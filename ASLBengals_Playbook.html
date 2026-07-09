@@ -245,29 +245,83 @@ main{padding:10px 10px 30px}
 </div>
 <script>
 (function(){
-  var ACCESS_CODE = 'GoBengals26';
+  // SHA-256 of the access code — the plaintext code itself is never stored
+  // in the page source, only this hash, so a casual "view source" doesn't
+  // hand someone the code directly.
+  var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
   var STORAGE_KEY = 'bengalsPlaybookAuthed';
+  var LOCKOUT_KEY = 'bengalsPlaybookLockout';
+  var MAX_ATTEMPTS = 5;
+  var LOCKOUT_MS = 30000;
+
   var screenEl = document.getElementById('loginScreen');
   var contentEl = document.querySelector('.loginContent');
   var inputEl = document.getElementById('loginCode');
   var btnEl = document.getElementById('loginBtn');
   var errorEl = document.getElementById('loginError');
+  var attempts = 0;
+  var lockTimer = null;
 
   try {
     if(localStorage.getItem(STORAGE_KEY) === '1'){ screenEl.classList.add('hide'); }
   } catch(e) { /* localStorage unavailable — just show the login screen */ }
 
-  function attemptLogin(){
-    if(inputEl.value === ACCESS_CODE){
+  async function sha256Hex(text){
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  }
+
+  function setLocked(msRemaining){
+    inputEl.disabled = true; btnEl.disabled = true;
+    var secs = Math.ceil(msRemaining/1000);
+    errorEl.textContent = 'Too many attempts — try again in ' + secs + 's.';
+    clearTimeout(lockTimer);
+    lockTimer = setTimeout(function(){
+      var left = getLockRemaining();
+      if(left > 0){ setLocked(left); } else { clearLock(); }
+    }, 1000);
+  }
+  function clearLock(){
+    inputEl.disabled = false; btnEl.disabled = false;
+    errorEl.textContent = '';
+    attempts = 0;
+    try { localStorage.removeItem(LOCKOUT_KEY); } catch(e) {}
+  }
+  function getLockRemaining(){
+    try {
+      var until = parseInt(localStorage.getItem(LOCKOUT_KEY) || '0', 10);
+      return Math.max(0, until - Date.now());
+    } catch(e) { return 0; }
+  }
+  (function checkExistingLock(){
+    var left = getLockRemaining();
+    if(left > 0) setLocked(left);
+  })();
+
+  async function attemptLogin(){
+    if(inputEl.disabled) return;
+    if(!window.crypto || !window.crypto.subtle){
+      errorEl.textContent = 'This browser can\'t verify the code securely — try a modern browser (Chrome/Safari/Firefox) over https.';
+      return;
+    }
+    var hash = await sha256Hex(inputEl.value);
+    if(hash === CODE_HASH){
       try { localStorage.setItem(STORAGE_KEY, '1'); } catch(e) {}
       screenEl.classList.add('hide');
     } else {
-      errorEl.textContent = 'Incorrect code — try again.';
+      attempts++;
+      inputEl.value = '';
+      if(attempts >= MAX_ATTEMPTS){
+        var until = Date.now() + LOCKOUT_MS;
+        try { localStorage.setItem(LOCKOUT_KEY, String(until)); } catch(e) {}
+        setLocked(LOCKOUT_MS);
+      } else {
+        errorEl.textContent = 'Incorrect code — try again.';
+        inputEl.focus();
+      }
       contentEl.classList.remove('shake');
       void contentEl.offsetWidth;
       contentEl.classList.add('shake');
-      inputEl.value = '';
-      inputEl.focus();
     }
   }
   btnEl.addEventListener('click', attemptLogin);
