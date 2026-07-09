@@ -82,6 +82,10 @@ main{padding:10px 10px 30px}
 .noresults{text-align:center;color:var(--muted);font-size:13px;padding:30px 10px}
 
 
+/* Single-play lists (e.g. one play under a variant) should fill the
+   available column width instead of sitting as a tiny stranded chip. */
+.playgrid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
 /* ===== Mode tabs (Playbook / Study / Quiz) ===== */
 .modeTabs{position:sticky;top:57px;z-index:280;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;padding:10px 6px;text-align:center;font-size:12.5px;font-weight:700;color:#8a8a8a;
@@ -151,7 +155,7 @@ main{padding:10px 10px 30px}
 /* ===== Signal (single) quiz — multiple choice, 5 rounds of 6 ===== */
 #signalQuiz{max-width:380px;margin:0 auto}
 .sigHint{color:var(--muted);font-size:11.5px;text-align:center;margin-bottom:14px}
-.sigImgWrap{max-width:220px;margin:0 auto 16px;border-radius:14px;overflow:hidden;
+.sigImgWrap{max-width:300px;margin:0 auto 16px;border-radius:14px;overflow:hidden;
   box-shadow:0 8px 22px rgba(0,0,0,.22);background:var(--card)}
 .sigImgWrap img{width:100%;display:block;aspect-ratio:9/11;object-fit:cover;object-position:top}
 .sigNavRow{display:flex;gap:12px;justify-content:center;margin-bottom:6px}
@@ -164,11 +168,11 @@ main{padding:10px 10px 30px}
 
 /* ===== Sequence quiz ===== */
 #sequenceQuiz{max-width:420px;margin:0 auto}
-.seq-stage{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
-.seq-sig{position:relative;width:64px}
-.seq-sig img{width:100%;border-radius:8px;display:block;aspect-ratio:9/11;object-fit:cover;object-position:top}
-.seq-sig .stepbadge{position:absolute;top:-7px;left:-7px;background:var(--bengal-orange);color:#111;
-  font-size:10.5px;font-weight:800;border-radius:50%;width:19px;height:19px;line-height:19px;
+.seq-stage{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;max-width:280px;margin-left:auto;margin-right:auto}
+.seq-sig{position:relative;width:100%}
+.seq-sig img{width:100%;border-radius:10px;display:block;aspect-ratio:9/11;object-fit:cover;object-position:top}
+.seq-sig .stepbadge{position:absolute;top:-8px;left:-8px;background:var(--bengal-orange);color:#111;
+  font-size:11.5px;font-weight:800;border-radius:50%;width:21px;height:21px;line-height:21px;
   text-align:center;border:2px solid #fff}
 .seq-choices{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .seq-choice{padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);
@@ -367,7 +371,10 @@ function variantCellHtml(v, list, color){
     ${panelHtml}
   </div>`;
 }
-// Pairs of [Left variant, Right variant] — Left always renders in column 1, Right in column 2.
+// Left variants (Wing Left / Slot Left) always render in column 1, Right
+// variants (Wing Right / Slot Right) always render in column 2 — even when
+// only one side exists, the empty side stays blank rather than being
+// filled with an unrelated variant, so the column meaning stays consistent.
 const VARIANT_PAIRS = [['Wing Left','Wing Right'], ['Slot Left','Slot Right']];
 function variantAccordionHtml(variants, color){
   const rows = VARIANT_PAIRS.map(([leftKey, rightKey])=>{
@@ -615,6 +622,18 @@ const sigHintEl = document.querySelector('#signalQuiz .sigHint');
 function sigCurrentRound(){ return Math.floor(sigIdx / SIG_ROUND_SIZE) + 1; }
 function sigPosInRound(){ return (sigIdx % SIG_ROUND_SIZE) + 1; }
 
+// "Location / Direction" cards spell out the finger-count logic in the meaning
+// text (e.g. "FIVE FINGERS = ODD = LEFT"). For the quiz, the finger count is
+// what's shown on screen — the answer we're testing is just the direction.
+function sigDisplayText(c){
+  if(cardGroup(c) === 'Location / Direction'){
+    if(/LEFT/i.test(c.meaning)) return 'Left';
+    if(/RIGHT/i.test(c.meaning)) return 'Right';
+  }
+  if(/MOTION/i.test(c.meaning)) return 'Motion';
+  return c.meaning;
+}
+
 function sigBuildQuiz(){
   sigDeck = shuffleArr(ALL_CARDS.slice());
   sigIdx = 0; sigScore = 0; sigRoundScore = 0;
@@ -637,10 +656,21 @@ function sigRenderQuestion(){
   sigNavRow.style.display = 'none';
   sigStatsLine.textContent = `Round ${sigCurrentRound()} of ${SIG_TOTAL_ROUNDS}  •  Signal ${sigPosInRound()} of ${SIG_ROUND_SIZE}  •  Score ${sigScore}/${sigIdx}`;
 
-  const distractPool = ALL_CARDS.filter(x=> x.id!==c.id && x.meaning!==c.meaning);
-  const distractors = shuffleArr(distractPool.slice()).slice(0,3);
+  const correctText = sigDisplayText(c);
+  // Build a distractor pool with no two options resolving to the same
+  // displayed text (e.g. never two different "Left" options on screen).
+  const seenTexts = new Set([correctText]);
+  const distractors = [];
+  shuffleArr(ALL_CARDS.slice()).forEach(x=>{
+    if(distractors.length>=3) return;
+    if(x.id===c.id) return;
+    const t = sigDisplayText(x);
+    if(seenTexts.has(t)) return;
+    seenTexts.add(t);
+    distractors.push(x);
+  });
   const options = shuffleArr([c, ...distractors]);
-  sigChoices.innerHTML = options.map(o=>`<button class="seq-choice" data-id="${o.id}">${o.meaning}</button>`).join('');
+  sigChoices.innerHTML = options.map(o=>`<button class="seq-choice" data-id="${o.id}">${sigDisplayText(o)}</button>`).join('');
   sigChoices.querySelectorAll('.seq-choice').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(sigAnswered) return;
@@ -652,7 +682,7 @@ function sigRenderQuestion(){
         if(Number(b.dataset.id)===c.id) b.classList.add('correct');
         else if(b===btn) b.classList.add('wrong');
       });
-      sigFeedback.textContent = correct ? ('✓ Correct — ' + c.meaning) : ('✗ It was — ' + c.meaning);
+      sigFeedback.textContent = correct ? ('✓ Correct — ' + correctText) : ('✗ It was — ' + correctText);
       sigFeedback.classList.add(correct?'good':'bad');
       sigNavRow.style.display = 'flex';
     });
