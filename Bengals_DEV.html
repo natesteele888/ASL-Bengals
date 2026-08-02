@@ -514,6 +514,19 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle. Tap ▶ to watch the play, tap a player to highlight him, tap the flip icon to see the signal call.</div>
 </div>
 
+
+<div id="playCallsGate" class="pcInfoOverlay">
+  <div class="pcInfoCard" style="max-width:320px;">
+    <div class="pcInfoHeader">🔒 Coach Access</div>
+    <div class="pcInfoBody">
+      <p>This section is coach-only. Enter the password to continue.</p>
+    </div>
+    <input type="password" id="pcGateInput" placeholder="Password" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <div id="pcGateError" style="color:#e0201a;font-size:12px;font-weight:700;min-height:16px;margin-bottom:6px;"></div>
+    <button id="pcGateSubmitBtn" class="pcInfoCloseBtn">Unlock</button>
+  </div>
+</div>
+
 <div id="playCallsInfoOverlay" class="pcInfoOverlay">
   <div class="pcInfoCard">
     <div class="pcInfoHeader">📋 Play Calls — What's New</div>
@@ -833,6 +846,10 @@ function setMode(mode){
   quizModeEl.classList.toggle('show', mode==='quiz');
   timedModeEl.classList.toggle('show', mode==='timed');
   playcallsModeEl.classList.toggle('show', mode==='playcalls');
+  if (mode !== 'playcalls') {
+    const gate = document.getElementById('playCallsGate');
+    if (gate) gate.classList.remove('show');
+  }
   if(mode==='timed' && typeof timedBuildQuiz === 'function') timedBuildQuiz();
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
 }
@@ -1740,14 +1757,17 @@ const PLAY_TYPE_SIGNAL_LABEL = {
   option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast',
 };
 
-function randomFingerId(side) {
+function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
-  return pool[Math.floor(Math.random() * pool.length)];
+  const options = exclude !== undefined ? pool.filter(id => id !== exclude) : pool;
+  return options[Math.floor(Math.random() * options.length)];
 }
 
 function buildSignalSequence(playKey, wingSide, direction) {
   const wingFingerId = randomFingerId(wingSide);
-  const dirFingerId = randomFingerId(direction);
+  const dirFingerId = direction === wingSide
+    ? randomFingerId(direction, wingFingerId)
+    : randomFingerId(direction);
   const playSignalId = PLAY_TYPE_SIGNAL_ID[playKey];
   return [
     { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
@@ -1904,8 +1924,28 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   if (ballEntry && ballEntry.circleEl) {
     await wait((ballEntry.delayMs || 0) * speedMultiplier);
     const carrier = ballEntry.circleEl;
-    const liveStart = { x: Number(carrier.getAttribute('cx')), y: Number(carrier.getAttribute('cy')) + OFFY };
-    await tweenPoint(qbPos, liveStart, 200 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    // ease toward the carrier's LIVE position every frame (never a stale
+    // snapshot target) -- the carrier is already moving along his own path
+    // by this point, so tweening to a fixed captured point goes stale and
+    // causes a visible jump once tracking begins
+    let cx = qbPos.x, cy = qbPos.y;
+    let catchingUp = true;
+    function catchUpFrame() {
+      const targetX = Number(carrier.getAttribute('cx'));
+      const targetY = Number(carrier.getAttribute('cy')) + OFFY;
+      cx += (targetX - cx) * 0.25;
+      cy += (targetY - cy) * 0.25;
+      ball.setAttribute('cx', cx);
+      ball.setAttribute('cy', cy);
+      const dist = Math.hypot(targetX - cx, targetY - cy);
+      if (catchingUp && dist > 3) {
+        requestAnimationFrame(catchUpFrame);
+      } else {
+        catchingUp = false;
+        track();
+      }
+    }
+    catchUpFrame();
     let tracking = true;
     function track() {
       if (!tracking) return;
@@ -1913,7 +1953,6 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
       ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
       requestAnimationFrame(track);
     }
-    track();
     await wait(animMs);
     tracking = false;
   } else {
@@ -2119,7 +2158,10 @@ function buildGrid() {
 
 
   let playCallsSeenThisSession = false;
-  window.initPlayCalls = function() {
+  let playCallsUnlocked = false;
+  const PC_PASSWORD = 'FrontSeat';
+
+  function proceedIntoPlayCalls() {
     const grid = document.getElementById('playCallsGrid');
     if (!grid.dataset.built) {
       grid.dataset.built = '1';
@@ -2129,7 +2171,36 @@ function buildGrid() {
       playCallsSeenThisSession = true;
       document.getElementById('playCallsInfoOverlay').classList.add('show');
     }
+  }
+
+  window.initPlayCalls = function() {
+    if (playCallsUnlocked) {
+      proceedIntoPlayCalls();
+      return;
+    }
+    const gate = document.getElementById('playCallsGate');
+    gate.classList.add('show');
+    document.getElementById('pcGateInput').value = '';
+    document.getElementById('pcGateError').textContent = '';
+    setTimeout(() => document.getElementById('pcGateInput').focus(), 50);
   };
+
+  function attemptUnlock() {
+    const input = document.getElementById('pcGateInput');
+    if (input.value === PC_PASSWORD) {
+      playCallsUnlocked = true;
+      document.getElementById('playCallsGate').classList.remove('show');
+      proceedIntoPlayCalls();
+    } else {
+      document.getElementById('pcGateError').textContent = 'Incorrect password.';
+      input.value = '';
+      input.focus();
+    }
+  }
+  document.getElementById('pcGateSubmitBtn').addEventListener('click', attemptUnlock);
+  document.getElementById('pcGateInput').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') attemptUnlock();
+  });
 
   document.getElementById('pcInfoBtn').addEventListener('click', () => {
     document.getElementById('playCallsInfoOverlay').classList.add('show');
