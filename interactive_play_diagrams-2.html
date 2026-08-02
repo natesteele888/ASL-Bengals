@@ -753,6 +753,21 @@ function getBlockFieldKey() {
   return (defenseMode === '4x4') ? base + '4x4' : base;
 }
 
+// Old saved data (from before same-side/cross-side blocking was independent)
+// only has points/points4x4. Rather than crash on the missing field, migrate
+// it in-memory the first time it's touched, so old cloud saves keep working.
+function getBlockPoints(p) {
+  const fieldKey = getBlockFieldKey();
+  if (!p[fieldKey]) {
+    const fallback = defenseMode === '4x4' ? (p.points4x4 || p.points) : p.points;
+    p.sameSidePoints = p.sameSidePoints || p.points || fallback;
+    p.crossPoints = p.crossPoints || p.points || fallback;
+    p.sameSidePoints4x4 = p.sameSidePoints4x4 || p.points4x4 || fallback;
+    p.crossPoints4x4 = p.crossPoints4x4 || p.points4x4 || fallback;
+  }
+  return p[fieldKey];
+}
+
 function getAbsolutePoints(p) {
   // mirrors the same substitution logic used in render() for player 4's
   // special path types, so chip-block math can read the CURRENT on-screen
@@ -760,8 +775,7 @@ function getAbsolutePoints(p) {
   const wingPos = DATA.wing[wingSide];
   if (p.player === 4 && !p.optionLine) {
     if (p.blockRelative) {
-      const fieldKey = getBlockFieldKey();
-      const [dx, dy] = p[fieldKey][1];
+      const [dx, dy] = getBlockPoints(p)[1];
       const sign = wingSide === 'Left' ? 1 : -1;
       return [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
     } else if (p.wingSeamRelative) {
@@ -797,6 +811,7 @@ function writeBackPoint(p, idx, absX, absY) {
   if (p.blockRelative) {
     if (idx === 0) return; // start always tracks the wing circle itself
     const sign = wingSide === 'Left' ? 1 : -1;
+    getBlockPoints(p); // ensures the field exists (migrates old data if needed)
     const fieldKey = getBlockFieldKey();
     p[fieldKey][1] = [(absX - wingPos[0]) / sign, absY - wingPos[1]];
   } else if (p.wingSeamRelative) {
@@ -1072,8 +1087,7 @@ function render() {
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
     if (p.player === 4 && !p.optionLine) {
       if (p.blockRelative) {
-        const fieldKey = getBlockFieldKey();
-        const [dx, dy] = p[fieldKey][1];
+        const [dx, dy] = getBlockPoints(p)[1];
         const sign = wingSide === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
         points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
       } else if (p.wingSeamRelative) {
