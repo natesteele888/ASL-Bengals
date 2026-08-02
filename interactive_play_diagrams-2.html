@@ -455,13 +455,22 @@ saveCloudBtn.addEventListener('click', () => {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(DATA.playTypes),
-  }).then(r => {
-    saveCloudBtn.textContent = r.ok ? 'Saved!' : 'Save Failed';
-    if (r.ok) cloudStatusEl.textContent = 'Showing the latest saved play edits.';
-    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 1800);
-  }).catch(() => {
+  }).then(async r => {
+    if (r.ok) {
+      saveCloudBtn.textContent = 'Saved!';
+      cloudStatusEl.textContent = 'Showing the latest saved play edits.';
+    } else {
+      const bodyText = await r.text().catch(() => '');
+      saveCloudBtn.textContent = 'Save Failed';
+      cloudStatusEl.textContent = `Save failed (HTTP ${r.status}): ${bodyText.slice(0, 200)}`;
+      console.error('Save to Cloud failed:', r.status, bodyText);
+    }
+    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
+  }).catch(err => {
     saveCloudBtn.textContent = 'Save Failed';
-    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 1800);
+    cloudStatusEl.textContent = `Save failed: ${err.message}`;
+    console.error('Save to Cloud failed:', err);
+    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
   });
 });
 
