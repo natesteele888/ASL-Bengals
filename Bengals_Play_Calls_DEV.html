@@ -561,12 +561,11 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
   const lastRenderedPaths = [];
   variant.paths.forEach(p => {
-    if (p.isBlocking) return; // keep the card visual focused on the route itself
     const isSelected = anySelected && p.player === selectedPlayer;
     const dim = anySelected && (p.player === null || p.player !== selectedPlayer);
     const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
 
-    let points = p.points;
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
     if (p.player === 4 && !p.optionLine) {
       if (p.wingSeamRelative) {
         const sameSide = wingSide === direction;
@@ -574,7 +573,13 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const sign = wingSide === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
       } else if (p.blockRelative) {
-        return; // blocking, skip
+        const sameSide = wingSide === direction;
+        const baseKey = sameSide ? 'sameSidePoints' : 'crossPoints';
+        const fieldKey = defenseMode === '4x4' ? baseKey + '4x4' : baseKey;
+        const srcPoints = p[fieldKey] || p.points; // fall back for any not-yet-migrated data
+        const [dx, dy] = srcPoints[1];
+        const sign = wingSide === 'Left' ? 1 : -1;
+        points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
       } else {
         points = [wingPos, ...points.slice(1)];
       }
@@ -587,7 +592,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       return;
     }
 
-    const color = p.ball ? BALL_COLOR : NOBALL_COLOR;
+    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
     const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
     const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
     if (p.fake) attrs['stroke-dasharray'] = '10 8';
