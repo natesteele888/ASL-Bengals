@@ -424,6 +424,22 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   }
   .signal-progress .dot.done { background: var(--bengal-orange); }
 
+  .replay-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 16px;
+    border: 2px solid var(--bengal-orange);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--bengal-orange);
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .replay-btn:active { background: var(--bengal-orange); color: #fff; }
+
   .edit-handle { fill: #ffde00; stroke: #111; stroke-width: 2; }
   .dimmed { opacity: .15; }
   .full-op { opacity: 1; }
@@ -2128,14 +2144,22 @@ function buildCard(combo) {
   backFlipBtn.innerHTML = '&#8635;';
   backFlipBtn.addEventListener('click', () => { outer.classList.remove('flipped'); stopSignalSequence(); });
 
+  const replayBtn = document.createElement('button');
+  replayBtn.className = 'replay-btn';
+  replayBtn.innerHTML = '&#8635; Replay';
+  replayBtn.style.display = 'none';
+  replayBtn.addEventListener('click', () => startSignalSequence());
+
   back.appendChild(signalStage);
   back.appendChild(label);
   back.appendChild(progress);
+  back.appendChild(replayBtn);
   back.appendChild(backFlipBtn);
 
   let seqTimer = null;
   function startSignalSequence() {
     stopSignalSequence();
+    replayBtn.style.display = 'none';
     const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
@@ -2146,7 +2170,7 @@ function buildCard(combo) {
       if (i >= signals.length) {
         i = 0;
         loopCount++;
-        if (loopCount >= MAX_LOOPS) { seqTimer = null; return; }
+        if (loopCount >= MAX_LOOPS) { seqTimer = null; replayBtn.style.display = 'flex'; return; }
       }
       img.src = signals[i].src;
       label.textContent = signals[i].label;
