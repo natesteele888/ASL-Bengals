@@ -134,9 +134,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbCard h3{margin:0 0 4px;font-size:16px;color:var(--ink);text-align:center}
 .lbCard .lbSub{text-align:center;color:var(--muted);font-size:11px;margin-bottom:14px}
 
-.lbCardCool{padding:0;overflow:hidden}
+.lbCardCool{padding:0}
 .lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
-  padding:22px 18px 20px;text-align:center;margin-bottom:16px}
+  padding:22px 18px 20px;text-align:center;margin-bottom:16px;border-radius:16px 16px 0 0}
 .lbHeroTrophy{font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));margin-bottom:4px}
 .lbHeroHeader h3{color:#fff;font-size:19px;font-weight:900;margin:0 0 2px;text-shadow:0 1px 3px rgba(0,0,0,.2)}
 .lbHeroHeader .lbSub{color:rgba(255,255,255,.9);font-size:11.5px;font-weight:700;margin:0}
@@ -514,6 +514,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 </style>
 </head>
 <body>
+<!-- BUILD_VERSION: 2026-08-03 13:39 UTC (lineman-movement-fix, leaderboard-scroll-fix) -->
+<div id="buildVersionTag" style="position:fixed;bottom:2px;right:4px;font-size:8px;color:#ccc;z-index:9999;pointer-events:none;">build 2026-08-03 13:39 UTC</div>
+
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
