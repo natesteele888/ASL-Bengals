@@ -939,25 +939,14 @@ function updateEditUI(variant) {
   if (p.isBlocking) {
     assignPanel.style.display = 'flex';
     const who = editTarget.player !== undefined ? `#${editTarget.player}` : editTarget.id;
-    assignLabel.textContent = `${who} blocks:`;
+    assignLabel.textContent = `${who} blocks: tap a defender on the field`;
     [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
-    getDefenderIds().forEach(defId => {
-      const btn = document.createElement('button');
-      btn.textContent = defId;
-      btn.addEventListener('click', () => {
-        const blockerStart = p.blockRelative ? [0,0] : p.points[0];
-        assignBlockerToDefender(p, blockerStart, defId, variant);
-        selectedHandle = null;
-        render();
-      });
-      assignPanel.appendChild(btn);
-    });
   } else if ([4,5,6].includes(editTarget.player)) {
     // a real route (going out for a pass) -- offer a quick chip block on
     // the way, which only nudges the early part of the route and leaves
     // the release/pattern itself alone
     assignPanel.style.display = 'flex';
-    assignLabel.textContent = `#${editTarget.player} chip block (then release):`;
+    assignLabel.textContent = `#${editTarget.player} chip block: tap a defender on the field, then release`;
     [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
     const noneBtn = document.createElement('button');
     noneBtn.textContent = 'No Chip';
@@ -967,16 +956,6 @@ function updateEditUI(variant) {
       render();
     });
     assignPanel.appendChild(noneBtn);
-    getDefenderIds().forEach(defId => {
-      const btn = document.createElement('button');
-      btn.textContent = defId;
-      btn.addEventListener('click', () => {
-        applyChipBlock(p, defId, variant);
-        selectedHandle = null;
-        render();
-      });
-      assignPanel.appendChild(btn);
-    });
   } else {
     assignPanel.style.display = 'none';
   }
@@ -1038,12 +1017,30 @@ function render() {
 
   // defense -- now dims too when a player is selected ("D" per the request)
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+  const assignablePath = (editMode && editTarget) ? findEditTargetPath(variant) : null;
+  const isAssignableBlock = assignablePath && assignablePath.isBlocking;
+  const isAssignableChip = assignablePath && !assignablePath.isBlocking && [4,5,6].includes(editTarget && editTarget.player);
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
     const r = d.extra ? 30 : CIRCLE_R;
     const fs = d.extra ? 22 : 26;
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, anyPlayerSelected, r));
+    const defCircle = drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, anyPlayerSelected, r);
+    if (isAssignableBlock || isAssignableChip) {
+      defCircle.style.cursor = 'pointer';
+      defCircle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (isAssignableBlock) {
+          const blockerStart = assignablePath.blockRelative ? [0,0] : assignablePath.points[0];
+          assignBlockerToDefender(assignablePath, blockerStart, d.id, variant);
+        } else {
+          applyChipBlock(assignablePath, d.id, variant);
+        }
+        selectedHandle = null;
+        render();
+      });
+    }
+    circlesLayer.appendChild(defCircle);
     if (isReadKey) {
       const bx = d.pos[0] + 44, by = d.pos[1] - 40;
       const badge = svgEl('g', {class: anyPlayerSelected ? 'dimmed' : 'full-op'});
