@@ -133,6 +133,15 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   padding:18px}
 .lbCard h3{margin:0 0 4px;font-size:16px;color:var(--ink);text-align:center}
 .lbCard .lbSub{text-align:center;color:var(--muted);font-size:11px;margin-bottom:14px}
+
+.lbCardCool{padding:0;overflow:hidden}
+.lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
+  padding:22px 18px 20px;text-align:center;margin-bottom:16px}
+.lbHeroTrophy{font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));margin-bottom:4px}
+.lbHeroHeader h3{color:#fff;font-size:19px;font-weight:900;margin:0 0 2px;text-shadow:0 1px 3px rgba(0,0,0,.2)}
+.lbHeroHeader .lbSub{color:rgba(255,255,255,.9);font-size:11.5px;font-weight:700;margin:0}
+.lbCardCool .lbList{padding:0 18px}
+.lbCardCool > button{margin-left:18px;width:calc(100% - 36px) !important}
 .lbSectionHeader{font-size:12px;font-weight:800;color:var(--bengal-orange-dark);text-transform:uppercase;
   letter-spacing:.04em;margin:14px 0 8px;text-align:center}
 .lbSectionHeader:first-of-type{margin-top:0}
@@ -144,11 +153,12 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbList{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .lbRow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:var(--paper)}
 .lbRow.me{background:#fff4e8;border:1px solid var(--bengal-orange)}
-.lbRank{width:22px;height:22px;border-radius:50%;background:var(--bengal-black);color:#fff;font-size:11px;
+.lbRank{width:26px;height:26px;border-radius:50%;background:var(--bengal-black);color:#fff;font-size:13px;
   font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lbRow:nth-child(1) .lbRank{background:#d4a017}
-.lbRow:nth-child(2) .lbRank{background:#9a9a9a}
-.lbRow:nth-child(3) .lbRank{background:#a4653a}
+.lbRow.top3{background:linear-gradient(90deg, #fff7ec, var(--paper))}
+.lbRow:nth-child(1) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(2) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(3) .lbRank{background:transparent;font-size:20px}
 .lbName{flex:1;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
 .lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
@@ -609,6 +619,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
         <input id="lbNameInput" type="text" placeholder="e.g. JD #24" maxlength="20" autocomplete="off">
         <button class="navBtn" id="lbSaveBtn">Save to Leaderboard</button>
       </div>
+      <div class="lbEmpty" id="lbSaveConfirm" style="display:none;">✅ Score saved!</div>
       <button class="navBtn secondary" id="sigRestartBtn">Play Again</button>
     </div>
   </div>
@@ -640,12 +651,12 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 </div>
 
 <div class="lbOverlay" id="lbOverlay">
-  <div class="lbCard">
-    <h3>🏆 Leaderboard</h3>
-    <div class="lbSub">Top results across the whole team</div>
-    <div class="lbSectionHeader">📝 Quiz Scores</div>
-    <div class="lbList" id="lbList"></div>
-    <div class="lbSectionHeader">⏱️ Timed Times</div>
+  <div class="lbCard lbCardCool">
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏆</div>
+      <h3>Fastest Times</h3>
+      <div class="lbSub">Top 25 across the whole team</div>
+    </div>
     <div class="lbList" id="timedLbList"></div>
     <button class="navBtn secondary" id="historyBtn" style="width:100%;margin-bottom:8px">📜 View History</button>
     <button class="navBtn secondary lbCloseBtn" id="lbCloseBtn">Close</button>
@@ -1054,6 +1065,7 @@ const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
 const LEADERBOARD_KEY = 'bengalsSignalLeaderboard';
 const TIMED_LEADERBOARD_KEY = 'bengalsTimedLeaderboard';
 const LEADERBOARD_MAX = 30;
+const TIMED_LEADERBOARD_MAX = 25;
 
 async function cloudPush(path, entry){
   try {
@@ -1130,12 +1142,13 @@ async function openAdminStats(){
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading…</div>';
 
-  const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts] = await Promise.all([
+  const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries] = await Promise.all([
     cloudFetch('analytics/timedStarts'),
     cloudFetch('analytics/standardStarts'),
     cloudFetch('analytics/standardResults'),
     cloudFetch('analytics/timedResults'),
     cloudFetch('analytics/signalAttempts'),
+    cloudFetch('timedLeaderboard'),
   ]);
 
   if([timedStarts, standardStarts, standardResults, timedResults, signalAttempts].includes(null)){
@@ -1173,6 +1186,34 @@ async function openAdminStats(){
     </div>`;
   }
 
+  // ---- Recent individual timed sessions -- matched against the saved
+  // leaderboard so unsaved/unnamed runs (someone finished but never
+  // entered a name) are clearly flagged rather than invisible ----
+  const savedEntries = (timedLbEntries || []).slice();
+  function findSavedName(result){
+    const match = savedEntries.find(e => e.timeMs === result.timeMs && e.mistakes === result.mistakes);
+    return match ? match.name : null;
+  }
+  const recentSessions = timedResults.slice()
+    .sort((a,b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 20);
+  function sessionRowHtml(r){
+    const d = new Date(r.date);
+    const dateStr = isNaN(d) ? '' : d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) + ' ' +
+      d.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+    const name = findSavedName(r);
+    const nameHtml = name
+      ? `<span style="color:var(--ink)">${name}</span>`
+      : `<span style="color:#b03030;font-weight:800">❓ Unsaved</span>`;
+    return `<div class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${dateStr}</div>
+      <div class="lbName">${nameHtml}</div>
+      <div class="lbScore">${formatClock(r.timeMs)} • ✗${r.mistakes}</div></div>`;
+  }
+  const sessionsHtml = recentSessions.length
+    ? recentSessions.map(sessionRowHtml).join('')
+    : '<div class="lbEmpty">No timed sessions yet.</div>';
+  const unsavedCount = recentSessions.filter(r => !findSavedName(r)).length;
+
   // ---- Team-wide hardest / easiest signals, from every recorded attempt ----
   const bySignal = {};
   signalAttempts.forEach(a=>{
@@ -1206,11 +1247,13 @@ async function openAdminStats(){
     ${standardBlock}
     <div class="lbSectionHeader">⏱️ Timed Quiz</div>
     ${timedBlock}
+    <div class="lbSectionHeader">🕓 Recent Timed Sessions${unsavedCount ? ` (${unsavedCount} unsaved)` : ''}</div>
+    <div class="lbList">${sessionsHtml}</div>
     <div class="lbSectionHeader">🥵 Hardest Signals (team-wide)</div>
     <div class="lbList">${hardestHtml}</div>
     <div class="lbSectionHeader">😎 Easiest Signals (team-wide)</div>
     <div class="lbList">${easiestHtml}</div>
-    <div class="lbSub">Starts count every attempt, even if never finished. Signal stats need at least 3 team-wide attempts to show.</div>`;
+    <div class="lbSub">Starts count every attempt, even if never finished. "Unsaved" means someone completed a timed run but never entered a name on the leaderboard. Signal stats need at least 3 team-wide attempts to show.</div>`;
 }
 document.getElementById('adminCloseBtn').addEventListener('click', ()=>{
   document.getElementById('adminOverlay').classList.remove('show');
@@ -1232,13 +1275,14 @@ function saveTimedLeaderboardLocal(entry){
   const list = getTimedLeaderboard();
   list.push(entry);
   list.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
-  try { localStorage.setItem(TIMED_LEADERBOARD_KEY, JSON.stringify(list.slice(0, LEADERBOARD_MAX))); } catch(e) {}
+  try { localStorage.setItem(TIMED_LEADERBOARD_KEY, JSON.stringify(list.slice(0, TIMED_LEADERBOARD_MAX))); } catch(e) {}
 }
 
 function lbRowHtml(entry, i, highlightEntry, scoreHtml){
   const isMe = highlightEntry && entry.date === highlightEntry.date && entry.name === highlightEntry.name;
-  return `<div class="lbRow${isMe?' me':''}">
-    <div class="lbRank">${i+1}</div>
+  const medal = i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : (i+1);
+  return `<div class="lbRow${isMe?' me':''}${i<3?' top3':''}">
+    <div class="lbRank">${medal}</div>
     <div class="lbName">${entry.name}</div>
     <div class="lbScore">${scoreHtml}</div>
   </div>`;
@@ -1268,7 +1312,7 @@ async function renderTimedLeaderboard(highlightEntry){
   const offline = cloudList === null;
   const list = (offline ? getTimedLeaderboard() : cloudList).slice();
   list.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
-  const trimmed = list.slice(0, LEADERBOARD_MAX);
+  const trimmed = list.slice(0, TIMED_LEADERBOARD_MAX);
   if(trimmed.length === 0){
     timedLbList.innerHTML = '<div class="lbEmpty">No times yet — finish a Timed Quiz to be the first!</div>';
   } else {
@@ -1282,7 +1326,6 @@ async function renderTimedLeaderboard(highlightEntry){
 const lbOverlay = document.getElementById('lbOverlay');
 document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
   lbOverlay.classList.add('show');
-  renderLeaderboard(null);
   renderTimedLeaderboard(null);
 });
 document.getElementById('lbCloseBtn').addEventListener('click', ()=>{
@@ -1295,10 +1338,8 @@ document.getElementById('lbSaveBtn').addEventListener('click', async ()=>{
   const entry = { name: name.slice(0,20)||'Anonymous', score: sigScore, total: sigDeck.length, bestStreak: sigBestStreakThisRun, date: new Date().toISOString() };
   saveLeaderboardLocal(entry);
   document.getElementById('lbSaveForm').style.display = 'none';
-  lbOverlay.classList.add('show');
+  document.getElementById('lbSaveConfirm').style.display = 'block';
   await cloudPush('leaderboard', entry);
-  renderLeaderboard(entry);
-  renderTimedLeaderboard(null);
 });
 document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   const nameInput = document.getElementById('timedLbNameInput');
@@ -1309,7 +1350,6 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   document.getElementById('timedLbSaveForm').style.display = 'none';
   lbOverlay.classList.add('show');
   await cloudPush('timedLeaderboard', entry);
-  renderLeaderboard(null);
   renderTimedLeaderboard(entry);
 });
 
@@ -1365,6 +1405,7 @@ function sigBuildQuiz(){
   sigCurrentStreak = 0; sigBestStreakThisRun = 0;
   sigMissedCards = [];
   document.getElementById('lbSaveForm').style.display = 'flex';
+  document.getElementById('lbSaveConfirm').style.display = 'none';
   document.getElementById('lbNameInput').value = '';
   logQuizStart('standardStarts');
   sigShowQuestionUI();
