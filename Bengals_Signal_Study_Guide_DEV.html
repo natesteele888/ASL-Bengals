@@ -514,8 +514,8 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 </style>
 </head>
 <body>
-<!-- BUILD_VERSION: 2026-08-03 13:39 UTC (lineman-movement-fix, leaderboard-scroll-fix) -->
-<div id="buildVersionTag" style="position:fixed;bottom:2px;right:4px;font-size:8px;color:#ccc;z-index:9999;pointer-events:none;">build 2026-08-03 13:39 UTC</div>
+<!-- BUILD_VERSION: 2026-08-03 14:18 UTC (blocking-always-animates-fix-v2) -->
+<div id="buildVersionTag" style="position:fixed;bottom:2px;right:4px;font-size:9px;color:#e8720c;font-weight:800;z-index:9999;pointer-events:none;background:#fff;padding:2px 5px;border-radius:4px;">build 2026-08-03 14:18 UTC v2</div>
 
 
 <div class="topToolbar" id="topToolbar" style="display:none">
@@ -2004,6 +2004,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const lastRenderedPaths = selectedPlayer === null
     ? allPaths
     : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
+  console.log('[PlayCalls v2 check] selectedPlayer:', selectedPlayer, '| blocking paths included:', lastRenderedPaths.filter(p=>p.isBlocking).length, '/', allPaths.filter(p=>p.isBlocking).length);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
