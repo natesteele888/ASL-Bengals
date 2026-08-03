@@ -1909,7 +1909,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111', 34, anySelected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
   ['LT','LG','C','RG','RT'].forEach(k => {
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, anySelected);
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, false);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111', 34, anySelected, null, 6);
@@ -1928,7 +1928,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const lastRenderedPaths = [];
   variant.paths.forEach(p => {
     const isSelected = anySelected && p.player === selectedPlayer;
-    const dim = anySelected && (p.player === null || p.player !== selectedPlayer);
+    const dim = anySelected && !p.isBlocking && (p.player === null || p.player !== selectedPlayer);
     const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
 
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
@@ -1975,7 +1975,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, isBall: !!p.ball, delayMs: p.delayMs || 0,
+    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
       circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
   });
 
@@ -1998,10 +1998,12 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const mainGroup = stage._mainGroup;
   const circlesLayerRef = stage._circlesLayerRef;
   const allPaths = stage._lastRenderedPaths;
-  // if a player is selected, animate only his path; otherwise everyone
+  // if a player is selected, animate his path plus all blocking (blocking
+  // supports the play regardless of which skill player is being isolated);
+  // otherwise animate everyone
   const lastRenderedPaths = selectedPlayer === null
     ? allPaths
-    : allPaths.filter(p => p.player === selectedPlayer);
+    : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
