@@ -1898,8 +1898,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
-    const r = d.extra ? 30 : CIRCLE_R;
-    const fs = d.extra ? 22 : 26;
+    const r = CIRCLE_R;
+    const fs = 26;
     circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, anySelected, r));
   });
 
