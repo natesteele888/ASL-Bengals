@@ -1857,14 +1857,19 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
     { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
     { src: SIGNAL_CARDS[wingFingerId], label: `Wing Location: ${wingSide}` },
   ];
-  if (playKey === 'blast' || playKey === 'double_blast') {
+  if (playKey === 'blast') {
     const ioId = insideOutside === 'Inside' ? INSIDE_SIGNAL_ID : OUTSIDE_SIGNAL_ID;
     signals.push({ src: SIGNAL_CARDS[ioId], label: insideOutside === 'Inside' ? 'Inside' : 'Outside' });
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
+  } else if (playKey === 'double_blast') {
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
+    if (insideOutside === 'Outside') {
+      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
+    }
+  } else {
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
   }
-  signals.push(
-    { src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] },
-    { src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` },
-  );
+  signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
   return signals;
 }
 
