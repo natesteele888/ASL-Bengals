@@ -1053,7 +1053,8 @@ function render() {
   });
 
   // formation (O-line + 5/6) -- now dims too ("line" per the request)
-  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111111', 34, anyPlayerSelected, null, 5);
+  const c5Dim = anyPlayerSelected && selectedPlayer !== 5;
+  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111111', 34, c5Dim, null, 5);
   circlesLayer.appendChild(c5);
   playerCircles['5'] = c5;
   ['LT','LG','C','RG','RT'].forEach(k => {
@@ -1066,7 +1067,8 @@ function render() {
     circlesLayer.appendChild(c);
     playerCircles[k] = c;
   });
-  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111111', 34, anyPlayerSelected, null, 6);
+  const c6Dim = anyPlayerSelected && selectedPlayer !== 6;
+  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111111', 34, c6Dim, null, 6);
   circlesLayer.appendChild(c6);
   playerCircles['6'] = c6;
 
