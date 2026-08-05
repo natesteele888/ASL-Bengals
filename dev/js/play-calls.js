@@ -398,7 +398,8 @@ function buildCard(combo) {
 
   let wingSide = 'Left';
   let direction = 'Left';
-  let defenseMode = '4x3';
+  // 4x3 removed as an option -- everything is 4x4 now.
+  const defenseMode = '4x4';
   let insideOutside = 'Outside';
   let selectedPlayer = null;
   let speedMultiplier = 1;
@@ -413,15 +414,6 @@ function buildCard(combo) {
 
   const toggleRow = document.createElement('div');
   toggleRow.className = 'card-toggle-row';
-
-  const defToggle = document.createElement('div');
-  defToggle.className = 'def-toggle';
-  const def3 = document.createElement('button'); def3.textContent = '4x3'; def3.className = 'active';
-  const def4 = document.createElement('button'); def4.textContent = '4x4';
-  def3.addEventListener('click', () => { if (isPlayingRef.value) return; defenseMode = '4x3'; def3.classList.add('active'); def4.classList.remove('active'); onComboChanged(); });
-  def4.addEventListener('click', () => { if (isPlayingRef.value) return; defenseMode = '4x4'; def4.classList.add('active'); def3.classList.remove('active'); onComboChanged(); });
-  defToggle.appendChild(def3); defToggle.appendChild(def4);
-  toggleRow.appendChild(defToggle);
 
   if (combo.hasInsideOutside) {
     const ioToggle = document.createElement('div');

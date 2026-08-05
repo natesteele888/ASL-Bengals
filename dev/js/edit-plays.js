@@ -99,9 +99,12 @@ function wireToggle(el, getter, setter) {
 wireToggle(wingToggle, () => wingSide, v => wingSide = v);
 wireToggle(dirToggle, () => direction, v => direction = v);
 
-let defenseMode = '4x3';
-const defenseToggle = document.getElementById('defenseToggle');
-wireToggle(defenseToggle, () => defenseMode, v => defenseMode = v);
+// 4x3 removed as an option -- everything is 4x4 now, most teams played are
+// a 4x4 front and it halves the number of blocking assignments to keep up
+// to date. Left as a variable (rather than ripping out every
+// defenseMode === '4x4' check below) since those checks all still work
+// correctly with a value that never changes.
+const defenseMode = '4x4';
 
 const insideOutsideGroup = document.getElementById('insideOutsideGroup');
 const insideOutsideToggle = document.getElementById('insideOutsideToggle');
