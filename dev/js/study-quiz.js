@@ -409,7 +409,8 @@ async function openAdminStats(){
     <div class="lbList">${hardestHtml}</div>
     <div class="lbSectionHeader">😎 Easiest Signals (team-wide)</div>
     <div class="lbList">${easiestHtml}</div>
-    <div class="lbSub">Starts count every attempt, even if never finished. "Unsaved" means someone completed a timed run but never entered a name on the leaderboard. Signal stats need at least 3 team-wide attempts to show.</div>`;
+    <div class="lbSub">Starts count every attempt, even if never finished. "Unsaved" means someone completed a timed run but never entered a name on the leaderboard. Signal stats need at least 3 team-wide attempts to show.</div>
+    <div class="lbSub" style="opacity:.5;margin-top:14px;">build 2026-08-05 02:39 UTC v3 (motion+duplicate+autoheal)</div>`;
 }
 document.getElementById('adminCloseBtn').addEventListener('click', ()=>{
   document.getElementById('adminOverlay').classList.remove('show');

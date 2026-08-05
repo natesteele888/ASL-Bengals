@@ -7,7 +7,7 @@ body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFo
 
 /* ===== Login gate ===== */
 .loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;
-  justify-content:center;overflow:hidden;background-image:url(assets/images/login-bg.jpg);
+  justify-content:center;overflow:hidden;background-color:#000;background-image:url(assets/images/login-bg.jpg);
   background-size:cover;background-position:center;opacity:1;transition:opacity 1.5s ease}
 .loginScreen.fadeOut{opacity:0;pointer-events:none}
 .loginScreen.hide{display:none}
