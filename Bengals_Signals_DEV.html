@@ -806,7 +806,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   <button class="modeBtn active" data-mode="study">🎓 Study</button>
   <button class="modeBtn" data-mode="quiz">🏈 Quiz</button>
   <button class="modeBtn" data-mode="timed">⏱️ Timed Quiz</button>
-  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn" style="display:none;">📋 Play Calls</button>
+  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn">📋 Play Calls</button>
   <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;">✏️ Edit Plays</button>
 </div>
 
@@ -829,6 +829,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   <div class="inline-control" id="playWrap">
     <label>Play</label>
     <select id="playSelect"></select>
+  </div>
+  <div class="inline-control">
+    <button class="toggle-btn" id="duplicatePlayBtn" type="button">+ Duplicate Play</button>
   </div>
   <div class="inline-control">
     <label>Dir</label>
@@ -887,6 +890,11 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   </div>
   <div class="assign-panel" id="assignPanel" style="display:none;">
     <span class="assign-label" id="assignLabel">Block assignment:</span>
+  </div>
+  <div class="assign-panel" id="motionPanel" style="display:none;">
+    <span class="assign-label" id="motionLabel">Motion:</span>
+    <button id="motionToggleBtn" type="button">Off</button>
+    <button id="setMotionEndBtn" type="button" style="display:none;">Tap field to set end spot</button>
   </div>
   <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 </div>
@@ -1215,9 +1223,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
       if(hash === COACH_CODE_HASH){
         window.isCoachSession = true;
         try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
-        var pcBtn2 = document.getElementById('playCallsTabBtn');
         var epBtn2 = document.getElementById('editPlaysTabBtn');
-        if (pcBtn2) pcBtn2.style.display = '';
         if (epBtn2) epBtn2.style.display = '';
       }
       try { localStorage.setItem(STORAGE_KEY, '1'); } catch(e) {}
@@ -1248,9 +1254,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   btnEl.addEventListener('click', attemptLogin);
   inputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter') attemptLogin(); });
 if (window.isCoachSession) {
-    var pcBtn = document.getElementById('playCallsTabBtn');
     var epBtn = document.getElementById('editPlaysTabBtn');
-    if (pcBtn) pcBtn.style.display = '';
     if (epBtn) epBtn.style.display = '';
   }
 })();
@@ -2242,9 +2246,11 @@ function getVariant(playType, direction, insideOutside) {
 // ---- Build every base play x direction combo (wing is a per-card toggle, not a filter) ----
 const BASE_PLAY_ORDER = ['inside_zone', 'outside_zone', 'option', 'option_pass', 'blast', 'double_blast'];
 function buildPlayList() {
-  return BASE_PLAY_ORDER
+  const base = BASE_PLAY_ORDER
     .map(playKey => DATA.playTypes.find(p => p.key === playKey))
-    .filter(Boolean)
+    .filter(Boolean);
+  const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
+  return base.concat(extras)
     .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside }));
 }
 
@@ -2274,7 +2280,9 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
   const dirFingerId = direction === wingSide
     ? randomFingerId(direction, wingFingerId)
     : randomFingerId(direction);
-  const playSignalId = PLAY_TYPE_SIGNAL_ID[playKey];
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
+  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
   const signals = [
     { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
     { src: SIGNAL_CARDS[wingFingerId], label: `Wing Location: ${wingSide}` },
@@ -2282,14 +2290,14 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
   if (playKey === 'blast') {
     const ioId = insideOutside === 'Inside' ? INSIDE_SIGNAL_ID : OUTSIDE_SIGNAL_ID;
     signals.push({ src: SIGNAL_CARDS[ioId], label: insideOutside === 'Inside' ? 'Inside' : 'Outside' });
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   } else if (playKey === 'double_blast') {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
     if (insideOutside === 'Outside') {
       signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
     }
   } else {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: PLAY_TYPE_SIGNAL_LABEL[playKey] });
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }
   signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
   return signals;
@@ -2345,7 +2353,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   const wingDim = anySelected && selectedPlayer !== 4;
-  const c4 = drawCircle(wingPos[0], wingPos[1], '4', '#111', 34, wingDim, null, 4);
+  const p4MotionPath = variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
+  const p4CirclePos = p4MotionPath ? p4MotionPath.motionEnd : wingPos;
+  const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
   ['3','1','2'].forEach(num => {
@@ -2376,7 +2386,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const sign = wingSide === 'Left' ? 1 : -1;
         points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
       } else {
-        points = [wingPos, ...points.slice(1)];
+        const motionStart = (p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
+        points = [motionStart, ...points.slice(1)];
       }
     }
     if (p.optionLine) {
@@ -2441,6 +2452,29 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const qbPos = { x: DATA.backfield['1'][0], y: DATA.backfield['1'][1] };
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
+
+  // Pre-snap motion: if #4 is set to motion, he's already drawn at his
+  // motionEnd spot (so his route/blocking math is correct from the start).
+  // For the animation specifically, temporarily snap him back to his real
+  // lineup spot and let him visibly run the motion before the snap --
+  // otherwise "motion" would look identical to just picking the other wing.
+  const motionPlayType = DATA.playTypes.find(p => p.key === playKey);
+  const motionVariant = getVariant(motionPlayType, direction, insideOutside);
+  const motionPath = (motionVariant.paths || []).find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
+  if (motionPath) {
+    const p4Entry = lastRenderedPaths.find(p => p.player === 4) || allPaths.find(p => p.player === 4);
+    if (p4Entry && p4Entry.circleEl) {
+      const startPos = { x: DATA.wing[wingSide][0], y: DATA.wing[wingSide][1] };
+      const endPos = { x: motionPath.motionEnd[0], y: motionPath.motionEnd[1] };
+      p4Entry.circleEl.setAttribute('cx', startPos.x); p4Entry.circleEl.setAttribute('cy', startPos.y);
+      if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', startPos.x); p4Entry.textEl.setAttribute('y', startPos.y + 12); }
+      await tweenPoint(startPos, endPos, 900 * speedMultiplier, pt => {
+        p4Entry.circleEl.setAttribute('cx', pt.x); p4Entry.circleEl.setAttribute('cy', pt.y);
+        if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', pt.x); p4Entry.textEl.setAttribute('y', pt.y + 12); }
+      });
+      await wait(150 * speedMultiplier);
+    }
+  }
 
   await wait(250 * speedMultiplier);
   await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
@@ -2764,16 +2798,8 @@ function buildGrid() {
   }
 
   window.initPlayCalls = function() {
-    if (playCallsUnlocked || window.isCoachSession) {
-      playCallsUnlocked = true;
-      proceedIntoPlayCalls();
-      return;
-    }
-    const gate = document.getElementById('playCallsGate');
-    gate.classList.add('show');
-    document.getElementById('pcGateInput').value = '';
-    document.getElementById('pcGateError').textContent = '';
-    setTimeout(() => document.getElementById('pcGateInput').focus(), 50);
+    playCallsUnlocked = true;
+    proceedIntoPlayCalls();
   };
 
   function attemptUnlock() {
@@ -2855,6 +2881,42 @@ function rebuildPlaySelectOptions() {
   });
 }
 rebuildPlaySelectOptions();
+
+// Mirrors Play Calls' base signal-card mapping just enough to carry a
+// signal forward when duplicating one of the 6 standard plays.
+const BASE_SIGNAL_MAP = {
+  inside_zone: { id: 9, label: 'Inside Zone' }, outside_zone: { id: 10, label: 'Outside Zone' },
+  option: { id: 15, label: 'Option' }, option_pass: { id: 16, label: 'Option Pass' },
+  blast: { id: 13, label: 'Blast' }, double_blast: { id: 14, label: 'Double Blast' },
+};
+
+document.getElementById('duplicatePlayBtn').addEventListener('click', () => {
+  if (isPlaying) return;
+  const original = DATA.playTypes.find(p => p.key === playKey);
+  if (!original) return;
+  const newLabel = prompt('Name for the new play (e.g. "Inside Zone Wham"):', original.label + ' Copy');
+  if (!newLabel || !newLabel.trim()) return;
+
+  let baseKey = newLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  let newKey = baseKey;
+  let n = 2;
+  while (DATA.playTypes.some(p => p.key === newKey)) { newKey = baseKey + '_' + n; n++; }
+
+  const clone = JSON.parse(JSON.stringify(original));
+  clone.key = newKey;
+  clone.label = newLabel.trim();
+  const carriedSignal = (original.signalCardId != null) ? { id: original.signalCardId, label: original.signalLabel }
+    : BASE_SIGNAL_MAP[original.key];
+  if (carriedSignal) { clone.signalCardId = carriedSignal.id; clone.signalLabel = carriedSignal.label; }
+
+  DATA.playTypes.push(clone);
+  rebuildPlaySelectOptions();
+  playSelect.value = newKey;
+  playKey = newKey;
+  updateReadPosVisibility();
+  render();
+  alert('"' + clone.label + '" created as a copy of "' + original.label + '". It reuses that signal for now -- edit routes/blocking freely, then Save to Cloud when ready.');
+});
 
 function wireToggle(el, getter, setter) {
   [...el.children].forEach(btn => {
@@ -3285,7 +3347,7 @@ function getAbsolutePoints(p) {
       const sign = wingSide === 'Left' ? 1 : -1;
       return offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
     }
-    return [wingPos, ...p.points.slice(1)];
+    return [(p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos, ...p.points.slice(1)];
   }
   return p.points;
 }
@@ -3339,6 +3401,7 @@ function getEditablePointsArray(p) {
 let selectedHandle = null;
 // editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
 let editTarget = null;
+let settingMotionEnd = false;
 
 const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
 const DEFENDER_IDS_4x4 = ['DE_L','DT_L','DT_R','DE_R','LB1','LB2','LB3','LB4','CB_L','CB_R','FS'];
@@ -3367,6 +3430,16 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
 }
 
 stage.addEventListener('click', (ev) => {
+  if (settingMotionEnd && editTarget && editTarget.player === 4) {
+    const pt = svgPointFromEvent(ev);
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    variant.paths.filter(p => p.player === 4 && !p.optionLine && p.hasMotion).forEach(p => {
+      p.motionEnd = [pt.x, pt.y];
+    });
+    settingMotionEnd = false;
+    render();
+    return;
+  }
   if (!editMode) return;
   const target = ev.target;
   if (target.classList && target.classList.contains('edit-handle')) return; // handled by its own listener
@@ -3416,6 +3489,18 @@ function updateEditUI(variant) {
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
 
+  const motionPanel = document.getElementById('motionPanel');
+  if (editTarget.player === 4) {
+    motionPanel.style.display = 'flex';
+    const motionBtn = document.getElementById('motionToggleBtn');
+    const setEndBtn = document.getElementById('setMotionEndBtn');
+    motionBtn.textContent = p.hasMotion ? 'On' : 'Off';
+    setEndBtn.style.display = p.hasMotion ? '' : 'none';
+  } else {
+    motionPanel.style.display = 'none';
+    settingMotionEnd = false;
+  }
+
   if (p.isBlocking) {
     assignPanel.style.display = 'flex';
     const who = editTarget.player !== undefined ? `#${editTarget.player}` : editTarget.id;
@@ -3444,7 +3529,30 @@ function updateEditUI(variant) {
 document.getElementById('doneEditingBtn').addEventListener('click', () => {
   editTarget = null;
   selectedHandle = null;
+  settingMotionEnd = false;
   render();
+});
+
+document.getElementById('motionToggleBtn').addEventListener('click', () => {
+  if (!editTarget || editTarget.player !== 4) return;
+  const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+  const p4Paths = variant.paths.filter(p => p.player === 4 && !p.optionLine);
+  const turningOn = !p4Paths.some(p => p.hasMotion);
+  p4Paths.forEach(p => {
+    p.hasMotion = turningOn;
+    if (turningOn && !p.motionEnd) {
+      // sensible default: at the opposite wing spot, i.e. "at or past the
+      // opposite tight end" -- coach can tap the field to move it from there
+      const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
+      p.motionEnd = DATA.wing[oppositeSide].slice();
+    }
+  });
+  settingMotionEnd = false;
+  render();
+});
+
+document.getElementById('setMotionEndBtn').addEventListener('click', () => {
+  settingMotionEnd = true;
 });
 
 document.getElementById('addPointBtn').addEventListener('click', () => {
@@ -3555,7 +3663,9 @@ function render() {
   // wing (#4) -- position depends on wingSide, independent of play direction
   const wingPos = DATA.wing[wingSide];
   const wingDim = anyPlayerSelected && selectedPlayer !== 4;
-  const c4 = drawCircle(wingPos[0], wingPos[1], '4', '#111111', 34, wingDim, null, 4);
+  const p4MotionPath = variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
+  const p4CirclePos = p4MotionPath ? p4MotionPath.motionEnd : wingPos;
+  const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4);
   playerCircles['4'] = c4;
 
@@ -3599,7 +3709,8 @@ function render() {
         const sign = wingSide === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
       } else {
-        points = [wingPos, ...points.slice(1)];
+        const motionStart = (p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
+        points = [motionStart, ...points.slice(1)];
       }
     }
 
