@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASL Bengals — Signal Study Guide</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<!-- BUILD_VERSION: 2026-08-03 14:18 UTC (blocking-always-animates-fix-v2) -->
+<div id="buildVersionTag" style="position:fixed;bottom:2px;right:4px;font-size:9px;color:#e8720c;font-weight:800;z-index:9999;pointer-events:none;background:#fff;padding:2px 5px;border-radius:4px;">build 2026-08-05 02:39 UTC v3 (motion+duplicate+autoheal)</div>
+
+
+<div class="topToolbar" id="topToolbar" style="display:none">
+  <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
+  <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
+  <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
+</div>
+
+<div class="loginScreen" id="loginScreen">
+  <div class="loginOverlay"></div>
+  <div class="loginGlow"></div>
+  <div class="loginContent">
+    <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
+    <h1 class="loginTitle"><span class="bengalsBig">Bengals</span><span class="loginSubtitle">Signal Study Guide</span></h1>
+    <input class="loginInput" id="loginCode" type="password" placeholder="Enter access code"
+      autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="loginBtn" id="loginBtn">Log In</button>
+    <div class="loginError" id="loginError"></div>
+  </div>
+</div>
+
+<header>
+  <div class="headerRow">
+    <img id="headerLogo" src="assets/images/header-logo.png" alt="Bengals logo">
+    <div>
+      <h1>ASL Bengals</h1>
+      <p>Signal Study Guide</p>
+    </div>
+  </div>
+</header>
+
+<div class="modeTabs" id="modeTabs">
+  <button class="modeBtn active" data-mode="study">🎓 Study</button>
+  <button class="modeBtn" data-mode="quiz">🏈 Quiz</button>
+  <button class="modeBtn" data-mode="timed">⏱️ Timed Quiz</button>
+  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn">📋 Play Calls</button>
+  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;">✏️ Edit Plays</button>
+</div>
+
+<div id="editPlaysMode" class="modePanel">
+<div class="controls">
+  <div class="inline-control">
+    <label>Defense</label>
+    <div class="toggle-pair" id="defenseToggle">
+      <button class="toggle-btn" data-value="4x3">4x3</button>
+      <button class="toggle-btn" data-value="4x4">4x4</button>
+    </div>
+  </div>
+  <div class="inline-control">
+    <label>Wing</label>
+    <div class="toggle-pair" id="wingToggle">
+      <button class="toggle-btn" data-value="Left">L</button>
+      <button class="toggle-btn" data-value="Right">R</button>
+    </div>
+  </div>
+  <div class="inline-control" id="playWrap">
+    <label>Play</label>
+    <select id="playSelect"></select>
+  </div>
+  <div class="inline-control">
+    <button class="toggle-btn" id="duplicatePlayBtn" type="button">+ Duplicate Play</button>
+  </div>
+  <div class="inline-control">
+    <label>Dir</label>
+    <div class="toggle-pair" id="dirToggle">
+      <button class="toggle-btn" data-value="Left">L</button>
+      <button class="toggle-btn" data-value="Right">R</button>
+    </div>
+  </div>
+  <div class="inline-control">
+    <label>Blocking</label>
+    <div class="toggle-pair" id="blockingToggle">
+      <button class="toggle-btn" data-value="off">Off</button>
+      <button class="toggle-btn" data-value="on">On</button>
+    </div>
+  </div>
+  <div class="inline-control">
+    <label>Edit</label>
+    <div class="toggle-pair" id="editToggle">
+      <button class="toggle-btn" data-value="off">Off</button>
+      <button class="toggle-btn" data-value="on">On</button>
+    </div>
+  </div>
+  <div class="inline-control" id="ballCarrierWrap" style="display:none;">
+    <button class="toggle-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+  </div>
+  <div class="inline-control">
+    <label>Speed</label>
+    <div class="toggle-pair" id="speedToggle">
+      <button class="toggle-btn" data-value="normal">1x</button>
+      <button class="toggle-btn" data-value="half">&#189;x</button>
+    </div>
+  </div>
+  <div class="action-row">
+    <button class="action-btn primary" id="playBtn">&#9654; Play</button>
+    <button class="action-btn" id="exportBtn" style="display:none;">Export Points</button>
+    <button class="action-btn" id="saveCloudBtn" style="display:none;">Save to Cloud</button>
+  </div>
+</div>
+
+<div class="diagram-card">
+  <div class="corner-control" id="readPosGroup" style="display:none;">
+    <label>Read</label>
+    <div class="toggle-pair" id="readPosToggle">
+      <button class="toggle-btn tiny" data-value="A">A</button>
+      <button class="toggle-btn tiny" data-value="B">B</button>
+    </div>
+  </div>
+  <div class="corner-control" id="insideOutsideGroup" style="display:none;">
+    <label>Blast</label>
+    <div class="toggle-pair" id="insideOutsideToggle">
+      <button class="toggle-btn tiny" data-value="Inside">In</button>
+      <button class="toggle-btn tiny" data-value="Outside">Out</button>
+    </div>
+  </div>
+  
+  <div class="edit-toolbar" id="editToolbar" style="display:none;">
+    <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
+    <button id="addPointBtn">+ Add Point to End</button>
+  </div>
+  <div class="assign-panel" id="assignPanel" style="display:none;">
+    <span class="assign-label" id="assignLabel">Block assignment:</span>
+  </div>
+  <div class="assign-panel" id="motionPanel" style="display:none;">
+    <span class="assign-label" id="motionLabel">Motion:</span>
+    <button id="motionToggleBtn" type="button">Off</button>
+    <button id="setMotionEndBtn" type="button" style="display:none;">Tap field to set end spot</button>
+  </div>
+  <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div id="exportModal" style="display:none;">
+  <div class="export-backdrop"></div>
+  <div class="export-panel">
+    <div class="export-header">
+      <span>Edited Points (JSON)</span>
+      <button id="exportCloseBtn" class="action-btn">Close</button>
+    </div>
+    <textarea id="exportText" readonly></textarea>
+    <div class="export-footer">
+      <button id="exportCopyBtn" class="action-btn primary">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+<div class="hint" id="cloudStatus" style="font-weight:700; color:#999;">Checking for saved play edits\u2026</div>
+<div class="hint">Wing side and play direction are independent -- set them separately. Tap a player's circle in the diagram to highlight just his path; tap it again to show everyone.</div>
+
+</div>
+
+<div id="playcallsMode" class="modePanel">
+  <div style="text-align:center;margin-bottom:8px;">
+    <button id="pcInfoBtn" class="pcInfoBtn">i</button>
+  </div>
+  <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
+  <div class="play-grid" id="playCallsGrid"></div>
+  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle. Tap ▶ to watch the play, tap a player to highlight him, tap the flip icon to see the signal call.</div>
+</div>
+
+
+<div id="playCallsGate" class="pcInfoOverlay">
+  <div class="pcInfoCard" style="max-width:320px;">
+    <div class="pcInfoHeader">🔒 Coach Access</div>
+    <div class="pcInfoBody">
+      <p>This section is coach-only. Enter the password to continue.</p>
+    </div>
+    <input type="password" id="pcGateInput" placeholder="Password" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <div id="pcGateError" style="color:#e0201a;font-size:12px;font-weight:700;min-height:16px;margin-bottom:6px;"></div>
+    <button id="pcGateSubmitBtn" class="pcInfoCloseBtn">Unlock</button>
+  </div>
+</div>
+
+<div id="playCallsInfoOverlay" class="pcInfoOverlay">
+  <div class="pcInfoCard">
+    <div class="pcInfoHeader">📋 Play Calls — What's New</div>
+    <div class="pcInfoBody">
+      <p><strong>This tab is a coach-only preview.</strong> It's not part of the live study experience for players yet — think of it as a work-in-progress you're checking before it goes out.</p>
+      <p><strong>Each play has two independent toggles</strong> right on the card: <em>Wing L/R</em> (which side #4 lines up on) and <em>Direction L/R</em> (which way the play actually goes). They don't have to match — flip either one any time.</p>
+      <p><strong>▶ Play</strong> animates the diagram. Tap any player's circle to highlight just his path. The small <em>1x / ½x</em> toggle slows the play down.</p>
+      <p><strong>The flip icon</strong> (bottom-right) turns the card over to show the actual signal call for whatever Wing/Direction combo is currently selected — one sign at a time, looping twice.</p>
+      <p><strong>How updates get made:</strong> route and blocking edits happen in the separate builder tool. Once you're happy with a change, it gets folded back into this file. Nothing goes live to players until you personally push the updated file to GitHub — that stays entirely your call.</p>
+    </div>
+    <button id="pcInfoCloseBtn" class="pcInfoCloseBtn">Got it</button>
+  </div>
+</div>
+
+
+<div id="studyMode" class="modePanel show">
+  <div class="study-grid" id="studyGrid"></div>
+</div>
+
+<div id="quizMode" class="modePanel">
+  <div id="signalQuiz">
+    <div class="quizStats" id="sigStatsLine"></div>
+    <div class="sigHint">What does this signal mean?</div>
+    <div class="sigImgWrap" id="sigImgWrap"><img id="sigQImg" src="" alt="signal"></div>
+    <div class="seq-choices" id="sigChoices"></div>
+    <div class="seq-feedback" id="sigFeedback"></div>
+    <div class="sigNavRow" id="sigNavRow" style="display:none">
+      <button class="navBtn" id="sigNextBtn">Next ›</button>
+    </div>
+    <div class="doneScreen" id="sigRoundScreen" style="display:none">
+      <h2 id="sigRoundTitle"></h2>
+      <p id="sigRoundText"></p>
+      <button class="navBtn" id="sigRoundContinueBtn">Continue</button>
+    </div>
+    <div class="doneScreen" id="sigDoneScreen" style="display:none">
+      <div class="practiceTag" id="practiceModeTag" style="display:none">Practice Round</div>
+      <h2>🏈 Quiz Complete!</h2>
+      <p id="sigDoneText"></p>
+      <div class="reviewMissedBtnRow" id="reviewMissedRow" style="display:none">
+        <button class="reviewMissedBtn" id="reviewMissedBtn">📖 Review Missed</button>
+      </div>
+      <div class="lbSaveForm" id="lbSaveForm">
+        <div class="lbSaveHint">📢 Visible to the whole team. Tip: initials + jersey # (like "JD #24") helps everyone tell players apart</div>
+        <input id="lbNameInput" type="text" placeholder="e.g. JD #24" maxlength="20" autocomplete="off">
+        <button class="navBtn" id="lbSaveBtn">Save to Leaderboard</button>
+      </div>
+      <div class="lbEmpty" id="lbSaveConfirm" style="display:none;">✅ Score saved!</div>
+      <button class="navBtn secondary" id="sigRestartBtn">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<div id="timedMode" class="modePanel">
+  <div id="timedQuiz">
+    <div class="timedClockBig" id="timedClockBig">0:00.0</div>
+    <div class="quizStats" id="timedStatsLine"></div>
+    <div class="sigImgWrap" id="timedImgWrap">
+      <img id="timedQImg" src="" alt="signal">
+      <div class="startOverlay" id="timedStartOverlay">
+        <div class="startOverlayText">▶️<br>Tap to Start</div>
+      </div>
+    </div>
+    <div class="seq-choices" id="timedChoices" style="display:none"></div>
+    <div class="seq-feedback" id="timedFeedback"></div>
+    <div class="doneScreen" id="timedDoneScreen" style="display:none">
+      <h2>⏱️ Timed Challenge Complete!</h2>
+      <p id="timedDoneText"></p>
+      <div class="lbSaveForm" id="timedLbSaveForm">
+        <div class="lbSaveHint">📢 Visible to the whole team. Tip: initials + jersey # (like "JD #24") helps everyone tell players apart</div>
+        <input id="timedLbNameInput" type="text" placeholder="e.g. JD #24" maxlength="20" autocomplete="off">
+        <button class="navBtn" id="timedLbSaveBtn">Save to Leaderboard</button>
+      </div>
+      <button class="navBtn secondary" id="timedRestartBtn">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<div class="lbOverlay" id="lbOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="lbCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏆</div>
+      <h3>Leaderboard</h3>
+      <div class="lbSub">Top 20 across the whole team</div>
+    </div>
+    <div class="lbTabRow">
+      <button class="lbTabBtn active" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
+      <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz Scores</button>
+    </div>
+    <div class="lbList" id="timedLbList"></div>
+    <div class="lbList" id="lbList" style="display:none"></div>
+    <button class="navBtn secondary" id="historyBtn" style="width:calc(100% - 36px);margin:0 18px 14px">📜 View History</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="historyOverlay">
+  <div class="lbCard">
+    <h3>📜 Your History</h3>
+    <div class="lbSub">Everything you've done on this device</div>
+    <div class="lbSectionHeader">🥵 Toughest Signals</div>
+    <div class="missedList" id="toughestList"></div>
+    <div class="lbSectionHeader">😎 Easiest Signals</div>
+    <div class="missedList" id="easiestList"></div>
+    <div class="lbSectionHeader">🕓 Recent Quizzes</div>
+    <div class="lbList" id="historyList"></div>
+    <button class="navBtn secondary lbCloseBtn" id="historyCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="adminPinOverlay">
+  <div class="lbCard">
+    <h3>🔐 Coach Access</h3>
+    <div class="lbSub">Enter the 4-digit code</div>
+    <input id="adminPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+      autocomplete="off" style="width:100%;box-sizing:border-box;padding:14px;border-radius:10px;
+      border:1px solid var(--line);font-size:22px;text-align:center;letter-spacing:.5em;margin-bottom:10px">
+    <div class="lbEmpty" id="adminPinError" style="display:none;color:#b03030">Incorrect code</div>
+    <button class="navBtn" id="adminPinSubmitBtn" style="width:100%;margin-bottom:8px">Enter</button>
+    <button class="navBtn secondary lbCloseBtn" id="adminPinCancelBtn">Cancel</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="adminOverlay">
+  <div class="lbCard">
+    <h3>🔐 Coach Stats</h3>
+    <div class="lbSub">Team-wide usage — not visible to players</div>
+    <div id="adminStatsBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="adminCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="tipsOverlay">
+  <div class="lbCard">
+    <h3>👋 Welcome!</h3>
+    <div class="lbSub">A few quick tips to get started</div>
+    <ul class="tipsList">
+      <li>🎓 <b>Study Signals</b> — tap a category to expand it and see every signal in it.</li>
+      <li>🏈 <b>Quiz</b> — pick the right meaning, 5 rounds of 6, and build your streak!</li>
+      <li>⏱️ <b>Timed Quiz</b> — race the clock through all 30 signals; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
+      <li>🏆 Tap the trophy anytime to see the leaderboard — scores and times are shared across the whole team, so you'll see everyone's results, not just your own.</li>
+      <li>🔊 Tap the speaker to mute or unmute the music.</li>
+      <li>? Tap this icon anytime to see these tips again.</li>
+    </ul>
+    <button class="navBtn" id="tipsGotItBtn" style="width:100%">Got it!</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="missedOverlay">
+  <div class="lbCard">
+    <h3>📖 Missed Signals</h3>
+    <div class="lbSub">Review these, then give them another shot</div>
+    <div class="missedList" id="missedList"></div>
+    <button class="navBtn" id="practiceMissedBtn" style="width:100%;margin-bottom:10px">Practice These Again</button>
+    <button class="navBtn secondary lbCloseBtn" id="missedCloseBtn">Close</button>
+  </div>
+</div>
+
+<audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
+<audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
+<audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
+<audio id="bgMusic" preload="auto" loop src="assets/audio/bg-music.mp3"></audio>
+
+
+<script>
+// Loads the card/play data files, then the feature scripts in the same
+// order they used to run as inline <script> blocks in the old single file.
+// Everything downstream (auth.js, study-quiz.js, play-calls.js,
+// edit-plays.js) expects window.ALL_CARDS and window.DATA to already be
+// populated by the time it runs, exactly like the old inline JSON blobs.
+(async function boot(){
+  const [cardsRes, playsRes] = await Promise.all([
+    fetch('data/cards.json'),
+    fetch('data/plays.json'),
+  ]);
+  window.ALL_CARDS = await cardsRes.json();
+  window.DATA = await playsRes.json();
+
+  const scripts = ['js/auth.js', 'js/study-quiz.js', 'js/play-calls.js', 'js/edit-plays.js'];
+  for (const src of scripts) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.body.appendChild(s);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
