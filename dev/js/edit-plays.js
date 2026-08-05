@@ -20,7 +20,13 @@ function getPlayVariant(playType, dir) {
   return v;
 }
 let selectedPlayer = null;
-let blockingEnabled = false; // off by default until assignments are confirmed
+// Defaults ON. This is a session-only display toggle -- it's never saved to
+// or loaded from Firebase, so it silently reset to off on every page load,
+// which looked exactly like "blocking breaks after I save": no blocking
+// lines drawn at all, for anyone, until someone happened to click
+// Blocking: On again. Defaulting to on means what's already on the page
+// (built-in or previously-saved) is visible immediately.
+let blockingEnabled = true;
 let editMode = false;
 let speedMultiplier = 1; // 1 = normal, 2 = half speed
 let mainGroup = null;
@@ -170,10 +176,13 @@ function sanitizeBlockingDistances(playTypes) {
       variants.forEach(variant => {
         (variant.paths || []).forEach(p => {
           if (!p.isBlocking) return;
+          // sameSidePoints/crossPoints (player 4's block-relative fields) store
+          // an offset FROM the wing position, not an absolute field coordinate --
+          // comparing those against defenders' absolute positions doesn't mean
+          // anything, so only points/points4x4 (which are absolute) belong here.
+          if (p.blockRelative) return;
           const actualStart = (p.player === 4 && p.hasMotion && p.motionEnd) ? p.motionEnd : null;
-          [['points', variant.defense], ['points4x4', variant.defense4x4],
-           ['sameSidePoints', variant.defense], ['sameSidePoints4x4', variant.defense4x4],
-           ['crossPoints', variant.defense], ['crossPoints4x4', variant.defense4x4]].forEach(([field, defenders]) => {
+          [['points', variant.defense], ['points4x4', variant.defense4x4]].forEach(([field, defenders]) => {
             if (!p[field] || !defenders || !defenders.length) return;
             const start = actualStart || p[field][0];
             const end = p[field][1];
