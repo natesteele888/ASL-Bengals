@@ -410,8 +410,6 @@ async function playSequence() {
   // draw every path -- this is the play actually happening. Each path can
   // carry its own delay (e.g. Double Blast's QB starts after the blockers,
   // since he's following behind them, not moving in lockstep).
-  console.log('[EditPlays debug] play:', playKey, direction, '| paths this animation:',
-    lastRenderedPaths.map(p => ({ player: p.player, hasCircleEl: !!p.circleEl })));
   const pathPromises = lastRenderedPaths.map(({el, arrowEl, delayMs, circleEl, textEl}) =>
     animatePathDraw(el, arrowEl, animMs, (delayMs || 0) * speedMultiplier, circleEl, textEl));
 

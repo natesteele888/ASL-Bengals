@@ -307,8 +307,6 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const lastRenderedPaths = selectedPlayer === null
     ? allPaths
     : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
-  console.log('[PlayCalls v2 check] selectedPlayer:', selectedPlayer, '| blocking paths included:', lastRenderedPaths.filter(p=>p.isBlocking).length, '/', allPaths.filter(p=>p.isBlocking).length);
-  console.log('[PlayCalls v2 check] blocking circleEl status:', lastRenderedPaths.filter(p=>p.isBlocking).map(p => !!p.circleEl));
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
