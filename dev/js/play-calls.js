@@ -4,6 +4,34 @@
 // IIFE below) because edit-plays.js also reads this same DATA variable.
 let DATA = window.DATA;
 
+// Firebase's database deletes any field whose value is `null` when you save
+// it (that's how you delete a field via their API) -- so a path object
+// authored as `{player: null, id: 'LT', ...}` round-trips through a cloud
+// save as `{id: 'LT', ...}` with no `player` key at all. Several places in
+// play-calls.js/edit-plays.js specifically check `p.player === null` (vs.
+// looking it up by `p.id`) to tell an O-line blocker apart from a numbered
+// player -- `undefined !== null`, so those checks silently failed for any
+// play loaded from a cloud save, which is what broke the O-line's circles
+// from tracking their block lines during playback (arrows for players 1-6
+// were unaffected since their `player` field is a real number, never null).
+// Called right after fetching playEdits.json, before it's assigned to
+// DATA.playTypes, so loaded data behaves identically to the built-in JSON.
+function normalizePlayData(playTypes) {
+  (playTypes || []).forEach(pt => {
+    Object.values(pt.directions || {}).forEach(dirVal => {
+      const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
+      variants.forEach(variant => {
+        if (!variant) return;
+        if (variant.readKeyId === undefined) variant.readKeyId = null;
+        (variant.paths || []).forEach(p => {
+          if (p.player === undefined) p.player = null;
+        });
+      });
+    });
+  });
+  return playTypes;
+}
+
 (function() {
   const SIGNAL_CARDS = {};
   ALL_CARDS.forEach(c => { SIGNAL_CARDS[c.id] = c.img; });
@@ -616,7 +644,7 @@ function buildGrid() {
       .then(r => r.ok ? r.json() : null)
       .then(saved => {
         if (saved && Array.isArray(saved) && saved.length) {
-          DATA.playTypes = saved;
+          DATA.playTypes = normalizePlayData(saved);
           if (statusEl) statusEl.textContent = 'Showing the latest saved routes from the builder tool.';
         } else {
           if (statusEl) statusEl.textContent = 'Showing built-in default routes (no saved edits found).';

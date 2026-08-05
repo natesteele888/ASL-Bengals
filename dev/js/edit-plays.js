@@ -232,7 +232,7 @@ function loadSavedPlaysFromCloud() {
     .then(r => r.ok ? r.json() : null)
     .then(saved => {
       if (saved && Array.isArray(saved) && saved.length) {
-        DATA.playTypes = saved;
+        DATA.playTypes = normalizePlayData(saved);
         cloudStatusEl.textContent = 'Showing the latest saved play edits.';
         rebuildPlaySelectOptions();
         // guard against the loaded data not including whatever play was
