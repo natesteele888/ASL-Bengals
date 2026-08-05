@@ -3000,17 +3000,18 @@ function sanitizeBlockingDistances(playTypes) {
       variants.forEach(variant => {
         (variant.paths || []).forEach(p => {
           if (!p.isBlocking) return;
+          const actualStart = (p.player === 4 && p.hasMotion && p.motionEnd) ? p.motionEnd : null;
           [['points', variant.defense], ['points4x4', variant.defense4x4],
            ['sameSidePoints', variant.defense], ['sameSidePoints4x4', variant.defense4x4],
            ['crossPoints', variant.defense], ['crossPoints4x4', variant.defense4x4]].forEach(([field, defenders]) => {
             if (!p[field] || !defenders || !defenders.length) return;
-            const start = p[field][0];
+            const start = actualStart || p[field][0];
             const end = p[field][1];
             const target = closest(defenders, end);
             const distToDefender = dist(target.pos, end);
             if (distToDefender > 130) return; // not actually aimed at this defender, leave alone
             const newEnd = [start[0] + NEW_FRAC*(target.pos[0]-start[0]), start[1] + NEW_FRAC*(target.pos[1]-start[1])];
-            if (dist(newEnd, end) > 2) p[field] = [start, newEnd]; // only touch it if it's actually short
+            if (dist(newEnd, end) > 2) p[field] = [p[field][0], newEnd]; // only touch it if it's actually short -- keep the stored start point as-is, only fix the end
           });
         });
       });
@@ -3086,6 +3087,15 @@ playSelect.addEventListener('change', () => {
 
 function selectPlayer(n) {
   if (isPlaying) return;
+  if (settingBallCarrier && editMode) {
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    variant.paths.forEach(p => { if (p.player !== null && !p.optionLine) p.ball = false; });
+    const targetPath = variant.paths.find(p => p.player === n && !p.optionLine);
+    if (targetPath) targetPath.ball = true;
+    settingBallCarrier = false;
+    render();
+    return;
+  }
   if (editMode) {
     editTarget = (editTarget && editTarget.player === n) ? null : { player: n };
     selectedHandle = null;
@@ -3402,6 +3412,7 @@ let selectedHandle = null;
 // editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
 let editTarget = null;
 let settingMotionEnd = false;
+let settingBallCarrier = false;
 
 const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
 const DEFENDER_IDS_4x4 = ['DE_L','DT_L','DT_R','DE_R','LB1','LB2','LB3','LB4','CB_L','CB_R','FS'];
