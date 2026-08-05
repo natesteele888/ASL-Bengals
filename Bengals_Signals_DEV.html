@@ -854,6 +854,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
       <button class="toggle-btn" data-value="on">On</button>
     </div>
   </div>
+  <div class="inline-control" id="ballCarrierWrap" style="display:none;">
+    <button class="toggle-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+  </div>
   <div class="inline-control">
     <label>Speed</label>
     <div class="toggle-pair" id="speedToggle">
@@ -2954,8 +2957,17 @@ wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
   editMode = (v === 'on');
   editTarget = null;
   selectedHandle = null;
+  settingBallCarrier = false;
   exportBtn.style.display = editMode ? '' : 'none';
   saveCloudBtn.style.display = editMode ? '' : 'none';
+  document.getElementById('ballCarrierWrap').style.display = editMode ? '' : 'none';
+});
+
+document.getElementById('ballCarrierBtn').addEventListener('click', () => {
+  if (!editMode) return;
+  settingBallCarrier = true;
+  editTarget = null; // clear any route-editing target so the click goes to carrier selection
+  render();
 });
 
 const speedToggle = document.getElementById('speedToggle');
@@ -3584,6 +3596,11 @@ document.getElementById('addPointBtn').addEventListener('click', () => {
 function render() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getPlayVariant(playType, direction);
+  const ballCarrierBtn = document.getElementById('ballCarrierBtn');
+  if (ballCarrierBtn) {
+    ballCarrierBtn.textContent = settingBallCarrier ? 'Tap a player…' : 'Ball Carrier';
+    ballCarrierBtn.classList.toggle('active', settingBallCarrier);
+  }
   const [vw, vh] = DATA.viewBox;
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   stage.innerHTML = '';
