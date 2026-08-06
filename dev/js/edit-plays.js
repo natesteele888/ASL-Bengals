@@ -30,7 +30,9 @@ let blockingEnabled = true;
 // Motion is a pure playback choice, exactly like Wing L/R and Dir L/R --
 // never authored per play, never saved. Whatever side #4 is set on,
 // turning this on always sends him to the opposite side before the snap.
-let motionOn = true;
+// Defaults off, matching Play Calls, so what's shown out of the box
+// matches the play as authored.
+let motionOn = false;
 let editMode = false;
 let speedMultiplier = 1; // 1 = normal, 2 = half speed
 let mainGroup = null;
@@ -1068,7 +1070,8 @@ function render() {
 
   const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
     'text-anchor':'middle', fill:'#111111'});
-  title.textContent = `WING ${wingSide.toUpperCase()} ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' · BOOT' : '');
+  title.textContent = `WING ${wingSide.toUpperCase()}` + (motionOn ? ' MOTION' : '') +
+    ` ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' BOOT' : '');
   stage.appendChild(title);
 
 

@@ -444,11 +444,9 @@ function buildCard(combo) {
   let insideOutside = 'Outside';
   let selectedPlayer = null;
   let speedMultiplier = 1;
-  // #4 is the only player who ever goes in motion -- on by default (matches
-  // how the diagram always looked before this toggle existed). Boot is off
-  // by default -- it's a modifier on top of whichever play is selected, not
-  // a state most cards start in.
-  let motionOn = true;
+  // Both Motion and Boot default off -- they're modifiers on top of the
+  // play as authored, not a state most cards should start in.
+  let motionOn = false;
   let bootOn = false;
   const isPlayingRef = { value: false };
 
@@ -487,8 +485,8 @@ function buildCard(combo) {
   // it's part of the pre-snap picture, same as the wing spot.
   const motionToggle = document.createElement('div');
   motionToggle.className = 'motion-toggle';
-  const mOff = document.createElement('button'); mOff.textContent = 'Motion Off';
-  const mOn = document.createElement('button'); mOn.textContent = 'Motion On'; mOn.className = 'active';
+  const mOff = document.createElement('button'); mOff.textContent = 'Motion Off'; mOff.className = 'active';
+  const mOn = document.createElement('button'); mOn.textContent = 'Motion On';
   mOff.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = false; mOff.classList.add('active'); mOn.classList.remove('active'); onComboChanged(); });
   mOn.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = true; mOn.classList.add('active'); mOff.classList.remove('active'); onComboChanged(); });
   motionToggle.appendChild(mOff); motionToggle.appendChild(mOn);
@@ -620,8 +618,16 @@ function buildCard(combo) {
   function onComboChanged() {
     selectedPlayer = null;
     rerenderDiagram();
-    const base = combo.hasInsideOutside ? `Wing ${wingSide} ${insideOutside} ${combo.label} ${direction}` : `Wing ${wingSide} ${combo.label} ${direction}`;
-    titleBar.textContent = bootOn ? `${base} · Boot` : base;
+    // Same order as the actual signal call: Wing side, then Motion (right
+    // after the wing spot is set), then In/Out if this play has it, then
+    // the play itself, then Direction, then Boot tacked on at the very end.
+    const parts = [`Wing ${wingSide}`];
+    if (motionOn) parts.push('Motion');
+    if (combo.hasInsideOutside) parts.push(insideOutside);
+    parts.push(combo.label);
+    parts.push(direction);
+    if (bootOn) parts.push('Boot');
+    titleBar.textContent = parts.join(' ');
     if (outer.classList.contains('flipped')) startSignalSequence();
   }
 
