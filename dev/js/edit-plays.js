@@ -27,6 +27,10 @@ let selectedPlayer = null;
 // Blocking: On again. Defaulting to on means what's already on the page
 // (built-in or previously-saved) is visible immediately.
 let blockingEnabled = true;
+// Motion is a pure playback choice, exactly like Wing L/R and Dir L/R --
+// never authored per play, never saved. Whatever side #4 is set on,
+// turning this on always sends him to the opposite side before the snap.
+let motionOn = true;
 let editMode = false;
 let speedMultiplier = 1; // 1 = normal, 2 = half speed
 let mainGroup = null;
@@ -119,6 +123,20 @@ function wireToggle(el, getter, setter) {
 }
 wireToggle(wingToggle, () => wingSide, v => wingSide = v);
 wireToggle(dirToggle, () => direction, v => direction = v);
+
+const motionToggle = document.getElementById('motionToggle');
+wireToggle(motionToggle, () => (motionOn ? 'on' : 'off'), v => motionOn = (v === 'on'));
+
+// Wherever #4 actually is at the snap -- his set wing spot, or the
+// opposite one if Motion is on. Every player-4-specific point computation
+// (route start, block-relative offset anchor, seam-route offset anchor)
+// reads from this instead of the raw wing spot.
+function p4Anchor() {
+  const wingPos = DATA.wing[wingSide];
+  if (!motionOn) return wingPos;
+  const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
+  return DATA.wing[oppositeSide];
+}
 
 // 4x3 removed as an option -- everything is 4x4 now, most teams played are
 // a 4x4 front and it halves the number of blocking assignments to keep up
@@ -227,10 +245,9 @@ function sanitizeBlockingDistances(playTypes) {
           // comparing those against defenders' absolute positions doesn't mean
           // anything, so only points/points4x4 (which are absolute) belong here.
           if (p.blockRelative) return;
-          const actualStart = (p.player === 4 && p.hasMotion && p.motionEnd) ? p.motionEnd : null;
           [['points', variant.defense], ['points4x4', variant.defense4x4]].forEach(([field, defenders]) => {
             if (!p[field] || !defenders || !defenders.length) return;
-            const start = actualStart || p[field][0];
+            const start = p[field][0];
             const end = p[field][1];
             const target = closest(defenders, end);
             const distToDefender = dist(target.pos, end);
@@ -351,7 +368,7 @@ const PAUSE_MS = 500;
 let isPlaying = false;
 
 function setControlsDisabled(disabled) {
-  [wingToggle, dirToggle, blockingToggle, speedToggle].forEach(el => {
+  [wingToggle, dirToggle, motionToggle, blockingToggle, speedToggle].forEach(el => {
     [...el.children].forEach(b => b.disabled = disabled);
   });
   playSelect.disabled = disabled;
@@ -576,19 +593,19 @@ function getAbsolutePoints(p) {
   // mirrors the same substitution logic used in render() for player 4's
   // special path types, so chip-block math can read the CURRENT on-screen
   // points without duplicating render()'s full pipeline
-  const wingPos = DATA.wing[wingSide];
   if (p.player === 4 && !p.optionLine) {
+    const anchor = p4Anchor();
     if (p.blockRelative) {
       const [dx, dy] = getBlockPoints(p)[1];
       const sign = wingSide === 'Left' ? 1 : -1;
-      return [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
+      return [anchor, [anchor[0] + sign * dx, anchor[1] + dy]];
     } else if (p.wingSeamRelative) {
       const sameSide = wingSide === direction;
       const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
       const sign = wingSide === 'Left' ? 1 : -1;
-      return offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
+      return offsets.map(([dx, dy]) => [anchor[0] + sign * dx, anchor[1] + dy]);
     }
-    return [(p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos, ...p.points.slice(1)];
+    return [anchor, ...p.points.slice(1)];
   }
   return p.points;
 }
@@ -611,19 +628,19 @@ function applyChipBlock(p, defenderId, variant) {
 }
 
 function writeBackPoint(p, idx, absX, absY) {
-  const wingPos = DATA.wing[wingSide];
+  const anchor = p4Anchor();
   if (p.blockRelative) {
     if (idx === 0) return; // start always tracks the wing circle itself
     const sign = wingSide === 'Left' ? 1 : -1;
     getBlockPoints(p); // ensures the field exists (migrates old data if needed)
     const fieldKey = getBlockFieldKey();
-    p[fieldKey][1] = [(absX - wingPos[0]) / sign, absY - wingPos[1]];
+    p[fieldKey][1] = [(absX - anchor[0]) / sign, absY - anchor[1]];
   } else if (p.wingSeamRelative) {
     if (idx === 0) return;
     const sameSide = wingSide === direction;
     const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
     const sign = wingSide === 'Left' ? 1 : -1;
-    offsets[idx] = [(absX - wingPos[0]) / sign, absY - wingPos[1]];
+    offsets[idx] = [(absX - anchor[0]) / sign, absY - anchor[1]];
   } else if (p.player === 4 && !p.optionLine) {
     if (idx === 0) return;
     p.points[idx] = [absX, absY];
@@ -642,7 +659,6 @@ function getEditablePointsArray(p) {
 let selectedHandle = null;
 // editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
 let editTarget = null;
-let settingMotionEnd = false;
 let settingBallCarrier = false;
 
 const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
@@ -658,13 +674,13 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
   const d = getActiveDefenseArr(variant).find(d => d.id === defenderId);
   if (!d) return;
   const frac = 0.9;
-  const actualStart = p.blockRelative ? DATA.wing[wingSide] : blockerStart;
+  const actualStart = p.blockRelative ? p4Anchor() : blockerStart;
   const end = [actualStart[0] + frac*(d.pos[0]-actualStart[0]), actualStart[1] + frac*(d.pos[1]-actualStart[1])];
   if (p.blockRelative) {
-    const wingPos = DATA.wing[wingSide];
+    const anchor = p4Anchor();
     const sign = wingSide === 'Left' ? 1 : -1;
     const fieldKey = getBlockFieldKey();
-    p[fieldKey] = [[0,0], [(end[0]-wingPos[0])/sign, end[1]-wingPos[1]]];
+    p[fieldKey] = [[0,0], [(end[0]-anchor[0])/sign, end[1]-anchor[1]]];
   } else {
     const targetKey = defenseMode === '4x4' ? 'points4x4' : 'points';
     p[targetKey] = [blockerStart.slice(), end];
@@ -672,16 +688,6 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
 }
 
 stage.addEventListener('click', (ev) => {
-  if (settingMotionEnd && editTarget && editTarget.player === 4) {
-    const pt = svgPointFromEvent(ev);
-    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
-    variant.paths.filter(p => p.player === 4 && !p.optionLine && p.hasMotion).forEach(p => {
-      p.motionEnd = [pt.x, pt.y];
-    });
-    settingMotionEnd = false;
-    render();
-    return;
-  }
   if (!editMode) return;
   const target = ev.target;
   if (target.classList && target.classList.contains('edit-handle')) return; // handled by its own listener
@@ -712,7 +718,6 @@ function findEditTargetPath(variant) {
 const editToolbar = document.getElementById('editToolbar');
 const assignPanel = document.getElementById('assignPanel');
 const assignLabel = document.getElementById('assignLabel');
-const motionToggle = document.getElementById('motionToggle');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
@@ -731,17 +736,6 @@ function updateEditUI(variant) {
 
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
-
-  const motionPanel = document.getElementById('motionPanel');
-  if (editTarget.player === 4) {
-    motionPanel.style.display = 'flex';
-    [...motionToggle.children].forEach(b =>
-      b.classList.toggle('active', b.dataset.value === (p.hasMotion ? 'on' : 'off')));
-    document.getElementById('motionHint').style.display = p.hasMotion ? '' : 'none';
-  } else {
-    motionPanel.style.display = 'none';
-    settingMotionEnd = false;
-  }
 
   if (p.isBlocking) {
     assignPanel.style.display = 'flex';
@@ -771,29 +765,7 @@ function updateEditUI(variant) {
 document.getElementById('doneEditingBtn').addEventListener('click', () => {
   editTarget = null;
   selectedHandle = null;
-  settingMotionEnd = false;
   render();
-});
-
-[...motionToggle.children].forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (!editTarget || editTarget.player !== 4) return;
-    const turningOn = btn.dataset.value === 'on';
-    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
-    const p4Paths = variant.paths.filter(p => p.player === 4 && !p.optionLine);
-    p4Paths.forEach(p => {
-      p.hasMotion = turningOn;
-      if (turningOn && !p.motionEnd) {
-        // sensible default: at the opposite wing spot, i.e. "at or past the
-        // opposite tight end" -- coach can then drag the dotted line's end
-        // handle to move it
-        const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
-        p.motionEnd = DATA.wing[oppositeSide].slice();
-      }
-    });
-    settingMotionEnd = false;
-    render();
-  });
 });
 
 document.getElementById('addPointBtn').addEventListener('click', () => {
@@ -906,35 +878,25 @@ function render() {
   circlesLayer.appendChild(c6);
   playerCircles['6'] = c6;
 
-  // wing (#4) -- position depends on wingSide, independent of play direction
+  // wing (#4) -- position depends on wingSide, independent of play direction.
+  // Motion is a pure playback choice (like Wing/Dir) -- if it's on, he's
+  // drawn at the opposite wing spot instead, and everything below anchors
+  // off that same spot so his route/blocking math stays correct.
   const wingPos = DATA.wing[wingSide];
+  const p4Pos = p4Anchor();
   const wingDim = anyPlayerSelected && selectedPlayer !== 4;
-  const p4MotionPath = variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
-  const p4CirclePos = p4MotionPath ? p4MotionPath.motionEnd : wingPos;
-  const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111111', 34, wingDim, null, 4);
+  const c4 = drawCircle(p4Pos[0], p4Pos[1], '4', '#111111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4);
   playerCircles['4'] = c4;
 
-  // motion path -- dotted line from #4's real lineup spot to wherever he
-  // goes in motion, always visible whenever motion is on (not just while
-  // editing it), so it's clear at a glance instead of being invisible
-  // state hidden behind a toggle.
-  if (p4MotionPath) {
+  // motion path -- dotted line from #4's real lineup spot to the opposite
+  // side, always visible whenever Motion is on so it's clear at a glance.
+  if (motionOn) {
     const motionLine = svgEl('path', {
-      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4MotionPath.motionEnd[0]} ${p4MotionPath.motionEnd[1]}`,
+      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4Pos[0]} ${p4Pos[1]}`,
       fill: 'none', stroke: '#111111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
     });
     circlesLayer.appendChild(motionLine);
-    if (editMode && editTarget && editTarget.player === 4) {
-      const handle = svgEl('circle', {cx: p4MotionPath.motionEnd[0], cy: p4MotionPath.motionEnd[1],
-        r: settingMotionEnd ? 19 : 16, class: 'edit-handle' + (settingMotionEnd ? ' picked' : '')});
-      handle.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        settingMotionEnd = !settingMotionEnd; // tap again to cancel picking it up
-        render();
-      });
-      circlesLayer.appendChild(handle);
-    }
   }
 
   // backfield (#3, #1, #2) -- always fixed positions
@@ -965,7 +927,7 @@ function render() {
       if (p.blockRelative) {
         const [dx, dy] = getBlockPoints(p)[1];
         const sign = wingSide === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
-        points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
+        points = [p4Pos, [p4Pos[0] + sign * dx, p4Pos[1] + dy]];
       } else if (p.wingSeamRelative) {
         // Two shapes, both authored assuming Wing Left as the base: one for
         // when he's on the SAME side as the play's direction (stays on his
@@ -975,10 +937,9 @@ function render() {
         const sameSide = wingSide === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
         const sign = wingSide === 'Left' ? 1 : -1;
-        points = offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
+        points = offsets.map(([dx, dy]) => [p4Pos[0] + sign * dx, p4Pos[1] + dy]);
       } else {
-        const motionStart = (p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
-        points = [motionStart, ...points.slice(1)];
+        points = [p4Pos, ...points.slice(1)];
       }
     }
 

@@ -67,6 +67,13 @@
     </div>
   </div>
   <div class="inline-control">
+    <label>Motion</label>
+    <div class="toggle-pair" id="motionToggle">
+      <button class="toggle-btn" data-value="off">Off</button>
+      <button class="toggle-btn" data-value="on">On</button>
+    </div>
+  </div>
+  <div class="inline-control">
     <label>Blocking</label>
     <div class="toggle-pair" id="blockingToggle">
       <button class="toggle-btn" data-value="off">Off</button>
@@ -120,14 +127,6 @@
   </div>
   <div class="assign-panel" id="assignPanel" style="display:none;">
     <span class="assign-label" id="assignLabel">Block assignment:</span>
-  </div>
-  <div class="assign-panel" id="motionPanel" style="display:none;">
-    <span class="assign-label" id="motionLabel">Motion:</span>
-    <div class="toggle-pair" id="motionToggle">
-      <button class="toggle-btn" data-value="off">Off</button>
-      <button class="toggle-btn" data-value="on">On</button>
-    </div>
-    <span class="assign-label" id="motionHint" style="display:none;">Dotted line shows the path -- tap the end of it, then tap the field to move it</span>
   </div>
   <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 </div>

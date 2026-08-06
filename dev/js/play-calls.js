@@ -227,11 +227,24 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111', 34, c6Dim, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
+  // Motion is now a pure playback choice, exactly like Wing L/R and Dir L/R
+  // -- not something authored per play. Whatever side #4 is set on, turning
+  // Motion on always sends him to the opposite side before the snap; his
+  // route/blocking math below is anchored from wherever he actually ends
+  // up standing.
+  const oppositeWingSide = wingSide === 'Left' ? 'Right' : 'Left';
+  const p4Anchor = motionOn ? DATA.wing[oppositeWingSide] : wingPos;
+
   const wingDim = anySelected && selectedPlayer !== 4;
-  const p4MotionPath = motionOn ? variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd) : null;
-  const p4CirclePos = p4MotionPath ? p4MotionPath.motionEnd : wingPos;
-  const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111', 34, wingDim, null, 4);
+  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
+
+  if (motionOn) {
+    circlesLayer.appendChild(svgEl('path', {
+      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
+      fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
+    }));
+  }
 
   ['3','1','2'].forEach(num => {
     const dim = anySelected && String(selectedPlayer) !== num;
@@ -251,7 +264,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const sameSide = wingSide === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
         const sign = wingSide === 'Left' ? 1 : -1;
-        points = offsets.map(([dx, dy]) => [wingPos[0] + sign * dx, wingPos[1] + dy]);
+        points = offsets.map(([dx, dy]) => [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]);
       } else if (p.blockRelative) {
         const sameSide = wingSide === direction;
         const baseKey = sameSide ? 'sameSidePoints' : 'crossPoints';
@@ -259,10 +272,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const srcPoints = p[fieldKey] || p.points;
         const [dx, dy] = srcPoints[1];
         const sign = wingSide === 'Left' ? 1 : -1;
-        points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
+        points = [p4Anchor, [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]];
       } else {
-        const motionStart = (motionOn && p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
-        points = [motionStart, ...points.slice(1)];
+        points = [p4Anchor, ...points.slice(1)];
       }
     }
     if (p.optionLine) {
@@ -327,19 +339,19 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
 
-  // Pre-snap motion: if #4 is set to motion, he's already drawn at his
-  // motionEnd spot (so his route/blocking math is correct from the start).
-  // For the animation specifically, temporarily snap him back to his real
-  // lineup spot and let him visibly run the motion before the snap --
-  // otherwise "motion" would look identical to just picking the other wing.
-  const motionPlayType = DATA.playTypes.find(p => p.key === playKey);
-  const motionVariant = getVariant(motionPlayType, direction, insideOutside);
-  const motionPath = motionOn ? (motionVariant.paths || []).find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd) : null;
-  if (motionPath) {
+  // Pre-snap motion: purely a playback choice (like Wing/Dir), not authored
+  // per play -- whatever side #4 is set on, Motion On always sends him to
+  // the opposite side. He's already drawn there (renderCardDiagram anchors
+  // his route/blocking off that spot); for the animation, temporarily snap
+  // him back to his real lineup spot and let him visibly run the motion
+  // before the snap, otherwise it'd look identical to just picking the
+  // other wing side to begin with.
+  if (motionOn) {
     const p4Entry = lastRenderedPaths.find(p => p.player === 4) || allPaths.find(p => p.player === 4);
     if (p4Entry && p4Entry.circleEl) {
+      const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
       const startPos = { x: DATA.wing[wingSide][0], y: DATA.wing[wingSide][1] };
-      const endPos = { x: motionPath.motionEnd[0], y: motionPath.motionEnd[1] };
+      const endPos = { x: DATA.wing[oppositeSide][0], y: DATA.wing[oppositeSide][1] };
       p4Entry.circleEl.setAttribute('cx', startPos.x); p4Entry.circleEl.setAttribute('cy', startPos.y);
       if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', startPos.x); p4Entry.textEl.setAttribute('y', startPos.y + 12); }
       await tweenPoint(startPos, endPos, 2200 * speedMultiplier, pt => {
