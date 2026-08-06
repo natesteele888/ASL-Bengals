@@ -784,6 +784,32 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     resize: vertical;
   }
 #editPlaysMode .export-footer { display: flex; justify-content: flex-end; }
+
+  /* Play Calls cards on phones: with Wing/Motion/Dir/Boot (and sometimes
+     In/Out) all showing at once, the toggle row can wrap to 2-3 lines.
+     card-outer used to size itself purely off aspect-ratio, so a taller
+     toggle row squeezed the diagram down to almost nothing. Shrinking the
+     toggle buttons cuts down on wrapping, and swapping aspect-ratio for a
+     generous fixed height guarantees the diagram always has real room to
+     breathe, no matter how many lines the toggles wrap to. */
+  @media (max-width: 480px) {
+    .card-toggle-row {
+      gap: 4px;
+      padding: 6px 6px 0;
+    }
+    .def-toggle, .wing-toggle, .dir-toggle, .motion-toggle, .boot-toggle {
+      font-size: 8px;
+    }
+    .def-toggle button, .wing-toggle button, .dir-toggle button,
+    .motion-toggle button, .boot-toggle button {
+      padding: 3px 5px;
+    }
+    .card-outer, .accordion-body .card-outer {
+      aspect-ratio: auto;
+      height: 420px;
+    }
+  }
+
   @media (min-width: 640px) {
     
     

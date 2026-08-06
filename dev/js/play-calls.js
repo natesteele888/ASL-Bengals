@@ -131,6 +131,12 @@ const PLAY_TYPE_SIGNAL_LABEL = {
   inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
   option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast',
 };
+// Two different real signals both mean "motion is on" -- picking randomly
+// between them (same idea as the finger-count randomization below) keeps
+// the defense from pattern-reading a single fixed sign. Boot only has one
+// dedicated card.
+const MOTION_SIGNAL_IDS = [11, 12];
+const BOOT_SIGNAL_ID = 26;
 
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
@@ -138,7 +144,7 @@ function randomFingerId(side, exclude) {
   return options[Math.floor(Math.random() * options.length)];
 }
 
-function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn) {
   const wingFingerId = randomFingerId(wingSide);
   const dirFingerId = direction === wingSide
     ? randomFingerId(direction, wingFingerId)
@@ -150,6 +156,12 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
     { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
     { src: SIGNAL_CARDS[wingFingerId], label: `Wing Location: ${wingSide}` },
   ];
+  // Motion is called right after the wing spot is set, since it's part of
+  // the pre-snap picture -- matches where the Motion toggle sits in the UI.
+  if (motionOn) {
+    const motionId = MOTION_SIGNAL_IDS[Math.floor(Math.random() * MOTION_SIGNAL_IDS.length)];
+    signals.push({ src: SIGNAL_CARDS[motionId], label: 'Motion' });
+  }
   if (playKey === 'blast') {
     const ioId = insideOutside === 'Inside' ? INSIDE_SIGNAL_ID : OUTSIDE_SIGNAL_ID;
     signals.push({ src: SIGNAL_CARDS[ioId], label: insideOutside === 'Inside' ? 'Inside' : 'Outside' });
@@ -163,6 +175,10 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }
   signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
+  // Boot is a modifier tacked on at the very end, after direction is set.
+  if (bootOn) {
+    signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
+  }
   return signals;
 }
 
@@ -579,7 +595,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     const MAX_LOOPS = 2;
