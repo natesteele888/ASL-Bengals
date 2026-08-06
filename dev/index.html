@@ -48,19 +48,16 @@
 
 <div id="editPlaysMode" class="modePanel">
 <div class="controls">
+  <div class="inline-control" id="playWrap">
+    <label>Play</label>
+    <select id="playSelect"></select>
+  </div>
   <div class="inline-control">
     <label>Wing</label>
     <div class="toggle-pair" id="wingToggle">
       <button class="toggle-btn" data-value="Left">L</button>
       <button class="toggle-btn" data-value="Right">R</button>
     </div>
-  </div>
-  <div class="inline-control" id="playWrap">
-    <label>Play</label>
-    <select id="playSelect"></select>
-  </div>
-  <div class="inline-control">
-    <button class="toggle-btn" id="duplicatePlayBtn" type="button">+ Duplicate Play</button>
   </div>
   <div class="inline-control">
     <label>Dir</label>
@@ -77,6 +74,13 @@
     </div>
   </div>
   <div class="inline-control">
+    <label>Speed</label>
+    <div class="toggle-pair" id="speedToggle">
+      <button class="toggle-btn" data-value="normal">1x</button>
+      <button class="toggle-btn" data-value="half">&#189;x</button>
+    </div>
+  </div>
+  <div class="inline-control">
     <label>Edit</label>
     <div class="toggle-pair" id="editToggle">
       <button class="toggle-btn" data-value="off">Off</button>
@@ -85,13 +89,6 @@
   </div>
   <div class="inline-control" id="ballCarrierWrap" style="display:none;">
     <button class="toggle-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
-  </div>
-  <div class="inline-control">
-    <label>Speed</label>
-    <div class="toggle-pair" id="speedToggle">
-      <button class="toggle-btn" data-value="normal">1x</button>
-      <button class="toggle-btn" data-value="half">&#189;x</button>
-    </div>
   </div>
   <div class="action-row">
     <button class="action-btn primary" id="playBtn">&#9654; Play</button>
@@ -125,8 +122,11 @@
   </div>
   <div class="assign-panel" id="motionPanel" style="display:none;">
     <span class="assign-label" id="motionLabel">Motion:</span>
-    <button id="motionToggleBtn" type="button">Off</button>
-    <button id="setMotionEndBtn" type="button" style="display:none;">Tap field to set end spot</button>
+    <div class="toggle-pair" id="motionToggle">
+      <button class="toggle-btn" data-value="off">Off</button>
+      <button class="toggle-btn" data-value="on">On</button>
+    </div>
+    <span class="assign-label" id="motionHint" style="display:none;">Dotted line shows the path -- tap the end of it, then tap the field to move it</span>
   </div>
   <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 </div>

@@ -329,7 +329,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
       const endPos = { x: motionPath.motionEnd[0], y: motionPath.motionEnd[1] };
       p4Entry.circleEl.setAttribute('cx', startPos.x); p4Entry.circleEl.setAttribute('cy', startPos.y);
       if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', startPos.x); p4Entry.textEl.setAttribute('y', startPos.y + 12); }
-      await tweenPoint(startPos, endPos, 900 * speedMultiplier, pt => {
+      await tweenPoint(startPos, endPos, 2200 * speedMultiplier, pt => {
         p4Entry.circleEl.setAttribute('cx', pt.x); p4Entry.circleEl.setAttribute('cy', pt.y);
         if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', pt.x); p4Entry.textEl.setAttribute('y', pt.y + 12); }
       });

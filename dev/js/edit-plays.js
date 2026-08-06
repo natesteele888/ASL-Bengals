@@ -38,6 +38,8 @@ const dirToggle = document.getElementById('dirToggle');
 const playSelect = document.getElementById('playSelect');
 const stage = document.getElementById('stage');
 
+const DUPLICATE_OPTION_VALUE = '__duplicate__';
+
 function rebuildPlaySelectOptions() {
   playSelect.innerHTML = '';
   DATA.playTypes.forEach(p => {
@@ -46,6 +48,10 @@ function rebuildPlaySelectOptions() {
     opt.textContent = p.label;
     playSelect.appendChild(opt);
   });
+  const dupOpt = document.createElement('option');
+  dupOpt.value = DUPLICATE_OPTION_VALUE;
+  dupOpt.textContent = '+ Duplicate a play…';
+  playSelect.appendChild(dupOpt);
 }
 rebuildPlaySelectOptions();
 
@@ -57,10 +63,24 @@ const BASE_SIGNAL_MAP = {
   blast: { id: 13, label: 'Blast' }, double_blast: { id: 14, label: 'Double Blast' },
 };
 
-document.getElementById('duplicatePlayBtn').addEventListener('click', () => {
-  if (isPlaying) return;
-  const original = DATA.playTypes.find(p => p.key === playKey);
-  if (!original) return;
+// Asks which existing play to duplicate (a plain numbered prompt, matching
+// the rest of this tool's lightweight prompt()-based UX rather than
+// building a custom picker modal). Defaults to whichever play was open,
+// so hitting Enter behaves like the old duplicate button did.
+function promptForPlayToDuplicate() {
+  const list = DATA.playTypes.map((p, i) => `${i + 1}. ${p.label}`).join('\n');
+  const currentIdx = DATA.playTypes.findIndex(p => p.key === playKey);
+  const answer = prompt(`Which play do you want to duplicate?\n\n${list}\n\nEnter a number:`, String(currentIdx + 1));
+  if (!answer) return null;
+  const idx = parseInt(answer, 10) - 1;
+  if (isNaN(idx) || !DATA.playTypes[idx]) {
+    alert('Not a valid play number -- nothing duplicated.');
+    return null;
+  }
+  return DATA.playTypes[idx];
+}
+
+function duplicatePlay(original) {
   const newLabel = prompt('Name for the new play (e.g. "Inside Zone Wham"):', original.label + ' Copy');
   if (!newLabel || !newLabel.trim()) return;
 
@@ -83,7 +103,7 @@ document.getElementById('duplicatePlayBtn').addEventListener('click', () => {
   updateReadPosVisibility();
   render();
   alert('"' + clone.label + '" created as a copy of "' + original.label + '". It reuses that signal for now -- edit routes/blocking freely, then Save to Cloud when ready.');
-});
+}
 
 function wireToggle(el, getter, setter) {
   [...el.children].forEach(btn => {
@@ -262,6 +282,12 @@ function updateReadPosVisibility() {
 
 playSelect.addEventListener('change', () => {
   if (isPlaying) return;
+  if (playSelect.value === DUPLICATE_OPTION_VALUE) {
+    playSelect.value = playKey; // snap the dropdown back before the prompt opens
+    const original = promptForPlayToDuplicate();
+    if (original) duplicatePlay(original);
+    return;
+  }
   playKey = playSelect.value;
   updateReadPosVisibility();
   render();
@@ -663,6 +689,7 @@ function findEditTargetPath(variant) {
 const editToolbar = document.getElementById('editToolbar');
 const assignPanel = document.getElementById('assignPanel');
 const assignLabel = document.getElementById('assignLabel');
+const motionToggle = document.getElementById('motionToggle');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
@@ -685,10 +712,9 @@ function updateEditUI(variant) {
   const motionPanel = document.getElementById('motionPanel');
   if (editTarget.player === 4) {
     motionPanel.style.display = 'flex';
-    const motionBtn = document.getElementById('motionToggleBtn');
-    const setEndBtn = document.getElementById('setMotionEndBtn');
-    motionBtn.textContent = p.hasMotion ? 'On' : 'Off';
-    setEndBtn.style.display = p.hasMotion ? '' : 'none';
+    [...motionToggle.children].forEach(b =>
+      b.classList.toggle('active', b.dataset.value === (p.hasMotion ? 'on' : 'off')));
+    document.getElementById('motionHint').style.display = p.hasMotion ? '' : 'none';
   } else {
     motionPanel.style.display = 'none';
     settingMotionEnd = false;
@@ -726,26 +752,25 @@ document.getElementById('doneEditingBtn').addEventListener('click', () => {
   render();
 });
 
-document.getElementById('motionToggleBtn').addEventListener('click', () => {
-  if (!editTarget || editTarget.player !== 4) return;
-  const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
-  const p4Paths = variant.paths.filter(p => p.player === 4 && !p.optionLine);
-  const turningOn = !p4Paths.some(p => p.hasMotion);
-  p4Paths.forEach(p => {
-    p.hasMotion = turningOn;
-    if (turningOn && !p.motionEnd) {
-      // sensible default: at the opposite wing spot, i.e. "at or past the
-      // opposite tight end" -- coach can tap the field to move it from there
-      const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
-      p.motionEnd = DATA.wing[oppositeSide].slice();
-    }
+[...motionToggle.children].forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!editTarget || editTarget.player !== 4) return;
+    const turningOn = btn.dataset.value === 'on';
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    const p4Paths = variant.paths.filter(p => p.player === 4 && !p.optionLine);
+    p4Paths.forEach(p => {
+      p.hasMotion = turningOn;
+      if (turningOn && !p.motionEnd) {
+        // sensible default: at the opposite wing spot, i.e. "at or past the
+        // opposite tight end" -- coach can then drag the dotted line's end
+        // handle to move it
+        const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
+        p.motionEnd = DATA.wing[oppositeSide].slice();
+      }
+    });
+    settingMotionEnd = false;
+    render();
   });
-  settingMotionEnd = false;
-  render();
-});
-
-document.getElementById('setMotionEndBtn').addEventListener('click', () => {
-  settingMotionEnd = true;
 });
 
 document.getElementById('addPointBtn').addEventListener('click', () => {
@@ -866,6 +891,28 @@ function render() {
   const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4);
   playerCircles['4'] = c4;
+
+  // motion path -- dotted line from #4's real lineup spot to wherever he
+  // goes in motion, always visible whenever motion is on (not just while
+  // editing it), so it's clear at a glance instead of being invisible
+  // state hidden behind a toggle.
+  if (p4MotionPath) {
+    const motionLine = svgEl('path', {
+      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4MotionPath.motionEnd[0]} ${p4MotionPath.motionEnd[1]}`,
+      fill: 'none', stroke: '#111111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
+    });
+    circlesLayer.appendChild(motionLine);
+    if (editMode && editTarget && editTarget.player === 4) {
+      const handle = svgEl('circle', {cx: p4MotionPath.motionEnd[0], cy: p4MotionPath.motionEnd[1],
+        r: settingMotionEnd ? 19 : 16, class: 'edit-handle' + (settingMotionEnd ? ' picked' : '')});
+      handle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        settingMotionEnd = !settingMotionEnd; // tap again to cancel picking it up
+        render();
+      });
+      circlesLayer.appendChild(handle);
+    }
+  }
 
   // backfield (#3, #1, #2) -- always fixed positions
   ['3','1','2'].forEach(num => {
