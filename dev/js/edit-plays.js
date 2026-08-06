@@ -131,6 +131,28 @@ const insideOutsideGroup = document.getElementById('insideOutsideGroup');
 const insideOutsideToggle = document.getElementById('insideOutsideToggle');
 wireToggle(insideOutsideToggle, () => insideOutside, v => insideOutside = v);
 
+// Fixes a play that was duplicated from an Inside/Outside play (Blast,
+// Double Blast) but was never meant to have that toggle -- keeps whichever
+// side is currently selected as the play's only routes, discards the other
+// side, and removes the toggle. A regular data edit like any other; nothing
+// is final until Save to Cloud.
+const removeInOutBtn = document.getElementById('removeInOutBtn');
+removeInOutBtn.addEventListener('click', () => {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType || !playType.hasInsideOutside) return;
+  const keep = insideOutside;
+  const drop = keep === 'Inside' ? 'Outside' : 'Inside';
+  const ok = confirm(`Remove the Inside/Outside toggle from "${playType.label}"?\n\nThis keeps only the ${keep} routes you're currently viewing and permanently discards the ${drop} version. This can't be undone once you Save to Cloud.`);
+  if (!ok) return;
+  Object.keys(playType.directions).forEach(dir => {
+    playType.directions[dir] = playType.directions[dir][keep];
+  });
+  playType.hasInsideOutside = false;
+  updateReadPosVisibility();
+  render();
+  alert(`Done -- "${playType.label}" now always uses the ${keep} routes. Click Save to Cloud when you're ready to make this permanent.`);
+});
+
 const readPosGroup = document.getElementById('readPosGroup');
 const readPosToggle = document.getElementById('readPosToggle');
 wireToggle(readPosToggle, () => readPosition, v => readPosition = v);
