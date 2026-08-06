@@ -146,6 +146,16 @@ function p4Anchor() {
   const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
   return DATA.wing[oppositeSide];
 }
+// Which side #4 is ACTUALLY standing on -- his set wing side, or the
+// opposite one once Motion has sent him there. Block/seam offsets mirror
+// off of this (not the raw wingSide) since the anchor itself has moved:
+// using wingSide alone here left the mirror sign out of sync with
+// p4Anchor() whenever Motion was on, which sent block assignments miles
+// off their intended spot (occasionally clear off screen).
+function p4Side() {
+  if (!motionOn) return wingSide;
+  return wingSide === 'Left' ? 'Right' : 'Left';
+}
 
 // 4x3 removed as an option -- everything is 4x4 now, most teams played are
 // a 4x4 front and it halves the number of blocking assignments to keep up
@@ -606,12 +616,12 @@ function getAbsolutePoints(p) {
     const anchor = p4Anchor();
     if (p.blockRelative) {
       const [dx, dy] = getBlockPoints(p)[1];
-      const sign = wingSide === 'Left' ? 1 : -1;
+      const sign = p4Side() === 'Left' ? 1 : -1;
       return [anchor, [anchor[0] + sign * dx, anchor[1] + dy]];
     } else if (p.wingSeamRelative) {
       const sameSide = wingSide === direction;
       const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
-      const sign = wingSide === 'Left' ? 1 : -1;
+      const sign = p4Side() === 'Left' ? 1 : -1;
       return offsets.map(([dx, dy]) => [anchor[0] + sign * dx, anchor[1] + dy]);
     }
     return [anchor, ...p.points.slice(1)];
@@ -640,7 +650,7 @@ function writeBackPoint(p, idx, absX, absY) {
   const anchor = p4Anchor();
   if (p.blockRelative) {
     if (idx === 0) return; // start always tracks the wing circle itself
-    const sign = wingSide === 'Left' ? 1 : -1;
+    const sign = p4Side() === 'Left' ? 1 : -1;
     getBlockPoints(p); // ensures the field exists (migrates old data if needed)
     const fieldKey = getBlockFieldKey();
     p[fieldKey][1] = [(absX - anchor[0]) / sign, absY - anchor[1]];
@@ -648,7 +658,7 @@ function writeBackPoint(p, idx, absX, absY) {
     if (idx === 0) return;
     const sameSide = wingSide === direction;
     const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
-    const sign = wingSide === 'Left' ? 1 : -1;
+    const sign = p4Side() === 'Left' ? 1 : -1;
     offsets[idx] = [(absX - anchor[0]) / sign, absY - anchor[1]];
   } else if (p.player === 4 && !p.optionLine) {
     if (idx === 0) return;
@@ -687,7 +697,7 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
   const end = [actualStart[0] + frac*(d.pos[0]-actualStart[0]), actualStart[1] + frac*(d.pos[1]-actualStart[1])];
   if (p.blockRelative) {
     const anchor = p4Anchor();
-    const sign = wingSide === 'Left' ? 1 : -1;
+    const sign = p4Side() === 'Left' ? 1 : -1;
     const fieldKey = getBlockFieldKey();
     p[fieldKey] = [[0,0], [(end[0]-anchor[0])/sign, end[1]-anchor[1]]];
   } else {
@@ -947,7 +957,7 @@ function render() {
     if (p.player === 4 && !p.optionLine) {
       if (p.blockRelative) {
         const [dx, dy] = getBlockPoints(p)[1];
-        const sign = wingSide === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
+        const sign = p4Side() === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
         points = [p4Pos, [p4Pos[0] + sign * dx, p4Pos[1] + dy]];
       } else if (p.wingSeamRelative) {
         // Two shapes, both authored assuming Wing Left as the base: one for
@@ -957,7 +967,7 @@ function render() {
         // (flip dx) whenever wingSide is Right.
         const sameSide = wingSide === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
-        const sign = wingSide === 'Left' ? 1 : -1;
+        const sign = p4Side() === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [p4Pos[0] + sign * dx, p4Pos[1] + dy]);
       } else {
         points = [p4Pos, ...points.slice(1)];

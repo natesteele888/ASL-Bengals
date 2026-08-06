@@ -250,6 +250,12 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // up standing.
   const oppositeWingSide = wingSide === 'Left' ? 'Right' : 'Left';
   const p4Anchor = motionOn ? DATA.wing[oppositeWingSide] : wingPos;
+  // Which side #4 is ACTUALLY standing on -- used to mirror his
+  // block/seam offsets correctly. Using raw wingSide here (ignoring
+  // Motion) left the mirror sign out of sync with p4Anchor whenever
+  // Motion was on, sending block assignments miles off their intended
+  // spot, occasionally clear off screen.
+  const p4Side = motionOn ? oppositeWingSide : wingSide;
 
   const wingDim = anySelected && selectedPlayer !== 4;
   const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingDim, null, 4);
@@ -279,7 +285,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       if (p.wingSeamRelative) {
         const sameSide = wingSide === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
-        const sign = wingSide === 'Left' ? 1 : -1;
+        const sign = p4Side === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]);
       } else if (p.blockRelative) {
         const sameSide = wingSide === direction;
@@ -287,7 +293,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const fieldKey = defenseMode === '4x4' ? baseKey + '4x4' : baseKey;
         const srcPoints = p[fieldKey] || p.points;
         const [dx, dy] = srcPoints[1];
-        const sign = wingSide === 'Left' ? 1 : -1;
+        const sign = p4Side === 'Left' ? 1 : -1;
         points = [p4Anchor, [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]];
       } else {
         points = [p4Anchor, ...points.slice(1)];
