@@ -127,6 +127,13 @@ wireToggle(dirToggle, () => direction, v => direction = v);
 const motionToggle = document.getElementById('motionToggle');
 wireToggle(motionToggle, () => (motionOn ? 'on' : 'off'), v => motionOn = (v === 'on'));
 
+// Boot: QB (#1) keeps the ball instead of handing off -- everything else
+// about the play (routes, blocking) stays exactly as authored. Same idea
+// as Motion: a pure playback toggle, nothing saved, works for any play.
+let bootOn = false;
+const bootToggle = document.getElementById('bootToggle');
+wireToggle(bootToggle, () => (bootOn ? 'on' : 'off'), v => bootOn = (v === 'on'));
+
 // Wherever #4 actually is at the snap -- his set wing spot, or the
 // opposite one if Motion is on. Every player-4-specific point computation
 // (route start, block-relative offset anchor, seam-route offset anchor)
@@ -368,7 +375,7 @@ const PAUSE_MS = 500;
 let isPlaying = false;
 
 function setControlsDisabled(disabled) {
-  [wingToggle, dirToggle, motionToggle, blockingToggle, speedToggle].forEach(el => {
+  [wingToggle, dirToggle, motionToggle, bootToggle, blockingToggle, speedToggle].forEach(el => {
     [...el.children].forEach(b => b.disabled = disabled);
   });
   playSelect.disabled = disabled;
@@ -786,6 +793,18 @@ document.getElementById('addPointBtn').addEventListener('click', () => {
 function render() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getPlayVariant(playType, direction);
+
+  // Boot: swap which path is treated as the ball carrier, purely for this
+  // render/animation -- doesn't touch the play data, so nothing else about
+  // the play (routes, blocking, everyone else's paths) changes. No-op if
+  // #1 already has the ball (e.g. Option).
+  let bootBallPath = null, bootFakePath = null;
+  if (bootOn) {
+    const realBallPath = variant.paths.find(p => p.ball && !p.optionLine);
+    const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
+    if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
+  }
+
   const ballCarrierBtn = document.getElementById('ballCarrierBtn');
   if (ballCarrierBtn) {
     ballCarrierBtn.textContent = settingBallCarrier ? 'Tap a player…' : 'Ball Carrier';
@@ -1014,7 +1033,8 @@ function render() {
       return;
     }
 
-    const color = p.ball ? BALL_COLOR : NOBALL_COLOR;
+    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
+    const color = effectiveBall ? BALL_COLOR : NOBALL_COLOR;
     const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
     const attrs = {d, fill:'none', stroke:color, 'stroke-width':p.width, 'stroke-linecap':'round'};
     if (p.fake) attrs['stroke-dasharray'] = '10 8';
@@ -1032,7 +1052,7 @@ function render() {
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: !!p.ball,
+    lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: effectiveBall,
       delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
       textEl: ownerCircle ? ownerCircle.textEl : null});
     if (isSelected) animatePaths.push({el: path, arrowEl,
@@ -1048,7 +1068,7 @@ function render() {
 
   const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
     'text-anchor':'middle', fill:'#111111'});
-  title.textContent = `WING ${wingSide.toUpperCase()} ${playType.label.toUpperCase()} ${direction.toUpperCase()}`;
+  title.textContent = `WING ${wingSide.toUpperCase()} ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' · BOOT' : '');
   stage.appendChild(title);
 
 
