@@ -61,6 +61,7 @@ const BASE_SIGNAL_MAP = {
   inside_zone: { id: 9, label: 'Inside Zone' }, outside_zone: { id: 10, label: 'Outside Zone' },
   option: { id: 15, label: 'Option' }, option_pass: { id: 16, label: 'Option Pass' },
   blast: { id: 13, label: 'Blast' }, double_blast: { id: 14, label: 'Double Blast' },
+  boot: { id: 26, label: 'Boot' },
 };
 
 // Asks which existing play to duplicate (a plain numbered prompt, matching
