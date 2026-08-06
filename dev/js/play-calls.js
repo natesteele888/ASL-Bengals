@@ -283,12 +283,12 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
     if (p.player === 4 && !p.optionLine) {
       if (p.wingSeamRelative) {
-        const sameSide = wingSide === direction;
+        const sameSide = p4Side === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
         const sign = p4Side === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]);
       } else if (p.blockRelative) {
-        const sameSide = wingSide === direction;
+        const sameSide = p4Side === direction;
         const baseKey = sameSide ? 'sameSidePoints' : 'crossPoints';
         const fieldKey = defenseMode === '4x4' ? baseKey + '4x4' : baseKey;
         const srcPoints = p[fieldKey] || p.points;

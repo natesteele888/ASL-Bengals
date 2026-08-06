@@ -588,7 +588,7 @@ function svgPointFromEvent(ev) {
 }
 
 function getBlockFieldKey() {
-  const sameSide = wingSide === direction;
+  const sameSide = p4Side() === direction;
   const base = sameSide ? 'sameSidePoints' : 'crossPoints';
   return (defenseMode === '4x4') ? base + '4x4' : base;
 }
@@ -619,7 +619,7 @@ function getAbsolutePoints(p) {
       const sign = p4Side() === 'Left' ? 1 : -1;
       return [anchor, [anchor[0] + sign * dx, anchor[1] + dy]];
     } else if (p.wingSeamRelative) {
-      const sameSide = wingSide === direction;
+      const sameSide = p4Side() === direction;
       const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
       const sign = p4Side() === 'Left' ? 1 : -1;
       return offsets.map(([dx, dy]) => [anchor[0] + sign * dx, anchor[1] + dy]);
@@ -656,7 +656,7 @@ function writeBackPoint(p, idx, absX, absY) {
     p[fieldKey][1] = [(absX - anchor[0]) / sign, absY - anchor[1]];
   } else if (p.wingSeamRelative) {
     if (idx === 0) return;
-    const sameSide = wingSide === direction;
+    const sameSide = p4Side() === direction;
     const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
     const sign = p4Side() === 'Left' ? 1 : -1;
     offsets[idx] = [(absX - anchor[0]) / sign, absY - anchor[1]];
@@ -963,9 +963,14 @@ function render() {
         // Two shapes, both authored assuming Wing Left as the base: one for
         // when he's on the SAME side as the play's direction (stays on his
         // own side, attacks the near safety), one for when he's on the
-        // OPPOSITE side (a genuine crossing route to match the QB). Mirror
-        // (flip dx) whenever wingSide is Right.
-        const sameSide = wingSide === direction;
+        // OPPOSITE side (a genuine crossing route to match the QB). This
+        // has to key off #4's ACTUAL side -- his set wing side, or the
+        // opposite one if Motion has sent him there -- not the raw wing
+        // side setting. Otherwise Motion just mirrors the same-side route
+        // instead of switching to the crossing route, sending him away
+        // from the pass action instead of into it. Mirror (flip dx)
+        // whenever he's actually standing on the right.
+        const sameSide = p4Side() === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
         const sign = p4Side() === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [p4Pos[0] + sign * dx, p4Pos[1] + dy]);
