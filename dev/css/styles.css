@@ -401,6 +401,42 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   }
   .dir-toggle button.active { background: var(--bengal-black); color: #fff; }
 
+  .motion-toggle {
+    display: flex;
+    background: #fff;
+    border: 2px solid #1a8c3a;
+    border-radius: 999px;
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .motion-toggle button {
+    border: none;
+    background: transparent;
+    padding: 5px 8px;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .motion-toggle button.active { background: #1a8c3a; color: #fff; }
+
+  .boot-toggle {
+    display: flex;
+    background: #fff;
+    border: 2px solid #e0201a;
+    border-radius: 999px;
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .boot-toggle button {
+    border: none;
+    background: transparent;
+    padding: 5px 8px;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .boot-toggle button.active { background: #e0201a; color: #fff; }
+
   .flip-btn {
     position: absolute;
     bottom: 6px;

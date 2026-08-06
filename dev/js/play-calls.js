@@ -167,11 +167,23 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside) {
 }
 
 // ---- Render a card's diagram into its SVG stage ----
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn) {
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getVariant(playType, direction, insideOutside);
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
+
+  // Boot: swap which path is treated as the ball carrier, purely for this
+  // render/animation -- doesn't touch DATA, so nothing else about the play
+  // (routes, blocking, everyone else's paths) changes, matching "the rest
+  // of the play works exactly the same." If #1 already has the ball (e.g.
+  // Option), there's nothing to swap and the toggle is a no-op.
+  let bootBallPath = null, bootFakePath = null;
+  if (bootOn) {
+    const realBallPath = variant.paths.find(p => p.ball && !p.optionLine);
+    const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
+    if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
+  }
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
@@ -216,7 +228,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   const wingDim = anySelected && selectedPlayer !== 4;
-  const p4MotionPath = variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
+  const p4MotionPath = motionOn ? variant.paths.find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd) : null;
   const p4CirclePos = p4MotionPath ? p4MotionPath.motionEnd : wingPos;
   const c4 = drawCircle(p4CirclePos[0], p4CirclePos[1], '4', '#111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
@@ -249,7 +261,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const sign = wingSide === 'Left' ? 1 : -1;
         points = [wingPos, [wingPos[0] + sign * dx, wingPos[1] + dy]];
       } else {
-        const motionStart = (p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
+        const motionStart = (motionOn && p.hasMotion && p.motionEnd) ? p.motionEnd : wingPos;
         points = [motionStart, ...points.slice(1)];
       }
     }
@@ -261,7 +273,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       return;
     }
 
-    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
+    const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
     const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
     const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
     if (p.fake) attrs['stroke-dasharray'] = '10 8';
@@ -278,7 +291,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
       circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
   });
 
@@ -292,10 +305,10 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside) {
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn);
 
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
@@ -321,7 +334,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // otherwise "motion" would look identical to just picking the other wing.
   const motionPlayType = DATA.playTypes.find(p => p.key === playKey);
   const motionVariant = getVariant(motionPlayType, direction, insideOutside);
-  const motionPath = (motionVariant.paths || []).find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd);
+  const motionPath = motionOn ? (motionVariant.paths || []).find(p => p.player === 4 && !p.optionLine && p.hasMotion && p.motionEnd) : null;
   if (motionPath) {
     const p4Entry = lastRenderedPaths.find(p => p.player === 4) || allPaths.find(p => p.player === 4);
     if (p4Entry && p4Entry.circleEl) {
@@ -403,6 +416,12 @@ function buildCard(combo) {
   let insideOutside = 'Outside';
   let selectedPlayer = null;
   let speedMultiplier = 1;
+  // #4 is the only player who ever goes in motion -- on by default (matches
+  // how the diagram always looked before this toggle existed). Boot is off
+  // by default -- it's a modifier on top of whichever play is selected, not
+  // a state most cards start in.
+  let motionOn = true;
+  let bootOn = false;
   const isPlayingRef = { value: false };
 
   // FRONT
@@ -435,6 +454,18 @@ function buildCard(combo) {
   wingToggle.appendChild(wL); wingToggle.appendChild(wR);
   toggleRow.appendChild(wingToggle);
 
+  // #4 is the only player who ever goes in motion, so this is a simple
+  // on/off rather than a direction pick -- sits between Wing and Dir since
+  // it's part of the pre-snap picture, same as the wing spot.
+  const motionToggle = document.createElement('div');
+  motionToggle.className = 'motion-toggle';
+  const mOff = document.createElement('button'); mOff.textContent = 'Motion Off';
+  const mOn = document.createElement('button'); mOn.textContent = 'Motion On'; mOn.className = 'active';
+  mOff.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = false; mOff.classList.add('active'); mOn.classList.remove('active'); onComboChanged(); });
+  mOn.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = true; mOn.classList.add('active'); mOff.classList.remove('active'); onComboChanged(); });
+  motionToggle.appendChild(mOff); motionToggle.appendChild(mOn);
+  toggleRow.appendChild(motionToggle);
+
   const dirToggle = document.createElement('div');
   dirToggle.className = 'dir-toggle';
   const dL = document.createElement('button'); dL.textContent = 'Dir L'; dL.className = 'active';
@@ -444,6 +475,18 @@ function buildCard(combo) {
   dirToggle.appendChild(dL); dirToggle.appendChild(dR);
   toggleRow.appendChild(dirToggle);
 
+  // Boot: QB (#1) keeps the ball instead of handing off -- everything else
+  // about the play (routes, blocking) stays exactly as authored, this just
+  // swaps who's carrying for this card's diagram/animation.
+  const bootToggle = document.createElement('div');
+  bootToggle.className = 'boot-toggle';
+  const bOff = document.createElement('button'); bOff.textContent = 'Boot Off'; bOff.className = 'active';
+  const bOn = document.createElement('button'); bOn.textContent = 'Boot On';
+  bOff.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = false; bOff.classList.add('active'); bOn.classList.remove('active'); onComboChanged(); });
+  bOn.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = true; bOn.classList.add('active'); bOff.classList.remove('active'); onComboChanged(); });
+  bootToggle.appendChild(bOff); bootToggle.appendChild(bOn);
+  toggleRow.appendChild(bootToggle);
+
   front.appendChild(toggleRow);
 
   const stageWrap = document.createElement('div');
@@ -452,7 +495,7 @@ function buildCard(combo) {
   const stage = svgEl('svg', {});
   stageWrap.appendChild(stage);
 
-  function rerenderDiagram() { renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside); }
+  function rerenderDiagram() { renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn); }
 
   stage.addEventListener('playerclick', (ev) => {
     if (isPlayingRef.value) return;
@@ -468,7 +511,7 @@ function buildCard(combo) {
   playBtn.className = 'card-btn play-btn';
   playBtn.innerHTML = '&#9654;';
   playBtn.addEventListener('click', () => {
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn);
   });
 
   const speedToggle = document.createElement('div');
@@ -549,7 +592,8 @@ function buildCard(combo) {
   function onComboChanged() {
     selectedPlayer = null;
     rerenderDiagram();
-    titleBar.textContent = combo.hasInsideOutside ? `Wing ${wingSide} ${insideOutside} ${combo.label} ${direction}` : `Wing ${wingSide} ${combo.label} ${direction}`;
+    const base = combo.hasInsideOutside ? `Wing ${wingSide} ${insideOutside} ${combo.label} ${direction}` : `Wing ${wingSide} ${combo.label} ${direction}`;
+    titleBar.textContent = bootOn ? `${base} · Boot` : base;
     if (outer.classList.contains('flipped')) startSignalSequence();
   }
 
