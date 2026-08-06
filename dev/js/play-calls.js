@@ -99,10 +99,10 @@ const BALL_COLOR = '#e0201a';
 const NOBALL_COLOR = '#123a8c';
 const CIRCLE_R = 36;
 
-function getVariant(playType, direction, insideOutside) {
+function getVariant(playType, direction, insideOutside, readPosition) {
   let v = playType.directions[direction];
   if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
-  if (playType.hasReadToggle) v = v['A'];
+  if (playType.hasReadToggle) v = v[readPosition || 'A'];
   return v;
 }
 
@@ -114,7 +114,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -183,10 +183,10 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
 }
 
 // ---- Render a card's diagram into its SVG stage ----
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const variant = getVariant(playType, direction, insideOutside);
+  const variant = getVariant(playType, direction, insideOutside, readPosition);
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
   // Boot: swap which path is treated as the ball carrier, purely for this
@@ -339,10 +339,10 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn) {
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
 
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
@@ -448,6 +448,11 @@ function buildCard(combo) {
   // 4x3 removed as an option -- everything is 4x4 now.
   const defenseMode = '4x4';
   let insideOutside = 'Outside';
+  // Inside Zone reads the play-side DT: lined up outside the LG -> A gap,
+  // lined up inside closer to the C -> B gap. Same play call either way --
+  // this just lets a coach/player flip between the two alignments to see
+  // both gap reads. Only Inside Zone has this (hasReadToggle in the data).
+  let readPosition = 'A';
   let selectedPlayer = null;
   let speedMultiplier = 1;
   // Both Motion and Boot default off -- they're modifiers on top of the
@@ -475,6 +480,17 @@ function buildCard(combo) {
     ioIn.addEventListener('click', () => { if (isPlayingRef.value) return; insideOutside = 'Inside'; ioIn.classList.add('active'); ioOut.classList.remove('active'); onComboChanged(); });
     ioToggle.appendChild(ioOut); ioToggle.appendChild(ioIn);
     toggleRow.appendChild(ioToggle);
+  }
+
+  if (combo.hasReadToggle) {
+    const readToggle = document.createElement('div');
+    readToggle.className = 'def-toggle';
+    const rA = document.createElement('button'); rA.textContent = 'Read A'; rA.className = 'active';
+    const rB = document.createElement('button'); rB.textContent = 'Read B';
+    rA.addEventListener('click', () => { if (isPlayingRef.value) return; readPosition = 'A'; rA.classList.add('active'); rB.classList.remove('active'); onComboChanged(); });
+    rB.addEventListener('click', () => { if (isPlayingRef.value) return; readPosition = 'B'; rB.classList.add('active'); rA.classList.remove('active'); onComboChanged(); });
+    readToggle.appendChild(rA); readToggle.appendChild(rB);
+    toggleRow.appendChild(readToggle);
   }
 
   const wingToggle = document.createElement('div');
@@ -527,7 +543,7 @@ function buildCard(combo) {
   const stage = svgEl('svg', {});
   stageWrap.appendChild(stage);
 
-  function rerenderDiagram() { renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn); }
+  function rerenderDiagram() { renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition); }
 
   stage.addEventListener('playerclick', (ev) => {
     if (isPlayingRef.value) return;
@@ -543,7 +559,7 @@ function buildCard(combo) {
   playBtn.className = 'card-btn play-btn';
   playBtn.innerHTML = '&#9654;';
   playBtn.addEventListener('click', () => {
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   });
 
   const speedToggle = document.createElement('div');
