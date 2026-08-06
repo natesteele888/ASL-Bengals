@@ -114,7 +114,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -525,15 +525,19 @@ function buildCard(combo) {
 
   // Boot: QB (#1) keeps the ball instead of handing off -- everything else
   // about the play (routes, blocking) stays exactly as authored, this just
-  // swaps who's carrying for this card's diagram/animation.
-  const bootToggle = document.createElement('div');
-  bootToggle.className = 'boot-toggle';
-  const bOff = document.createElement('button'); bOff.textContent = 'Boot Off'; bOff.className = 'active';
-  const bOn = document.createElement('button'); bOn.textContent = 'Boot On';
-  bOff.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = false; bOff.classList.add('active'); bOn.classList.remove('active'); onComboChanged(); });
-  bOn.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = true; bOn.classList.add('active'); bOff.classList.remove('active'); onComboChanged(); });
-  bootToggle.appendChild(bOff); bootToggle.appendChild(bOn);
-  toggleRow.appendChild(bootToggle);
+  // swaps who's carrying for this card's diagram/animation. Doesn't apply
+  // to plays where #1 already has the ball or already has a built-in fake
+  // (Option, Option Pass, Double Blast) -- noBoot in the data hides it.
+  if (!combo.noBoot) {
+    const bootToggle = document.createElement('div');
+    bootToggle.className = 'boot-toggle';
+    const bOff = document.createElement('button'); bOff.textContent = 'Boot Off'; bOff.className = 'active';
+    const bOn = document.createElement('button'); bOn.textContent = 'Boot On';
+    bOff.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = false; bOff.classList.add('active'); bOn.classList.remove('active'); onComboChanged(); });
+    bOn.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = true; bOn.classList.add('active'); bOff.classList.remove('active'); onComboChanged(); });
+    bootToggle.appendChild(bOff); bootToggle.appendChild(bOn);
+    toggleRow.appendChild(bootToggle);
+  }
 
   front.appendChild(toggleRow);
 

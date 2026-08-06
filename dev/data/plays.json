@@ -3020,6 +3020,7 @@
     {
       "key": "option",
       "label": "Option",
+      "noBoot": true,
       "hasReadToggle": false,
       "directions": {
         "Left": {
@@ -6031,6 +6032,7 @@
     {
       "key": "double_blast",
       "label": "Double Blast",
+      "noBoot": true,
       "hasReadToggle": false,
       "directions": {
         "Left": {
@@ -8027,6 +8029,7 @@
     {
       "key": "option_pass",
       "label": "Option Pass",
+      "noBoot": true,
       "hasReadToggle": false,
       "directions": {
         "Left": {

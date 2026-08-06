@@ -337,6 +337,16 @@ function updateReadPosVisibility() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   readPosGroup.style.display = playType.hasReadToggle ? 'flex' : 'none';
   insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
+  // Boot doesn't make sense on plays where #1 already has the ball or
+  // already has a built-in fake (Option, Option Pass, Double Blast) --
+  // hide the toggle and force it back off so a swap from a previously
+  // selected play can't silently carry over onto one where it's a no-op.
+  const bootAllowed = !playType.noBoot;
+  bootToggle.parentElement.style.display = bootAllowed ? 'flex' : 'none';
+  if (!bootAllowed && bootOn) {
+    bootOn = false;
+    [...bootToggle.children].forEach(b => b.classList.toggle('active', b.dataset.value === 'off'));
+  }
 }
 
 playSelect.addEventListener('change', () => {
