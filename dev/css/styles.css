@@ -436,6 +436,53 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   .toggle-group.toggle-tiny { height: 24px; }
   .toggle-group.toggle-tiny .toggle-btn { height: 20px; line-height: 20px; padding: 0 7px; font-size: 10px; }
 
+  /* Compact on/off switch for simple binary toggles (Motion, Boot) -- one
+     label plus a small sliding red/green pill, instead of a two-button
+     group that has to repeat the word ("Motion Off" / "Motion On"). */
+  .switch-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .switch-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--bengal-black);
+    white-space: nowrap;
+  }
+  .switch-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .switch-track {
+    display: block;
+    width: 34px;
+    height: 18px;
+    border-radius: 999px;
+    background: #e74c3c;
+    position: relative;
+    transition: background-color .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-track { background: #2ecc71; }
+  .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+    transition: transform .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-thumb { transform: translateX(16px); }
+  .switch-toggle:disabled { cursor: default; opacity: .6; }
+
   .flip-btn {
     position: absolute;
     bottom: 6px;

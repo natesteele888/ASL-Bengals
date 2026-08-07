@@ -85,6 +85,39 @@ function buildToggleGroup(color, options, initialValue, onChange, extraClass) {
   return group;
 }
 
+// Builds a compact on/off switch for simple binary toggles (Motion, Boot)
+// where showing the same word twice ("Motion Off" / "Motion On") is
+// redundant -- the label sits once to the left, and a small red/green pill
+// switch with a sliding knob shows the current state, same idea as a
+// standard iOS-style toggle. `checked` is the initial boolean state,
+// `onChange(nextBoolean)` fires on every click.
+function buildSwitchToggle(label, checked, onChange, extraClass) {
+  const wrap = document.createElement('div');
+  wrap.className = 'switch-control' + (extraClass ? ' ' + extraClass : '');
+  const lbl = document.createElement('span');
+  lbl.className = 'switch-label';
+  lbl.textContent = label;
+  wrap.appendChild(lbl);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'switch-toggle';
+  btn.setAttribute('aria-pressed', checked ? 'true' : 'false');
+  btn.setAttribute('aria-label', label);
+  const track = document.createElement('span');
+  track.className = 'switch-track';
+  const thumb = document.createElement('span');
+  thumb.className = 'switch-thumb';
+  track.appendChild(thumb);
+  btn.appendChild(track);
+  btn.addEventListener('click', () => {
+    const next = btn.getAttribute('aria-pressed') !== 'true';
+    btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+    onChange(next);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 (function() {
   const SIGNAL_CARDS = {};
   ALL_CARDS.forEach(c => { SIGNAL_CARDS[c.id] = c.img; });
@@ -566,10 +599,7 @@ function buildCard(combo) {
   // on/off rather than a direction pick. Every play has this slot.
   const motionSlot = document.createElement('div');
   motionSlot.className = 'toggle-slot';
-  const motionToggle = buildToggleGroup('green', [
-    { value: 'off', label: 'Motion Off' },
-    { value: 'on', label: 'Motion On' },
-  ], motionOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; motionOn = (v === 'on'); onComboChanged(); });
+  const motionToggle = buildSwitchToggle('Motion', motionOn, (v) => { if (isPlayingRef.value) return; motionOn = v; onComboChanged(); });
   motionSlot.appendChild(motionToggle);
   extrasRow.appendChild(motionSlot);
 
@@ -582,10 +612,7 @@ function buildCard(combo) {
   const bootSlot = document.createElement('div');
   bootSlot.className = 'toggle-slot';
   if (!combo.noBoot) {
-    const bootToggle = buildToggleGroup('red', [
-      { value: 'off', label: 'Boot Off' },
-      { value: 'on', label: 'Boot On' },
-    ], bootOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; bootOn = (v === 'on'); onComboChanged(); });
+    const bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
   }
   extrasRow.appendChild(bootSlot);
