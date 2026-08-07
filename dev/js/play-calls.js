@@ -622,6 +622,13 @@ function buildCard(combo) {
     const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
+    // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
+    // signals into the same sequence -- slow the pace down a bit per extra
+    // signal past 4 so a 7-signal call isn't as rushed as a plain 4-signal
+    // one.
+    const BASE_STEP_MS = 950;
+    const EXTRA_MS_PER_SIGNAL = 120;
+    const stepDurationMs = BASE_STEP_MS + Math.max(0, signals.length - 4) * EXTRA_MS_PER_SIGNAL;
     const MAX_LOOPS = 2;
     let i = 0;
     let loopCount = 0;
@@ -635,7 +642,7 @@ function buildCard(combo) {
       label.textContent = signals[i].label;
       [...progress.children].forEach((d, idx) => d.classList.toggle('done', idx <= i));
       i++;
-      seqTimer = setTimeout(showStep, 950);
+      seqTimer = setTimeout(showStep, stepDurationMs);
     }
     showStep();
   }
