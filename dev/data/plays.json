@@ -3021,6 +3021,7 @@
       "key": "option",
       "label": "Option",
       "noBoot": true,
+      "directionFixed": true,
       "hasReadToggle": false,
       "directions": {
         "Left": {

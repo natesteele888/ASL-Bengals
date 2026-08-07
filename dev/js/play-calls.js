@@ -24,8 +24,36 @@ const SHIPPED_PLAY_FLAGS = {};
     noBoot: !!pt.noBoot,
     hasReadToggle: !!pt.hasReadToggle,
     hasInsideOutside: !!pt.hasInsideOutside,
+    directionFixed: !!pt.directionFixed,
   };
 });
+
+// The Option play's Direction Left/Right were themselves swapped for a
+// while (Left's ball path actually ran right) -- fixed by swapping the
+// direction-carrying paths (players 1/2/3 and the dashed option-read line)
+// between the two direction blocks. Like every other fix on this page,
+// that's invisible to anyone loading a Firebase snapshot saved before the
+// fix, since Firebase always wins over the shipped file. Unlike the other
+// fixes, there's no missing flag to graft in -- the OLD data is just as
+// "complete" as the new data, only mislabeled -- so this repairs it by
+// swapping the direction-carrying paths back into the correct slot,
+// in place, the same way the original data fix did. This preserves
+// whatever a coach has since edited on either side; it only fixes which
+// direction key that content lives under.
+function repairStaleDirectionOrientation(pt) {
+  if (!pt.directions || !pt.directions.Left || !pt.directions.Right) return;
+  const isDirectionPath = (p) => p.player === 1 || p.player === 2 || p.player === 3 || p.optionLine;
+  const leftMatches = (pt.directions.Left.paths || []).filter(isDirectionPath);
+  const rightMatches = (pt.directions.Right.paths || []).filter(isDirectionPath);
+  leftMatches.forEach(lp => {
+    const key = lp.player != null ? lp.player : 'optionLine';
+    const rp = rightMatches.find(r => (r.player != null ? r.player : 'optionLine') === key);
+    if (!rp) return;
+    const tmp = lp.points;
+    lp.points = rp.points;
+    rp.points = tmp;
+  });
+}
 
 // Same problem, one level deeper: a path can gain a brand-new BLOCKING
 // CAPABILITY (like the Option play's playside TE splitting into a same-
@@ -75,6 +103,13 @@ function normalizePlayData(playTypes) {
     // code, regardless of what this particular cloud snapshot has (or is
     // missing) for them -- see SHIPPED_PLAY_FLAGS above for why.
     const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
+    // Repair BEFORE stamping the flag on, and only if this cloud copy
+    // hasn't already been fixed (either by this same repair on a previous
+    // load, or by a coach re-saving after the real fix shipped) -- otherwise
+    // a second pass would swap an already-correct play right back to wrong.
+    if (shippedFlags && shippedFlags.directionFixed && !pt.directionFixed) {
+      repairStaleDirectionOrientation(pt);
+    }
     if (shippedFlags) Object.assign(pt, shippedFlags);
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
       const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
