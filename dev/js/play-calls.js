@@ -27,6 +27,36 @@ const SHIPPED_PLAY_FLAGS = {};
   };
 });
 
+// Same problem, one level deeper: a path can gain a brand-new BLOCKING
+// CAPABILITY (like the Option play's playside TE splitting into a same-
+// side/cross-side target instead of always blocking the backside DE) --
+// not just an authored point tweak. A cloud snapshot saved before that
+// capability existed has the path WITHOUT the dualSideBlock flag at all,
+// so it'd silently keep the old fixed behavior forever. Snapshot every
+// currently-shipped dualSideBlock path, keyed by playKey|direction|player,
+// so normalizePlayData() can graft the capability (flag + its two target
+// options) onto a matching cloud path that's missing it -- but only if
+// that cloud path doesn't already have its own dualSideBlock data, so a
+// coach's own post-upgrade re-aim of these targets is never overwritten.
+const SHIPPED_DUAL_SIDE_BLOCKS = {};
+(window.DATA.playTypes || []).forEach(pt => {
+  Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
+    const variants = dirVal.paths ? [dirVal] : Object.values(dirVal);
+    variants.forEach(variant => {
+      (variant && variant.paths || []).forEach(p => {
+        if (!p.dualSideBlock) return;
+        SHIPPED_DUAL_SIDE_BLOCKS[`${pt.key}|${dirKey}|${p.player}`] = {
+          dualSideBlock: true,
+          sameSidePoints: p.sameSidePoints,
+          crossPoints: p.crossPoints,
+          sameSidePoints4x4: p.sameSidePoints4x4,
+          crossPoints4x4: p.crossPoints4x4,
+        };
+      });
+    });
+  });
+});
+
 // Firebase's database deletes any field whose value is `null` when you save
 // it (that's how you delete a field via their API) -- so a path object
 // authored as `{player: null, id: 'LT', ...}` round-trips through a cloud
@@ -46,13 +76,21 @@ function normalizePlayData(playTypes) {
     // missing) for them -- see SHIPPED_PLAY_FLAGS above for why.
     const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
     if (shippedFlags) Object.assign(pt, shippedFlags);
-    Object.values(pt.directions || {}).forEach(dirVal => {
+    Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
       const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
       variants.forEach(variant => {
         if (!variant) return;
         if (variant.readKeyId === undefined) variant.readKeyId = null;
         (variant.paths || []).forEach(p => {
           if (p.player === undefined) p.player = null;
+          // Graft in a shipped dualSideBlock capability this path is
+          // missing (see SHIPPED_DUAL_SIDE_BLOCKS above) -- but never
+          // overwrite a cloud path that already has its own dualSideBlock
+          // data, so a coach's own re-aimed targets always win.
+          if (!p.dualSideBlock) {
+            const shipped = SHIPPED_DUAL_SIDE_BLOCKS[`${pt.key}|${dirKey}|${p.player}`];
+            if (shipped) Object.assign(p, shipped);
+          }
         });
       });
     });
@@ -394,8 +432,16 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const dim = anySelected && !p.isBlocking && (p.player === null || p.player !== selectedPlayer);
     const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
 
-    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
-    if (p.player === 4 && !p.optionLine) {
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+    if (p.dualSideBlock) {
+      // Fixed-position blocker (e.g. the Option play's playside TE) whose
+      // block target depends on whether the wing is on the same side as the
+      // play's direction or the opposite side.
+      const sameSide = p4Side === direction;
+      const baseKey = sameSide ? 'sameSidePoints' : 'crossPoints';
+      const fieldKey = defenseMode === '4x4' ? baseKey + '4x4' : baseKey;
+      points = p[fieldKey] || p.points;
+    } else if (p.player === 4 && !p.optionLine) {
       if (p.wingSeamRelative) {
         const sameSide = p4Side === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;

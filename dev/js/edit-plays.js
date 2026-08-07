@@ -637,6 +637,15 @@ function getAbsolutePoints(p) {
   // mirrors the same substitution logic used in render() for player 4's
   // special path types, so chip-block math can read the CURRENT on-screen
   // points without duplicating render()'s full pipeline
+  if (p.dualSideBlock) {
+    // Not anchored to #4 at all -- a fixed-position blocker (e.g. a TE)
+    // whose block TARGET flips between two authored options depending on
+    // whether the wing is on the same side as the play's direction or not.
+    // getBlockFieldKey()/getBlockPoints() already do exactly this same-side/
+    // cross-side lookup for #4's blockRelative paths -- reused as-is here
+    // since both are just "pick sameSidePoints or crossPoints".
+    return getBlockPoints(p);
+  }
   if (p.player === 4 && !p.optionLine) {
     const anchor = p4Anchor();
     if (p.blockRelative) {
@@ -673,7 +682,13 @@ function applyChipBlock(p, defenderId, variant) {
 
 function writeBackPoint(p, idx, absX, absY) {
   const anchor = p4Anchor();
-  if (p.blockRelative) {
+  if (p.dualSideBlock) {
+    // Absolute coordinates, not #4-anchor-relative -- just write straight
+    // into whichever of sameSidePoints/crossPoints is currently showing.
+    getBlockPoints(p); // ensures the field exists (migrates old data if needed)
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey][idx] = [absX, absY];
+  } else if (p.blockRelative) {
     if (idx === 0) return; // start always tracks the wing circle itself
     const sign = p4Side() === 'Left' ? 1 : -1;
     getBlockPoints(p); // ensures the field exists (migrates old data if needed)
@@ -695,7 +710,7 @@ function writeBackPoint(p, idx, absX, absY) {
 
 function getEditablePointsArray(p) {
   // returns the actual mutable array backing this path's points, for add/remove
-  if (p.blockRelative || (p.player === 4 && p.wingSeamRelative)) return null; // structurally fixed, no add/remove
+  if (p.blockRelative || p.dualSideBlock || (p.player === 4 && p.wingSeamRelative)) return null; // structurally fixed, no add/remove
   return p.points;
 }
 
@@ -725,6 +740,12 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
     const sign = p4Side() === 'Left' ? 1 : -1;
     const fieldKey = getBlockFieldKey();
     p[fieldKey] = [[0,0], [(end[0]-anchor[0])/sign, end[1]-anchor[1]]];
+  } else if (p.dualSideBlock) {
+    // Reassigning only updates whichever same-side/cross-side variant is
+    // currently showing -- the other one (the play run the opposite way
+    // relative to the wing) keeps whatever it was already set to.
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey] = [blockerStart.slice(), end];
   } else {
     const targetKey = defenseMode === '4x4' ? 'points4x4' : 'points';
     p[targetKey] = [blockerStart.slice(), end];
@@ -978,8 +999,13 @@ function render() {
     // actually standing, not a coordinate baked into the play. Blocking
     // paths for #4 also need their END point computed relative to his live
     // position, since which defender he's nearest to depends on wing side.
-    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && p.points4x4) ? p.points4x4 : p.points;
-    if (p.player === 4 && !p.optionLine) {
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+    if (p.dualSideBlock) {
+      // Fixed-position blocker (e.g. the Option play's playside TE) whose
+      // block target depends on whether the wing is on the same side as the
+      // play's direction or the opposite side -- see getBlockFieldKey().
+      points = getBlockPoints(p);
+    } else if (p.player === 4 && !p.optionLine) {
       if (p.blockRelative) {
         const [dx, dy] = getBlockPoints(p)[1];
         const sign = p4Side() === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
