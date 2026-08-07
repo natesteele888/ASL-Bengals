@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide</title>
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=20260807a">
 </head>
 <body>
-<!-- BUILD_VERSION: 2026-08-03 14:18 UTC (blocking-always-animates-fix-v2) -->
+<!-- BUILD_VERSION: 2026-08-07 (toggle-redesign-and-tutorial-cache-bust) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
@@ -398,9 +398,20 @@
 // edit-plays.js) expects window.ALL_CARDS and window.DATA to already be
 // populated by the time it runs, exactly like the old inline JSON blobs.
 (async function boot(){
+  // Cache-busting query string: without this, browsers (and mobile Safari
+  // especially) can keep serving an old cached copy of a script/data file
+  // after a new one has been pushed, even though the freshly-served
+  // index.html now expects the new version -- e.g. an old cached
+  // play-calls.js still wiring up a button ID that the new HTML no longer
+  // has (or vice versa) throws partway through and silently breaks
+  // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
+  // force every client to fetch fresh copies.
+  const BUILD_V = '20260807a';
+  const withV = (path) => `${path}?v=${BUILD_V}`;
+
   const [cardsRes, playsRes] = await Promise.all([
-    fetch('data/cards.json'),
-    fetch('data/plays.json'),
+    fetch(withV('data/cards.json')),
+    fetch(withV('data/plays.json')),
   ]);
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
@@ -409,7 +420,7 @@
   for (const src of scripts) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = src;
+      s.src = withV(src);
       s.onload = resolve;
       s.onerror = () => reject(new Error('Failed to load ' + src));
       document.body.appendChild(s);
