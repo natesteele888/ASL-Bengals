@@ -50,9 +50,10 @@
 <div class="controls">
   <div class="inline-control">
     <label>Wing</label>
-    <div class="toggle-pair" id="wingToggle">
-      <button class="toggle-btn" data-value="Left">L</button>
-      <button class="toggle-btn" data-value="Right">R</button>
+    <div class="toggle-group toggle-orange" id="wingToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
     </div>
   </div>
   <div class="inline-control" id="playWrap">
@@ -61,48 +62,54 @@
   </div>
   <div class="inline-control">
     <label>Dir</label>
-    <div class="toggle-pair" id="dirToggle">
-      <button class="toggle-btn" data-value="Left">L</button>
-      <button class="toggle-btn" data-value="Right">R</button>
+    <div class="toggle-group toggle-black" id="dirToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
     </div>
   </div>
   <div class="inline-control">
     <label>Motion</label>
-    <div class="toggle-pair" id="motionToggle">
-      <button class="toggle-btn" data-value="off">Off</button>
-      <button class="toggle-btn" data-value="on">On</button>
+    <div class="toggle-group toggle-green" id="motionToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
     </div>
   </div>
   <div class="inline-control">
     <label>Boot</label>
-    <div class="toggle-pair" id="bootToggle">
-      <button class="toggle-btn" data-value="off">Off</button>
-      <button class="toggle-btn" data-value="on">On</button>
+    <div class="toggle-group toggle-red" id="bootToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
     </div>
   </div>
   <div class="inline-control">
     <label>Blocking</label>
-    <div class="toggle-pair" id="blockingToggle">
-      <button class="toggle-btn" data-value="off">Off</button>
-      <button class="toggle-btn" data-value="on">On</button>
+    <div class="toggle-group toggle-black" id="blockingToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="off" aria-pressed="false">Off</button>
+      <button class="toggle-btn" data-value="on" aria-pressed="true">On</button>
     </div>
   </div>
   <div class="inline-control">
     <label>Speed</label>
-    <div class="toggle-pair" id="speedToggle">
-      <button class="toggle-btn" data-value="normal">1x</button>
-      <button class="toggle-btn" data-value="half">&#189;x</button>
+    <div class="toggle-group toggle-black" id="speedToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="normal" aria-pressed="true">1x</button>
+      <button class="toggle-btn" data-value="half" aria-pressed="false">&#189;x</button>
     </div>
   </div>
   <div class="inline-control">
     <label>Edit</label>
-    <div class="toggle-pair" id="editToggle">
-      <button class="toggle-btn" data-value="off">Off</button>
-      <button class="toggle-btn" data-value="on">On</button>
+    <div class="toggle-group toggle-black" id="editToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
     </div>
   </div>
   <div class="inline-control" id="ballCarrierWrap" style="display:none;">
-    <button class="toggle-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+    <button class="standalone-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
   </div>
   <div class="action-row">
     <button class="action-btn primary" id="playBtn">&#9654; Play</button>
@@ -114,18 +121,20 @@
 <div class="diagram-card">
   <div class="corner-control" id="readPosGroup" style="display:none;">
     <label>Read</label>
-    <div class="toggle-pair" id="readPosToggle">
-      <button class="toggle-btn tiny" data-value="A">A</button>
-      <button class="toggle-btn tiny" data-value="B">B</button>
+    <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
+      <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
     </div>
   </div>
   <div class="corner-control" id="insideOutsideGroup" style="display:none;">
     <label>In/Out</label>
-    <div class="toggle-pair" id="insideOutsideToggle">
-      <button class="toggle-btn tiny" data-value="Inside">In</button>
-      <button class="toggle-btn tiny" data-value="Outside">Out</button>
+    <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
+      <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
     </div>
-    <button id="removeInOutBtn" class="toggle-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
+    <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
   </div>
   
   <div class="edit-toolbar" id="editToolbar" style="display:none;">
@@ -193,8 +202,16 @@
         <div class="pcTutorialHeader">🔀 Try different looks</div>
         <div class="pcTutorialIllustration">
           <div class="mockToggleRow">
-            <div class="wing-toggle mockToggle"><button class="active">Wing L</button><button>Wing R</button></div>
-            <div class="dir-toggle mockToggle"><button class="active">Dir L</button><button>Dir R</button></div>
+            <div class="toggle-group toggle-orange mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="true">Wing L</button>
+              <button class="toggle-btn" aria-pressed="false">Wing R</button>
+            </div>
+            <div class="toggle-group toggle-black mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="true">Dir L</button>
+              <button class="toggle-btn" aria-pressed="false">Dir R</button>
+            </div>
           </div>
           <div class="mockTapHint">👆 Tap to flip a toggle</div>
         </div>

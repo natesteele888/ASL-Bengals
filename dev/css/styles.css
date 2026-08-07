@@ -348,94 +348,74 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     gap: 6px;
     padding: 8px 8px 0;
   }
-  .def-toggle {
-    display: flex;
-    background: #fff;
-    border: 2px solid #7a4a24;
+  /* Shared toggle-group pill system -- used for every L/R-style toggle in
+     the app (Wing, Dir, Motion, Boot, In/Out, Read, and Edit Plays' own
+     Wing/Dir/Motion/Boot/Blocking/Speed/Edit controls). One reusable
+     component instead of a hand-copied color variant per toggle: a tinted
+     track, a white "active" pill that slides/resizes to fit whichever
+     label is currently pressed, and a color modifier class per group so
+     each still reads at a glance. Scoped to `.toggle-group .toggle-btn`
+     (not a bare `.toggle-btn`) so it doesn't affect standalone buttons
+     that happen to reuse the toggle-btn class (Ball Carrier, Remove
+     Toggle) outside of a toggle-group.
+     Requires a `.toggle-thumb` span as the toggle-group's first child;
+     placeToggleThumb() in play-calls.js sizes/positions it to match
+     whichever button has aria-pressed="true". */
+  .toggle-group {
+    position: relative;
+    display: inline-flex;
+    height: 30px;
     border-radius: 999px;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 800;
+    background: var(--toggle-tint, #f0f0f0);
+    padding: 2px;
+    isolation: isolate;
+    user-select: none;
+    flex-shrink: 0;
   }
-  .def-toggle button {
+  .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    height: calc(100% - 4px);
+    width: 0;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.15);
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), width .2s ease;
+    z-index: 0;
+  }
+  .toggle-group .toggle-btn {
+    position: relative;
+    z-index: 1;
     border: none;
     background: transparent;
-    padding: 5px 7px;
-    cursor: pointer;
-    color: var(--bengal-black);
-  }
-  .def-toggle button.active { background: #7a4a24; color: #fff; }
-  .wing-toggle {
-    display: flex;
-    background: #fff;
-    border: 2px solid var(--bengal-orange);
+    padding: 0 10px;
+    height: 26px;
+    line-height: 26px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(0,0,0,.4);
     border-radius: 999px;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 800;
-  }
-  .wing-toggle button {
-    border: none;
-    background: transparent;
-    padding: 5px 8px;
     cursor: pointer;
-    color: var(--bengal-black);
+    white-space: nowrap;
+    transition: color .15s ease;
+    -webkit-tap-highlight-color: transparent;
   }
-  .wing-toggle button.active { background: var(--bengal-orange); color: #fff; }
+  .toggle-group .toggle-btn[aria-pressed="true"] { color: var(--toggle-color, #333); }
+  .toggle-group .toggle-btn:active { transform: scale(.95); }
+  .toggle-group .toggle-btn:disabled { cursor: default; opacity: .6; }
 
-  .dir-toggle {
-    display: flex;
-    background: #fff;
-    border: 2px solid var(--bengal-black);
-    border-radius: 999px;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 800;
-  }
-  .dir-toggle button {
-    border: none;
-    background: transparent;
-    padding: 5px 8px;
-    cursor: pointer;
-    color: var(--bengal-black);
-  }
-  .dir-toggle button.active { background: var(--bengal-black); color: #fff; }
+  /* per-group color coding -- reused by both Play Calls' per-card toggles
+     and Edit Plays' matching controls */
+  .toggle-group.toggle-orange { --toggle-color: var(--bengal-orange); --toggle-tint: rgba(232,114,12,.12); }
+  .toggle-group.toggle-black  { --toggle-color: var(--bengal-black); --toggle-tint: rgba(0,0,0,.06); }
+  .toggle-group.toggle-green  { --toggle-color: #2e7d32; --toggle-tint: rgba(46,125,50,.1); }
+  .toggle-group.toggle-red    { --toggle-color: #c62828; --toggle-tint: rgba(198,40,40,.1); }
+  .toggle-group.toggle-brown  { --toggle-color: #7a4a24; --toggle-tint: rgba(122,74,36,.12); }
 
-  .motion-toggle {
-    display: flex;
-    background: #fff;
-    border: 2px solid #1a8c3a;
-    border-radius: 999px;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 800;
-  }
-  .motion-toggle button {
-    border: none;
-    background: transparent;
-    padding: 5px 8px;
-    cursor: pointer;
-    color: var(--bengal-black);
-  }
-  .motion-toggle button.active { background: #1a8c3a; color: #fff; }
-
-  .boot-toggle {
-    display: flex;
-    background: #fff;
-    border: 2px solid #e0201a;
-    border-radius: 999px;
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 800;
-  }
-  .boot-toggle button {
-    border: none;
-    background: transparent;
-    padding: 5px 8px;
-    cursor: pointer;
-    color: var(--bengal-black);
-  }
-  .boot-toggle button.active { background: #e0201a; color: #fff; }
+  /* compact variant for corner controls (Edit Plays' In/Out and Read) */
+  .toggle-group.toggle-tiny { height: 24px; }
+  .toggle-group.toggle-tiny .toggle-btn { height: 20px; line-height: 20px; padding: 0 7px; font-size: 10px; }
 
   .flip-btn {
     position: absolute;
@@ -718,28 +698,22 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     width: 100%;
     background: #fafafa;
   }
-#editPlaysMode .toggle-pair {
-    display: flex;
+#editPlaysMode .standalone-btn {
+    padding: 6px 10px;
     border: 2px solid var(--bengal-black);
     border-radius: 6px;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-#editPlaysMode .toggle-btn {
-    padding: 6px 10px;
-    border: none;
     background: #fff;
     font-weight: 700;
     font-size: 12px;
     cursor: pointer;
     min-width: 30px;
+    flex-shrink: 0;
   }
-#editPlaysMode .toggle-btn + .toggle-btn { border-left: 2px solid var(--bengal-black); }
-#editPlaysMode .toggle-btn.active {
+#editPlaysMode .standalone-btn.active {
     background: var(--bengal-black);
     color: #fff;
   }
-#editPlaysMode .toggle-btn.tiny { padding: 3px 8px; font-size: 10px; min-width: 22px; }
+#editPlaysMode .standalone-btn.tiny { padding: 3px 8px; font-size: 10px; min-width: 22px; }
 #editPlaysMode .action-row {
     display: flex;
     gap: 6px;
@@ -914,13 +888,10 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
       gap: 4px;
       padding: 6px 6px 0;
     }
-    .def-toggle, .wing-toggle, .dir-toggle, .motion-toggle, .boot-toggle {
-      font-size: 8px;
-    }
-    .def-toggle button, .wing-toggle button, .dir-toggle button,
-    .motion-toggle button, .boot-toggle button {
-      padding: 3px 5px;
-    }
+    /* the pill toggles already shrink to fit their text, but tighten them
+       up a bit further on very small phones */
+    .toggle-group { height: 26px; }
+    .toggle-group .toggle-btn { height: 22px; line-height: 22px; padding: 0 8px; font-size: 10px; }
     .card-outer, .accordion-body .card-outer {
       aspect-ratio: auto;
       height: 420px;
@@ -933,7 +904,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     
     
 #editPlaysMode .controls { padding: 10px 16px; }
-#editPlaysMode .toggle-btn { padding: 8px 16px; font-size: 14px; }
+#editPlaysMode .standalone-btn { padding: 8px 16px; font-size: 14px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) { height: 34px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) .toggle-btn { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; }
 #editPlaysMode .action-btn { flex: none; padding: 9px 18px; }
 #editPlaysMode .action-row { width: auto; }
   }

@@ -32,6 +32,59 @@ function normalizePlayData(playTypes) {
   return playTypes;
 }
 
+// ---- Shared toggle-group pill component ----
+// Declared at top level (not inside either file's IIFE), same reasoning
+// as DATA/normalizePlayData above: play-calls.js loads before
+// edit-plays.js as a plain <script> tag, so a top-level function
+// declaration here becomes a global both files can call. Used for every
+// L/R-style toggle in the app -- Play Calls builds its per-card toggles
+// with buildToggleGroup(); Edit Plays' static HTML toggles are wired with
+// wireToggle() in edit-plays.js, which also calls placeToggleThumb().
+
+// Slides/resizes the white "active" pill inside a .toggle-group to match
+// whichever button currently has aria-pressed="true". Needs the group to
+// actually be laid out (not display:none) to measure correctly -- call it
+// again any time a group becomes visible after being hidden.
+function placeToggleThumb(group) {
+  const active = group.querySelector('.toggle-btn[aria-pressed="true"]');
+  const thumb = group.querySelector('.toggle-thumb');
+  if (!active || !thumb) return;
+  thumb.style.width = active.offsetWidth + 'px';
+  thumb.style.transform = `translateX(${active.offsetLeft - 2}px)`;
+}
+
+// Builds a complete two-button toggle-group. `color` is one of the
+// toggle-<color> modifier classes (orange/black/green/red/brown), `extraClass`
+// is an optional additional class (e.g. 'toggle-tiny'), `options` is
+// [{value, label}, {value, label}], `initialValue` picks which one starts
+// pressed, and `onChange(value)` fires on every click (including re-clicks
+// of the already-active button, same as the old .active-class toggles did).
+function buildToggleGroup(color, options, initialValue, onChange, extraClass) {
+  const group = document.createElement('div');
+  group.className = `toggle-group toggle-${color}` + (extraClass ? ' ' + extraClass : '');
+  const thumb = document.createElement('span');
+  thumb.className = 'toggle-thumb';
+  group.appendChild(thumb);
+  const buttons = options.map(opt => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toggle-btn';
+    btn.dataset.value = opt.value;
+    btn.textContent = opt.label;
+    btn.setAttribute('aria-pressed', opt.value === initialValue ? 'true' : 'false');
+    group.appendChild(btn);
+    return btn;
+  });
+  group.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.toggle-btn');
+    if (!btn) return;
+    buttons.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+    placeToggleThumb(group);
+    onChange(btn.dataset.value);
+  });
+  return group;
+}
+
 (function() {
   const SIGNAL_CARDS = {};
   ALL_CARDS.forEach(c => { SIGNAL_CARDS[c.id] = c.img; });
@@ -472,55 +525,40 @@ function buildCard(combo) {
   toggleRow.className = 'card-toggle-row';
 
   if (combo.hasInsideOutside) {
-    const ioToggle = document.createElement('div');
-    ioToggle.className = 'def-toggle';
-    const ioOut = document.createElement('button'); ioOut.textContent = 'Out'; ioOut.className = 'active';
-    const ioIn = document.createElement('button'); ioIn.textContent = 'In';
-    ioOut.addEventListener('click', () => { if (isPlayingRef.value) return; insideOutside = 'Outside'; ioOut.classList.add('active'); ioIn.classList.remove('active'); onComboChanged(); });
-    ioIn.addEventListener('click', () => { if (isPlayingRef.value) return; insideOutside = 'Inside'; ioIn.classList.add('active'); ioOut.classList.remove('active'); onComboChanged(); });
-    ioToggle.appendChild(ioOut); ioToggle.appendChild(ioIn);
+    const ioToggle = buildToggleGroup('brown', [
+      { value: 'Outside', label: 'Out' },
+      { value: 'Inside', label: 'In' },
+    ], insideOutside, (v) => { if (isPlayingRef.value) return; insideOutside = v; onComboChanged(); });
     toggleRow.appendChild(ioToggle);
   }
 
   if (combo.hasReadToggle) {
-    const readToggle = document.createElement('div');
-    readToggle.className = 'def-toggle';
-    const rA = document.createElement('button'); rA.textContent = 'Read A'; rA.className = 'active';
-    const rB = document.createElement('button'); rB.textContent = 'Read B';
-    rA.addEventListener('click', () => { if (isPlayingRef.value) return; readPosition = 'A'; rA.classList.add('active'); rB.classList.remove('active'); onComboChanged(); });
-    rB.addEventListener('click', () => { if (isPlayingRef.value) return; readPosition = 'B'; rB.classList.add('active'); rA.classList.remove('active'); onComboChanged(); });
-    readToggle.appendChild(rA); readToggle.appendChild(rB);
+    const readToggle = buildToggleGroup('brown', [
+      { value: 'A', label: 'Read A' },
+      { value: 'B', label: 'Read B' },
+    ], readPosition, (v) => { if (isPlayingRef.value) return; readPosition = v; onComboChanged(); });
     toggleRow.appendChild(readToggle);
   }
 
-  const wingToggle = document.createElement('div');
-  wingToggle.className = 'wing-toggle';
-  const wL = document.createElement('button'); wL.textContent = 'Wing L'; wL.className = 'active';
-  const wR = document.createElement('button'); wR.textContent = 'Wing R';
-  wL.addEventListener('click', () => { if (isPlayingRef.value) return; wingSide = 'Left'; wL.classList.add('active'); wR.classList.remove('active'); onComboChanged(); });
-  wR.addEventListener('click', () => { if (isPlayingRef.value) return; wingSide = 'Right'; wR.classList.add('active'); wL.classList.remove('active'); onComboChanged(); });
-  wingToggle.appendChild(wL); wingToggle.appendChild(wR);
+  const wingToggle = buildToggleGroup('orange', [
+    { value: 'Left', label: 'Wing L' },
+    { value: 'Right', label: 'Wing R' },
+  ], wingSide, (v) => { if (isPlayingRef.value) return; wingSide = v; onComboChanged(); });
   toggleRow.appendChild(wingToggle);
 
   // #4 is the only player who ever goes in motion, so this is a simple
   // on/off rather than a direction pick -- sits between Wing and Dir since
   // it's part of the pre-snap picture, same as the wing spot.
-  const motionToggle = document.createElement('div');
-  motionToggle.className = 'motion-toggle';
-  const mOff = document.createElement('button'); mOff.textContent = 'Motion Off'; mOff.className = 'active';
-  const mOn = document.createElement('button'); mOn.textContent = 'Motion On';
-  mOff.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = false; mOff.classList.add('active'); mOn.classList.remove('active'); onComboChanged(); });
-  mOn.addEventListener('click', () => { if (isPlayingRef.value) return; motionOn = true; mOn.classList.add('active'); mOff.classList.remove('active'); onComboChanged(); });
-  motionToggle.appendChild(mOff); motionToggle.appendChild(mOn);
+  const motionToggle = buildToggleGroup('green', [
+    { value: 'off', label: 'Motion Off' },
+    { value: 'on', label: 'Motion On' },
+  ], motionOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; motionOn = (v === 'on'); onComboChanged(); });
   toggleRow.appendChild(motionToggle);
 
-  const dirToggle = document.createElement('div');
-  dirToggle.className = 'dir-toggle';
-  const dL = document.createElement('button'); dL.textContent = 'Dir L'; dL.className = 'active';
-  const dR = document.createElement('button'); dR.textContent = 'Dir R';
-  dL.addEventListener('click', () => { if (isPlayingRef.value) return; direction = 'Left'; dL.classList.add('active'); dR.classList.remove('active'); onComboChanged(); });
-  dR.addEventListener('click', () => { if (isPlayingRef.value) return; direction = 'Right'; dR.classList.add('active'); dL.classList.remove('active'); onComboChanged(); });
-  dirToggle.appendChild(dL); dirToggle.appendChild(dR);
+  const dirToggle = buildToggleGroup('black', [
+    { value: 'Left', label: 'Dir L' },
+    { value: 'Right', label: 'Dir R' },
+  ], direction, (v) => { if (isPlayingRef.value) return; direction = v; onComboChanged(); });
   toggleRow.appendChild(dirToggle);
 
   // Boot: QB (#1) keeps the ball instead of handing off -- everything else
@@ -529,17 +567,22 @@ function buildCard(combo) {
   // to plays where #1 already has the ball or already has a built-in fake
   // (Option, Option Pass, Double Blast) -- noBoot in the data hides it.
   if (!combo.noBoot) {
-    const bootToggle = document.createElement('div');
-    bootToggle.className = 'boot-toggle';
-    const bOff = document.createElement('button'); bOff.textContent = 'Boot Off'; bOff.className = 'active';
-    const bOn = document.createElement('button'); bOn.textContent = 'Boot On';
-    bOff.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = false; bOff.classList.add('active'); bOn.classList.remove('active'); onComboChanged(); });
-    bOn.addEventListener('click', () => { if (isPlayingRef.value) return; bootOn = true; bOn.classList.add('active'); bOff.classList.remove('active'); onComboChanged(); });
-    bootToggle.appendChild(bOff); bootToggle.appendChild(bOn);
+    const bootToggle = buildToggleGroup('red', [
+      { value: 'off', label: 'Boot Off' },
+      { value: 'on', label: 'Boot On' },
+    ], bootOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; bootOn = (v === 'on'); onComboChanged(); });
     toggleRow.appendChild(bootToggle);
   }
 
   front.appendChild(toggleRow);
+
+  // Groups built above may not be in the live DOM yet (buildCard() runs
+  // before the caller appends its result), so their thumbs would measure
+  // 0-width if placed synchronously -- defer one frame, by which point
+  // the card is guaranteed to be inserted.
+  requestAnimationFrame(() => {
+    [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
+  });
 
   const stageWrap = document.createElement('div');
   stageWrap.className = 'card-stage-wrap';
@@ -813,6 +856,14 @@ function buildGrid() {
     pcTutorialDots.forEach((d, idx) => d.classList.toggle('active', idx === i));
     pcTutorialBackBtn.disabled = i === 0;
     pcTutorialNextBtn.textContent = i === pcTutorialSteps.length - 1 ? "Let's go!" : 'Next';
+    // The step's decorative toggle mock-up (step 2, "Try different
+    // looks") reuses the real .toggle-group markup so it always matches
+    // the live styling -- place its thumb now that the step is visible
+    // (display:none until now means it couldn't be measured before this).
+    const activeStep = pcTutorialSteps[i];
+    if (activeStep) {
+      [...activeStep.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
+    }
   }
 
   pcTutorialBackBtn.addEventListener('click', () => {

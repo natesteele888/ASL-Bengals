@@ -113,15 +113,22 @@ function duplicatePlay(original) {
 }
 
 function wireToggle(el, getter, setter) {
-  [...el.children].forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.value === getter());
+  const buttons = [...el.querySelectorAll('.toggle-btn')];
+  buttons.forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.value === getter() ? 'true' : 'false');
     btn.addEventListener('click', () => {
       if (isPlaying) return;
       setter(btn.dataset.value);
-      [...el.children].forEach(b => b.classList.toggle('active', b === btn));
+      buttons.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+      placeToggleThumb(el);
       render();
     });
   });
+  // The thumb needs real layout to measure -- some groups (readPosToggle,
+  // insideOutsideToggle) start hidden (display:none) until a play with
+  // that flag is selected, so this initial call is a no-op for those and
+  // updateReadPosVisibility() re-calls it once they're actually shown.
+  placeToggleThumb(el);
 }
 wireToggle(wingToggle, () => wingSide, v => wingSide = v);
 wireToggle(dirToggle, () => direction, v => direction = v);
@@ -337,6 +344,11 @@ function updateReadPosVisibility() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   readPosGroup.style.display = playType.hasReadToggle ? 'flex' : 'none';
   insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
+  // These groups start hidden (display:none), so their thumb couldn't be
+  // measured correctly by wireToggle()'s initial call -- re-place it now
+  // that they're actually laid out, whenever they're shown.
+  if (playType.hasReadToggle) placeToggleThumb(readPosToggle);
+  if (playType.hasInsideOutside) placeToggleThumb(insideOutsideToggle);
   // Boot doesn't make sense on plays where #1 already has the ball or
   // already has a built-in fake (Option, Option Pass, Double Blast) --
   // hide the toggle and force it back off so a swap from a previously
@@ -345,7 +357,10 @@ function updateReadPosVisibility() {
   bootToggle.parentElement.style.display = bootAllowed ? 'flex' : 'none';
   if (!bootAllowed && bootOn) {
     bootOn = false;
-    [...bootToggle.children].forEach(b => b.classList.toggle('active', b.dataset.value === 'off'));
+    [...bootToggle.querySelectorAll('.toggle-btn')].forEach(b => b.setAttribute('aria-pressed', b.dataset.value === 'off' ? 'true' : 'false'));
+    placeToggleThumb(bootToggle);
+  } else if (bootAllowed) {
+    placeToggleThumb(bootToggle);
   }
 }
 
@@ -398,7 +413,7 @@ let isPlaying = false;
 
 function setControlsDisabled(disabled) {
   [wingToggle, dirToggle, motionToggle, bootToggle, blockingToggle, speedToggle].forEach(el => {
-    [...el.children].forEach(b => b.disabled = disabled);
+    [...el.querySelectorAll('.toggle-btn')].forEach(b => b.disabled = disabled);
   });
   playSelect.disabled = disabled;
   playBtn.disabled = disabled;
