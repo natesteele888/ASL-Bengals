@@ -342,11 +342,30 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 
   .card-toggle-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
     padding: 8px 8px 0;
+  }
+  /* Row 1: Wing + Dir, every play has both, always in this order. */
+  .toggle-row-basics {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+  /* Row 2: one fixed slot each for In/Out, Motion, Boot, Read -- a play
+     that doesn't have a given toggle just leaves that slot empty instead
+     of letting the others shift over, so the same toggle always lands in
+     the same spot from card to card. */
+  .toggle-row-extras {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .toggle-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
   }
   /* Shared toggle-group pill system -- used for every L/R-style toggle in
      the app (Wing, Dir, Motion, Boot, In/Out, Read, and Edit Plays' own
@@ -892,6 +911,8 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
        up a bit further on very small phones */
     .toggle-group { height: 26px; }
     .toggle-group .toggle-btn { height: 22px; line-height: 22px; padding: 0 8px; font-size: 10px; }
+    .toggle-slot { min-height: 26px; }
+    .toggle-row-basics, .toggle-row-extras { gap: 4px; }
     .card-outer, .accordion-body .card-outer {
       aspect-ratio: auto;
       height: 420px;

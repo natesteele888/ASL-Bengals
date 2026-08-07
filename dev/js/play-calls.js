@@ -521,59 +521,87 @@ function buildCard(combo) {
   titleBar.className = 'card-title-bar';
   front.appendChild(titleBar);
 
+  // Two fixed rows so toggles never shift around from card to card: the
+  // basics (Wing, Dir) are on every play, always top row, always in that
+  // order. The second row has one dedicated slot each for In/Out, Motion,
+  // Boot, and Read, in that order -- a play that doesn't have a given
+  // toggle just leaves its slot empty instead of letting the others slide
+  // over, so e.g. Motion always lands in the same spot whether or not the
+  // card next to it has In/Out or Boot.
   const toggleRow = document.createElement('div');
   toggleRow.className = 'card-toggle-row';
 
-  if (combo.hasInsideOutside) {
-    const ioToggle = buildToggleGroup('brown', [
-      { value: 'Outside', label: 'Out' },
-      { value: 'Inside', label: 'In' },
-    ], insideOutside, (v) => { if (isPlayingRef.value) return; insideOutside = v; onComboChanged(); });
-    toggleRow.appendChild(ioToggle);
-  }
-
-  if (combo.hasReadToggle) {
-    const readToggle = buildToggleGroup('brown', [
-      { value: 'A', label: 'Read A' },
-      { value: 'B', label: 'Read B' },
-    ], readPosition, (v) => { if (isPlayingRef.value) return; readPosition = v; onComboChanged(); });
-    toggleRow.appendChild(readToggle);
-  }
+  const basicsRow = document.createElement('div');
+  basicsRow.className = 'toggle-row-basics';
 
   const wingToggle = buildToggleGroup('orange', [
     { value: 'Left', label: 'Wing L' },
     { value: 'Right', label: 'Wing R' },
   ], wingSide, (v) => { if (isPlayingRef.value) return; wingSide = v; onComboChanged(); });
-  toggleRow.appendChild(wingToggle);
-
-  // #4 is the only player who ever goes in motion, so this is a simple
-  // on/off rather than a direction pick -- sits between Wing and Dir since
-  // it's part of the pre-snap picture, same as the wing spot.
-  const motionToggle = buildToggleGroup('green', [
-    { value: 'off', label: 'Motion Off' },
-    { value: 'on', label: 'Motion On' },
-  ], motionOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; motionOn = (v === 'on'); onComboChanged(); });
-  toggleRow.appendChild(motionToggle);
+  basicsRow.appendChild(wingToggle);
 
   const dirToggle = buildToggleGroup('black', [
     { value: 'Left', label: 'Dir L' },
     { value: 'Right', label: 'Dir R' },
   ], direction, (v) => { if (isPlayingRef.value) return; direction = v; onComboChanged(); });
-  toggleRow.appendChild(dirToggle);
+  basicsRow.appendChild(dirToggle);
+
+  toggleRow.appendChild(basicsRow);
+
+  const extrasRow = document.createElement('div');
+  extrasRow.className = 'toggle-row-extras';
+
+  const ioSlot = document.createElement('div');
+  ioSlot.className = 'toggle-slot';
+  if (combo.hasInsideOutside) {
+    const ioToggle = buildToggleGroup('brown', [
+      { value: 'Outside', label: 'Out' },
+      { value: 'Inside', label: 'In' },
+    ], insideOutside, (v) => { if (isPlayingRef.value) return; insideOutside = v; onComboChanged(); });
+    ioSlot.appendChild(ioToggle);
+  }
+  extrasRow.appendChild(ioSlot);
+
+  // #4 is the only player who ever goes in motion, so this is a simple
+  // on/off rather than a direction pick. Every play has this slot.
+  const motionSlot = document.createElement('div');
+  motionSlot.className = 'toggle-slot';
+  const motionToggle = buildToggleGroup('green', [
+    { value: 'off', label: 'Motion Off' },
+    { value: 'on', label: 'Motion On' },
+  ], motionOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; motionOn = (v === 'on'); onComboChanged(); });
+  motionSlot.appendChild(motionToggle);
+  extrasRow.appendChild(motionSlot);
 
   // Boot: QB (#1) keeps the ball instead of handing off -- everything else
   // about the play (routes, blocking) stays exactly as authored, this just
   // swaps who's carrying for this card's diagram/animation. Doesn't apply
   // to plays where #1 already has the ball or already has a built-in fake
-  // (Option, Option Pass, Double Blast) -- noBoot in the data hides it.
+  // (Option, Option Pass, Double Blast) -- noBoot in the data leaves this
+  // slot empty rather than hiding it and letting Read slide over.
+  const bootSlot = document.createElement('div');
+  bootSlot.className = 'toggle-slot';
   if (!combo.noBoot) {
     const bootToggle = buildToggleGroup('red', [
       { value: 'off', label: 'Boot Off' },
       { value: 'on', label: 'Boot On' },
     ], bootOn ? 'on' : 'off', (v) => { if (isPlayingRef.value) return; bootOn = (v === 'on'); onComboChanged(); });
-    toggleRow.appendChild(bootToggle);
+    bootSlot.appendChild(bootToggle);
   }
+  extrasRow.appendChild(bootSlot);
 
+  const readSlot = document.createElement('div');
+  readSlot.className = 'toggle-slot';
+  if (combo.hasReadToggle) {
+    const readToggle = buildToggleGroup('brown', [
+      { value: 'A', label: 'Read A' },
+      { value: 'B', label: 'Read B' },
+    ], readPosition, (v) => { if (isPlayingRef.value) return; readPosition = v; onComboChanged(); });
+    readSlot.appendChild(readToggle);
+  }
+  extrasRow.appendChild(readSlot);
+
+  toggleRow.appendChild(extrasRow);
   front.appendChild(toggleRow);
 
   // Groups built above may not be in the live DOM yet (buildCard() runs
