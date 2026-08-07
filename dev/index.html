@@ -179,16 +179,49 @@
 </div>
 
 <div id="playCallsInfoOverlay" class="pcInfoOverlay">
-  <div class="pcInfoCard">
-    <div class="pcInfoHeader">📋 Play Calls — What's New</div>
-    <div class="pcInfoBody">
-      <p><strong>This tab is a coach-only preview.</strong> It's not part of the live study experience for players yet — think of it as a work-in-progress you're checking before it goes out.</p>
-      <p><strong>Each play has two independent toggles</strong> right on the card: <em>Wing L/R</em> (which side #4 lines up on) and <em>Direction L/R</em> (which way the play actually goes). They don't have to match — flip either one any time.</p>
-      <p><strong>▶ Play</strong> animates the diagram. Tap any player's circle to highlight just his path. The small <em>1x / ½x</em> toggle slows the play down.</p>
-      <p><strong>The flip icon</strong> (bottom-right) turns the card over to show the actual signal call for whatever Wing/Direction combo is currently selected — one sign at a time, looping twice.</p>
-      <p><strong>How updates get made:</strong> route and blocking edits happen in the separate builder tool. Once you're happy with a change, it gets folded back into this file. Nothing goes live to players until you personally push the updated file to GitHub — that stays entirely your call.</p>
+  <div class="pcInfoCard pcTutorialCard">
+    <div id="pcTutorialSteps">
+      <div class="pcTutorialStep active" data-step="0">
+        <div class="pcTutorialHeader">📋 Welcome to Play Calls!</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockAccordionHeader">Inside Zone <span class="mockChevron">▾</span></div>
+          <div class="mockTapHint">👆 Tap a play to open it</div>
+        </div>
+        <p class="pcTutorialText">This is every play in our playbook. <strong>Tap a play's name</strong> to open it up and see the diagram.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="1">
+        <div class="pcTutorialHeader">🔀 Try different looks</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockToggleRow">
+            <div class="wing-toggle mockToggle"><button class="active">Wing L</button><button>Wing R</button></div>
+            <div class="dir-toggle mockToggle"><button class="active">Dir L</button><button>Dir R</button></div>
+          </div>
+          <div class="mockTapHint">👆 Tap to flip a toggle</div>
+        </div>
+        <p class="pcTutorialText">Every play can change. Flip <strong>Wing</strong> to move #4, flip <strong>Direction</strong> to run it the other way. Some plays also have <strong>Motion</strong> or <strong>Boot</strong> — try those too!</p>
+      </div>
+      <div class="pcTutorialStep" data-step="2">
+        <div class="pcTutorialHeader">✅ Know your job</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPlayerCircle">3</div>
+          <div class="mockTapHint">👆 Tap your number, then ▶ Play</div>
+        </div>
+        <p class="pcTutorialText"><strong>Tap your number</strong> on the diagram to light up just your path. Tap <strong>▶</strong> to watch the play run. Tap your number again to see everyone.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="3">
+        <div class="pcTutorialHeader">🔄 Flip for the signal</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockFlipBtn">&#8635;</div>
+          <div class="mockTapHint">👆 Tap the flip icon</div>
+        </div>
+        <p class="pcTutorialText">Every play has a hand signal from the sideline. <strong>Tap the flip icon</strong> to see each sign, one at a time. Tap it again to flip back.</p>
+      </div>
     </div>
-    <button id="pcInfoCloseBtn" class="pcInfoCloseBtn">Got it</button>
+    <div class="pcTutorialDots" id="pcTutorialDots"></div>
+    <div class="pcTutorialNav">
+      <button id="pcTutorialBackBtn" class="pcTutorialNavBtn secondary">Back</button>
+      <button id="pcTutorialNextBtn" class="pcTutorialNavBtn primary">Next</button>
+    </div>
   </div>
 </div>
 

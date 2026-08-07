@@ -732,6 +732,7 @@ function buildGrid() {
       }
       if (!playCallsSeenThisSession) {
         playCallsSeenThisSession = true;
+        showPcTutorialStep(0);
         document.getElementById('playCallsInfoOverlay').classList.add('show');
       }
     }
@@ -790,10 +791,43 @@ function buildGrid() {
     if (ev.key === 'Enter') attemptUnlock();
   });
 
-  document.getElementById('pcInfoBtn').addEventListener('click', () => {
-    document.getElementById('playCallsInfoOverlay').classList.add('show');
+  // ---- Play Calls tutorial: a few short steps, each with a small mock-up
+  // of the real control (open a play, try a toggle, tap your number, flip
+  // for the signal). Shows automatically the first time a player opens
+  // Play Calls each session, and any time via the "i" button.
+  const pcTutorialSteps = [...document.querySelectorAll('.pcTutorialStep')];
+  const pcTutorialDotsEl = document.getElementById('pcTutorialDots');
+  const pcTutorialBackBtn = document.getElementById('pcTutorialBackBtn');
+  const pcTutorialNextBtn = document.getElementById('pcTutorialNextBtn');
+  pcTutorialSteps.forEach(() => {
+    const d = document.createElement('div');
+    d.className = 'pcTutorialDot';
+    pcTutorialDotsEl.appendChild(d);
   });
-  document.getElementById('pcInfoCloseBtn').addEventListener('click', () => {
-    document.getElementById('playCallsInfoOverlay').classList.remove('show');
+  const pcTutorialDots = [...pcTutorialDotsEl.children];
+  let pcTutorialIndex = 0;
+
+  function showPcTutorialStep(i) {
+    pcTutorialIndex = i;
+    pcTutorialSteps.forEach((el, idx) => el.classList.toggle('active', idx === i));
+    pcTutorialDots.forEach((d, idx) => d.classList.toggle('active', idx === i));
+    pcTutorialBackBtn.disabled = i === 0;
+    pcTutorialNextBtn.textContent = i === pcTutorialSteps.length - 1 ? "Let's go!" : 'Next';
+  }
+
+  pcTutorialBackBtn.addEventListener('click', () => {
+    if (pcTutorialIndex > 0) showPcTutorialStep(pcTutorialIndex - 1);
+  });
+  pcTutorialNextBtn.addEventListener('click', () => {
+    if (pcTutorialIndex < pcTutorialSteps.length - 1) {
+      showPcTutorialStep(pcTutorialIndex + 1);
+    } else {
+      document.getElementById('playCallsInfoOverlay').classList.remove('show');
+    }
+  });
+
+  document.getElementById('pcInfoBtn').addEventListener('click', () => {
+    showPcTutorialStep(0);
+    document.getElementById('playCallsInfoOverlay').classList.add('show');
   });
 })();
