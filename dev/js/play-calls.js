@@ -4,6 +4,29 @@
 // IIFE below) because edit-plays.js also reads this same DATA variable.
 let DATA = window.DATA;
 
+// Snapshot of the code-owned, behavioral flags shipped in data/plays.json
+// (noBoot, hasReadToggle, hasInsideOutside), keyed by play key, captured
+// right now -- before any Firebase cloud data has a chance to replace
+// DATA.playTypes. "Save to Cloud" (edit-plays.js) writes the coach's
+// *entire* DATA.playTypes array as one big snapshot, not just the point
+// edits they made -- so if that snapshot was saved before a flag like
+// noBoot existed in the code, the cloud copy permanently lacks it, and
+// every future page load silently loses that flag for every player,
+// forever, until someone re-saves from a browser with the newer code
+// loaded. These three flags describe how the UI should behave for a given
+// play, not coach-authored point positions, so they should always come
+// from the shipped file, never from a stale cloud snapshot. Applied in
+// normalizePlayData() below, which both Play Calls and Edit Plays already
+// run on any cloud data before using it.
+const SHIPPED_PLAY_FLAGS = {};
+(window.DATA.playTypes || []).forEach(pt => {
+  SHIPPED_PLAY_FLAGS[pt.key] = {
+    noBoot: !!pt.noBoot,
+    hasReadToggle: !!pt.hasReadToggle,
+    hasInsideOutside: !!pt.hasInsideOutside,
+  };
+});
+
 // Firebase's database deletes any field whose value is `null` when you save
 // it (that's how you delete a field via their API) -- so a path object
 // authored as `{player: null, id: 'LT', ...}` round-trips through a cloud
@@ -18,6 +41,11 @@ let DATA = window.DATA;
 // DATA.playTypes, so loaded data behaves identically to the built-in JSON.
 function normalizePlayData(playTypes) {
   (playTypes || []).forEach(pt => {
+    // Force the behavioral flags back to whatever's actually shipped in
+    // code, regardless of what this particular cloud snapshot has (or is
+    // missing) for them -- see SHIPPED_PLAY_FLAGS above for why.
+    const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
+    if (shippedFlags) Object.assign(pt, shippedFlags);
     Object.values(pt.directions || {}).forEach(dirVal => {
       const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
       variants.forEach(variant => {
