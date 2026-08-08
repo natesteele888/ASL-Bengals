@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fix Sweep In/Out Toggle</title>
+<style>
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; color: #222; }
+  h1 { font-size: 20px; }
+  p { line-height: 1.5; color: #444; }
+  button { font-size: 16px; padding: 12px 20px; border-radius: 8px; border: none; background: #e0201a; color: #fff; cursor: pointer; }
+  button:disabled { background: #ccc; cursor: default; }
+  #status { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 15px; white-space: pre-wrap; }
+  .ok { background: #e6f4ea; color: #1a6e2e; }
+  .err { background: #fdeaea; color: #a3231b; }
+  .pending { background: #f0f0f0; color: #555; }
+</style>
+</head>
+<body>
+<h1>One-time fix: remove Sweep's Inside/Outside toggle</h1>
+<p>
+  Sweep currently has an "In / Out" toggle in Play Calls that shouldn't be
+  there -- its "Inside" version is leftover data from when Sweep was cloned
+  from Double Blast, not a real second way to run the play. This page sends
+  the corrected play data straight to the same cloud database the app reads
+  from, so it takes effect immediately -- no need to touch a terminal.
+</p>
+<p>Click the button below once. It's safe to click more than once if you're not sure it worked the first time.</p>
+<button id="fixBtn">Fix Sweep Now</button>
+<div id="status" class="pending">Not run yet.</div>
+
+<script>
+const FIREBASE_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+const fixedSweep = {"key":"sweep","label":"Sweep","signalCardId":14,"signalLabel":"Double Blast","hasReadToggle":false,"hasInsideOutside":false,"directions":{"Left":{"defense":[{"id":"DE_L","label":"DE","pos":[436,110]},{"id":"DT_L","label":"DT","pos":[662,110]},{"id":"DT_R","label":"DT","pos":[949,110]},{"id":"DE_R","label":"DE","pos":[1183,110]},{"extra":true,"id":"OLB_L","label":"LB","pos":[600,-20]},{"extra":true,"id":"MLB","label":"LB","pos":[805,-20]},{"extra":true,"id":"OLB_R","label":"LB","pos":[1010,-20]},{"extra":true,"id":"CB_L","label":"CB","pos":[150,90]},{"extra":true,"id":"CB_R","label":"CB","pos":[1460,90]},{"extra":true,"id":"FS","label":"S","pos":[650,-190]},{"extra":true,"id":"SS","label":"S","pos":[960,-190]}],"defense4x4":[{"id":"DE_L","label":"DE","pos":[436,110]},{"id":"DT_L","label":"DT","pos":[662,110]},{"id":"DT_R","label":"DT","pos":[949,110]},{"id":"DE_R","label":"DE","pos":[1183,110]},{"extra":true,"id":"LB1","label":"LB","pos":[500,-20]},{"extra":true,"id":"LB2","label":"LB","pos":[700,-20]},{"extra":true,"id":"LB3","label":"LB","pos":[900,-20]},{"extra":true,"id":"LB4","label":"LB","pos":[1100,-20]},{"extra":true,"id":"CB_L","label":"CB","pos":[150,90]},{"extra":true,"id":"CB_R","label":"CB","pos":[1460,90]},{"extra":true,"id":"FS","label":"S","pos":[805,-190]}],"paths":[{"ball":false,"lineThenCurve":true,"player":3,"points":[[638,438],[307.57000732421875,349.84368896484375],[182.96408081054688,288.3293762207031],[176.65492248535156,228.39236450195312]],"width":9},{"ball":true,"player":2,"points":[[985,438],[520.504150390625,411.3580017089844],[427.4440612792969,332.4934997558594]],"width":9},{"ball":false,"delayMs":500,"player":1,"points":[[809,438],[1083.5394287109375,460.3507995605469],[1295.05859375,427.9092102050781]],"width":9},{"ball":false,"isBlocking":true,"player":5,"points":[[462,204],[438.6,119.39999999999999]],"points4x4":[[462,204],[438.6,119.39999999999999]],"width":7},{"ball":false,"id":"LT","isBlocking":true,"points":[[577,204],[450.1,119.39999999999999]],"points4x4":[[577,204],[507.7,2.4000000000000057]],"width":7},{"ball":false,"id":"LG","isBlocking":true,"points":[[692,204],[665,119.39999999999999]],"points4x4":[[692,204],[665,119.39999999999999]],"width":7},{"ball":false,"id":"C","isBlocking":true,"points":[[806,204],[806,144]],"points4x4":[[806,204],[710.6,2.4000000000000057]],"width":7},{"ball":false,"id":"RG","isBlocking":true,"points":[[921,204],[1383.2818603515625,351.4209899902344]],"points4x4":[[921,204],[902.1,2.4000000000000057]],"width":7},{"ball":false,"id":"RT","isBlocking":true,"points":[[1035,204],[1168.2,119.39999999999999]],"points4x4":[[1035,204],[957.6,119.39999999999999]],"width":7},{"ball":false,"isBlocking":true,"player":6,"points":[[1149,204],[1179.6,119.39999999999999]],"points4x4":[[1149,204],[1104.9,2.4000000000000057]],"width":7},{"ball":false,"blockRelative":true,"crossPoints":[[0,0],[156,-188]],"crossPoints4x4":[[0,0],[401.4000000000001,-413.1]],"isBlocking":true,"player":4,"sameSidePoints":[[0,0],[156,-188]],"sameSidePoints4x4":[[0,0],[68.39999999999998,-143.1]],"width":7}]},"Right":{"defense":[{"id":"DE_L","label":"DE","pos":[436,110]},{"id":"DT_L","label":"DT","pos":[662,110]},{"id":"DT_R","label":"DT","pos":[949,110]},{"id":"DE_R","label":"DE","pos":[1183,110]},{"extra":true,"id":"OLB_L","label":"LB","pos":[600,-20]},{"extra":true,"id":"MLB","label":"LB","pos":[805,-20]},{"extra":true,"id":"OLB_R","label":"LB","pos":[1011,-20]},{"extra":true,"id":"CB_L","label":"CB","pos":[150,90]},{"extra":true,"id":"CB_R","label":"CB","pos":[1460,90]},{"extra":true,"id":"FS","label":"S","pos":[805,-190]}],"defense4x4":[{"id":"DE_L","label":"DE","pos":[436,110]},{"id":"DT_L","label":"DT","pos":[662,110]},{"id":"DT_R","label":"DT","pos":[949,110]},{"id":"DE_R","label":"DE","pos":[1183,110]},{"extra":true,"id":"LB1","label":"LB","pos":[500,-20]},{"extra":true,"id":"LB2","label":"LB","pos":[700,-20]},{"extra":true,"id":"LB3","label":"LB","pos":[900,-20]},{"extra":true,"id":"LB4","label":"LB","pos":[1100,-20]},{"extra":true,"id":"CB_L","label":"CB","pos":[150,90]},{"extra":true,"id":"CB_R","label":"CB","pos":[1460,90]},{"extra":true,"id":"FS","label":"S","pos":[805,-190]}],"paths":[{"ball":false,"lineThenCurve":true,"player":2,"points":[[973,438],[1179.8114013671875,376.6576232910156],[1358.045166015625,316.7206115722656],[1462.1463623046875,157.414306640625]],"width":9},{"ball":true,"player":3,"points":[[626,438],[859.043701171875,404.55126953125],[1040.716552734375,377.30035400390625],[1141.934326171875,364.3236999511719],[1305.99462890625,280.44293212890625]],"width":9},{"ball":false,"delayMs":500,"player":1,"points":[[802,438],[576.3677978515625,470.321044921875],[382.70697021484375,425.36407470703125]],"width":9},{"ball":false,"isBlocking":true,"player":5,"points":[[462,204],[438.6,119.39999999999999]],"points4x4":[[462,204],[496.2,2.4000000000000057]],"width":7},{"ball":false,"id":"LT","isBlocking":true,"points":[[577,204],[450.1,119.39999999999999]],"points4x4":[[577,204],[653.5,119.39999999999999]],"width":7},{"ball":false,"id":"LG","isBlocking":true,"points":[[692,204],[665,119.39999999999999]],"points4x4":[[692,204],[699.2,2.4000000000000057]],"width":7},{"ball":false,"id":"C","isBlocking":true,"points":[[806,204],[806,144]],"points4x4":[[806,204],[890.6,2.4000000000000057]],"width":7},{"ball":false,"id":"RG","isBlocking":true,"points":[[921,204],[946.2,119.39999999999999]],"points4x4":[[921,204],[946.2,119.39999999999999]],"width":7},{"ball":false,"id":"RT","isBlocking":true,"points":[[1035,204],[1168.2,119.39999999999999]],"points4x4":[[1035,204],[1093.5,2.4000000000000057]],"width":7},{"ball":false,"isBlocking":true,"player":6,"points":[[1149,204],[1179.6,119.39999999999999]],"points4x4":[[1149,204],[1179.6,119.39999999999999]],"width":7},{"ball":false,"blockRelative":true,"crossPoints":[[0,0],[156,-188]],"crossPoints4x4":[[0,0],[400.5,-413.1]],"isBlocking":true,"player":4,"sameSidePoints":[[0,0],[156,-188]],"sameSidePoints4x4":[[0,0],[61.200000000000045,-143.1]],"width":7}]}}};
+
+const statusEl = document.getElementById('status');
+const btn = document.getElementById('fixBtn');
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+btn.addEventListener('click', async () => {
+  btn.disabled = true;
+  setStatus('Sending the fix...', 'pending');
+  try {
+    const putRes = await fetch(`${FIREBASE_URL}/playEdits/6.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fixedSweep),
+    });
+    if (!putRes.ok) throw new Error('Save failed: HTTP ' + putRes.status);
+
+    setStatus('Saved. Verifying...', 'pending');
+    const checkRes = await fetch(`${FIREBASE_URL}/playEdits/6/hasInsideOutside.json?_=` + Date.now());
+    const stillOn = await checkRes.json();
+    if (stillOn === false) {
+      setStatus('Done! Sweep’s In/Out toggle is fixed. Reload Play Calls in the app (you may need to close and reopen the tab) to see it.', 'ok');
+    } else {
+      setStatus('Saved, but verification did not come back as expected. Try clicking the button again, or let Claude know.', 'err');
+    }
+  } catch (err) {
+    setStatus('Something went wrong: ' + err.message + '\n\nCheck your internet connection and try again.', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
