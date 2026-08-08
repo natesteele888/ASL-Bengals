@@ -389,15 +389,6 @@ def new_page(c):
 c = canvas.Canvas(OUT_PATH, pagesize=(PAGE_W, PAGE_H))
 y_cursor = new_page(c)
 
-c.setFillColor((0.1, 0.1, 0.1))
-c.setFont("Helvetica-Bold", 14)
-c.drawString(MARGIN, y_cursor - 11, "ASL Bengals 11U — Sideline Play Call Reference (live data)")
-c.setFont("Helvetica", 6.8)
-c.setFillColor((0.35, 0.35, 0.35))
-c.drawString(MARGIN, y_cursor - 20, "4x4 front shown · base call, plus Boot/Motion examples where applicable")
-draw_legend(c, MARGIN, y_cursor - 29)
-y_cursor -= TITLE_H
-
 for fam_key, fam_label, fam_color in FAMILIES:
     play_type = PLAY_TYPES[fam_key]
     variants = list(variant_list(play_type))
