@@ -922,7 +922,21 @@ function buildGrid() {
 
 
 
-  let playCallsSeenThisSession = false;
+  // Tutorial "seen" state used to live in a plain in-memory flag, so it
+  // reset (and the overlay auto-popped up again) on every page reload --
+  // in practice that meant almost every time a coach opened Play Calls on
+  // the sideline. Persisted to localStorage instead so it only ever
+  // auto-shows once per device; the "i" button (pcInfoBtn, always visible
+  // at the top of the screen) remains as the on-demand way to reopen it.
+  const PC_TUTORIAL_SEEN_KEY = 'aslBengalsPcTutorialSeen';
+  function hasSeenPcTutorial() {
+    try { return localStorage.getItem(PC_TUTORIAL_SEEN_KEY) === '1'; }
+    catch (e) { return false; }
+  }
+  function markPcTutorialSeen() {
+    try { localStorage.setItem(PC_TUTORIAL_SEEN_KEY, '1'); }
+    catch (e) { /* localStorage unavailable -- just won't persist */ }
+  }
   let playCallsUnlocked = false;
   let playCallsDataLoaded = false;
   const PC_PASSWORD = 'FrontSeat';
@@ -937,8 +951,8 @@ function buildGrid() {
         window._playCallsShouldRebuild = false;
         buildGrid();
       }
-      if (!playCallsSeenThisSession) {
-        playCallsSeenThisSession = true;
+      if (!hasSeenPcTutorial()) {
+        markPcTutorialSeen();
         showPcTutorialStep(0);
         document.getElementById('playCallsInfoOverlay').classList.add('show');
       }
