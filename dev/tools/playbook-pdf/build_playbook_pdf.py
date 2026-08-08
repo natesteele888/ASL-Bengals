@@ -76,6 +76,19 @@ FAMILY_META = [
 ]
 FAMILIES = [(key, PLAY_TYPES[key]["label"], color) for key, color in FAMILY_META if key in PLAY_TYPES]
 
+# ---------------------------------------------------------------------------
+# Sweep is flagged hasInsideOutside in the live cloud data, but the "Inside"
+# variant's ball path starts from a different backfield spot and cuts
+# through the middle like an Inside Zone run -- it doesn't match "Outside"'s
+# wide-and-bow-out shape, which is the actual sweep action. This looks like
+# leftover data from Sweep being cloned from Double Blast (they still share
+# Double Blast's signal card) rather than a deliberate second variant, so
+# the PDF only shows the Outside call. The underlying live data/flag is
+# untouched -- this is a print-only override pending a decision on whether
+# to clean up the live "Inside" variant too.
+# ---------------------------------------------------------------------------
+FORCE_SINGLE_VARIANT = {"sweep": "Outside"}
+
 
 def hexcolor(h):
     h = h.lstrip("#")
@@ -312,7 +325,8 @@ GRID_X0 = MARGIN + (USABLE_W - GRID_W) / 2
 
 
 def default_subvariant(play_type):
-    io = "Outside" if play_type.get("hasInsideOutside") else None
+    forced = FORCE_SINGLE_VARIANT.get(play_type["key"])
+    io = forced or ("Outside" if play_type.get("hasInsideOutside") else None)
     rp = "A" if play_type.get("hasReadToggle") else None
     return io, rp
 
@@ -320,7 +334,8 @@ def default_subvariant(play_type):
 def variant_list(play_type):
     """Yields (direction, io, rp, boot_on, motion_on, sublabel) tuples."""
     has_read = play_type.get("hasReadToggle")
-    has_io = play_type.get("hasInsideOutside")
+    forced_io = FORCE_SINGLE_VARIANT.get(play_type["key"])
+    has_io = play_type.get("hasInsideOutside") and not forced_io
     no_boot = bool(play_type.get("noBoot"))
 
     # base calls
@@ -331,6 +346,8 @@ def variant_list(play_type):
         elif has_io:
             for io in ["Inside", "Outside"]:
                 yield direction, io, None, False, False, f"{direction} • {io}"
+        elif forced_io:
+            yield direction, forced_io, None, False, False, direction
         else:
             yield direction, None, None, False, False, direction
 
