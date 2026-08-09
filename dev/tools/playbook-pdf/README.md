@@ -37,9 +37,24 @@ Claude will:
 2. Overwrite `live_playtypes.json` in this folder with the combined result
    (an array of all 7 play type objects, in index order).
 3. Run `build_playbook_pdf.py` (needs Python 3 + the `reportlab` package).
-4. Copy the result from `output/ASL_Bengals_Sideline_Playbook.pdf` to the
-   repo root (or wherever you want the delivered file) and hand it back to
-   you.
+   The script writes to `output/ASL_Bengals_Sideline_Playbook.pdf` (a
+   gitignored scratch copy) and **also copies it to
+   `dev/playbook/ASL_Bengals_Sideline_Playbook.pdf`** automatically — that
+   second copy is the one that's actually committed and deployed, since it's
+   the file the live app links to from the 5-tap Coach Stats admin panel
+   ("Save Sideline Playbook PDF" button). No manual copy step needed.
+4. Hand the PDF back to you, and stage a commit covering both the updated
+   `live_playtypes.json` and the new `dev/playbook/...pdf` so the in-app
+   download link stays current once you push.
+
+## In-app download (5-tap admin panel)
+
+Tap the header logo 5 times within 3 seconds, enter the coach PIN, and the
+"COACH STATS" overlay now has a **Save Sideline Playbook PDF** button/link
+at `dev/playbook/ASL_Bengals_Sideline_Playbook.pdf` (relative to
+`dev/index.html`). On desktop browsers this downloads directly; on mobile
+it opens the PDF in a new tab, from which "Share → Save to Files" (iOS) or
+the browser's own download/save option (Android) saves it to the phone.
 
 If a play is added or removed entirely (not just edited), update
 `FAMILY_META` near the top of `build_playbook_pdf.py` — it's the ordered

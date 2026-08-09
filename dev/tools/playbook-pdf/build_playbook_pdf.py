@@ -31,6 +31,13 @@ LIVE_PLAYTYPES_PATH = os.path.join(HERE, "live_playtypes.json")
 OUT_PATH = os.path.join(HERE, "output", "ASL_Bengals_Sideline_Playbook.pdf")
 os.makedirs(os.path.join(HERE, "output"), exist_ok=True)
 
+# Deploy copy: output/ is gitignored (working scratch), but the live app
+# serves everything under dev/, so the coach's in-app "download playbook"
+# link needs a committed copy inside dev/. This is the file that actually
+# ships to GitHub Pages.
+DEPLOY_PATH = os.path.join(HERE, "..", "..", "playbook", "ASL_Bengals_Sideline_Playbook.pdf")
+os.makedirs(os.path.dirname(DEPLOY_PATH), exist_ok=True)
+
 with open(SHIPPED_DATA_PATH) as f:
     SHIPPED = json.load(f)
 with open(LIVE_PLAYTYPES_PATH) as f:
@@ -424,3 +431,7 @@ for fam_key, fam_label, fam_color in FAMILIES:
 c.showPage()
 c.save()
 print("done ->", OUT_PATH)
+
+import shutil
+shutil.copyfile(OUT_PATH, DEPLOY_PATH)
+print("deployed ->", DEPLOY_PATH)
