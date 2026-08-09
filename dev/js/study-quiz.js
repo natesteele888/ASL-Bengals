@@ -225,7 +225,8 @@ const TIMED_LEADERBOARD_MAX = 20;
 
 async function cloudPush(path, entry){
   try {
-    const res = await fetch(`${FIREBASE_DB_URL}/${path}.json`, {
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${path}.json`);
+    const res = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(entry),
@@ -235,7 +236,8 @@ async function cloudPush(path, entry){
 }
 async function cloudFetch(path){
   try {
-    const res = await fetch(`${FIREBASE_DB_URL}/${path}.json`);
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${path}.json`);
+    const res = await fetch(url);
     if(!res.ok) return null;
     const data = await res.json();
     return data ? Object.values(data) : [];

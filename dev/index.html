@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide</title>
-<link rel="stylesheet" href="css/styles.css?v=20260809b">
+<link rel="stylesheet" href="css/styles.css?v=20260809c">
 </head>
 <body>
-<!-- BUILD_VERSION: 2026-08-09b (hash-frontseat-and-admin-pin) -->
+<!-- BUILD_VERSION: 2026-08-09c (firebase-anonymous-auth) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
@@ -407,7 +407,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260809b';
+  const BUILD_V = '20260809c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
@@ -417,7 +417,7 @@
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/auth.js', 'js/study-quiz.js', 'js/play-calls.js', 'js/edit-plays.js'];
+  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/play-calls.js', 'js/edit-plays.js'];
   for (const src of scripts) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');

@@ -291,9 +291,10 @@ function sanitizeBlockingDistances(playTypes) {
 const FIREBASE_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
 const cloudStatusEl = document.getElementById('cloudStatus');
 
-saveCloudBtn.addEventListener('click', () => {
+saveCloudBtn.addEventListener('click', async () => {
   saveCloudBtn.textContent = 'Saving\u2026';
-  fetch(`${FIREBASE_URL}/playEdits.json`, {
+  const url = await window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`);
+  fetch(url, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(sanitizeBlockingDistances(DATA.playTypes)),
@@ -317,7 +318,8 @@ saveCloudBtn.addEventListener('click', () => {
 });
 
 function loadSavedPlaysFromCloud() {
-  return fetch(`${FIREBASE_URL}/playEdits.json`)
+  return window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`)
+    .then(url => fetch(url))
     .then(r => r.ok ? r.json() : null)
     .then(saved => {
       if (saved && Array.isArray(saved) && saved.length) {

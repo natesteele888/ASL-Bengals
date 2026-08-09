@@ -967,7 +967,8 @@ function buildGrid() {
       return;
     }
     if (statusEl) statusEl.textContent = 'Checking for the latest saved routes\u2026';
-    fetch(`${FIREBASE_DB_URL}/playEdits.json`)
+    window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`)
+      .then(url => fetch(url))
       .then(r => r.ok ? r.json() : null)
       .then(saved => {
         if (saved && Array.isArray(saved) && saved.length) {
