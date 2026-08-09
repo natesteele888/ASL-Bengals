@@ -1,0 +1,212 @@
+[
+  {
+    "id": 1,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "ONE FINGER = ODD = LEFT",
+    "img": "assets/cards/1.png"
+  },
+  {
+    "id": 2,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "THREE FINGERS = ODD = LEFT",
+    "img": "assets/cards/2.png"
+  },
+  {
+    "id": 3,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "FIVE FINGERS = ODD = LEFT",
+    "img": "assets/cards/3.png"
+  },
+  {
+    "id": 4,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "ZERO = EVEN = RIGHT",
+    "img": "assets/cards/4.png"
+  },
+  {
+    "id": 5,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "TWO FINGERS = EVEN = RIGHT",
+    "img": "assets/cards/5.png"
+  },
+  {
+    "id": 6,
+    "group": "Location / Direction",
+    "cat": "Location / Direction",
+    "meaning": "FOUR FINGERS = EVEN = RIGHT",
+    "img": "assets/cards/6.png"
+  },
+  {
+    "id": 7,
+    "group": "#4 Identity",
+    "cat": "#4 Identity",
+    "meaning": "WING LOCATION",
+    "img": "assets/cards/7.png"
+  },
+  {
+    "id": 8,
+    "group": "#4 Identity",
+    "cat": "#4 Identity",
+    "meaning": "WING LOCATION",
+    "img": "assets/cards/8.png"
+  },
+  {
+    "id": 9,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "INSIDE ZONE",
+    "img": "assets/cards/9.png"
+  },
+  {
+    "id": 10,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "OUTSIDE ZONE",
+    "img": "assets/cards/10.png"
+  },
+  {
+    "id": 11,
+    "group": "",
+    "cat": "",
+    "meaning": "THROAT SLASH = MOTION",
+    "img": "assets/cards/11.png"
+  },
+  {
+    "id": 12,
+    "group": "",
+    "cat": "",
+    "meaning": "SEAT BELT = MOTION",
+    "img": "assets/cards/12.png"
+  },
+  {
+    "id": 13,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "BLAST",
+    "img": "assets/cards/13.png"
+  },
+  {
+    "id": 14,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "DOUBLE BLAST",
+    "img": "assets/cards/14.png"
+  },
+  {
+    "id": 15,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "OPTION",
+    "img": "assets/cards/15.png"
+  },
+  {
+    "id": 16,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "OPTION PASS",
+    "img": "assets/cards/16.png"
+  },
+  {
+    "id": 17,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "SWEEP",
+    "img": "assets/cards/17.png"
+  },
+  {
+    "id": 18,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "COUNTER",
+    "img": "assets/cards/18.png"
+  },
+  {
+    "id": 19,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "TRAP",
+    "img": "assets/cards/19.png"
+  },
+  {
+    "id": 20,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "POWER",
+    "img": "assets/cards/20.png"
+  },
+  {
+    "id": 21,
+    "group": "",
+    "cat": "",
+    "meaning": "QB KEEP",
+    "img": "assets/cards/21.png"
+  },
+  {
+    "id": 22,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "REVERSE",
+    "img": "assets/cards/22.png"
+  },
+  {
+    "id": 23,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "SHUFFLE PASS",
+    "img": "assets/cards/23.png"
+  },
+  {
+    "id": 24,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "4-SWEEP",
+    "img": "assets/cards/24.png"
+  },
+  {
+    "id": 25,
+    "group": "Play Call",
+    "cat": "",
+    "meaning": "TE SWEEP",
+    "img": "assets/cards/25.png"
+  },
+  {
+    "id": 26,
+    "group": "",
+    "cat": "",
+    "meaning": "BOOT",
+    "img": "assets/cards/26.png"
+  },
+  {
+    "id": 27,
+    "group": "",
+    "cat": "",
+    "meaning": "QB SNEAK",
+    "img": "assets/cards/27.png"
+  },
+  {
+    "id": 28,
+    "group": "",
+    "cat": "",
+    "meaning": "PASS 1",
+    "img": "assets/cards/28.png"
+  },
+  {
+    "id": 29,
+    "group": "",
+    "cat": "",
+    "meaning": "PASS 2",
+    "img": "assets/cards/29.png"
+  },
+  {
+    "id": 30,
+    "group": "",
+    "cat": "",
+    "meaning": "PASS 3",
+    "img": "assets/cards/30.png"
+  }
+]

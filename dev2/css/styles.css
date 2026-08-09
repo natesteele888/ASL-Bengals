@@ -1,0 +1,981 @@
+:root{
+  --bengal-orange:#ff6a13; --bengal-orange-dark:#e0570a; --bengal-black:#111111;
+  --ink:#1b1b1b; --paper:#f4f2ee; --card:#ffffff; --line:#e6e2da; --muted:#8a8a8a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink)}
+
+/* ===== Login gate ===== */
+.loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;background-color:#000;background-image:url(../assets/images/login-bg.jpg);
+  background-size:cover;background-position:center;opacity:1;transition:opacity 1.5s ease}
+.loginScreen.fadeOut{opacity:0;pointer-events:none}
+.loginScreen.hide{display:none}
+.loginOverlay{position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.6) 0%, rgba(0,0,0,.72) 55%, rgba(0,0,0,.88) 100%);
+  pointer-events:none}
+.loginGlow{position:absolute;left:50%;bottom:-38%;width:150%;height:65%;transform:translateX(-50%);
+  background:radial-gradient(ellipse at center, rgba(255,106,19,.4) 0%, rgba(255,106,19,.16) 38%, rgba(255,106,19,0) 72%);
+  filter:blur(6px);pointer-events:none}
+.loginContent{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:16px;
+  padding:24px;max-width:340px;width:100%;box-sizing:border-box}
+.loginLogo{width:80px;height:80px;object-fit:contain;border-radius:16px;background:#fff;padding:8px;
+  box-shadow:0 8px 24px rgba(255,106,19,.35)}
+.loginTitle{color:#fff;text-align:center;line-height:1.15;text-transform:uppercase;margin:0;
+  text-shadow:0 2px 10px rgba(0,0,0,.6)}
+.bengalsBig{display:block;font-size:44px;font-weight:900;letter-spacing:.03em;color:#fff}
+.loginSubtitle{display:block;font-size:15px;font-weight:700;letter-spacing:.08em;color:var(--bengal-orange);margin-top:6px}
+.loginInput{width:100%;padding:13px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.06);color:#fff;font-size:15px;text-align:center;letter-spacing:.05em;
+  outline:none;box-sizing:border-box}
+.loginInput::placeholder{color:rgba(255,255,255,.4)}
+.loginInput:focus{border-color:var(--bengal-orange)}
+.loginBtn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--bengal-orange);color:#fff;
+  font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;text-transform:uppercase}
+.loginBtn:active{background:var(--bengal-orange-dark)}
+.loginError{color:#ff8a8a;font-size:12.5px;min-height:16px;text-align:center;margin:-6px 0 0}
+@keyframes loginShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}
+  40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.loginContent.shake{animation:loginShake .4s}
+
+header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--bengal-orange)}
+.topToolbar{position:fixed;top:8px;right:8px;z-index:1100;display:flex;gap:6px}
+.toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
+  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.toolbarBtn:active{background:rgba(17,17,17,.85)}
+.headerRow{display:flex;align-items:center;gap:12px;padding:10px 14px}
+.headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
+.headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
+.headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+.modeTabs{position:sticky;top:57px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
+.modeBtn{flex:1;padding:10px 6px;text-align:center;font-size:13px;font-weight:700;color:#8a8a8a;
+  border:none;background:none;cursor:pointer}
+.modeBtn.active{background:var(--bengal-black);color:#fff}
+.modePanel{display:none;padding:8px 10px 14px}
+.modePanel.show{display:block}
+
+/* ===== Collapsible section headers (Study Signals) ===== */
+.vaSubHeader{font-size:13.5px;font-weight:800;color:#fff;background:var(--tile-color,var(--bengal-black));
+  padding:10px 14px;border-radius:10px;margin:18px 0 10px;text-transform:uppercase;letter-spacing:.03em;
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.vaSubHeader:first-child{margin-top:0}
+.vaChevron{font-size:12px;transition:transform .18s;flex-shrink:0}
+.vaSubHeader.collapsed .vaChevron{transform:rotate(-90deg)}
+.vaSubBody.collapsed{display:none}
+.vaCount{font-weight:600;opacity:.85;font-size:11px;text-transform:none;letter-spacing:0}
+.study-grid-inner{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;padding:2px 0 6px}
+.study-card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  display:flex;flex-direction:column}
+.study-card img{width:100%;aspect-ratio:9/11;object-fit:cover;object-position:top;display:block}
+.study-card .info{padding:8px 8px 10px;text-align:center}
+.study-card .num{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.study-card .meaning{font-size:12px;font-weight:800;color:var(--ink);line-height:1.25}
+
+/* ===== Quiz ===== */
+.quizStats{text-align:center;font-size:11.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.timedClockBig{text-align:center;font-size:40px;font-weight:900;color:var(--bengal-black);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;margin-bottom:2px;line-height:1.1}
+.quizBar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:8px}
+.quizBar button.tool{background:#fff;border:1px solid var(--line);border-radius:20px;padding:8px 14px;
+  font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer}
+.doneScreen{text-align:center;max-width:380px;margin:20px auto 0}
+.doneScreen h2{font-size:20px;margin-bottom:6px;color:var(--ink)}
+.doneScreen p{color:var(--muted);font-size:13px;margin-bottom:14px}
+.navBtn{background:var(--bengal-orange);color:#fff;border:none;border-radius:50px;padding:11px 20px;
+  font-size:13px;font-weight:700;cursor:pointer}
+.navBtn.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.navBtn:active{transform:scale(.96)}
+
+#signalQuiz{max-width:380px;margin:0 auto}
+#timedQuiz{max-width:380px;margin:0 auto}
+.sigHint{color:var(--muted);font-size:11px;text-align:center;margin-bottom:6px}
+.sigImgWrap{position:relative;width:min(360px, 92vw, 36.8vh);height:auto;aspect-ratio:9/11;margin:0 auto 8px;border-radius:14px;overflow:hidden;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);background:var(--card);aspect-ratio:9/11}
+.sigImgWrap img{width:100%;height:100%;display:block;object-fit:cover;object-position:top}
+.sigNavRow{display:flex;gap:12px;justify-content:center;margin-bottom:4px}
+.startOverlay{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;
+  justify-content:center;cursor:pointer}
+.startOverlay.show{display:flex}
+.startOverlayText{color:#fff;font-size:16px;font-weight:800;text-align:center;line-height:1.5;
+  text-shadow:0 2px 8px rgba(0,0,0,.5)}
+
+@keyframes flashGreen{0%{background:#fff}45%{background:#8fe08f}100%{background:#e3f7e3}}
+@keyframes flashRed{0%{background:#fff}45%{background:#f08a8a}100%{background:#fbe6e6}}
+.seq-choice.correct{animation:flashGreen .55s ease}
+.seq-choice.wrong{animation:flashRed .55s ease}
+.seq-choices{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+#sigChoices, #timedChoices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#sigChoices .seq-choice, #timedChoices .seq-choice{text-align:center}
+.seq-choice{padding:9px 13px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+  font-weight:700;font-size:12.5px;cursor:pointer;text-align:left;color:var(--ink);line-height:1.25}
+.seq-choice:active{background:#f6f4f0}
+.seq-choice.correct{background:#e3f7e3;border-color:#2d7a2d;color:#1c5c1c}
+.seq-choice.wrong{background:#fbe6e6;border-color:#b03030;color:#8a1f1f}
+.seq-choice[disabled]{cursor:default}
+.seq-feedback{text-align:center;font-weight:800;margin:2px 0 6px;min-height:16px;font-size:12.5px}
+.seq-feedback.good{color:#2d7a2d}
+.seq-feedback.bad{color:#b03030}
+
+/* ===== Leaderboard ===== */
+.lbOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:none;
+  align-items:center;justify-content:center;padding:20px}
+.lbOverlay.show{display:flex}
+.lbCard{background:#fff;border-radius:16px;max-width:360px;width:100%;max-height:80vh;overflow-y:auto;
+  padding:18px}
+.lbCard h3{margin:0 0 4px;font-size:16px;color:var(--ink);text-align:center}
+.lbCard .lbSub{text-align:center;color:var(--muted);font-size:11px;margin-bottom:14px}
+
+.lbCardCool{padding:0;position:relative}
+.lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
+  padding:22px 18px 20px;text-align:center;margin-bottom:16px;border-radius:16px 16px 0 0}
+.lbHeroTrophy{font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));margin-bottom:4px}
+.lbHeroHeader h3{color:#fff;font-size:19px;font-weight:900;margin:0 0 2px;text-shadow:0 1px 3px rgba(0,0,0,.2)}
+.lbHeroHeader .lbSub{color:rgba(255,255,255,.9);font-size:11.5px;font-weight:700;margin:0}
+.lbCardCool .lbList{padding:0 18px}
+.lbCardCool > button:not(.lbXClose){margin-left:18px;width:calc(100% - 36px) !important}
+.lbSectionHeader{font-size:12px;font-weight:800;color:var(--bengal-orange-dark);text-transform:uppercase;
+  letter-spacing:.04em;margin:14px 0 8px;text-align:center}
+.lbSectionHeader:first-of-type{margin-top:0}
+.adminStatGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.adminStatCard{background:var(--paper);border-radius:12px;padding:14px 8px;text-align:center}
+.adminStatCard .num{font-size:26px;font-weight:900;color:var(--bengal-orange-dark);line-height:1.1}
+.adminStatCard .lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;
+  letter-spacing:.03em;margin-top:2px}
+.lbList{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.lbRow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:var(--paper)}
+.lbRow.me{background:#fff4e8;border:1px solid var(--bengal-orange)}
+.lbRank{width:26px;height:26px;border-radius:50%;background:var(--bengal-black);color:#fff;font-size:13px;
+  font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lbRow.top3{background:linear-gradient(90deg, #fff7ec, var(--paper))}
+.lbRow:nth-child(1) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(2) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(3) .lbRank{background:transparent;font-size:20px}
+.lbName{flex:1;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
+.lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
+.lbOfflineNote{text-align:center;color:#b0722f;font-size:10.5px;padding:8px 6px 2px;line-height:1.4}
+.lbCloseBtn{width:100%}
+
+
+.lbTabRow{display:flex;gap:6px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
+.lbTabBtn{flex:1;border:none;background:transparent;padding:9px 6px;border-radius:8px;font-size:12.5px;
+  font-weight:800;color:var(--muted);cursor:pointer}
+.lbTabBtn.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.lbXClose{position:absolute !important;top:10px !important;right:10px !important;left:auto !important;
+  margin:0 !important;z-index:5;width:32px !important;height:32px !important;border-radius:50%;
+  border:none;background:rgba(255,255,255,.25);color:#fff;font-size:22px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.lbXClose:active{background:rgba(255,255,255,.4)}
+
+.lbSaveForm{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px;background:var(--paper);
+  border-radius:10px}
+.lbSaveForm input{padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-size:13px;text-align:center}
+.lbSaveHint{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.35}
+
+.tipsList{list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:10px}
+.tipsList li{font-size:12.5px;color:var(--ink);line-height:1.45;text-align:left}
+.tipsList b{color:var(--bengal-orange-dark)}
+
+.missedList{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-height:48vh;overflow-y:auto}
+.missedItem{display:flex;align-items:center;gap:10px;background:var(--paper);border-radius:9px;padding:7px}
+.missedItem img{width:44px;height:54px;object-fit:cover;object-position:top;border-radius:7px;flex-shrink:0}
+.missedItem .missedNum{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.missedItem .missedMeaning{font-size:12.5px;font-weight:800;color:var(--ink);line-height:1.25}
+.missedItem .missedStat{font-size:10.5px;color:var(--muted);margin-top:2px}
+.reviewMissedBtnRow{display:flex;justify-content:center;margin-bottom:8px}
+.reviewMissedBtn{background:#fff;border:1px solid var(--line);border-radius:20px;padding:9px 18px;
+  font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer}
+.reviewMissedBtn:active{background:#f6f4f0}
+.practiceTag{display:inline-block;background:var(--bengal-orange);color:#fff;font-size:10.5px;font-weight:800;
+  border-radius:20px;padding:3px 10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+
+/* ===== Play Calls (DEV) ===== */
+.play-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .accordion-item {
+    border: 2px solid var(--bengal-black);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .accordion-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border: none;
+    background: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    font-style: italic;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .accordion-item.open .accordion-header {
+    background: var(--bengal-black);
+    color: #fff;
+  }
+  .accordion-chevron {
+    font-size: 12px;
+    transition: transform .2s;
+  }
+  .accordion-item.open .accordion-chevron {
+    transform: rotate(180deg);
+  }
+  .accordion-body {
+    display: none;
+    padding: 10px;
+  }
+  .accordion-item.open .accordion-body {
+    display: block;
+  }
+  .accordion-body .card-outer {
+    aspect-ratio: 16 / 15;
+  }
+
+  .empty-note {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    padding: 20px;
+  }
+
+  /* the flip card */
+  .card-outer {
+    perspective: 1400px;
+    aspect-ratio: 16 / 12;
+  }
+  .card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform .6s;
+    transform-style: preserve-3d;
+  }
+  .card-outer.flipped .card-inner {
+    transform: rotateY(180deg);
+  }
+  .card-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    background: #fff;
+    border: 2px solid var(--bengal-black);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .card-front { display: flex; flex-direction: column; }
+  .card-back {
+    transform: rotateY(180deg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-title-bar {
+    padding: 6px 10px;
+    font-weight: 800;
+    font-size: 12px;
+    text-align: center;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+  .card-stage-wrap {
+    flex: 1;
+    position: relative;
+  }
+  .card-stage-wrap svg { width: 100%; height: 100%; display: block; }
+
+  .card-controls {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    right: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .card-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--bengal-black);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .card-btn.play-btn { background: var(--bengal-orange); color: #fff; border-color: var(--bengal-orange); }
+  .card-btn svg { width: 16px; height: 16px; }
+
+  .speed-toggle {
+    display: flex;
+    background: #fff;
+    border: 2px solid var(--bengal-black);
+    border-radius: 999px;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .speed-toggle button {
+    border: none;
+    background: transparent;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .speed-toggle button.active { background: var(--bengal-black); color: #fff; }
+
+  .card-toggle-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 8px 0;
+  }
+  /* Row 1: Wing + Dir, every play has both, always in this order. */
+  .toggle-row-basics {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+  /* Row 2: one fixed slot each for In/Out, Motion, Boot, Read -- a play
+     that doesn't have a given toggle just leaves that slot empty instead
+     of letting the others shift over, so the same toggle always lands in
+     the same spot from card to card. */
+  .toggle-row-extras {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .toggle-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+  }
+  /* Shared toggle-group pill system -- used for every L/R-style toggle in
+     the app (Wing, Dir, Motion, Boot, In/Out, Read, and Edit Plays' own
+     Wing/Dir/Motion/Boot/Blocking/Speed/Edit controls). One reusable
+     component instead of a hand-copied color variant per toggle: a tinted
+     track, a white "active" pill that slides/resizes to fit whichever
+     label is currently pressed, and a color modifier class per group so
+     each still reads at a glance. Scoped to `.toggle-group .toggle-btn`
+     (not a bare `.toggle-btn`) so it doesn't affect standalone buttons
+     that happen to reuse the toggle-btn class (Ball Carrier, Remove
+     Toggle) outside of a toggle-group.
+     Requires a `.toggle-thumb` span as the toggle-group's first child;
+     placeToggleThumb() in play-calls.js sizes/positions it to match
+     whichever button has aria-pressed="true". */
+  .toggle-group {
+    position: relative;
+    display: inline-flex;
+    height: 30px;
+    border-radius: 999px;
+    background: var(--toggle-tint, #f0f0f0);
+    padding: 2px;
+    isolation: isolate;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    height: calc(100% - 4px);
+    width: 0;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.15);
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), width .2s ease;
+    z-index: 0;
+  }
+  .toggle-group .toggle-btn {
+    position: relative;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    height: 26px;
+    line-height: 26px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(0,0,0,.4);
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toggle-group .toggle-btn[aria-pressed="true"] { color: var(--toggle-color, #333); }
+  .toggle-group .toggle-btn:active { transform: scale(.95); }
+  .toggle-group .toggle-btn:disabled { cursor: default; opacity: .6; }
+
+  /* per-group color coding -- reused by both Play Calls' per-card toggles
+     and Edit Plays' matching controls */
+  .toggle-group.toggle-orange { --toggle-color: var(--bengal-orange); --toggle-tint: rgba(232,114,12,.12); }
+  .toggle-group.toggle-black  { --toggle-color: var(--bengal-black); --toggle-tint: rgba(0,0,0,.06); }
+  .toggle-group.toggle-green  { --toggle-color: #2e7d32; --toggle-tint: rgba(46,125,50,.1); }
+  .toggle-group.toggle-red    { --toggle-color: #c62828; --toggle-tint: rgba(198,40,40,.1); }
+  .toggle-group.toggle-brown  { --toggle-color: #7a4a24; --toggle-tint: rgba(122,74,36,.12); }
+
+  /* compact variant for corner controls (Edit Plays' In/Out and Read) */
+  .toggle-group.toggle-tiny { height: 24px; }
+  .toggle-group.toggle-tiny .toggle-btn { height: 20px; line-height: 20px; padding: 0 7px; font-size: 10px; }
+
+  /* Compact on/off switch for simple binary toggles (Motion, Boot) -- one
+     label plus a small sliding red/green pill, instead of a two-button
+     group that has to repeat the word ("Motion Off" / "Motion On"). */
+  .switch-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .switch-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--bengal-black);
+    white-space: nowrap;
+  }
+  .switch-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .switch-track {
+    display: block;
+    width: 34px;
+    height: 18px;
+    border-radius: 999px;
+    background: #e74c3c;
+    position: relative;
+    transition: background-color .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-track { background: #2ecc71; }
+  .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+    transition: transform .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-thumb { transform: translateX(16px); }
+  .switch-toggle:disabled { cursor: default; opacity: .6; }
+
+  .flip-btn {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .signal-stage {
+    width: 88%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .signal-stage img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .signal-label {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    min-height: 24px;
+    padding: 0 10px;
+  }
+  .signal-progress {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .signal-progress .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ddd;
+  }
+  .signal-progress .dot.done { background: var(--bengal-orange); }
+
+  .replay-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 16px;
+    border: 2px solid var(--bengal-orange);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--bengal-orange);
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .replay-btn:active { background: var(--bengal-orange); color: #fff; }
+
+  .edit-handle { fill: #ffde00; stroke: #111; stroke-width: 2; }
+  .dimmed { opacity: .15; }
+  .full-op { opacity: 1; }
+
+  
+.pcInfoOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.pcInfoOverlay.show { display: flex; }
+.pcInfoCard {
+  background: #fff;
+  border-radius: 14px;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 18px;
+}
+.pcInfoHeader {
+  font-size: 17px;
+  font-weight: 900;
+  font-style: italic;
+  margin-bottom: 10px;
+}
+.pcInfoBody p {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  color: #333;
+}
+.pcInfoCloseBtn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--bengal-orange);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.pcInfoBtn {
+  margin-left: 6px;
+  border: 2px solid var(--bengal-black);
+  background: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* Kid-facing Play Calls tutorial: a few short steps instead of one wall
+   of text, each with a small mock-up of the real control so it's obvious
+   what to look for and tap once they're in the actual app. */
+.pcTutorialCard { max-width: 360px; }
+.pcTutorialStep { display: none; }
+.pcTutorialStep.active { display: block; }
+.pcTutorialHeader {
+  font-size: 17px;
+  font-weight: 900;
+  font-style: italic;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.pcTutorialIllustration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 18px 14px;
+  margin-bottom: 12px;
+}
+.mockToggleRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.mockToggle { pointer-events: none; }
+.mockAccordionHeader {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bengal-black);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-style: italic;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mockChevron { font-size: 12px; }
+.mockPlayerCircle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid var(--bengal-black);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--bengal-black);
+}
+.mockFlipBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--bengal-black);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--bengal-black);
+}
+.mockTapHint {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #999;
+  text-align: center;
+}
+.pcTutorialText {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 0 0 4px;
+  color: #333;
+  text-align: center;
+}
+.pcTutorialDots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0;
+}
+.pcTutorialDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ddd;
+}
+.pcTutorialDot.active { background: var(--bengal-orange); }
+.pcTutorialNav {
+  display: flex;
+  gap: 8px;
+}
+.pcTutorialNavBtn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+.pcTutorialNavBtn.primary {
+  border: none;
+  background: var(--bengal-orange);
+  color: #fff;
+}
+.pcTutorialNavBtn.secondary {
+  border: 2px solid #ccc;
+  background: #fff;
+  color: #666;
+}
+.pcTutorialNavBtn.secondary:disabled { visibility: hidden; }
+
+
+/* ===== Edit Plays (diagram builder, embedded) ===== */
+
+  #editPlaysMode {
+    --bengal-orange: #e8720c;
+    --bengal-black: #111111;
+    --ball-color: #e0201a;
+    --noball-color: #123a8c;
+  }
+#editPlaysMode * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
+  
+  
+  
+#editPlaysMode .controls {
+    max-width: 1400px;
+    margin: 0 auto 6px;
+    background: #fff;
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+#editPlaysMode .inline-control {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+  }
+#editPlaysMode .inline-control label {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #888;
+    white-space: nowrap;
+  }
+#editPlaysMode #playWrap { flex: 1 1 auto; min-width: 90px; }
+#editPlaysMode select {
+    font-size: 13px;
+    padding: 6px 6px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    width: 100%;
+    background: #fafafa;
+  }
+#editPlaysMode .standalone-btn {
+    padding: 6px 10px;
+    border: 2px solid var(--bengal-black);
+    border-radius: 6px;
+    background: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 30px;
+    flex-shrink: 0;
+  }
+#editPlaysMode .standalone-btn.active {
+    background: var(--bengal-black);
+    color: #fff;
+  }
+#editPlaysMode .standalone-btn.tiny { padding: 3px 8px; font-size: 10px; min-width: 22px; }
+#editPlaysMode .action-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+  }
+#editPlaysMode .action-btn {
+    flex: 1;
+    padding: 9px 4px;
+    border-radius: 8px;
+    border: 2px solid #999;
+    background: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    font-size: 13px;
+  }
+#editPlaysMode .action-btn.primary { border-color: var(--bengal-orange); color: var(--bengal-orange); }
+#editPlaysMode .diagram-card {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    position: relative;
+  }
+#editPlaysMode .diagram-card svg { width: 100%; height: auto; display: block; }
+#editPlaysMode .corner-control {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,255,255,.92);
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 3px 6px;
+    z-index: 5;
+  }
+#editPlaysMode .corner-control label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #888;
+  }
+#editPlaysMode .dimmed { opacity: .6; transition: opacity .25s; }
+#editPlaysMode .full-op { opacity: 1; transition: opacity .25s; }
+#editPlaysMode .player-circle { cursor: pointer; }
+#editPlaysMode .hint {
+    max-width: 1400px;
+    margin: 8px auto 0;
+    text-align: center;
+    font-size: 11px;
+    color: #999;
+    padding: 0 8px;
+  }
+#editPlaysMode .edit-handle {
+    cursor: pointer;
+    fill: #ffde00;
+    stroke: #111;
+    stroke-width: 3;
+  }
+#editPlaysMode .edit-handle.picked {
+    fill: #e0201a;
+    stroke: #fff;
+    stroke-width: 3;
+  }
+#editPlaysMode .edit-handle-line {
+    stroke: #ffde00;
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+    fill: none;
+    opacity: .8;
+  }
+#editPlaysMode .edit-toolbar {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 6;
+  }
+#editPlaysMode .edit-toolbar button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 2px solid var(--bengal-black);
+    background: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+  }
+#editPlaysMode .assign-panel {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    background: rgba(255,255,255,.97);
+    border: 2px solid var(--bengal-black);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 6;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+#editPlaysMode .assign-panel .assign-label {
+    font-size: 11px;
+    font-weight: 800;
+    width: 100%;
+  }
+#editPlaysMode .assign-panel button {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 2px solid #999;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+#editPlaysMode #exportModal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+  }
+#editPlaysMode .export-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+  }
+#editPlaysMode .export-panel {
+    position: relative;
+    max-width: 600px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 80vh;
+  }
+#editPlaysMode .export-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 800;
+    font-size: 14px;
+  }
+#editPlaysMode #exportText {
+    width: 100%;
+    height: 300px;
+    font-family: monospace;
+    font-size: 11px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+  }
+#editPlaysMode .export-footer { display: flex; justify-content: flex-end; }
+
+  /* Play Calls cards on phones: with Wing/Motion/Dir/Boot (and sometimes
+     In/Out) all showing at once, the toggle row can wrap to 2-3 lines.
+     card-outer used to size itself purely off aspect-ratio, so a taller
+     toggle row squeezed the diagram down to almost nothing. Shrinking the
+     toggle buttons cuts down on wrapping, and swapping aspect-ratio for a
+     generous fixed height guarantees the diagram always has real room to
+     breathe, no matter how many lines the toggles wrap to. */
+  @media (max-width: 480px) {
+    .card-toggle-row {
+      gap: 4px;
+      padding: 6px 6px 0;
+    }
+    /* the pill toggles already shrink to fit their text, but tighten them
+       up a bit further on very small phones */
+    .toggle-group { height: 26px; }
+    .toggle-group .toggle-btn { height: 22px; line-height: 22px; padding: 0 8px; font-size: 10px; }
+    .toggle-slot { min-height: 26px; }
+    .toggle-row-basics, .toggle-row-extras { gap: 4px; }
+    .card-outer, .accordion-body .card-outer {
+      aspect-ratio: auto;
+      height: 420px;
+    }
+  }
+
+  @media (min-width: 640px) {
+    
+    
+    
+    
+#editPlaysMode .controls { padding: 10px 16px; }
+#editPlaysMode .standalone-btn { padding: 8px 16px; font-size: 14px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) { height: 34px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) .toggle-btn { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; }
+#editPlaysMode .action-btn { flex: none; padding: 9px 18px; }
+#editPlaysMode .action-row { width: auto; }
+  }
+
