@@ -50,8 +50,11 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 
 .modeTabs{position:sticky;top:57px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
-.modeBtn{flex:1;padding:10px 6px;text-align:center;font-size:13px;font-weight:700;color:#8a8a8a;
-  border:none;background:none;cursor:pointer}
+.modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;background:none;cursor:pointer}
+.modeBtn .modeIcon{font-size:20px;line-height:1}
+.modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .modeBtn.active{background:var(--bengal-black);color:#fff}
 .modePanel{display:none;padding:8px 10px 14px}
 .modePanel.show{display:block}
@@ -169,9 +172,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbCloseBtn{width:100%}
 
 
-.lbTabRow{display:flex;gap:6px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
-.lbTabBtn{flex:1;border:none;background:transparent;padding:9px 6px;border-radius:8px;font-size:12.5px;
-  font-weight:800;color:var(--muted);cursor:pointer}
+.lbTabRow{display:flex;gap:4px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
+.lbTabBtn{flex:1;min-width:0;border:none;background:transparent;padding:9px 3px;border-radius:8px;font-size:10.5px;
+  font-weight:800;color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbTabBtn.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .lbXClose{position:absolute !important;top:10px !important;right:10px !important;left:auto !important;
   margin:0 !important;z-index:5;width:32px !important;height:32px !important;border-radius:50%;
@@ -200,6 +203,43 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .reviewMissedBtn:active{background:#f6f4f0}
 .practiceTag{display:inline-block;background:var(--bengal-orange);color:#fff;font-size:10.5px;font-weight:800;
   border-radius:20px;padding:3px 10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+
+/* ===== Dark mode =====
+   Scope note: this covers the general app chrome -- header/tabs, overlays,
+   leaderboard, quiz screens, forms. It deliberately does NOT touch the
+   Play Calls / Edit Plays diagram rendering below (accordion cards, SVG
+   field stage, player/ball colors) -- those represent physical signal
+   cards and field diagrams and are meant to look the same (paper-white)
+   regardless of theme, same as a real printed card would. Most of the
+   general UI above already uses the --paper/--card/--ink/--line/--muted
+   variables, so redefining them here is most of the work; the rest are
+   explicit overrides for spots that had a literal #fff instead. */
+[data-theme="dark"]{
+  --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
+}
+[data-theme="dark"] body{background:var(--paper);color:var(--ink)}
+[data-theme="dark"] .modeTabs{background:#1c1c1c}
+[data-theme="dark"] .navBtn.secondary,
+[data-theme="dark"] .quizBar button.tool,
+[data-theme="dark"] .reviewMissedBtn{background:var(--card);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] .reviewMissedBtn:active{background:#2c2c2c}
+[data-theme="dark"] .lbCard{background:var(--card);color:var(--ink)}
+[data-theme="dark"] .lbTabBtn.active{background:#333;color:var(--ink)}
+[data-theme="dark"] .adminDashBtn{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .adminDashCount{background:#333}
+[data-theme="dark"] .lbRow.me{background:#3a2a12;border-color:var(--bengal-orange)}
+[data-theme="dark"] .lbOfflineNote{color:#e0a020}
+[data-theme="dark"] .seq-choice:active{background:#2c2c2c}
+[data-theme="dark"] .seq-choice.correct{background:#1c3a1c;border-color:#3fae3f;color:#8fe08f}
+[data-theme="dark"] .seq-choice.wrong{background:#3a1c1c;border-color:#c65050;color:#f08a8a}
+[data-theme="dark"] #adminPinInput,
+[data-theme="dark"] #lbNameInput,
+[data-theme="dark"] #timedLbNameInput,
+[data-theme="dark"] #pcGateInput,
+[data-theme="dark"] #playerIdNameInput,
+[data-theme="dark"] #playerIdPinInput,
+[data-theme="dark"] .lbSaveForm input{background:var(--card);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] .pcqGetReady{background:rgba(0,0,0,.92)}
 
 /* ===== Play Calls (DEV) ===== */
 .play-grid {
@@ -1000,6 +1040,12 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 }
 #playcallsquizMode select { font-size: 13px; padding: 6px; border-radius: 6px; border: 1px solid #ccc; background: #fafafa; }
 .lbLinkBtn { background: none; border: none; color: var(--bengal-orange); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; }
+/* The quiz answer panel is regular app UI (not a diagram surface), so
+   unlike the rest of this file's Play Calls / Edit Plays section, this
+   one spot does need dark-mode overrides. */
+[data-theme="dark"] #playcallsquizMode .controls { background: var(--card); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+[data-theme="dark"] #playcallsquizMode .inline-control label { color: var(--muted); }
+[data-theme="dark"] #playcallsquizMode select { background: var(--paper); color: var(--ink); border-color: var(--line); }
 #editPlaysMode .action-btn { flex: none; padding: 9px 18px; }
 #editPlaysMode .action-row { width: auto; }
   }

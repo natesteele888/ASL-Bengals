@@ -50,6 +50,31 @@
   document.addEventListener('touchstart', resumeIfBlocked, { once: true });
 })();
 
+/* ============================================================
+   DARK MODE — toggle in the corner, preference remembered per
+   device. The actual "apply before paint" step lives in a tiny
+   inline <script> right after <body> in index.html (so a returning
+   dark-mode user never sees a flash of the light theme); this just
+   wires the toggle button and keeps the icon in sync.
+   ============================================================ */
+(function(){
+  var THEME_KEY = 'bengalsTheme';
+  var themeBtn = document.getElementById('themeToggleBtn');
+  if(!themeBtn) return;
+
+  function isDark(){ return document.documentElement.getAttribute('data-theme') === 'dark'; }
+  function updateIcon(){ themeBtn.textContent = isDark() ? '☀️' : '🌙'; }
+  updateIcon();
+
+  themeBtn.addEventListener('click', function(){
+    var next = !isDark();
+    if(next){ document.documentElement.setAttribute('data-theme', 'dark'); }
+    else { document.documentElement.removeAttribute('data-theme'); }
+    try { localStorage.setItem(THEME_KEY, next ? 'dark' : 'light'); } catch(e) {}
+    updateIcon();
+  });
+})();
+
 (function(){
   var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
   var COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';

@@ -309,14 +309,12 @@ function buildPlayList() {
 const WING_TOUCH_ID = 7;
 const FINGER_RIGHT_IDS = [4, 5, 6];  // 0 (fist), 2, 4 fingers -- all mean EVEN = RIGHT
 const FINGER_LEFT_IDS = [1, 2, 3];   // 1, 3, 5 fingers -- all mean ODD = LEFT
-const INSIDE_SIGNAL_ID = 1;  // reuses the "1 finger" image -- Inside
-const OUTSIDE_SIGNAL_ID = 5; // reuses the "2 fingers" image -- Outside
 const PLAY_TYPE_SIGNAL_ID = {
-  inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14,
+  inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
 };
 const PLAY_TYPE_SIGNAL_LABEL = {
   inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
-  option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast',
+  option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
 };
 // Two different real signals both mean "motion is on" -- picking randomly
 // between them (same idea as the finger-count randomization below) keeps
@@ -349,17 +347,16 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     const motionId = MOTION_SIGNAL_IDS[Math.floor(Math.random() * MOTION_SIGNAL_IDS.length)];
     signals.push({ src: SIGNAL_CARDS[motionId], label: 'Motion' });
   }
-  if (playKey === 'blast') {
-    const ioId = insideOutside === 'Inside' ? INSIDE_SIGNAL_ID : OUTSIDE_SIGNAL_ID;
-    signals.push({ src: SIGNAL_CARDS[ioId], label: insideOutside === 'Inside' ? 'Inside' : 'Outside' });
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  } else if (playKey === 'double_blast') {
-    // Outside Zone (when present) is the modifier that flips the silent
-    // Inside default to Outside, so it's called BEFORE the Double Blast
-    // card itself -- same "modifier before play name" order as every other
-    // play (see the onComboChanged() comment above and Nathan's own
-    // example: "Wing, Right, Outside, Double Blast, Right"). This was
-    // previously reversed here.
+  if (playKey === 'blast' || playKey === 'double_blast') {
+    // Inside is a silent default for BOTH Blast and Double Blast -- no
+    // extra card at all, just the play card then direction. Outside is
+    // the one that gets called out explicitly, with the real Outside Zone
+    // card inserted BEFORE the play card (same "modifier before play name"
+    // order as every other play -- see the onComboChanged() comment above
+    // and Nathan's own example: "Wing, Right, Outside, Double Blast,
+    // Right"). Blast used to show an explicit Inside/Outside card either
+    // way (reusing plain finger-count images) -- that was wrong; both
+    // plays behave identically here.
     if (insideOutside === 'Outside') {
       signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
     }

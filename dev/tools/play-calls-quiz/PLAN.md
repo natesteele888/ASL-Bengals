@@ -46,14 +46,14 @@ work is mostly the answer UI, scoring, the curated 10-round list, and player ide
   live, in-the-moment read by the ball carrier, not something signaled from the sideline).
   But Inside/Outside on Blast and Double Blast *is* real signal information, not a hidden
   detail, so it's in:
-  - **Blast**: Inside/Outside is mandatory and explicit — the sequence always shows either
-    the Inside card or the Outside card (matches how `buildSignalSequence` already builds
-    it). Answer control: same as Wing/Direction, pick which one was shown.
-  - **Double Blast**: Inside is the default and gets no card at all; Outside only appears
-    if the coach adds the Outside Zone card to the sequence (real example from Nathan:
-    "Wing, Right, Outside, Double Blast, Right" — the Outside Zone card is what signals
-    Outside; its absence means Inside). Answer control: same shape as Motion/Boot — an
-    on/off toggle, where "on" means "I saw the extra Outside Zone card."
+  - **Blast and Double Blast** (corrected 2026-08-09, was wrong in the original draft
+    below): Inside is a silent default for BOTH — no extra card at all, just the play card
+    then direction. Outside is the one that gets called out explicitly, with the real
+    Outside Zone card inserted before the play card (real example from Nathan: "Wing,
+    Right, Outside, Double Blast, Right"). Blast used to show an explicit Inside/Outside
+    card either way (reusing plain finger-count images) — that was wrong; both plays now
+    behave identically. Answer control unchanged either way: pick which one was shown
+    (same UI regardless of whether the underlying signal was silent or an explicit card).
   - Everything else (Inside Zone, Outside Zone, Option Pass, Sweep): no Inside/Outside
     control shown at all, since it doesn't apply to those plays.
 - `option` is still excluded from the round pool below — it's `directionFixed`, and I want

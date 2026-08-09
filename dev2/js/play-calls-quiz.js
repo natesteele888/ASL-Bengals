@@ -33,23 +33,31 @@
   }
 
   // ---- Difficulty tiers (see PLAN.md for the reasoning behind the order).
+  // Rebalanced 2026-08-09 per Nathan's feedback that the quiz "gets hard"
+  // too fast -- each new concept (opposite side, Inside/Outside, Motion,
+  // Boot) now gets introduced alone before ever stacking with another, and
+  // only the very last round combines everything. Previously Motion+Boot
+  // were stacked for 2 of the last 3 rounds; now that combo shows up once.
   // sameSide: true = direction must match wing side, false = must differ.
-  // bootOnly: true = restrict the pool to plays that actually allow Boot.
+  // pool: which plays are eligible this round (on top of the boot filter).
+  // bootOnly: true = further restrict the pool to plays that allow Boot.
+  const SIMPLE_KEYS = ['inside_zone', 'outside_zone', 'sweep', 'option_pass', 'option']; // no Inside/Outside decision
+  const IO_KEYS = ['blast', 'double_blast']; // Inside/Outside decision plays
   const TIERS = [
-    { motion: false, boot: false, sameSide: true },
-    { motion: false, boot: false, sameSide: true },
-    { motion: false, boot: false, sameSide: true },
-    { motion: false, boot: false, sameSide: false },
-    { motion: false, boot: false, sameSide: false },
-    { motion: true, boot: false, sameSide: true },
-    { motion: true, boot: false, sameSide: false },
-    { motion: false, boot: true, sameSide: true, bootOnly: true },
-    { motion: true, boot: true, sameSide: false, bootOnly: true },
-    { motion: true, boot: true, sameSide: false, bootOnly: true },
+    { pool: SIMPLE_KEYS, motion: false, boot: false, sameSide: true },
+    { pool: SIMPLE_KEYS, motion: false, boot: false, sameSide: true },
+    { pool: SIMPLE_KEYS, motion: false, boot: false, sameSide: false },
+    { pool: IO_KEYS, motion: false, boot: false, sameSide: true },
+    { pool: IO_KEYS, motion: false, boot: false, sameSide: false },
+    { pool: ELIGIBLE_PLAY_KEYS, motion: true, boot: false, sameSide: true },
+    { pool: ELIGIBLE_PLAY_KEYS, motion: true, boot: false, sameSide: false },
+    { pool: ELIGIBLE_PLAY_KEYS, motion: false, boot: true, sameSide: true, bootOnly: true },
+    { pool: ELIGIBLE_PLAY_KEYS, motion: false, boot: true, sameSide: false, bootOnly: true },
+    { pool: ELIGIBLE_PLAY_KEYS, motion: true, boot: true, sameSide: false, bootOnly: true },
   ];
 
   function eligiblePlaysForTier(tier){
-    let keys = ELIGIBLE_PLAY_KEYS.slice();
+    let keys = tier.pool.slice();
     if (tier.bootOnly) keys = keys.filter(k => !playFlags(k).noBoot);
     return keys;
   }
@@ -59,16 +67,14 @@
     const rounds = [];
     const recent = [];
     const playCounts = {};
-    // double_blast and option_pass can't Boot, so they're the only plays
-    // that never show up in the boot-only tiers (7-9). If general tiers
-    // (0-6) picked freely from the full pool, they could exhaust the
+    // double_blast, option_pass and option can't Boot, so they're the only
+    // plays that never show up in the boot-only tiers (7-9). If earlier
+    // tiers picked freely without regard for this, they could exhaust the
     // *boot-eligible* plays' 2-each cap before the boot-only tiers get a
-    // turn later, forcing a play to appear a 3rd time. Fix: general tiers
-    // preferentially use up double_blast/option_pass's capacity first,
-    // which reliably leaves enough headroom in the boot-eligible pool
-    // (4 plays x 2 = 8 slots) for the 3 boot-only draws that must come
-    // from it -- with only 6 eligible plays and a cap of 2 each (capacity
-    // 12) across 10 rounds, that's always enough room either way.
+    // turn later, forcing a play to appear a 3rd time. Fix: non-boot-only
+    // tiers preferentially use up the no-boot plays' capacity first,
+    // reliably leaving enough headroom in the boot-eligible pool for the
+    // 3 boot-only draws that must come from it.
     const NON_BOOT_ONLY_KEYS = ELIGIBLE_PLAY_KEYS.filter(k => playFlags(k).noBoot);
     TIERS.forEach(tier => {
       let pool = eligiblePlaysForTier(tier).filter(k => k !== recent[recent.length - 1]);

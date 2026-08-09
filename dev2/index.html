@@ -7,11 +7,21 @@
 <link rel="stylesheet" href="css/styles.css?v=20260809c">
 </head>
 <body>
+<script>
+  // Applied synchronously, before first paint, so a returning dark-mode
+  // user never sees a flash of the light theme.
+  try {
+    if (localStorage.getItem('bengalsTheme') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch(e) {}
+</script>
 <div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
 <!-- BUILD_VERSION: 2026-08-09c (firebase-anonymous-auth) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
+  <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
   <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
   <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
 </div>
@@ -57,12 +67,12 @@
 </header>
 
 <div class="modeTabs" id="modeTabs">
-  <button class="modeBtn active" data-mode="study">🎓 Study</button>
-  <button class="modeBtn" data-mode="quiz">🏈 Quiz</button>
-  <button class="modeBtn" data-mode="timed">⏱️ Timed Quiz</button>
-  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn">📋 Play Calls</button>
-  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn">🧠 Play Calls Quiz</button>
-  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;">✏️ Edit Plays</button>
+  <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
+  <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
+  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
+  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
+  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">PC Quiz</span></button>
+  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
 </div>
 
 <div id="editPlaysMode" class="modePanel">
@@ -408,11 +418,16 @@
       <div class="lbSub">Top 20 across the whole team</div>
     </div>
     <div class="lbTabRow">
-      <button class="lbTabBtn active" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
-      <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz Scores</button>
+      <button class="lbTabBtn active" id="lbTabOverall" data-lbtab="overall">🏆 Overall</button>
+      <button class="lbTabBtn" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
+      <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz</button>
+      <button class="lbTabBtn" id="lbTabPCQ" data-lbtab="pcq">🧠 PC Quiz</button>
     </div>
-    <div class="lbList" id="timedLbList"></div>
+    <div class="lbSub" id="overallLbNote" style="margin:-4px 18px 8px;">Points: 20 for 1st place down to 1 for 20th, added up across the Timed and Play Calls Quiz boards.</div>
+    <div class="lbList" id="overallLbList"></div>
+    <div class="lbList" id="timedLbList" style="display:none"></div>
     <div class="lbList" id="lbList" style="display:none"></div>
+    <div class="lbList" id="pcqLbList" style="display:none"></div>
     <button class="navBtn secondary" id="historyBtn" style="width:calc(100% - 36px);margin:0 18px 14px">📜 View History</button>
   </div>
 </div>

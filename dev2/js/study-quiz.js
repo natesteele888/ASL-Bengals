@@ -526,18 +526,68 @@ function lbRowHtml(entry, i, highlightEntry, scoreHtml){
   </div>`;
 }
 
+// ---- Name-based dedup: "same name is the same person" -- each board
+// should only give one person one spot, keeping their best entry. Done
+// client-side at render time (not by deleting anything from Firebase),
+// so nothing's lost if two different people ever did share a name.
+function normName(n){ return (n||'').trim().toLowerCase(); }
+function dedupeBestByName(list, isBetter){
+  const byName = {};
+  list.forEach(entry => {
+    const key = normName(entry.name);
+    if(!key) return;
+    if(!byName[key] || isBetter(entry, byName[key])) byName[key] = entry;
+  });
+  return Object.values(byName);
+}
+function quizIsBetter(a, b){
+  if(a.score !== b.score) return a.score > b.score;
+  return (a.bestStreak||0) > (b.bestStreak||0);
+}
+function timedIsBetter(a, b){
+  if(a.timeMs !== b.timeMs) return a.timeMs < b.timeMs;
+  return a.mistakes < b.mistakes;
+}
+
+async function fetchQuizLeaderboardData(){
+  const cloudList = await cloudFetch('leaderboard');
+  const offline = cloudList === null;
+  const raw = (offline ? getLeaderboard() : cloudList).slice();
+  const deduped = dedupeBestByName(raw, quizIsBetter);
+  deduped.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  return { list: deduped.slice(0, LEADERBOARD_MAX), offline: offline };
+}
+async function fetchTimedLeaderboardData(){
+  const cloudList = await cloudFetch('timedLeaderboard');
+  const offline = cloudList === null;
+  const raw = (offline ? getTimedLeaderboard() : cloudList).slice();
+  const deduped = dedupeBestByName(raw, timedIsBetter);
+  deduped.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
+  return { list: deduped.slice(0, TIMED_LEADERBOARD_MAX), offline: offline };
+}
+// Play Calls Quiz doesn't need its own manual "save to leaderboard" step or
+// storage path -- every signed-in player's best run is already tracked on
+// their player record (pcqBestScore), so this just reads that straight
+// from PlayerIdentity instead of duplicating the data.
+async function fetchPCQLeaderboardData(){
+  if(!window.PlayerIdentity) return { list: [], offline: true };
+  const players = await window.PlayerIdentity.fetchAllPlayers();
+  const raw = Object.values(players)
+    .filter(p => p.pcqBestScore)
+    .map(p => ({ name: p.name, score: p.pcqBestScore, maxScore: p.pcqBestMaxScore }));
+  const deduped = dedupeBestByName(raw, (a, b) => a.score > b.score);
+  deduped.sort((a,b)=> b.score - a.score);
+  return { list: deduped.slice(0, LEADERBOARD_MAX), offline: false };
+}
+
 async function renderLeaderboard(highlightEntry){
   const lbList = document.getElementById('lbList');
   lbList.innerHTML = '<div class="lbEmpty">Loading team scores…</div>';
-  const cloudList = await cloudFetch('leaderboard');
-  const offline = cloudList === null;
-  const list = (offline ? getLeaderboard() : cloudList).slice();
-  list.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
-  const trimmed = list.slice(0, LEADERBOARD_MAX);
-  if(trimmed.length === 0){
+  const { list, offline } = await fetchQuizLeaderboardData();
+  if(list.length === 0){
     lbList.innerHTML = '<div class="lbEmpty">No scores yet — finish a quiz to be the first!</div>';
   } else {
-    lbList.innerHTML = trimmed.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${e.score}/${e.total}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`)).join('');
+    lbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${e.score}/${e.total}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`)).join('');
   }
   if(offline){
     lbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing scores saved on this device only — could not reach the team server.</div>';
@@ -546,36 +596,74 @@ async function renderLeaderboard(highlightEntry){
 async function renderTimedLeaderboard(highlightEntry){
   const timedLbList = document.getElementById('timedLbList');
   timedLbList.innerHTML = '<div class="lbEmpty">Loading team times…</div>';
-  const cloudList = await cloudFetch('timedLeaderboard');
-  const offline = cloudList === null;
-  const list = (offline ? getTimedLeaderboard() : cloudList).slice();
-  list.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
-  const trimmed = list.slice(0, TIMED_LEADERBOARD_MAX);
-  if(trimmed.length === 0){
+  const { list, offline } = await fetchTimedLeaderboardData();
+  if(list.length === 0){
     timedLbList.innerHTML = '<div class="lbEmpty">No times yet — finish a Timed Quiz to be the first!</div>';
   } else {
-    timedLbList.innerHTML = trimmed.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${formatClock(e.timeMs)} • ✗${e.mistakes}`)).join('');
+    timedLbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${formatClock(e.timeMs)} • ✗${e.mistakes}`)).join('');
   }
   if(offline){
     timedLbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing times saved on this device only — could not reach the team server.</div>';
   }
 }
+async function renderPCQLeaderboard(){
+  const pcqLbList = document.getElementById('pcqLbList');
+  pcqLbList.innerHTML = '<div class="lbEmpty">Loading team scores…</div>';
+  const { list } = await fetchPCQLeaderboardData();
+  pcqLbList.innerHTML = list.length
+    ? list.map((e,i)=> lbRowHtml(e, i, null, `${e.score}/${e.maxScore}`)).join('')
+    : '<div class="lbEmpty">No Play Calls Quiz scores yet — finish a run to be the first!</div>';
+}
+
+// ---- Overall: rank-based points (20 for 1st down to 1 for 20th) on each
+// contributing board, summed by name. Quiz Scores is deliberately left out
+// -- with the standard quiz being easy enough that most engaged players
+// land on 30/30, ranking it wouldn't mean much (per Nathan's note).
+function pointsForRank(list){
+  const pts = {};
+  list.slice(0, 20).forEach((e, i) => { pts[normName(e.name)] = { name: e.name, points: 20 - i }; });
+  return pts;
+}
+async function renderOverallLeaderboard(){
+  const overallLbList = document.getElementById('overallLbList');
+  overallLbList.innerHTML = '<div class="lbEmpty">Loading overall standings…</div>';
+  const [timedData, pcqData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData()]);
+  const timedPts = pointsForRank(timedData.list);
+  const pcqPts = pointsForRank(pcqData.list);
+  const combined = {};
+  [timedPts, pcqPts].forEach(ptsMap => {
+    Object.keys(ptsMap).forEach(key => {
+      if(!combined[key]) combined[key] = { name: ptsMap[key].name, points: 0 };
+      combined[key].points += ptsMap[key].points;
+    });
+  });
+  const ranked = Object.values(combined).sort((a,b)=> b.points - a.points);
+  overallLbList.innerHTML = ranked.length
+    ? ranked.map((e,i)=> lbRowHtml(e, i, null, `${e.points} pt${e.points===1?'':'s'}`)).join('')
+    : '<div class="lbEmpty">No points yet — finish a Timed Quiz or Play Calls Quiz to get on the board!</div>';
+}
+
+const LB_TAB_LIST_IDS = { overall: 'overallLbList', timed: 'timedLbList', quiz: 'lbList', pcq: 'pcqLbList' };
+function showLbTab(tabKey){
+  document.querySelectorAll('.lbTabBtn').forEach(b => b.classList.toggle('active', b.dataset.lbtab === tabKey));
+  Object.keys(LB_TAB_LIST_IDS).forEach(key => {
+    document.getElementById(LB_TAB_LIST_IDS[key]).style.display = key === tabKey ? '' : 'none';
+  });
+  const overallNote = document.getElementById('overallLbNote');
+  if(overallNote) overallNote.style.display = tabKey === 'overall' ? '' : 'none';
+}
 
 const lbOverlay = document.getElementById('lbOverlay');
 document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
   lbOverlay.classList.add('show');
-  document.querySelectorAll('.lbTabBtn').forEach(b => b.classList.toggle('active', b.dataset.lbtab === 'timed'));
-  document.getElementById('timedLbList').style.display = '';
-  document.getElementById('lbList').style.display = 'none';
-  renderLeaderboard(null);
+  showLbTab('overall');
+  renderOverallLeaderboard();
   renderTimedLeaderboard(null);
+  renderLeaderboard(null);
+  renderPCQLeaderboard();
 });
 [...document.querySelectorAll('.lbTabBtn')].forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.lbTabBtn').forEach(b => b.classList.toggle('active', b === btn));
-    document.getElementById('timedLbList').style.display = btn.dataset.lbtab === 'timed' ? '' : 'none';
-    document.getElementById('lbList').style.display = btn.dataset.lbtab === 'quiz' ? '' : 'none';
-  });
+  btn.addEventListener('click', () => showLbTab(btn.dataset.lbtab));
 });
 document.getElementById('lbCloseBtn').addEventListener('click', ()=>{
   lbOverlay.classList.remove('show');
@@ -591,7 +679,6 @@ document.getElementById('lbSaveBtn').addEventListener('click', async ()=>{
   lbOverlay.classList.add('show');
   await cloudPush('leaderboard', entry);
   renderLeaderboard(entry);
-  renderTimedLeaderboard(null);
 });
 document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   const nameInput = document.getElementById('timedLbNameInput');
@@ -602,8 +689,8 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   document.getElementById('timedLbSaveForm').style.display = 'none';
   lbOverlay.classList.add('show');
   await cloudPush('timedLeaderboard', entry);
-  renderLeaderboard(null);
   renderTimedLeaderboard(entry);
+  renderOverallLeaderboard();
 });
 
 /* ============================================================
