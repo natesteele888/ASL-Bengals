@@ -17,6 +17,7 @@ const studyModeEl = document.getElementById('studyMode');
 const quizModeEl = document.getElementById('quizMode');
 const timedModeEl = document.getElementById('timedMode');
 const playcallsModeEl = document.getElementById('playcallsMode');
+const playcallsquizModeEl = document.getElementById('playcallsquizMode');
 const editPlaysModeEl = document.getElementById('editPlaysMode');
 function setMode(mode){
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
@@ -24,6 +25,7 @@ function setMode(mode){
   quizModeEl.classList.toggle('show', mode==='quiz');
   timedModeEl.classList.toggle('show', mode==='timed');
   playcallsModeEl.classList.toggle('show', mode==='playcalls');
+  playcallsquizModeEl.classList.toggle('show', mode==='playcallsquiz');
   editPlaysModeEl.classList.toggle('show', mode==='editplays');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');

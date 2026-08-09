@@ -44,6 +44,7 @@
   <button class="modeBtn" data-mode="quiz">🏈 Quiz</button>
   <button class="modeBtn" data-mode="timed">⏱️ Timed Quiz</button>
   <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn">📋 Play Calls</button>
+  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn">🧠 Play Calls Quiz</button>
   <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;">✏️ Edit Plays</button>
 </div>
 
@@ -306,6 +307,26 @@
   </div>
 </div>
 
+<div id="playcallsquizMode" class="modePanel">
+  <div style="max-width:420px;margin:20px auto;padding:0 16px;">
+    <div id="pcqSignIn">
+      <h2 style="text-align:center;">🧠 Play Calls Quiz</h2>
+      <p class="lbSub">Type your name and a 4-digit code. First time? Just make one up — that's your code from now on, so your points follow you back next time.</p>
+      <div class="lbSaveForm">
+        <input id="pcqNameInput" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
+        <input id="pcqPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4-digit code" autocomplete="off">
+        <button class="navBtn" id="pcqSignInBtn">Continue</button>
+      </div>
+      <div class="lbEmpty" id="pcqSignInError" style="display:none;color:#b03030"></div>
+    </div>
+    <div id="pcqSignedIn" style="display:none;text-align:center;">
+      <p class="lbSub">Signed in as <strong id="pcqPlayerName"></strong></p>
+      <button class="navBtn secondary" id="pcqSwitchPlayerBtn" style="margin-bottom:10px;">Not you? Switch player</button>
+      <div class="lbEmpty">🚧 The quiz itself is coming in the next update — this just confirms sign-in works and is remembered.</div>
+    </div>
+  </div>
+</div>
+
 <div class="lbOverlay" id="lbOverlay">
   <div class="lbCard lbCardCool">
     <button class="lbXClose" id="lbCloseBtn" aria-label="Close">&times;</button>
@@ -418,7 +439,7 @@
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/play-calls.js', 'js/edit-plays.js'];
+  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/edit-plays.js'];
   for (const src of scripts) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
