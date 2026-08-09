@@ -308,7 +308,7 @@
 </div>
 
 <div id="playcallsquizMode" class="modePanel">
-  <div style="max-width:420px;margin:20px auto;padding:0 16px;">
+  <div style="max-width:460px;margin:20px auto;padding:0 16px;">
     <div id="pcqSignIn">
       <h2 style="text-align:center;">🧠 Play Calls Quiz</h2>
       <p class="lbSub">Type your name and a 4-digit code. First time? Just make one up — that's your code from now on, so your points follow you back next time.</p>
@@ -319,10 +319,76 @@
       </div>
       <div class="lbEmpty" id="pcqSignInError" style="display:none;color:#b03030"></div>
     </div>
+
     <div id="pcqSignedIn" style="display:none;text-align:center;">
-      <p class="lbSub">Signed in as <strong id="pcqPlayerName"></strong></p>
-      <button class="navBtn secondary" id="pcqSwitchPlayerBtn" style="margin-bottom:10px;">Not you? Switch player</button>
-      <div class="lbEmpty">🚧 The quiz itself is coming in the next update — this just confirms sign-in works and is remembered.</div>
+      <p class="lbSub">Signed in as <strong id="pcqPlayerName"></strong> &middot; <button class="lbLinkBtn" id="pcqSwitchPlayerBtn">Not you?</button></p>
+
+      <button class="navBtn" id="pcqStartBtn">🧠 Start Quiz</button>
+
+      <div id="pcqQuizArea" style="display:none;">
+        <div class="quizStats" id="pcqStatsLine"></div>
+        <p class="lbSub" style="margin-bottom:4px;">Watch the signals (plays twice), then set up the call you saw.</p>
+        <div class="sigImgWrap" id="pcqImgWrap"><img id="pcqImg" src="" alt="signal"></div>
+        <div class="signal-progress" id="pcqProgress"></div>
+        <button class="replay-btn" id="pcqReplayBtn" style="display:none;margin:6px auto;">&#8635; Replay (half credit)</button>
+
+        <div id="pcqAnswerPanel" class="controls" style="display:none;justify-content:center;">
+          <div class="inline-control">
+            <label>Play</label>
+            <select id="pcqPlaySelect"></select>
+          </div>
+          <div class="inline-control">
+            <label>Wing</label>
+            <div class="toggle-group toggle-orange" id="pcqWingToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Dir</label>
+            <div class="toggle-group toggle-black" id="pcqDirToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Motion</label>
+            <div class="toggle-group toggle-green" id="pcqMotionToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Boot</label>
+            <div class="toggle-group toggle-red" id="pcqBootToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+          <div class="inline-control" id="pcqIOWrap" style="display:none;">
+            <label>In/Out</label>
+            <div class="toggle-group toggle-black" id="pcqIOToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Inside" aria-pressed="true">In</button>
+              <button class="toggle-btn" data-value="Outside" aria-pressed="false">Out</button>
+            </div>
+          </div>
+        </div>
+        <button class="navBtn" id="pcqSubmitBtn" style="margin-top:10px;display:none;">Submit Answer</button>
+
+        <div class="seq-feedback" id="pcqFeedback"></div>
+        <button class="navBtn" id="pcqNextBtn" style="display:none;">Next ›</button>
+      </div>
+
+      <div class="doneScreen" id="pcqDoneScreen" style="display:none;">
+        <h2>🧠 Quiz Complete!</h2>
+        <p id="pcqDoneText"></p>
+        <button class="navBtn secondary" id="pcqRestartBtn">Play Again</button>
+      </div>
     </div>
   </div>
 </div>
@@ -439,7 +505,7 @@
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/edit-plays.js'];
+  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');

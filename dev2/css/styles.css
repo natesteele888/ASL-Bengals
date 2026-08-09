@@ -975,6 +975,21 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 #editPlaysMode .standalone-btn { padding: 8px 16px; font-size: 14px; }
 #editPlaysMode .toggle-group:not(.toggle-tiny) { height: 34px; }
 #editPlaysMode .toggle-group:not(.toggle-tiny) .toggle-btn { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; }
+
+/* Play Calls Quiz answer panel -- reuses the same .controls/.inline-control
+   shape as Edit Plays' toggle row, but that CSS is scoped to #editPlaysMode,
+   so it's mirrored here rather than widening the original selector. */
+#playcallsquizMode .controls {
+  max-width: 420px; margin: 10px auto; background: #fff; border-radius: 10px;
+  padding: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.06);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+}
+#playcallsquizMode .inline-control { display: flex; flex-direction: row; align-items: center; gap: 5px; }
+#playcallsquizMode .inline-control label {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #888; white-space: nowrap;
+}
+#playcallsquizMode select { font-size: 13px; padding: 6px; border-radius: 6px; border: 1px solid #ccc; background: #fafafa; }
+.lbLinkBtn { background: none; border: none; color: var(--bengal-orange); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; }
 #editPlaysMode .action-btn { flex: none; padding: 9px 18px; }
 #editPlaysMode .action-row { width: auto; }
   }
