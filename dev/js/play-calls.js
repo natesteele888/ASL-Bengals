@@ -939,7 +939,11 @@ function buildGrid() {
   }
   let playCallsUnlocked = false;
   let playCallsDataLoaded = false;
-  const PC_PASSWORD = 'FrontSeat';
+  // SHA-256 hash of the password, not the plaintext -- matches the pattern
+  // used for the main login codes in auth.js. Still a client-side check
+  // (any client-only gate is ultimately readable/bypassable via dev tools),
+  // but this at least keeps the actual password out of plain view in the JS.
+  const PC_PASSWORD_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
 
   function proceedIntoPlayCalls() {
     const grid = document.getElementById('playCallsGrid');
@@ -988,9 +992,10 @@ function buildGrid() {
     proceedIntoPlayCalls();
   };
 
-  function attemptUnlock() {
+  async function attemptUnlock() {
     const input = document.getElementById('pcGateInput');
-    if (input.value === PC_PASSWORD) {
+    const hash = window.sha256Hex ? await window.sha256Hex(input.value) : null;
+    if (hash === PC_PASSWORD_HASH) {
       playCallsUnlocked = true;
       editPlaysUnlocked = true;
       const gate = document.getElementById('playCallsGate');

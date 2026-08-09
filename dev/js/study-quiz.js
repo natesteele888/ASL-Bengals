@@ -256,7 +256,10 @@ function logQuizStart(kind){
    the normal UI on purpose — this is a peek for the coach, not a
    player-facing feature.
    ============================================================ */
-const ADMIN_PIN = '6103';
+// SHA-256 hash of the PIN, not the plaintext -- matches the pattern used
+// for the main login codes in auth.js, so it isn't sitting in plain view
+// in the shipped JS. Still a client-side check like every gate in this app.
+const ADMIN_PIN_HASH = 'a598a622f48075f13c88c0f051e4e8051bb9d8f695c581c8a3300a882f6673ab';
 let _logoTapCount = 0;
 let _logoTapTimer = null;
 document.getElementById('headerLogo').addEventListener('click', ()=>{
@@ -276,9 +279,10 @@ document.getElementById('headerLogo').addEventListener('click', ()=>{
 document.getElementById('adminPinCancelBtn').addEventListener('click', ()=>{
   document.getElementById('adminPinOverlay').classList.remove('show');
 });
-function tryAdminPin(){
+async function tryAdminPin(){
   const pinInput = document.getElementById('adminPinInput');
-  if(pinInput.value === ADMIN_PIN){
+  const hash = window.sha256Hex ? await window.sha256Hex(pinInput.value) : null;
+  if(hash === ADMIN_PIN_HASH){
     document.getElementById('adminPinOverlay').classList.remove('show');
     openAdminStats();
   } else {

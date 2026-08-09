@@ -80,6 +80,10 @@
     var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
   }
+  // Shared with play-calls.js (FrontSeat gate) and study-quiz.js (admin PIN)
+  // so those secrets can be hashed the same way instead of sitting as
+  // plaintext in the shipped JS.
+  window.sha256Hex = sha256Hex;
   function setLocked(msRemaining){
     inputEl.disabled = true; btnEl.disabled = true;
     var secs = Math.ceil(msRemaining/1000);

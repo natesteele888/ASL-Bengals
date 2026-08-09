@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide</title>
-<link rel="stylesheet" href="css/styles.css?v=20260809a">
+<link rel="stylesheet" href="css/styles.css?v=20260809b">
 </head>
 <body>
-<!-- BUILD_VERSION: 2026-08-09a (admin-playbook-pdf-download) -->
+<!-- BUILD_VERSION: 2026-08-09b (hash-frontseat-and-admin-pin) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
@@ -407,7 +407,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260809a';
+  const BUILD_V = '20260809b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
