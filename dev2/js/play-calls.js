@@ -354,10 +354,16 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     signals.push({ src: SIGNAL_CARDS[ioId], label: insideOutside === 'Inside' ? 'Inside' : 'Outside' });
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   } else if (playKey === 'double_blast') {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
+    // Outside Zone (when present) is the modifier that flips the silent
+    // Inside default to Outside, so it's called BEFORE the Double Blast
+    // card itself -- same "modifier before play name" order as every other
+    // play (see the onComboChanged() comment above and Nathan's own
+    // example: "Wing, Right, Outside, Double Blast, Right"). This was
+    // previously reversed here.
     if (insideOutside === 'Outside') {
       signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
     }
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   } else {
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }

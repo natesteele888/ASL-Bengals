@@ -328,32 +328,21 @@
   <div style="max-width:460px;margin:20px auto;padding:0 16px;text-align:center;">
     <h2>🧠 Play Calls Quiz</h2>
     <p class="lbSub">Ten rounds, easiest to hardest. Watch the signals, then set up the call you saw.</p>
+    <p class="lbSub" id="pcqBestLine" style="display:none;font-weight:700;"></p>
 
     <button class="navBtn" id="pcqStartBtn">🧠 Start Quiz</button>
 
     <div id="pcqQuizArea" style="display:none;">
         <div class="quizStats" id="pcqStatsLine"></div>
         <p class="lbSub" style="margin-bottom:4px;">Watch the signals (plays twice), then set up the call you saw.</p>
-        <div class="sigImgWrap" id="pcqImgWrap"><img id="pcqImg" src="" alt="signal"></div>
+        <div class="sigImgWrap" id="pcqImgWrap"><img id="pcqImg" src="" alt="signal"><div class="pcqGetReady" id="pcqGetReady" style="display:none;">Get Ready…</div></div>
         <div class="signal-progress" id="pcqProgress"></div>
         <button class="replay-btn" id="pcqReplayBtn" style="display:none;margin:6px auto;">&#8635; Replay (half credit)</button>
 
         <div id="pcqAnswerPanel" class="controls" style="display:none;justify-content:center;">
           <div class="inline-control">
-            <label>Play</label>
-            <select id="pcqPlaySelect"></select>
-          </div>
-          <div class="inline-control">
             <label>Wing</label>
             <div class="toggle-group toggle-orange" id="pcqWingToggle">
-              <span class="toggle-thumb"></span>
-              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
-              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
-            </div>
-          </div>
-          <div class="inline-control">
-            <label>Dir</label>
-            <div class="toggle-group toggle-black" id="pcqDirToggle">
               <span class="toggle-thumb"></span>
               <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
               <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
@@ -368,12 +357,8 @@
             </div>
           </div>
           <div class="inline-control">
-            <label>Boot</label>
-            <div class="toggle-group toggle-red" id="pcqBootToggle">
-              <span class="toggle-thumb"></span>
-              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
-              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
-            </div>
+            <label>Play</label>
+            <select id="pcqPlaySelect"></select>
           </div>
           <div class="inline-control" id="pcqIOWrap" style="display:none;">
             <label>In/Out</label>
@@ -381,6 +366,22 @@
               <span class="toggle-thumb"></span>
               <button class="toggle-btn" data-value="Inside" aria-pressed="true">In</button>
               <button class="toggle-btn" data-value="Outside" aria-pressed="false">Out</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Dir</label>
+            <div class="toggle-group toggle-black" id="pcqDirToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Boot</label>
+            <div class="toggle-group toggle-red" id="pcqBootToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
             </div>
           </div>
         </div>

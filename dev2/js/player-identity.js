@@ -79,6 +79,49 @@
       .catch(() => {}); // best-effort; not being able to log a timestamp shouldn't block anyone
   }
 
+  // Fetches the signed-in player's own record (name, best score so far,
+  // etc.) -- used so a quiz can show "your best: X" before/after a run.
+  async function getPlayerRecord(playerId){
+    try {
+      const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`);
+      const res = await fetch(url);
+      if(!res.ok) return null;
+      return await res.json();
+    } catch(e){ return null; }
+  }
+
+  // Records one Play Calls Quiz result against the signed-in player,
+  // bumping their best score if this run beat it. First step toward "what
+  // scores they're getting even if they aren't submitting it" -- scoped to
+  // the Play Calls Quiz for now; Study/Timed Quiz aren't wired to player
+  // IDs yet. Fire-and-forget by design, same spirit as touchLastSeen.
+  async function recordQuizResult(score, maxScore){
+    const session = getSession();
+    if(!session) return null;
+    try {
+      const existing = await getPlayerRecord(session.playerId);
+      const prevBest = (existing && existing.pcqBestScore) || 0;
+      const patch = {
+        pcqLastScore: score,
+        pcqLastMaxScore: maxScore,
+        pcqLastPlayedAt: new Date().toISOString(),
+        pcqPlaysCount: ((existing && existing.pcqPlaysCount) || 0) + 1,
+      };
+      const isNewBest = score > prevBest;
+      if(isNewBest){
+        patch.pcqBestScore = score;
+        patch.pcqBestMaxScore = maxScore;
+      }
+      const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${session.playerId}.json`);
+      await fetch(url, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(patch),
+      });
+      return { isNewBest: isNewBest, bestScore: isNewBest ? score : prevBest, bestMaxScore: isNewBest ? maxScore : (existing && existing.pcqBestMaxScore) || maxScore };
+    } catch(e){ return null; } // best-effort; a failed save shouldn't block the done screen
+  }
+
   // ---- UI wiring (full-screen mandatory overlay, same treatment as the
   // site login screen) ----
   const screenEl = document.getElementById('playerIdScreen');
@@ -171,5 +214,5 @@
     showOverlay();
   }
 
-  window.PlayerIdentity = { getSession, setSession, clearSession, fetchAllPlayers, gate };
+  window.PlayerIdentity = { getSession, setSession, clearSession, fetchAllPlayers, gate, getPlayerRecord, recordQuizResult };
 })();

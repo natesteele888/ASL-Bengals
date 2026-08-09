@@ -14,10 +14,13 @@
    (play-calls.js) -- this file loads last on purpose.
    ============================================================ */
 (function(){
-  // Plays eligible for the quiz. Option is left out for now -- it's
-  // directionFixed and needs a decision on what that should mean for a
-  // quiz answer before it's included (see PLAN.md).
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep'];
+  // Plays eligible for the quiz. Option was originally left out pending a
+  // decision on what its "directionFixed" flag should mean for a quiz
+  // answer -- turned out that flag is just a one-time migration marker
+  // (whether a cloud snapshot has had the old Left/Right swap bug repaired),
+  // not a real "direction can't be picked" behavior, so Option answers like
+  // any other play: noBoot is already handled generically below.
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
   const POINTS_FULL = 10, POINTS_HALF = 5;
 
   function playFlags(key){
@@ -106,6 +109,7 @@
   const quizArea = document.getElementById('pcqQuizArea');
   const statsLine = document.getElementById('pcqStatsLine');
   const img = document.getElementById('pcqImg');
+  const getReadyEl = document.getElementById('pcqGetReady');
   const progressEl = document.getElementById('pcqProgress');
   const replayBtn = document.getElementById('pcqReplayBtn');
   const answerPanel = document.getElementById('pcqAnswerPanel');
@@ -122,6 +126,8 @@
   const doneScreen = document.getElementById('pcqDoneScreen');
   const doneText = document.getElementById('pcqDoneText');
   const restartBtn = document.getElementById('pcqRestartBtn');
+  const bestLineEl = document.getElementById('pcqBestLine');
+  const tabBtn = document.getElementById('playCallsQuizTabBtn');
 
   // If any of these are missing, the markup didn't load as expected --
   // bail quietly rather than throwing on every other script.
@@ -173,6 +179,21 @@
     updateIOVisibility();
   }
 
+  // ---- Personal best (per signed-in player, via PlayerIdentity) ----
+  async function refreshBestLine(){
+    if (!bestLineEl || !window.PlayerIdentity) return;
+    const session = window.PlayerIdentity.getSession();
+    if (!session) { bestLineEl.style.display = 'none'; return; }
+    const record = await window.PlayerIdentity.getPlayerRecord(session.playerId);
+    if (record && record.pcqBestScore){
+      bestLineEl.textContent = `Your best: ${record.pcqBestScore} / ${record.pcqBestMaxScore} pts`;
+      bestLineEl.style.display = '';
+    } else {
+      bestLineEl.style.display = 'none';
+    }
+  }
+  if (tabBtn) tabBtn.addEventListener('click', refreshBestLine);
+
   // ---- Quiz state ----
   let rounds = [];
   let roundIndex = 0;
@@ -181,6 +202,8 @@
   let fullCount = 0, halfCount = 0, wrongCount = 0;
 
   function currentRound(){ return rounds[roundIndex]; }
+
+  const GET_READY_MS = 1300;
 
   function playSequence(){
     if (seqTimer) clearTimeout(seqTimer);
@@ -211,7 +234,15 @@
       i++;
       seqTimer = setTimeout(showStep, stepDurationMs);
     }
-    showStep();
+    // Brief warm-up beat before the first card appears -- signals used to
+    // start the instant this function ran, with zero warning, which meant
+    // the very first card of the sequence was easy to miss. Applies on
+    // Replay too, for the same reason and for consistency.
+    if (getReadyEl) getReadyEl.style.display = 'flex';
+    seqTimer = setTimeout(() => {
+      if (getReadyEl) getReadyEl.style.display = 'none';
+      showStep();
+    }, GET_READY_MS);
   }
 
   replayBtn.addEventListener('click', () => {
@@ -285,12 +316,21 @@
     startRound();
   });
 
-  function finishQuiz(){
+  async function finishQuiz(){
     quizArea.style.display = 'none';
     doneScreen.style.display = '';
     const score = fullCount * POINTS_FULL + halfCount * POINTS_HALF;
     const maxScore = rounds.length * POINTS_FULL;
     doneText.textContent = `${score} / ${maxScore} points — ${fullCount} full, ${halfCount} half credit, ${wrongCount} wrong.`;
+    if (window.PlayerIdentity){
+      const result = await window.PlayerIdentity.recordQuizResult(score, maxScore);
+      if (result){
+        doneText.textContent += result.isNewBest
+          ? `  🏆 New personal best!`
+          : `  Your best: ${result.bestScore} / ${result.bestMaxScore} pts.`;
+      }
+      refreshBestLine();
+    }
   }
 
   function startQuiz(){

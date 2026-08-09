@@ -337,9 +337,10 @@ async function openAdminStats(){
   }
   function playerRowHtml(p){
     const tag = p.isCoach ? ' <span style="opacity:.6">(coach)</span>' : '';
+    const best = p.pcqBestScore ? `🧠 ${p.pcqBestScore}/${p.pcqBestMaxScore}` : '—';
     return `<div class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(p.lastSeen)}</div>
       <div class="lbName">${p.name}${tag}</div>
-      <div class="lbScore" style="font-size:10px;">since ${fmtWhen(p.createdAt).split(' ')[0] || '—'}</div></div>`;
+      <div class="lbScore" style="font-size:10px;">${best}</div></div>`;
   }
   const playersHtml = playerRows.length
     ? playerRows.map(playerRowHtml).join('')
@@ -427,26 +428,70 @@ async function openAdminStats(){
   const hardestHtml = hardest.length ? hardest.map(signalRowHtml).join('') : '<div class="lbEmpty">Not enough team data yet.</div>';
   const easiestHtml = easiest.length ? easiest.map(signalRowHtml).join('') : '<div class="lbEmpty">Not enough team data yet.</div>';
 
+  // ---- Dashboard shell: a home screen of buttons instead of one long
+  // scroll -- each button opens exactly one panel below, with a Back
+  // button to return. Panels are all rendered up front (data's already
+  // fetched) and just toggled with display:none/'' -- no re-fetching on
+  // navigation.
   body.innerHTML = `
-    <div class="lbSectionHeader">👤 Registered Players (${playerRows.length})</div>
-    <div class="lbList" style="max-height:220px;overflow-y:auto;">${playersHtml}</div>
-    <div class="lbSub" style="margin:2px 0 12px;">Sorted by most recently active. Scores per person aren't tracked here yet -- next step.</div>
-    <div class="adminStatGrid">
-      ${statCard(timedStarts.length, 'Timed Quiz Starts')}
-      ${statCard(standardStarts.length, 'Standard Quiz Starts')}
+    <div id="adminHome">
+      <div class="adminStatGrid">
+        ${statCard(timedStarts.length, 'Timed Quiz Starts')}
+        ${statCard(standardStarts.length, 'Standard Quiz Starts')}
+      </div>
+      <div class="adminDashGrid">
+        <button class="adminDashBtn" data-panel="players">👤 Registered Players<span class="adminDashCount">${playerRows.length}</span></button>
+        <button class="adminDashBtn" data-panel="standard">📝 Standard Quiz</button>
+        <button class="adminDashBtn" data-panel="timed">⏱️ Timed Quiz</button>
+        <button class="adminDashBtn" data-panel="sessions">🕓 Recent Sessions${unsavedCount ? `<span class="adminDashCount">${unsavedCount} unsaved</span>` : ''}</button>
+        <button class="adminDashBtn" data-panel="signals">🎯 Signal Stats</button>
+      </div>
     </div>
-    <div class="lbSectionHeader">📝 Standard Quiz</div>
-    ${standardBlock}
-    <div class="lbSectionHeader">⏱️ Timed Quiz</div>
-    ${timedBlock}
-    <div class="lbSectionHeader">🕓 Recent Timed Sessions${unsavedCount ? ` (${unsavedCount} unsaved)` : ''}</div>
-    <div class="lbList">${sessionsHtml}</div>
-    <div class="lbSectionHeader">🥵 Hardest Signals (team-wide)</div>
-    <div class="lbList">${hardestHtml}</div>
-    <div class="lbSectionHeader">😎 Easiest Signals (team-wide)</div>
-    <div class="lbList">${easiestHtml}</div>
-    <div class="lbSub">Starts count every attempt, even if never finished. "Unsaved" means someone completed a timed run but never entered a name on the leaderboard. Signal stats need at least 3 team-wide attempts to show.</div>
-    <div class="lbSub" style="opacity:.5;margin-top:14px;">build 2026-08-05 02:39 UTC v3 (motion+duplicate+autoheal)</div>`;
+    <button class="navBtn secondary adminBackBtn" id="adminBackBtn" style="display:none;">‹ Back to Dashboard</button>
+    <div class="adminPanel" data-panel="players" style="display:none;">
+      <div class="lbSectionHeader">👤 Registered Players (${playerRows.length})</div>
+      <div class="lbList" style="max-height:340px;overflow-y:auto;">${playersHtml}</div>
+      <div class="lbSub" style="margin:2px 0 12px;">Sorted by most recently active. 🧠 column is each player's Play Calls Quiz personal best (Study/Timed Quiz aren't tied to player IDs yet).</div>
+    </div>
+    <div class="adminPanel" data-panel="standard" style="display:none;">
+      <div class="lbSectionHeader">📝 Standard Quiz</div>
+      ${standardBlock}
+      <div class="lbSub">Starts count every attempt, even if never finished.</div>
+    </div>
+    <div class="adminPanel" data-panel="timed" style="display:none;">
+      <div class="lbSectionHeader">⏱️ Timed Quiz</div>
+      ${timedBlock}
+      <div class="lbSub">Starts count every attempt, even if never finished.</div>
+    </div>
+    <div class="adminPanel" data-panel="sessions" style="display:none;">
+      <div class="lbSectionHeader">🕓 Recent Timed Sessions${unsavedCount ? ` (${unsavedCount} unsaved)` : ''}</div>
+      <div class="lbList">${sessionsHtml}</div>
+      <div class="lbSub">"Unsaved" means someone completed a timed run but never entered a name on the leaderboard.</div>
+    </div>
+    <div class="adminPanel" data-panel="signals" style="display:none;">
+      <div class="lbSectionHeader">🥵 Hardest Signals (team-wide)</div>
+      <div class="lbList">${hardestHtml}</div>
+      <div class="lbSectionHeader">😎 Easiest Signals (team-wide)</div>
+      <div class="lbList">${easiestHtml}</div>
+      <div class="lbSub">Needs at least 3 team-wide attempts per signal to show.</div>
+    </div>
+    <div class="lbSub" style="opacity:.5;margin-top:14px;">build 2026-08-09 v4 (dashboard)</div>`;
+
+  const homeEl = body.querySelector('#adminHome');
+  const backBtn = body.querySelector('#adminBackBtn');
+  const panels = [...body.querySelectorAll('.adminPanel')];
+  body.querySelectorAll('.adminDashBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      homeEl.style.display = 'none';
+      backBtn.style.display = '';
+      panels.forEach(p => { p.style.display = (p.dataset.panel === btn.dataset.panel) ? '' : 'none'; });
+    });
+  });
+  backBtn.addEventListener('click', () => {
+    homeEl.style.display = '';
+    backBtn.style.display = 'none';
+    panels.forEach(p => { p.style.display = 'none'; });
+  });
 }
 document.getElementById('adminCloseBtn').addEventListener('click', ()=>{
   document.getElementById('adminOverlay').classList.remove('show');
