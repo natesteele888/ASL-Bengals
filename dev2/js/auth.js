@@ -69,10 +69,17 @@
 
   try {
     if(localStorage.getItem(STORAGE_KEY) === '1'){
-      screenEl.classList.add('hide'); window.startBgMusic(); setTimeout(function(){ maybeShowTips(); }, 400);
+      screenEl.classList.add('hide'); window.startBgMusic();
       if(localStorage.getItem('bengalsCoachSession') === '1'){
         window.isCoachSession = true;
       }
+      // This runs the instant auth.js executes, before the later scripts
+      // (including player-identity.js) have necessarily finished loading --
+      // poll briefly rather than assume a fixed delay is always enough.
+      (function waitForPlayerIdentity(){
+        if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
+        else setTimeout(waitForPlayerIdentity, 50);
+      })();
     }
   } catch(e) {}
 
@@ -133,7 +140,10 @@
       } catch(e) {}
       screenEl.classList.add('fadeOut');
       window.startBgMusic();
-      setTimeout(function(){ screenEl.classList.add('hide'); maybeShowTips(); }, 1500);
+      setTimeout(function(){
+        screenEl.classList.add('hide');
+        window.PlayerIdentity.gate(function(){ maybeShowTips(); });
+      }, 1500);
     } else {
       attempts++;
       inputEl.value = '';

@@ -314,11 +314,36 @@ async function openAdminStats(){
     cloudFetch('analytics/signalAttempts'),
     cloudFetch('timedLeaderboard'),
   ]);
+  const players = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
 
   if([timedStarts, standardStarts, standardResults, timedResults, signalAttempts].includes(null)){
     body.innerHTML = '<div class="lbEmpty">⚠️ Could not reach the team server — check your connection and try again.</div>';
     return;
   }
+
+  // ---- Registered players -- who's set up a name+code, and when they
+  // were last seen. Not tied to any specific quiz's scores yet (that
+  // needs each quiz to record against a player id, which isn't wired up
+  // yet) -- this is "who's using the app at all," which is the first
+  // piece of that picture. ----
+  const playerRows = Object.keys(players).map(id => Object.assign({id}, players[id]))
+    .sort((a, b) => new Date(b.lastSeen || b.createdAt || 0) - new Date(a.lastSeen || a.createdAt || 0));
+  function fmtWhen(iso){
+    if(!iso) return '—';
+    const d = new Date(iso);
+    if(isNaN(d)) return '—';
+    return d.toLocaleDateString(undefined, {month:'short', day:'numeric'}) + ' ' +
+      d.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+  }
+  function playerRowHtml(p){
+    const tag = p.isCoach ? ' <span style="opacity:.6">(coach)</span>' : '';
+    return `<div class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(p.lastSeen)}</div>
+      <div class="lbName">${p.name}${tag}</div>
+      <div class="lbScore" style="font-size:10px;">since ${fmtWhen(p.createdAt).split(' ')[0] || '—'}</div></div>`;
+  }
+  const playersHtml = playerRows.length
+    ? playerRows.map(playerRowHtml).join('')
+    : '<div class="lbEmpty">No one has signed in with a name+code yet.</div>';
 
   function statCard(num, label){
     return `<div class="adminStatCard"><div class="num">${num}</div><div class="lbl">${label}</div></div>`;
@@ -403,6 +428,9 @@ async function openAdminStats(){
   const easiestHtml = easiest.length ? easiest.map(signalRowHtml).join('') : '<div class="lbEmpty">Not enough team data yet.</div>';
 
   body.innerHTML = `
+    <div class="lbSectionHeader">👤 Registered Players (${playerRows.length})</div>
+    <div class="lbList" style="max-height:220px;overflow-y:auto;">${playersHtml}</div>
+    <div class="lbSub" style="margin:2px 0 12px;">Sorted by most recently active. Scores per person aren't tracked here yet -- next step.</div>
     <div class="adminStatGrid">
       ${statCard(timedStarts.length, 'Timed Quiz Starts')}
       ${statCard(standardStarts.length, 'Standard Quiz Starts')}
