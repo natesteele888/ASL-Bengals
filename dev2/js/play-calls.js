@@ -368,6 +368,11 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
   }
   return signals;
 }
+// Exposed globally so play-calls-quiz.js (loaded after this file) can
+// reuse the exact same signal-sequence logic instead of duplicating it --
+// this whole file is wrapped in an IIFE, so without this the bare name
+// isn't reachable from other scripts.
+window.buildSignalSequence = buildSignalSequence;
 
 // ---- Render a card's diagram into its SVG stage ----
 function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {

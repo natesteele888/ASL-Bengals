@@ -130,6 +130,12 @@ function wireToggle(el, getter, setter) {
   // updateReadPosVisibility() re-calls it once they're actually shown.
   placeToggleThumb(el);
 }
+// Exposed globally so play-calls-quiz.js (loaded after this file) can
+// reuse the exact same toggle-wiring behavior for its answer panel,
+// instead of duplicating it -- this whole file is wrapped in an IIFE, so
+// without this the bare name isn't reachable from other scripts.
+window.wireToggle = wireToggle;
+
 wireToggle(wingToggle, () => wingSide, v => wingSide = v);
 wireToggle(dirToggle, () => direction, v => direction = v);
 
