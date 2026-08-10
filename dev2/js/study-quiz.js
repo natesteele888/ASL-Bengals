@@ -683,11 +683,33 @@ function findEntryAndRank(list, name){
   const idx = list.findIndex(e => normName(e.name) === normName(name));
   return idx === -1 ? { entry: null, rank: null } : { entry: list[idx], rank: idx + 1 };
 }
-function myStatRowHtml(icon, label, valueText, rank){
-  const rankHtml = rank ? ` <span style="opacity:.6;font-weight:600;">#${rank}</span>` : '';
-  return `<div class="lbRow"><div class="lbRank">${icon}</div>
-    <div class="lbName">${label}</div>
-    <div class="lbScore">${valueText}${rankHtml}</div></div>`;
+// Turns a rank + board size into a 0-100 fill for the progress bar --
+// rank 1 (best) fills all the way, worst rank still leaves a visible
+// sliver so the bar always reads as "a bar", never as empty/broken.
+function msBarFillPct(rank, total){
+  if(!rank) return 0;
+  if(total <= 1) return 100;
+  return Math.max(6, Math.round(((total - rank) / (total - 1)) * 100));
+}
+// "Top 15% • #3 of 20" -- more meaningful at a glance than the rank number
+// alone, since #3 means something very different on a board of 4 vs 20.
+function msRankCaption(rank, total){
+  if(!rank) return 'Not on the board yet';
+  const topPct = Math.max(1, Math.ceil((rank / total) * 100));
+  return `Top ${topPct}% • #${rank} of ${total}`;
+}
+function myStatRowHtml(icon, label, valueText, rank, total, isHero){
+  const barPct = msBarFillPct(rank, total);
+  const caption = total ? msRankCaption(rank, total) : 'No data yet';
+  return `<div class="msStatCard${isHero ? ' msHero' : ''}">
+    <div class="msStatTop">
+      <span class="msIcon">${icon}</span>
+      <span class="msLabel">${label}</span>
+      <span class="msValue">${valueText}</span>
+    </div>
+    <div class="msBarTrack"><div class="msBarFill" style="width:${barPct}%"></div></div>
+    <div class="msCaption">${caption}</div>
+  </div>`;
 }
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
@@ -696,17 +718,20 @@ window.showMyStats = async function showMyStats(){
   if(!overlay || !body || !session) return;
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading your stats…</div>';
-  const [timedData, pcqData, overallList] = await Promise.all([
-    fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), computeOverallStandings(),
+  const [timedData, pcqData, quizData, overallList] = await Promise.all([
+    fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
   ]);
   const pcq = findEntryAndRank(pcqData.list, session.name);
   const timed = findEntryAndRank(timedData.list, session.name);
+  const quiz = findEntryAndRank(quizData.list, session.name);
   const overall = findEntryAndRank(overallList, session.name);
-  body.innerHTML = [
-    myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank),
-    myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank),
-    myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank),
-  ].join('') + '<div class="lbSub" style="margin-top:10px;">Ranks are out of the top 20 on each board. Timed Quiz needs a saved name matching yours to show up here.</div>';
+  body.innerHTML = '<div class="msStatList">' + [
+    myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank, overallList.length, true),
+    myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank, timedData.list.length),
+    myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank, pcqData.list.length),
+    myStatRowHtml('📝', 'Quiz Scores', quiz.entry ? `${quiz.entry.score}/${quiz.entry.total}${quiz.entry.bestStreak ? ` 🔥${quiz.entry.bestStreak}` : ''}` : 'No score yet', quiz.rank, quizData.list.length),
+  ].join('') + '</div>' +
+  '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>';
 };
 document.getElementById('myStatsCloseBtn').addEventListener('click', () => {
   document.getElementById('myStatsOverlay').classList.remove('show');

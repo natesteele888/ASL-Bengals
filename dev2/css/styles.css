@@ -205,6 +205,26 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbOfflineNote{text-align:center;color:#b0722f;font-size:10.5px;padding:8px 6px 2px;line-height:1.4}
 .lbCloseBtn{width:100%}
 
+/* ===== My Stats -- rank progress bars ===== */
+.msStatList{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.msStatCard{background:var(--paper);border-radius:12px;padding:10px 12px}
+.msStatCard.msHero{background:linear-gradient(135deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 100%)}
+.msStatTop{display:flex;align-items:center;gap:9px}
+.msIcon{font-size:19px;width:22px;text-align:center;flex-shrink:0}
+.msLabel{flex:1;font-size:12.5px;font-weight:800;color:var(--ink)}
+.msHero .msLabel{color:#fff}
+.msValue{font-size:13.5px;font-weight:900;color:var(--bengal-orange-dark)}
+.msHero .msValue{color:#fff}
+.msBarTrack{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:7px}
+.msHero .msBarTrack{background:rgba(255,255,255,.3)}
+.msBarFill{height:100%;border-radius:4px;background:var(--bengal-orange);transition:width .4s ease}
+.msHero .msBarFill{background:#fff}
+.msCaption{font-size:10.5px;color:var(--muted);font-weight:700;margin-top:5px}
+.msHero .msCaption{color:rgba(255,255,255,.85)}
+[data-theme="dark"] .msStatCard{background:var(--card)}
+[data-theme="dark"] .msValue{color:var(--accent)}
+[data-theme="dark"] .msBarFill{background:var(--accent)}
+
 
 .lbTabRow{display:flex;gap:4px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
 .lbTabBtn{flex:1;min-width:0;border:none;background:transparent;padding:9px 3px;border-radius:8px;font-size:10.5px;
