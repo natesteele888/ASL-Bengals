@@ -97,7 +97,21 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 
 /* ===== Quiz ===== */
 .quizStats{text-align:center;font-size:11.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
-.timedClockBig{text-align:center;font-size:40px;font-weight:900;color:var(--bengal-black);
+/* Structured version of the stats line (currently just the Study/Quiz
+   header) -- a tidy round/score/streak row plus a dot progress strip for
+   position within the round, instead of one long dot-separated sentence. */
+.qsRow{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
+  font-size:11.5px;font-weight:700;color:var(--muted)}
+.qsRow .qsScore{color:var(--ink);font-weight:800}
+.qsStreak{color:var(--bengal-orange-dark)}
+[data-theme="dark"] .qsStreak{color:var(--accent)}
+.qsDots{display:flex;justify-content:center;align-items:center;gap:5px;margin-top:6px}
+.qsDot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:transform .15s}
+.qsDot.filled{background:var(--bengal-orange)}
+[data-theme="dark"] .qsDot.filled{background:var(--accent)}
+.qsDot.current{width:8px;height:8px;background:var(--bengal-black)}
+[data-theme="dark"] .qsDot.current{background:var(--ink)}
+.timedClockBig{text-align:center;font-size:40px;font-weight:900;color:var(--ink);
   font-variant-numeric:tabular-nums;letter-spacing:.01em;margin-bottom:2px;line-height:1.1}
 .quizBar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:8px}
 .quizBar button.tool{background:#fff;border:1px solid var(--line);border-radius:20px;padding:8px 14px;
@@ -226,15 +240,18 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 /* ===== Dark mode ("Stadium lights") =====
    This is now the default look for the whole app (see the pre-paint
    script in index.html), not just an opt-in toggle.
-   Scope note: this covers the general app chrome -- header/tabs, overlays,
-   leaderboard, quiz screens, forms. It deliberately does NOT touch the
-   Play Calls / Edit Plays diagram rendering below (accordion cards, SVG
-   field stage, player/ball colors) -- those represent physical signal
-   cards and field diagrams and are meant to look the same (paper-white)
-   regardless of theme, same as a real printed card would. Most of the
-   general UI above already uses the --paper/--card/--ink/--line/--muted
-   variables, so redefining them here is most of the work; the rest are
-   explicit overrides for spots that had a literal #fff instead. */
+   Scope note: covers the general app chrome -- header/tabs, overlays,
+   leaderboard, quiz screens, forms -- plus (as of this pass) the Play
+   Calls/Edit Plays CARD CHROME (accordion shell, card face, title bar,
+   buttons, toggle pills). The field diagram drawn INSIDE each card (SVG
+   player circles/routes) is deliberately left untouched -- those circles
+   already have solid white fill with colored stroke/text baked in by the
+   JS that draws them, so they read fine (better, even -- like numbers
+   under stadium lights) against a dark card without needing their own
+   theme awareness. Most of the general UI above already uses the
+   --paper/--card/--ink/--line/--muted variables, so redefining them here
+   is most of the work; the rest are explicit overrides for spots that
+   had a literal #fff/#111 instead. */
 [data-theme="dark"]{
   --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
   --accent:#EF9F27;
@@ -262,6 +279,26 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] #playerIdPinInput,
 [data-theme="dark"] .lbSaveForm input{background:var(--card);color:var(--ink);border-color:var(--line)}
 [data-theme="dark"] .pcqGetReady{background:rgba(0,0,0,.92)}
+
+/* Play card chrome (accordion shell + flip card) -- see scope note above.
+   The <svg> field diagram itself is untouched; only the frame around it. */
+[data-theme="dark"] .accordion-item{border-color:var(--line);background:var(--card)}
+[data-theme="dark"] .accordion-header{background:var(--card);color:var(--ink)}
+[data-theme="dark"] .card-face{background:var(--card);border-color:var(--line)}
+[data-theme="dark"] .card-title-bar{background:var(--paper);border-bottom-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .card-btn{background:var(--card);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .card-btn.play-btn{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+[data-theme="dark"] .speed-toggle{background:var(--card);border-color:var(--line)}
+[data-theme="dark"] .speed-toggle button{color:var(--ink)}
+[data-theme="dark"] .speed-toggle button.active{background:var(--ink);color:var(--paper)}
+[data-theme="dark"] .switch-label{color:var(--ink)}
+[data-theme="dark"] .empty-note{color:var(--muted)}
+/* the Wing/Dir/Motion/etc. pill toggles -- keep the white sliding "active"
+   thumb as-is (it already contrasts against a dark track), just lighten
+   the track tint and the inactive-label color so they aren't reading as
+   near-black-on-near-black. */
+[data-theme="dark"] .toggle-group{background:rgba(255,255,255,.1)}
+[data-theme="dark"] .toggle-group .toggle-btn{color:rgba(255,255,255,.45)}
 
 /* ===== Play Calls (DEV) ===== */
 .play-grid {
@@ -972,6 +1009,42 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
+  }
+  /* Per-path end cap: Run (arrow, keep running) vs Block (T-bar, plant and
+     block here). Sits top-right, mirroring the edit-toolbar's top-left
+     placement, so it's available any time a real route/block is selected --
+     independent of the assign-panel's own tap-a-defender/chip-block flow
+     just below it. */
+#editPlaysMode .end-type-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,.97);
+    border: 2px solid var(--bengal-black);
+    border-radius: 8px;
+    padding: 6px 8px;
+    z-index: 6;
+  }
+#editPlaysMode .end-type-panel .assign-label {
+    font-size: 10.5px;
+    font-weight: 800;
+  }
+#editPlaysMode .end-type-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 2px solid #999;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+#editPlaysMode .end-type-btn.active {
+    background: var(--bengal-black);
+    border-color: var(--bengal-black);
+    color: #fff;
   }
 #editPlaysMode #exportModal {
     position: fixed;

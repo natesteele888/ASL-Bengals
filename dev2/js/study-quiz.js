@@ -798,6 +798,32 @@ const sigHintEl = document.querySelector('#signalQuiz .sigHint');
 function sigCurrentRound(){ return Math.floor(sigIdx / SIG_ROUND_SIZE) + 1; }
 function sigPosInRound(){ return (sigIdx % SIG_ROUND_SIZE) + 1; }
 
+// Replaces the old single dot-separated sentence ("Round 1 of 5 • Signal 1
+// of 6 • Score 0/0 • 🔥 Streak 0") with a tidy stat row plus a dot strip
+// showing position within the current round -- same information, a lot
+// less to parse at a glance.
+function renderSigStatsLine(){
+  if(sigPracticeMode){
+    sigStatsLine.innerHTML = `<div class="qsRow">` +
+      `<span>Practice ${sigIdx+1} of ${sigDeck.length}</span>` +
+      `<span class="qsScore">${sigScore}/${sigIdx}</span>` +
+      `<span class="qsStreak">🔥 ${sigCurrentStreak}</span>` +
+      `</div>`;
+    return;
+  }
+  const pos = sigPosInRound();
+  const dots = Array.from({length: SIG_ROUND_SIZE}, (_, i) => {
+    const n = i + 1;
+    const cls = n < pos ? 'qsDot filled' : (n === pos ? 'qsDot current' : 'qsDot');
+    return `<span class="${cls}"></span>`;
+  }).join('');
+  sigStatsLine.innerHTML = `<div class="qsRow">` +
+    `<span>Round ${sigCurrentRound()} of ${SIG_TOTAL_ROUNDS}</span>` +
+    `<span class="qsScore">${sigScore}/${sigIdx}</span>` +
+    `<span class="qsStreak">🔥 ${sigCurrentStreak}</span>` +
+    `</div><div class="qsDots">${dots}</div>`;
+}
+
 function sigDisplayText(c){
   if(cardGroup(c) === 'Location / Direction'){
     if(/LEFT/i.test(c.meaning)) return 'LEFT';
@@ -844,11 +870,7 @@ function sigRenderQuestion(){
   sigQImg.src = c.img;
   sigFeedback.textContent = ''; sigFeedback.className = 'seq-feedback';
   sigNavRow.style.display = 'none';
-  if(sigPracticeMode){
-    sigStatsLine.textContent = `Practice ${sigIdx+1} of ${sigDeck.length}  •  Score ${sigScore}/${sigIdx}  •  🔥 Streak ${sigCurrentStreak}`;
-  } else {
-    sigStatsLine.textContent = `Round ${sigCurrentRound()} of ${SIG_TOTAL_ROUNDS}  •  Signal ${sigPosInRound()} of ${SIG_ROUND_SIZE}  •  Score ${sigScore}/${sigIdx}  •  🔥 Streak ${sigCurrentStreak}`;
-  }
+  renderSigStatsLine();
 
   const correctText = sigDisplayText(c);
   const seenTexts = new Set([correctText]);

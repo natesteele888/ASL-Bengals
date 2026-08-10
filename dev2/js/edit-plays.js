@@ -610,6 +610,32 @@ function placeArrowAtFraction(arrowEl, pathEl, fraction) {
   arrowEl.setAttribute('transform', `translate(${pt.x},${pt.y}) rotate(${angle})`);
 }
 
+// Which end-cap a path's line should draw: 'run' (arrowhead, the existing
+// default) means the player keeps running that direction past this point;
+// 'block' (a straight perpendicular T-bar) means they plant and block right
+// there. A coach can set this explicitly per path in the editor (p.endType);
+// if it's never been touched, it falls back to whatever isBlocking already
+// implied, so old saved data keeps drawing exactly like it always did.
+function endTypeFor(p) {
+  return p.endType || (p.isBlocking ? 'block' : 'run');
+}
+
+// Builds the actual end-cap SVG element for a path -- an arrowhead polygon
+// for 'run', or a short perpendicular bar for 'block'. Both are positioned
+// identically via placeArrowAtFraction (translate to the point + rotate to
+// the direction of travel there), so the T-bar automatically ends up
+// perpendicular to the route without any extra math.
+function buildEndCapEl(endType, color, width) {
+  if (endType === 'block') {
+    const barLen = Math.max(13, width * 2.2);
+    return svgEl('line', {
+      x1: 0, y1: -barLen / 2, x2: 0, y2: barLen / 2,
+      stroke: color, 'stroke-width': Math.max(6, width + 2), 'stroke-linecap': 'round',
+    });
+  }
+  return svgEl('polygon', {points: '-2,-11 20,0 -2,11', fill: color});
+}
+
 function svgPointFromEvent(ev) {
   const pt = stage.createSVGPoint();
   pt.x = ev.clientX;
@@ -791,12 +817,16 @@ function findEditTargetPath(variant) {
 const editToolbar = document.getElementById('editToolbar');
 const assignPanel = document.getElementById('assignPanel');
 const assignLabel = document.getElementById('assignLabel');
+const endTypePanel = document.getElementById('endTypePanel');
+const endTypeRunBtn = document.getElementById('endTypeRunBtn');
+const endTypeBlockBtn = document.getElementById('endTypeBlockBtn');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
   if (!editMode || !editTarget) {
     editToolbar.style.display = 'none';
     assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
     return;
   }
   editToolbar.style.display = 'flex'; // Done Editing is always available once a target is picked
@@ -804,11 +834,25 @@ function updateEditUI(variant) {
   if (!p) {
     addPointBtn.style.display = 'none';
     assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
     return;
   }
 
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
+
+  // End cap (Run arrow / Block T-bar) -- available for any real drawn path,
+  // independent of the assign-panel's own tap-a-defender/chip-block flow
+  // below. optionLine/fake paths never draw a cap at all (see render()), so
+  // there's nothing useful to toggle for those.
+  if (!p.optionLine && !p.fake) {
+    endTypePanel.style.display = 'flex';
+    const et = endTypeFor(p);
+    endTypeRunBtn.classList.toggle('active', et === 'run');
+    endTypeBlockBtn.classList.toggle('active', et === 'block');
+  } else {
+    endTypePanel.style.display = 'none';
+  }
 
   if (p.isBlocking) {
     assignPanel.style.display = 'flex';
@@ -834,6 +878,17 @@ function updateEditUI(variant) {
     assignPanel.style.display = 'none';
   }
 }
+
+function setEditTargetEndType(newEndType) {
+  const playType = DATA.playTypes.find(pt => pt.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  p.endType = newEndType;
+  render();
+}
+endTypeRunBtn.addEventListener('click', () => setEditTargetEndType('run'));
+endTypeBlockBtn.addEventListener('click', () => setEditTargetEndType('block'));
 
 document.getElementById('doneEditingBtn').addEventListener('click', () => {
   editTarget = null;
@@ -1119,7 +1174,7 @@ function render() {
 
     let arrowEl = null;
     if (!p.fake) {
-      arrowEl = svgEl('polygon', {points: '-2,-11 20,0 -2,11', fill: color});
+      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, path, 1); // static: sits at the finished tip until animated
     }

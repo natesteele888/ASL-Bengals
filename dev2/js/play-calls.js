@@ -258,6 +258,24 @@ function placeArrowAtFraction(arrowEl, pathEl, frac) {
   const angle = Math.atan2(pt.y - pt2.y, pt.x - pt2.x) * 180 / Math.PI;
   arrowEl.setAttribute('transform', `translate(${pt.x},${pt.y}) rotate(${angle})`);
 }
+
+// Mirrors edit-plays.js's endTypeFor/buildEndCapEl -- same end-cap doctrine
+// (an explicit p.endType wins; otherwise isBlocking implies a 'block' T-bar
+// and everything else is a 'run' arrow), so a path edited in Edit Plays
+// looks the same when a coach actually pulls up the card in Play Calls.
+function endTypeFor(p) {
+  return p.endType || (p.isBlocking ? 'block' : 'run');
+}
+function buildEndCapEl(endType, color, width) {
+  if (endType === 'block') {
+    const barLen = Math.max(13, width * 2.2);
+    return svgEl('line', {
+      x1: 0, y1: -barLen / 2, x2: 0, y2: barLen / 2,
+      stroke: color, 'stroke-width': Math.max(6, width + 2), 'stroke-linecap': 'round',
+    });
+  }
+  return svgEl('polygon', { points: '-2,-11 20,0 -2,11', fill: color });
+}
 function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl) {
   return new Promise(async resolve => {
     if (delayMs) await wait(delayMs);
@@ -520,7 +538,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     let arrowEl = null;
     if (!p.fake) {
-      arrowEl = svgEl('polygon', { points: '-2,-11 20,0 -2,11', fill: color });
+      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, path, 1);
     }
