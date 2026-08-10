@@ -44,6 +44,19 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .toolbarBtn:active{background:rgba(17,17,17,.85)}
+.playerMenuWrap{position:relative}
+.playerMenuBtn{height:20px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
+  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:700;cursor:pointer;
+  backdrop-filter:blur(3px);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playerMenuBtn:active{background:rgba(17,17,17,.85)}
+.playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);display:none;min-width:150px;overflow:hidden;z-index:1200}
+.playerMenuDropdown.show{display:block}
+.playerMenuDropdown button{display:block;width:100%;text-align:left;padding:10px 14px;background:none;
+  border:none;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer}
+.playerMenuDropdown button:active{background:var(--paper)}
+.playerMenuDropdown button + button{border-top:1px solid var(--line)}
+[data-theme="dark"] .playerMenuDropdown{background:var(--card)}
 .headerRow{display:flex;align-items:center;gap:12px;padding:10px 14px}
 .headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}

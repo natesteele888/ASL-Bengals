@@ -220,6 +220,27 @@
     });
   }
 
+  // ---- Top-right player menu: name pill opens a small dropdown
+  // (My Stats / Sign Out) instead of the old always-visible text bar. ----
+  const menuBtn = document.getElementById('playerMenuBtn');
+  const menuDropdown = document.getElementById('playerMenuDropdown');
+  const myStatsBtn = document.getElementById('myStatsBtn');
+  if(menuBtn && menuDropdown){
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menuDropdown.classList.toggle('show');
+    });
+    document.addEventListener('click', () => menuDropdown.classList.remove('show'));
+  }
+  if(myStatsBtn){
+    myStatsBtn.addEventListener('click', () => {
+      menuDropdown.classList.remove('show');
+      // showMyStats() lives in study-quiz.js, which loads before this file
+      // in the script order, so it's already a global by the time this runs.
+      if(typeof window.showMyStats === 'function') window.showMyStats();
+    });
+  }
+
   // ---- The mandatory gate ----
   function gate(onReady){
     const session = getSession();

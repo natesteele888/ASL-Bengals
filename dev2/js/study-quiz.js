@@ -649,9 +649,9 @@ function pointsForRank(list){
   list.slice(0, 20).forEach((e, i) => { pts[normName(e.name)] = { name: e.name, points: 20 - i }; });
   return pts;
 }
-async function renderOverallLeaderboard(){
-  const overallLbList = document.getElementById('overallLbList');
-  overallLbList.innerHTML = '<div class="lbEmpty">Loading overall standings…</div>';
+// Shared by both the Overall leaderboard tab and My Stats, so the two
+// never disagree about what someone's overall rank/points actually are.
+async function computeOverallStandings(){
   const [timedData, pcqData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData()]);
   const timedPts = pointsForRank(timedData.list);
   const pcqPts = pointsForRank(pcqData.list);
@@ -662,11 +662,55 @@ async function renderOverallLeaderboard(){
       combined[key].points += ptsMap[key].points;
     });
   });
-  const ranked = Object.values(combined).sort((a,b)=> b.points - a.points);
+  return Object.values(combined).sort((a,b)=> b.points - a.points);
+}
+async function renderOverallLeaderboard(){
+  const overallLbList = document.getElementById('overallLbList');
+  overallLbList.innerHTML = '<div class="lbEmpty">Loading overall standings…</div>';
+  const ranked = await computeOverallStandings();
   overallLbList.innerHTML = ranked.length
     ? ranked.map((e,i)=> lbRowHtml(e, i, null, `${e.points} pt${e.points===1?'':'s'}`)).join('')
     : '<div class="lbEmpty">No points yet — finish a Timed Quiz or Play Calls Quiz to get on the board!</div>';
 }
+
+// ---- My Stats: a signed-in player's own bests + ranks. Deliberately
+// summary-only (best score/time + rank per board) -- no round-by-round or
+// session-by-session history here. Recent quiz history stays admin-only,
+// in Coach Stats -- per Nathan's instruction, players (other than the
+// admin account) shouldn't be able to see anyone's detailed history,
+// including their own, only the headline numbers.
+function findEntryAndRank(list, name){
+  const idx = list.findIndex(e => normName(e.name) === normName(name));
+  return idx === -1 ? { entry: null, rank: null } : { entry: list[idx], rank: idx + 1 };
+}
+function myStatRowHtml(icon, label, valueText, rank){
+  const rankHtml = rank ? ` <span style="opacity:.6;font-weight:600;">#${rank}</span>` : '';
+  return `<div class="lbRow"><div class="lbRank">${icon}</div>
+    <div class="lbName">${label}</div>
+    <div class="lbScore">${valueText}${rankHtml}</div></div>`;
+}
+window.showMyStats = async function showMyStats(){
+  const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
+  const overlay = document.getElementById('myStatsOverlay');
+  const body = document.getElementById('myStatsBody');
+  if(!overlay || !body || !session) return;
+  overlay.classList.add('show');
+  body.innerHTML = '<div class="lbEmpty">Loading your stats…</div>';
+  const [timedData, pcqData, overallList] = await Promise.all([
+    fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), computeOverallStandings(),
+  ]);
+  const pcq = findEntryAndRank(pcqData.list, session.name);
+  const timed = findEntryAndRank(timedData.list, session.name);
+  const overall = findEntryAndRank(overallList, session.name);
+  body.innerHTML = [
+    myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank),
+    myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank),
+    myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank),
+  ].join('') + '<div class="lbSub" style="margin-top:10px;">Ranks are out of the top 20 on each board. Timed Quiz needs a saved name matching yours to show up here.</div>';
+};
+document.getElementById('myStatsCloseBtn').addEventListener('click', () => {
+  document.getElementById('myStatsOverlay').classList.remove('show');
+});
 
 const LB_TAB_LIST_IDS = { overall: 'overallLbList', timed: 'timedLbList', quiz: 'lbList', pcq: 'pcqLbList' };
 function showLbTab(tabKey){

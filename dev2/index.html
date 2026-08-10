@@ -16,10 +16,40 @@
     }
   } catch(e) {}
 </script>
-<div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
+<div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
 <!-- BUILD_VERSION: 2026-08-09c (firebase-anonymous-auth) -->
+<script>
+  // The dev2 banner above is position:fixed (so it stays put on scroll)
+  // which takes it out of normal document flow -- without this, it just
+  // overlaps whatever's underneath (the sticky header) instead of pushing
+  // it down. Measures the banner's real rendered height and pushes
+  // everything below it by exactly that much, so it stays correct no
+  // matter how the banner's text/font/wrapping changes later, instead of
+  // a hardcoded pixel guess that drifts out of sync.
+  function layoutForDev2Banner(){
+    var banner = document.getElementById('dev2Banner');
+    var header = document.querySelector('header');
+    var tabs = document.getElementById('modeTabs');
+    var toolbar = document.getElementById('topToolbar');
+    if(!banner) return;
+    var bannerH = banner.offsetHeight;
+    document.body.style.paddingTop = bannerH + 'px';
+    if(header) header.style.top = bannerH + 'px';
+    if(tabs) tabs.style.top = (bannerH + (header ? header.offsetHeight : 0)) + 'px';
+    if(toolbar) toolbar.style.top = (bannerH + 8) + 'px';
+  }
+  window.addEventListener('load', layoutForDev2Banner);
+  window.addEventListener('resize', layoutForDev2Banner);
+</script>
 
 <div class="topToolbar" id="topToolbar" style="display:none">
+  <div class="playerMenuWrap" id="playerMenuWrap">
+    <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span></button>
+    <div class="playerMenuDropdown" id="playerMenuDropdown">
+      <button id="myStatsBtn">📊 My Stats</button>
+      <button id="playerIdSwitchBtn">🚪 Sign Out</button>
+    </div>
+  </div>
   <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
   <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
   <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
@@ -60,9 +90,6 @@
       <h1>ASL Bengals</h1>
       <p>Signal Study Guide</p>
     </div>
-  </div>
-  <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:2px;">
-    Playing as <strong id="playerIdBadgeName"></strong> &middot; <button class="lbLinkBtn" id="playerIdSwitchBtn">Switch</button>
   </div>
 </header>
 
@@ -429,6 +456,15 @@
     <div class="lbList" id="lbList" style="display:none"></div>
     <div class="lbList" id="pcqLbList" style="display:none"></div>
     <button class="navBtn secondary" id="historyBtn" style="width:calc(100% - 36px);margin:0 18px 14px">📜 View History</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="myStatsOverlay">
+  <div class="lbCard">
+    <h3>📊 My Stats</h3>
+    <div class="lbSub">Just for you — not visible to teammates</div>
+    <div id="myStatsBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="myStatsCloseBtn">Close</button>
   </div>
 </div>
 
