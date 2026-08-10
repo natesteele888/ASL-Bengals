@@ -79,6 +79,25 @@
       .catch(() => {}); // best-effort; not being able to log a timestamp shouldn't block anyone
   }
 
+  // Admin-only: wipes a player's tracked Play Calls Quiz stats (best score,
+  // last score, play count) -- e.g. clearing out a coach's own test runs so
+  // they don't show up as a real score on the leaderboard/admin view.
+  // Doesn't touch the player's identity itself (name/pin/createdAt), just
+  // the quiz-result fields, so they don't have to sign up again.
+  async function resetQuizStats(playerId){
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`);
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        pcqBestScore: null, pcqBestMaxScore: null,
+        pcqLastScore: null, pcqLastMaxScore: null,
+        pcqPlaysCount: null, pcqLastPlayedAt: null,
+      }),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+  }
+
   // Fetches the signed-in player's own record (name, best score so far,
   // etc.) -- used so a quiz can show "your best: X" before/after a run.
   async function getPlayerRecord(playerId){
@@ -214,5 +233,5 @@
     showOverlay();
   }
 
-  window.PlayerIdentity = { getSession, setSession, clearSession, fetchAllPlayers, gate, getPlayerRecord, recordQuizResult };
+  window.PlayerIdentity = { getSession, setSession, clearSession, fetchAllPlayers, gate, getPlayerRecord, recordQuizResult, resetQuizStats };
 })();

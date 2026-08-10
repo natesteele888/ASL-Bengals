@@ -338,9 +338,15 @@ async function openAdminStats(){
   function playerRowHtml(p){
     const tag = p.isCoach ? ' <span style="opacity:.6">(coach)</span>' : '';
     const best = p.pcqBestScore ? `🧠 ${p.pcqBestScore}/${p.pcqBestMaxScore}` : '—';
+    // Reset button only shows once there's actually a score to clear --
+    // e.g. wiping out a coach's own test run so it doesn't linger as a
+    // real entry on the leaderboard/admin view.
+    const resetBtn = p.pcqBestScore
+      ? `<button class="lbLinkBtn pcqResetBtn" data-player-id="${p.id}" data-player-name="${p.name}" style="display:block;margin-left:auto;font-size:9.5px;margin-top:1px;">Reset</button>`
+      : '';
     return `<div class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(p.lastSeen)}</div>
       <div class="lbName">${p.name}${tag}</div>
-      <div class="lbScore" style="font-size:10px;">${best}</div></div>`;
+      <div class="lbScore" style="font-size:10px;text-align:right;">${best}${resetBtn}</div></div>`;
   }
   const playersHtml = playerRows.length
     ? playerRows.map(playerRowHtml).join('')
@@ -485,6 +491,25 @@ async function openAdminStats(){
       homeEl.style.display = 'none';
       backBtn.style.display = '';
       panels.forEach(p => { p.style.display = (p.dataset.panel === btn.dataset.panel) ? '' : 'none'; });
+    });
+  });
+  body.querySelectorAll('.pcqResetBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.playerId;
+      const name = btn.dataset.playerName;
+      if(!confirm(`Clear ${name}'s Play Calls Quiz score? This can't be undone.`)) return;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await window.PlayerIdentity.resetQuizStats(id);
+        await openAdminStats(); // re-fetch + rerender with the cleared score
+        const playersBtnAgain = body.querySelector('.adminDashBtn[data-panel="players"]');
+        if(playersBtnAgain) playersBtnAgain.dispatchEvent(new Event('click')); // stay on the Players panel
+      } catch(e){
+        btn.disabled = false;
+        btn.textContent = 'Reset';
+        alert('Could not reach the team server -- try again.');
+      }
     });
   });
   backBtn.addEventListener('click', () => {
