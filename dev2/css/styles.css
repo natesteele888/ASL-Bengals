@@ -1,6 +1,11 @@
 :root{
   --bengal-orange:#ff6a13; --bengal-orange-dark:#e0570a; --bengal-black:#111111;
   --ink:#1b1b1b; --paper:#f4f2ee; --card:#ffffff; --line:#e6e2da; --muted:#8a8a8a;
+  /* Selected/active-state accent -- distinct from --bengal-orange, which
+     stays reserved for brand/CTA spots (logo, login screen, primary
+     buttons). Softer amber in dark mode so "active" reads as a refined
+     highlight instead of one flat brand-orange used for everything. */
+  --accent: var(--bengal-orange-dark);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink)}
@@ -38,7 +43,7 @@ body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFo
   40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .loginContent.shake{animation:loginShake .4s}
 
-header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--bengal-orange)}
+header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
 .topToolbar{position:fixed;top:8px;right:8px;z-index:1100;display:flex;gap:6px}
 .toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
@@ -64,11 +69,12 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 
 .modeTabs{position:sticky;top:57px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;background:none;cursor:pointer}
+  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
+  background:none;cursor:pointer}
 .modeBtn .modeIcon{font-size:20px;line-height:1}
 .modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.modeBtn.active{background:var(--bengal-black);color:#fff}
+.modeBtn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .modePanel{display:none;padding:8px 10px 14px}
 .modePanel.show{display:block}
 
@@ -217,7 +223,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .practiceTag{display:inline-block;background:var(--bengal-orange);color:#fff;font-size:10.5px;font-weight:800;
   border-radius:20px;padding:3px 10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
 
-/* ===== Dark mode =====
+/* ===== Dark mode ("Stadium lights") =====
+   This is now the default look for the whole app (see the pre-paint
+   script in index.html), not just an opt-in toggle.
    Scope note: this covers the general app chrome -- header/tabs, overlays,
    leaderboard, quiz screens, forms. It deliberately does NOT touch the
    Play Calls / Edit Plays diagram rendering below (accordion cards, SVG
@@ -229,6 +237,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
    explicit overrides for spots that had a literal #fff instead. */
 [data-theme="dark"]{
   --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
+  --accent:#EF9F27;
 }
 [data-theme="dark"] body{background:var(--paper);color:var(--ink)}
 [data-theme="dark"] .modeTabs{background:#1c1c1c}

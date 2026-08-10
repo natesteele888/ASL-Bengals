@@ -8,13 +8,19 @@
 </head>
 <body>
 <script>
-  // Applied synchronously, before first paint, so a returning dark-mode
-  // user never sees a flash of the light theme.
+  // "Stadium lights" (dark) is now the default look for the whole app, not
+  // just an opt-in toggle -- applied synchronously, before first paint, so
+  // there's never a flash of the light theme. Only an explicit past choice
+  // of light mode (stored as 'light' by the toggle in auth.js) opts back
+  // out; anything else -- no preference yet, or localStorage unavailable
+  // -- defaults to dark.
   try {
-    if (localStorage.getItem('bengalsTheme') === 'dark') {
+    if (localStorage.getItem('bengalsTheme') !== 'light') {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
-  } catch(e) {}
+  } catch(e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
 </script>
 <div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
 <!-- BUILD_VERSION: 2026-08-09c (firebase-anonymous-auth) -->
