@@ -1,10 +1,11 @@
 :root{
   --bengal-orange:#ff6a13; --bengal-orange-dark:#e0570a; --bengal-black:#111111;
   --ink:#1b1b1b; --paper:#f4f2ee; --card:#ffffff; --line:#e6e2da; --muted:#8a8a8a;
-  /* Selected/active-state accent -- distinct from --bengal-orange, which
-     stays reserved for brand/CTA spots (logo, login screen, primary
-     buttons). Softer amber in dark mode so "active" reads as a refined
-     highlight instead of one flat brand-orange used for everything. */
+  /* Selected/active-state accent. In light mode this stays a step darker
+     than --bengal-orange (which is reserved for brand/CTA spots -- logo,
+     login screen, primary buttons) so it doesn't compete with them; in
+     dark mode it's redefined below to the actual bright brand orange,
+     since that's the color that pops against near-black surfaces. */
   --accent: var(--bengal-orange-dark);
 }
 *{box-sizing:border-box}
@@ -254,7 +255,10 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
    had a literal #fff/#111 instead. */
 [data-theme="dark"]{
   --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
-  --accent:#EF9F27;
+  /* Per Nathan: dark-mode callouts (active tab, header border, streak,
+     progress dots) should be the actual bright Bengals brand orange, not
+     a softer amber -- pops more against the near-black surfaces. */
+  --accent:var(--bengal-orange);
 }
 [data-theme="dark"] body{background:var(--paper);color:var(--ink)}
 [data-theme="dark"] .modeTabs{background:#1c1c1c}
