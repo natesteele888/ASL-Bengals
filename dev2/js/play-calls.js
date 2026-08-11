@@ -779,39 +779,27 @@ function getSplitRoutePaths(splitSide, leftCall, rightCall) {
   return out;
 }
 
-// Split's defensive look. Split's blocking is already reused generically
-// across every play (see getSplitBlockingPaths above) rather than authored
-// per play, so the defense mirrors that same approach: one base front/
-// linebacker level lined up on the O-line (identical real coordinates to
-// Shotgun's, so these numbers are shared), plus perimeter defenders (CB/
-// nickel/CB) shaded toward whichever receivers are actually split out for
-// this side -- Split's wide/flex spots sit at different real coordinates
-// than Shotgun's tight/wing spots, so the perimeter can't just be copied
-// from a Shotgun variant's defense list.
-function getSplitDefense(splitSide) {
-  const pos = DATA.split[splitSide];
-  if (!pos) return [];
-  const wideNum = splitSide === 'Right' ? 6 : 5;
-  const flexNum = splitSide === 'Right' ? 2 : 3;
-  const wide = pos[wideNum], flex = pos[flexNum], lone = pos['4'];
-  // Sign that nudges a defender's x inward, toward the ball, from wherever
-  // his receiver is standing -- the split side's receivers sit further
-  // right the more they're split out, so "toward center" is negative x
-  // there and positive x on the lone side (which sits left of center).
-  const in_ = splitSide === 'Right' ? -1 : 1;
+// Split's defensive look. Nathan: "The defense should always remain in the
+// 4x4 defense with no change." So this is the exact same static 4x4 front
+// used everywhere else in the app (every playType's defense4x4 field is
+// this identical array -- see DEFENDER_IDS_4x4 above) -- 4 down linemen, 4
+// linebackers, 2 corners, 1 free safety, always at these same fixed spots,
+// never shifted based on splitSide or where the receivers are standing. No
+// nickel, no second safety, no per-side tracking -- those were a previous,
+// over-designed attempt at "smart" coverage that Nathan asked to remove.
+function getSplitDefense() {
   return [
     { id: 'DE_L', label: 'DE', pos: [436, 110] },
     { id: 'DT_L', label: 'DT', pos: [662, 110] },
     { id: 'DT_R', label: 'DT', pos: [949, 110] },
     { id: 'DE_R', label: 'DE', pos: [1183, 110] },
-    { id: 'OLB_L', label: 'LB', pos: [600, -20] },
-    { id: 'MLB', label: 'LB', pos: [805, -20] },
-    { id: 'OLB_R', label: 'LB', pos: [1010, -20] },
-    { id: 'CB_WIDE', label: 'CB', pos: [wide[0] + in_ * 25, wide[1] - 110] },
-    { id: 'NB_FLEX', label: 'NB', pos: [flex[0] + in_ * 15, flex[1] - 90] },
-    { id: 'CB_LONE', label: 'CB', pos: [lone[0] - in_ * 25, lone[1] - 110] },
-    { id: 'FS', label: 'S', pos: [650, -190] },
-    { id: 'SS', label: 'S', pos: [960, -190] },
+    { id: 'LB1', label: 'LB', pos: [500, -20] },
+    { id: 'LB2', label: 'LB', pos: [700, -20] },
+    { id: 'LB3', label: 'LB', pos: [900, -20] },
+    { id: 'LB4', label: 'LB', pos: [1100, -20] },
+    { id: 'CB_L', label: 'CB', pos: [150, 90] },
+    { id: 'CB_R', label: 'CB', pos: [1460, 90] },
+    { id: 'FS', label: 'S', pos: [805, -190] },
   ];
 }
 
@@ -835,7 +823,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     return wrap;
   }
 
-  getSplitDefense(splitSide).forEach(d => {
+  getSplitDefense().forEach(d => {
     circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR));
   });
 
