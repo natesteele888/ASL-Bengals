@@ -669,6 +669,43 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
   });
 }
 
+// When Pass is on, the play isn't a run anymore -- Nathan: "the lineman
+// need to pass block not run block, they wouldn't go up field." Unlike
+// getSplitBlockingPaths above (which reuses whichever play's run-blocking
+// angles, aimed several yards upfield at a specific defender),
+// pass-protection is the same short, generic kick-slide set regardless of
+// which of the 6 plays is on the card -- so this doesn't touch playType/
+// variant data at all. The O-line, the tight one of 5/6 (not split out),
+// and the backfield companion (whichever of 2/3 isn't flexed out) all stay
+// in and take a short step back to protect instead of releasing downfield;
+// the QB drops back with the ball instead of handing it off, since on a
+// pass there's no run to hand off to. The three route-runners (wide, flex,
+// player 4) are unaffected -- getSplitRoutePaths already draws their routes
+// regardless of run/pass, per "even if the team runs the receivers still
+// run their assigned routes."
+function getSplitPassProtectionPaths(splitSide) {
+  const pos = DATA.split[splitSide];
+  const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
+  const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
+  const paths = [];
+
+  ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
+    const [x, y] = DATA.formation[k];
+    paths.push({ id: k, isBlocking: true, endType: 'block', width: 7, points: [[x, y], [x, y + 22]] });
+  });
+
+  const [tx, ty] = pos[tightNum];
+  paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
+
+  const [cx, cy] = pos[companionNum];
+  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [[cx, cy], [cx, cy + 15]] });
+
+  const [qx, qy] = pos['1'];
+  paths.push({ player: 1, ball: true, endType: 'run', width: 9, points: [[qx, qy], [qx, qy + 90]] });
+
+  return paths;
+}
+
 // Slides a route's whole points array so its first point (the player's
 // real starting spot) lands exactly on newAnchor, preserving every other
 // point's offset from that start -- used to reuse a route's SHAPE at a
@@ -764,7 +801,7 @@ function getSplitDefense(splitSide) {
   ];
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall) {
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -823,9 +860,13 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     });
   }
 
-  const playType = DATA.playTypes.find(p => p.key === playKey);
-  if (playType) {
-    getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+  if (passOn) {
+    getSplitPassProtectionPaths(splitSide).forEach(drawPath);
+  } else {
+    const playType = DATA.playTypes.find(p => p.key === playKey);
+    if (playType) {
+      getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+    }
   }
   getSplitRoutePaths(splitSide, leftCall, rightCall).forEach(drawPath);
 
@@ -1231,7 +1272,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   }
 
@@ -1250,9 +1291,10 @@ function buildCard(combo) {
   playBtn.innerHTML = '&#9654;';
   playBtn.addEventListener('click', () => {
     if (formation === 'split') {
-      // Pass negates the run and isn't wired yet (routes aren't authored) --
-      // only animate the run case for now, see getSplitBlockingPaths above.
-      if (passOn) return;
+      // Whatever's currently staged in stage._lastRenderedPaths plays --
+      // rerenderDiagram() already picked pass-protection vs run-blocking
+      // paths based on passOn, so playSplitAnimation doesn't need to know
+      // which one it's animating.
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
