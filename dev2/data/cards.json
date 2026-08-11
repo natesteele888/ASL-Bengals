@@ -208,5 +208,12 @@
     "cat": "",
     "meaning": "PASS 3",
     "img": "assets/cards/30.png"
+  },
+  {
+    "id": 31,
+    "group": "Formation",
+    "cat": "Formation",
+    "meaning": "SPLIT FORMATION",
+    "img": "assets/cards/31.png"
   }
 ]

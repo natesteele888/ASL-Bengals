@@ -341,13 +341,62 @@ const PLAY_TYPE_SIGNAL_LABEL = {
 const MOTION_SIGNAL_IDS = [11, 12];
 const BOOT_SIGNAL_ID = 26;
 
+// ---- Split formation (added alongside Wing, doesn't touch anything above) ----
+// Split's own touch/identity card, parallel to WING_TOUCH_ID. Real photo is
+// still TBD from Nathan -- card 31 currently points at a plain placeholder
+// image so nothing looks broken in the meantime; swap the image file in
+// once the real signal photo exists, no code change needed.
+const SPLIT_TOUCH_ID = 31;
+const PASS_SIGNAL_IDS = { pass1: 28, pass2: 29, pass3: 30 };
+const PASS_SIGNAL_LABELS = { pass1: 'Pass 1', pass2: 'Pass 2', pass3: 'Pass 3' };
+
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
   const options = exclude !== undefined ? pool.filter(id => id !== exclude) : pool;
   return options[Math.floor(Math.random() * options.length)];
 }
 
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn) {
+// Split's signal order, per Nathan: Split -> Direction(the split side) ->
+// Play call -> Direction (ALWAYS the side opposite the split -- not an
+// independent choice the way Wing's Direction toggle is) -> optional
+// Pass 1/2/3, which negates the run call (receivers run their routes
+// either way; Pass just changes who else on the line/backfield blocks vs.
+// releases -- that part isn't drawn yet, see task board for the diagram
+// work still to come).
+function buildSplitSignalSequence(playKey, splitSide, insideOutside, passCall) {
+  const oppositeOfSplit = splitSide === 'Left' ? 'Right' : 'Left';
+  const splitFingerId = randomFingerId(splitSide);
+  const oppFingerId = randomFingerId(oppositeOfSplit);
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
+  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
+  const signals = [
+    { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
+    { src: SIGNAL_CARDS[splitFingerId], label: `Split: ${splitSide}` },
+  ];
+  if (playKey === 'blast' || playKey === 'double_blast') {
+    if (insideOutside === 'Outside') {
+      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
+    }
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
+  } else {
+    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
+  }
+  signals.push({ src: SIGNAL_CARDS[oppFingerId], label: `Direction: ${oppositeOfSplit}` });
+  if (passCall) {
+    signals.push({ src: SIGNAL_CARDS[PASS_SIGNAL_IDS[passCall]], label: PASS_SIGNAL_LABELS[passCall] });
+  }
+  return signals;
+}
+
+// formation/splitSide/passCall are new, optional, and appended at the end
+// specifically so every existing caller (play-calls-quiz.js included) that
+// only ever passes the first 6 args keeps working completely unchanged --
+// formation defaults to Wing behavior whenever it's left undefined.
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passCall) {
+  if (formation === 'split') {
+    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passCall);
+  }
   const wingFingerId = randomFingerId(wingSide);
   const dirFingerId = direction === wingSide
     ? randomFingerId(direction, wingFingerId)
@@ -666,6 +715,17 @@ function buildCard(combo) {
 
   let wingSide = 'Left';
   let direction = 'Left';
+  // Split formation -- a second, independent formation alongside Wing (see
+  // the formationToggle below). 'wing' keeps every bit of existing
+  // behavior; 'split' uses its own signal order (buildSplitSignalSequence)
+  // and its own single Split Side toggle instead of Wing/Direction. The
+  // field diagram for Split is still coming (tracked separately) -- for
+  // now the front of the card shows a placeholder instead of a wrong or
+  // misleading Wing-formation diagram, while the back (the actual signal
+  // walkthrough) is fully real.
+  let formation = 'wing';
+  let splitSide = 'Left';
+  let passCall = ''; // '' = run, else 'pass1' | 'pass2' | 'pass3'
   // 4x3 removed as an option -- everything is 4x4 now.
   const defenseMode = '4x4';
   let insideOutside = 'Outside';
@@ -699,6 +759,18 @@ function buildCard(combo) {
   const toggleRow = document.createElement('div');
   toggleRow.className = 'card-toggle-row';
 
+  // Formation -- Wing (existing, default) vs Split (new). Its own row, above
+  // Wing/Dir, so switching it is always in the same spot regardless of
+  // which formation-specific row is showing underneath.
+  const formationRow = document.createElement('div');
+  formationRow.className = 'toggle-row-basics';
+  const formationToggle = buildToggleGroup('green', [
+    { value: 'wing', label: 'Wing' },
+    { value: 'split', label: 'Split' },
+  ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
+  formationRow.appendChild(formationToggle);
+  toggleRow.appendChild(formationRow);
+
   const basicsRow = document.createElement('div');
   basicsRow.className = 'toggle-row-basics';
 
@@ -715,6 +787,36 @@ function buildCard(combo) {
   basicsRow.appendChild(dirToggle);
 
   toggleRow.appendChild(basicsRow);
+
+  // Split's own row -- one Split Side toggle (the signal sequence always
+  // calls the second direction as whichever side is opposite this, so
+  // there's no separate Direction toggle to show here) plus the optional
+  // Pass 1/2/3 call, which negates the run without changing anything else
+  // about who's eligible -- receivers run their routes either way.
+  const splitRow = document.createElement('div');
+  splitRow.className = 'toggle-row-basics';
+  const splitSideToggle = buildToggleGroup('orange', [
+    { value: 'Left', label: 'Split L' },
+    { value: 'Right', label: 'Split R' },
+  ], splitSide, (v) => { if (isPlayingRef.value) return; splitSide = v; onComboChanged(); });
+  splitRow.appendChild(splitSideToggle);
+  const passToggle = buildToggleGroup('red', [
+    { value: '', label: 'Run' },
+    { value: 'pass1', label: 'Pass 1' },
+    { value: 'pass2', label: 'Pass 2' },
+    { value: 'pass3', label: 'Pass 3' },
+  ], passCall, (v) => { if (isPlayingRef.value) return; passCall = v; onComboChanged(); });
+  splitRow.appendChild(passToggle);
+  toggleRow.appendChild(splitRow);
+
+  function updateFormationRows() {
+    basicsRow.style.display = formation === 'wing' ? '' : 'none';
+    splitRow.style.display = formation === 'split' ? '' : 'none';
+    requestAnimationFrame(() => {
+      [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
+    });
+  }
+  updateFormationRows();
 
   const extrasRow = document.createElement('div');
   extrasRow.className = 'toggle-row-extras';
@@ -780,7 +882,23 @@ function buildCard(combo) {
   const stage = svgEl('svg', {});
   stageWrap.appendChild(stage);
 
-  function rerenderDiagram() { renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition); }
+  // Split's field diagram (player positions + routes) is still being built
+  // -- rendering the Wing diagram here would be actively wrong/misleading
+  // labeled as a Split call, so this shows an honest placeholder instead
+  // until that work lands.
+  function renderSplitPlaceholder() {
+    while (stage.firstChild) stage.removeChild(stage.firstChild);
+    const text = svgEl('text', {
+      x: '50%', y: '50%', 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-size': 14, 'font-weight': 800, fill: '#888',
+    });
+    text.textContent = 'Split diagram coming soon';
+    stage.appendChild(text);
+  }
+  function rerenderDiagram() {
+    if (formation === 'split') { renderSplitPlaceholder(); return; }
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
+  }
 
   stage.addEventListener('playerclick', (ev) => {
     if (isPlayingRef.value) return;
@@ -796,6 +914,7 @@ function buildCard(combo) {
   playBtn.className = 'card-btn play-btn';
   playBtn.innerHTML = '&#9654;';
   playBtn.addEventListener('click', () => {
+    if (formation === 'split') return; // nothing to animate yet -- see renderSplitPlaceholder
     playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   });
 
@@ -852,7 +971,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passCall);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -884,15 +1003,27 @@ function buildCard(combo) {
   function onComboChanged() {
     selectedPlayer = null;
     rerenderDiagram();
-    // Same order as the actual signal call: Wing side, then Motion (right
-    // after the wing spot is set), then In/Out if this play has it, then
-    // the play itself, then Direction, then Boot tacked on at the very end.
-    const parts = [`Wing ${wingSide}`];
-    if (motionOn) parts.push('Motion');
-    if (combo.hasInsideOutside) parts.push(insideOutside);
-    parts.push(combo.label);
-    parts.push(direction);
-    if (bootOn) parts.push('Boot');
+    let parts;
+    if (formation === 'split') {
+      // Same order as buildSplitSignalSequence: Split side, then the play,
+      // then the (always-opposite) direction, then Pass if it's on.
+      const oppositeOfSplit = splitSide === 'Left' ? 'Right' : 'Left';
+      parts = [`Split ${splitSide}`];
+      if (combo.hasInsideOutside) parts.push(insideOutside);
+      parts.push(combo.label);
+      parts.push(oppositeOfSplit);
+      if (passCall) parts.push(PASS_SIGNAL_LABELS[passCall]);
+    } else {
+      // Same order as the actual signal call: Wing side, then Motion (right
+      // after the wing spot is set), then In/Out if this play has it, then
+      // the play itself, then Direction, then Boot tacked on at the very end.
+      parts = [`Wing ${wingSide}`];
+      if (motionOn) parts.push('Motion');
+      if (combo.hasInsideOutside) parts.push(insideOutside);
+      parts.push(combo.label);
+      parts.push(direction);
+      if (bootOn) parts.push('Boot');
+    }
     titleBar.textContent = parts.join(' ');
     if (outer.classList.contains('flipped')) startSignalSequence();
   }
