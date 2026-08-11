@@ -669,25 +669,66 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
   });
 }
 
+// Slides a route's whole points array so its first point (the player's
+// real starting spot) lands exactly on newAnchor, preserving every other
+// point's offset from that start -- used to reuse a route's SHAPE at a
+// different player's real position (see player-4 handling below).
+function reanchorRoute(points, newAnchor) {
+  const [ax, ay] = points[0];
+  const vw = (DATA.viewBox && DATA.viewBox[0]) || 1600;
+  // Player 4's real spot differs from the route's original owner (2/3), so
+  // sliding the whole shape over can push the far end past the canvas edge
+  // (e.g. an already-wide route shifted further right) -- clamp to a safe
+  // margin the same way the route data itself was clamped when authored.
+  return points.map(([x, y]) => [
+    Math.max(20, Math.min(vw - 20, x - ax + newAnchor[0])),
+    Math.max(-390, Math.min(600, y - ay + newAnchor[1])),
+  ]);
+}
+
 // The two route calls always run, independent of run/pass ("even if the
-// team runs the receivers still run their assigned routes") -- one path
-// for the wide receiver, one for the flexed-out inside receiver, each
-// looked up by whichever of Seattle/Houston/Florida is currently picked
-// for that role.
-function getSplitRoutePaths(splitSide, wideCall, flexCall) {
-  const routes = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+// team runs the receivers still run their assigned routes") -- but per
+// Nathan's correction, they're not a "wide receiver call" / "inside
+// receiver call" pair. They're a LEFT-side call and a RIGHT-side call: "the
+// group of receivers on the left side of the play (split L would be 5 and
+// 3 on left, and only the 4 on the right)." Whichever side the split is on
+// has TWO receivers (the wide one + the flexed one, e.g. 5 and 3 for Split
+// Left) and both run that side's call from DATA.splitRoutes -- the wide
+// route and the flex/inside route are two different paths in the same
+// diagram, not two coaches picking independently. The side OPPOSITE the
+// split has just the one receiver, player 4, who always runs the inside
+// route for whatever's called to his side: "if they called the houston on
+// the right too, the 4 would run the inside positions route for Houston."
+// There's no separate reference image for 4 specifically -- he's re-using
+// the flex-route SHAPE from whichever split direction naturally puts a
+// flex player on that same physical side (Split Left's flex is player 3 on
+// the left; Split Right's flex is player 2 on the right), re-anchored to
+// 4's own real position via reanchorRoute().
+function getSplitRoutePaths(splitSide, leftCall, rightCall) {
+  const routes = DATA.splitRoutes;
   if (!routes) return [];
   const out = [];
-  if (routes.wide && routes.wide[wideCall]) {
-    out.push({ points: routes.wide[wideCall], player: routes.wide.player, width: 7 });
+  const splitSideData = routes[splitSide];
+  const splitSideCall = splitSide === 'Right' ? rightCall : leftCall;
+  if (splitSideData) {
+    if (splitSideData.wide && splitSideData.wide[splitSideCall]) {
+      out.push({ points: splitSideData.wide[splitSideCall], player: splitSideData.wide.player, width: 7 });
+    }
+    if (splitSideData.flex && splitSideData.flex[splitSideCall]) {
+      out.push({ points: splitSideData.flex[splitSideCall], player: splitSideData.flex.player, width: 7 });
+    }
   }
-  if (routes.flex && routes.flex[flexCall]) {
-    out.push({ points: routes.flex[flexCall], player: routes.flex.player, width: 7 });
+  const oppositeSide = splitSide === 'Right' ? 'Left' : 'Right';
+  const oppositeCall = splitSide === 'Right' ? leftCall : rightCall;
+  const oppositeFlexSource = routes[oppositeSide] && routes[oppositeSide].flex;
+  const fourPos = DATA.split[splitSide] && DATA.split[splitSide]['4'];
+  if (oppositeFlexSource && oppositeFlexSource[oppositeCall] && fourPos) {
+    out.push({ points: reanchorRoute(oppositeFlexSource[oppositeCall], fourPos), player: 4, width: 7 });
   }
   return out;
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, wideCall, flexCall) {
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -745,7 +786,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   if (playType) {
     getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
   }
-  getSplitRoutePaths(splitSide, wideCall, flexCall).forEach(drawPath);
+  getSplitRoutePaths(splitSide, leftCall, rightCall).forEach(drawPath);
 
   g.appendChild(pathsLayer);
   g.appendChild(circlesLayer);
@@ -948,13 +989,15 @@ function buildCard(combo) {
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
-  // Which of Seattle/Houston/Florida the wide receiver and the flexed-out
-  // inside receiver are each running -- independent choices, per Nathan:
-  // "both the left and right receivers can get any of the 3 calls at the
-  // line." Always in effect (drawn and animated) regardless of Pass, since
+  // Which of Seattle/Houston/Florida is called to each SIDE of the play --
+  // not a wide-receiver-vs-inside-receiver choice. The split side's two
+  // receivers (wide + flex) both run whatever's called to their side;
+  // player 4, alone on the other side, runs the inside route for whatever
+  // is called to his side. See getSplitRoutePaths for the full mapping.
+  // Always in effect (drawn and animated) regardless of Pass, since
   // receivers run their routes on every play, run or pass.
-  let wideCall = 'seattle';
-  let flexCall = 'seattle';
+  let leftCall = 'seattle';
+  let rightCall = 'seattle';
   // 4x3 removed as an option -- everything is 4x4 now.
   const defenseMode = '4x4';
   let insideOutside = 'Outside';
@@ -1040,9 +1083,10 @@ function buildCard(combo) {
   splitRow.appendChild(passSwitch);
   toggleRow.appendChild(splitRow);
 
-  // Route calls -- one picker for the wide receiver, one for the flexed
-  // inside receiver, each independently choosing Seattle/Houston/Florida.
-  // Own row below splitRow so it only shows in Split mode alongside it.
+  // Route calls -- one picker for whatever's called to the LEFT side of
+  // the play, one for the RIGHT side, each independently choosing Seattle/
+  // Houston/Florida. Own row below splitRow so it only shows in Split mode
+  // alongside it.
   function labeledGroup(labelText, group) {
     const wrap = document.createElement('div');
     wrap.className = 'switch-control';
@@ -1056,10 +1100,10 @@ function buildCard(combo) {
   const splitRoutesRow = document.createElement('div');
   splitRoutesRow.className = 'toggle-row-basics';
   const routeCallOptions = SPLIT_ROUTE_CALLS.map(v => ({ value: v, label: SPLIT_ROUTE_LABELS[v] }));
-  const wideCallToggle = buildToggleGroup('green', routeCallOptions, wideCall, (v) => { if (isPlayingRef.value) return; wideCall = v; onComboChanged(); }, 'toggle-tiny');
-  const flexCallToggle = buildToggleGroup('brown', routeCallOptions, flexCall, (v) => { if (isPlayingRef.value) return; flexCall = v; onComboChanged(); }, 'toggle-tiny');
-  splitRoutesRow.appendChild(labeledGroup('Wide', wideCallToggle));
-  splitRoutesRow.appendChild(labeledGroup('In', flexCallToggle));
+  const leftCallToggle = buildToggleGroup('green', routeCallOptions, leftCall, (v) => { if (isPlayingRef.value) return; leftCall = v; onComboChanged(); }, 'toggle-tiny');
+  const rightCallToggle = buildToggleGroup('brown', routeCallOptions, rightCall, (v) => { if (isPlayingRef.value) return; rightCall = v; onComboChanged(); }, 'toggle-tiny');
+  splitRoutesRow.appendChild(labeledGroup('Left', leftCallToggle));
+  splitRoutesRow.appendChild(labeledGroup('Right', rightCallToggle));
   toggleRow.appendChild(splitRoutesRow);
 
   function updateFormationRows() {
@@ -1137,7 +1181,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, wideCall, flexCall); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   }
 
