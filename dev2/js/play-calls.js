@@ -375,19 +375,31 @@ function randomFingerId(side, exclude) {
   return options[Math.floor(Math.random() * options.length)];
 }
 
-// Split's signal order, per Nathan: Split -> Direction(the split side) ->
-// Play call -> Direction (ALWAYS the side opposite the split -- not an
-// independent choice the way Wing's Direction toggle is) -> optional Pass,
-// which negates the run call (receivers run their routes either way; Pass
-// just changes who else on the line/backfield blocks vs. releases -- that
-// part isn't drawn yet, see task board for the diagram work still to come).
+// Split's signal order, per Nathan: Split -> Direction (the split side) ->
+// Play call -> Direction (the split side AGAIN, as its own explicit card) ->
+// optional Pass, which negates the run call (receivers run their routes
+// either way; Pass just changes who else on the line/backfield blocks vs.
+// releases -- that part isn't drawn yet, see task board for the diagram
+// work still to come). An earlier version of this had that final Direction
+// card always call the side OPPOSITE the split -- Nathan corrected that:
+// "Ensure the run is always going to the split side. So Split right inside
+// blast would have to be inside blast Right." The run itself was already
+// always to the split side (getSplitBlockingPaths/getVariant always pass
+// splitSide as the direction); this was purely the verbal call disagreeing
+// with what the diagram actually shows, same category of bug as the title
+// bar fix below in onComboChanged. Both direction cards -- the early
+// "Split: X" one and this later "Direction: X" one -- now say the same
+// side, matching the actual run direction and the naming convention coaches
+// use for the play itself ("Inside Blast Right").
 // passOn is a plain boolean now -- Nathan: "it's just any of those signals
 // means it is pass", so which of Pass 1/2/3 actually shows is randomized,
 // same idea as MOTION_SIGNAL_IDS below, not a coach-facing choice.
 function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
-  const oppositeOfSplit = splitSide === 'Left' ? 'Right' : 'Left';
   const splitFingerId = randomFingerId(splitSide);
-  const oppFingerId = randomFingerId(oppositeOfSplit);
+  // Avoid showing the literal same card image twice in a row for the two
+  // direction cards (both now the same side) -- same dedup approach Wing's
+  // Direction card already uses when direction === wingSide.
+  const dirFingerId = randomFingerId(splitSide, splitFingerId);
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
   const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
@@ -403,7 +415,7 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
   } else {
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }
-  signals.push({ src: SIGNAL_CARDS[oppFingerId], label: `Direction: ${oppositeOfSplit}` });
+  signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${splitSide}` });
   if (passOn) {
     const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
     signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
@@ -1389,17 +1401,19 @@ function buildCard(combo) {
     let parts;
     if (formation === 'split') {
       // Split Side IS the run direction -- "Split Right, the ball is always
-      // run to the right" (Nathan). Unlike buildSplitSignalSequence's card
-      // sequence below (which intentionally calls out a second, ALWAYS-
-      // opposite "Direction" as part of the verbal signal convention he set
-      // up), the title bar describes what the diagram actually shows, so it
-      // must not echo that opposite side here -- doing so previously made a
-      // Split Right card's title read "...Left" while the ball ran right,
-      // which looked like a direction bug even though the run itself was
-      // already correct.
+      // run to the right" (Nathan). The title bar names the play the same
+      // way a coach would say it -- e.g. "Split Right Inside Blast Right"
+      // -- so the final direction word is always appended too, and it
+      // always matches splitSide (never the old, now-removed "opposite"
+      // convention -- see buildSplitSignalSequence for that same fix on the
+      // back-of-card verbal call). Nathan: "it isn't saying the direction.
+      // needs to include the final direction... Ensure the run is always
+      // going to the split side. So Split right inside blast would have to
+      // be inside blast Right."
       parts = [`Split ${splitSide}`];
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
+      parts.push(splitSide);
       if (passOn) parts.push('Pass');
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
