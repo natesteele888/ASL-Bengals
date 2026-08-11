@@ -670,20 +670,26 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 }
 
 // When Pass is on, the play isn't a run anymore -- Nathan: "the lineman
-// need to pass block not run block, they wouldn't go up field." Unlike
-// getSplitBlockingPaths above (which reuses whichever play's run-blocking
-// angles, aimed several yards upfield at a specific defender),
-// pass-protection is the same short, generic kick-slide set regardless of
-// which of the 6 plays is on the card -- so this doesn't touch playType/
-// variant data at all. The O-line, the tight one of 5/6 (not split out),
-// and the backfield companion (whichever of 2/3 isn't flexed out) all stay
-// in and take a short step back to protect instead of releasing downfield;
-// the QB drops back with the ball instead of handing it off, since on a
-// pass there's no run to hand off to. The three route-runners (wide, flex,
-// player 4) are unaffected -- getSplitRoutePaths already draws their routes
+// need to pass block not run block, they wouldn't go up field." The O-line
+// and the tight one of 5/6 (not split out) stay in and take a short,
+// generic kick-slide step to protect instead of releasing downfield --
+// that part is the same regardless of which of the 6 plays is on the card.
+// The QB drops back with the ball instead of handing it off, since on a
+// pass there's no run to hand off to.
+//
+// The backfield companion (whichever of 2/3 isn't flexed out) is the one
+// exception that DOES still depend on which play is selected: Nathan --
+// "the running back in the backside still runs his fake handoff then looks
+// to pickup anyone coming in on the qb." So he runs the exact same path he
+// would have carried the ball on (reused from the play's own run data,
+// same as getSplitBlockingPaths reuses it for a real run), drawn as a fake
+// (dashed, no ball, no arrowhead -- same convention as Option's fake dive),
+// then comes back from wherever that fake ends to a spot near the QB to
+// check for a blitzer. The three route-runners (wide, flex, player 4) are
+// unaffected either way -- getSplitRoutePaths already draws their routes
 // regardless of run/pass, per "even if the team runs the receivers still
 // run their assigned routes."
-function getSplitPassProtectionPaths(splitSide) {
+function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
   const pos = DATA.split[splitSide];
   const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
   const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
@@ -698,9 +704,17 @@ function getSplitPassProtectionPaths(splitSide) {
   paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
 
   const [cx, cy] = pos[companionNum];
-  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [[cx, cy], [cx, cy + 15]] });
-
+  let fakeEnd = [cx, cy];
+  const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
+  const realBallPath = variant && (variant.paths || []).find(p => p.player === companionNum && p.ball && !p.optionLine);
+  if (realBallPath) {
+    paths.push({ player: companionNum, ball: false, fake: true, width: 9, points: realBallPath.points });
+    fakeEnd = realBallPath.points[realBallPath.points.length - 1];
+  }
   const [qx, qy] = pos['1'];
+  const pickupSpot = [(fakeEnd[0] + qx) / 2, qy + 30];
+  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [fakeEnd, pickupSpot] });
+
   paths.push({ player: 1, ball: true, endType: 'run', width: 9, points: [[qx, qy], [qx, qy + 90]] });
 
   return paths;
@@ -860,13 +874,11 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     });
   }
 
+  const playType = DATA.playTypes.find(p => p.key === playKey);
   if (passOn) {
-    getSplitPassProtectionPaths(splitSide).forEach(drawPath);
-  } else {
-    const playType = DATA.playTypes.find(p => p.key === playKey);
-    if (playType) {
-      getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
-    }
+    getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+  } else if (playType) {
+    getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
   }
   getSplitRoutePaths(splitSide, leftCall, rightCall).forEach(drawPath);
 
