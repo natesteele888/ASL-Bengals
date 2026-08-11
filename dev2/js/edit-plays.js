@@ -420,13 +420,19 @@ function loadSavedPlaysFromCloud() {
       gotAny = true;
     }
     if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-      // repairStaleSplitRoutes (play-calls.js) self-heals a pre-fix cloud
-      // snapshot of the Right-side Seattle/Florida swap. Doing this here too
-      // (not just in the read-only Play Calls view) matters: this is the
-      // editor's OWN load path, so without it, re-opening Edit Plays would
-      // keep showing -- and re-saving -- the same stale swap forever. With
-      // it, the very next "Save to Cloud" persists the corrected routes and
-      // this repair becomes a permanent no-op after that.
+      // repairStaleSplitRoutes (play-calls.js) now unconditionally forces
+      // the Right side's Seattle/Houston/Florida routes back to the shipped
+      // (correct) shapes, regardless of whatever's actually sitting in this
+      // cloud snapshot -- see the comment on that function for why. Applying
+      // it here too, not just in the read-only Play Calls view, means this
+      // editor will always show Right's routes correctly, but it ALSO means
+      // any future point-drag edit to Right's Seattle/Houston/Florida made
+      // in here and saved to cloud will look right for the rest of THIS
+      // session but get silently overwritten back to shipped on the next
+      // load -- Right's side of this editor is effectively read-only via
+      // the cloud path until this override is intentionally removed. Left's
+      // routes are unaffected and still fully editable/persistable as
+      // before.
       DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
       gotAny = true;
     }

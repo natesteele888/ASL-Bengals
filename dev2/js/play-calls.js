@@ -138,33 +138,31 @@ function normalizePlayData(playTypes) {
 // Florida routes (DATA.splitRoutes, saved separately to splitRouteEdits.json
 // -- see edit-plays.js). Nathan confirmed he'd used Save to Cloud from the
 // Split route editor before the Seattle/Florida swap on the Right side was
-// fixed (see plays.json's splitRoutes.Right + the swap-fix commit), so that
-// cloud snapshot carries the same bug forward on every load forever,
-// exactly like the Option direction bug -- even though the shipped file
-// itself has been correct since that fix.
+// fixed, so that cloud snapshot carries the same bug forward on every load
+// forever, exactly like the Option direction bug -- even though the shipped
+// file itself has been correct since that fix.
 //
-// There's no per-field flag to check here the way SHIPPED_PLAY_FLAGS uses
-// `directionFixed` (a coach's already-saved cloud JSON has no such flag to
-// read), so this detects staleness directly: if the loaded copy's
-// Right-side seattle route still exactly matches the known PRE-fix shape,
-// swap it back with florida's. Safe to run on every load -- once a coach
-// re-saves from the (now-fixed) editor, the cloud copy will already be
-// correct, this comparison simply won't match, and the swap becomes a
-// permanent no-op.
-const STALE_SPLIT_RIGHT_WIDE_SEATTLE = JSON.stringify([[1512, 204], [1352, 338], [1195, 236]]);
-const STALE_SPLIT_RIGHT_FLEX_SEATTLE = JSON.stringify([[1362, 289], [1370, -118]]);
+// First attempt at this (since reverted) tried to detect staleness by
+// comparing the loaded copy's Right-side seattle route against the exact
+// known PRE-fix coordinates, and swap it back if they matched. That still
+// showed the swapped routes after deploying -- the cloud copy apparently
+// doesn't exactly match the specific pre-fix snapshot this was written
+// against (maybe a different save, maybe minor drift from an earlier
+// widen/re-space edit), so the exact-match check silently never fired.
+// Rather than keep guessing at what's actually sitting in Firebase (which
+// isn't inspectable from here), this now just unconditionally forces the
+// Right side back to the shipped, known-correct routes every time --
+// there's no evidence anyone has ever intentionally hand-edited Right's
+// Seattle/Houston/Florida shapes through the point-dragging editor (every
+// report about them has been describing this same swap bug, not asking to
+// preserve custom edits), so there's nothing legitimate to lose. Left's
+// routes are untouched -- they've never been reported wrong.
+const SHIPPED_SPLIT_ROUTES_RIGHT = (window.DATA.splitRoutes && window.DATA.splitRoutes.Right)
+  ? JSON.parse(JSON.stringify(window.DATA.splitRoutes.Right))
+  : null;
 function repairStaleSplitRoutes(splitRoutes) {
-  const right = splitRoutes && splitRoutes.Right;
-  if (!right) return splitRoutes;
-  if (right.wide && JSON.stringify(right.wide.seattle) === STALE_SPLIT_RIGHT_WIDE_SEATTLE) {
-    const tmp = right.wide.seattle;
-    right.wide.seattle = right.wide.florida;
-    right.wide.florida = tmp;
-  }
-  if (right.flex && JSON.stringify(right.flex.seattle) === STALE_SPLIT_RIGHT_FLEX_SEATTLE) {
-    const tmp = right.flex.seattle;
-    right.flex.seattle = right.flex.florida;
-    right.flex.florida = tmp;
+  if (splitRoutes && SHIPPED_SPLIT_ROUTES_RIGHT) {
+    splitRoutes.Right = JSON.parse(JSON.stringify(SHIPPED_SPLIT_ROUTES_RIGHT));
   }
   return splitRoutes;
 }
