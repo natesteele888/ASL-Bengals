@@ -615,17 +615,52 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   stage._lastRenderedPaths = lastRenderedPaths;
 }
 
-// ---- Render the Split formation's static lineup (positions only, no
-// routes/animation yet -- that's the next increment) ----
-// DATA.split.Left/.Right hold real-coordinate positions for 5, 6, 3, 4, 1, 2
-// derived directly from Nathan's Split Right/Split Left reference diagrams
-// (same O-line row as Shotgun, reused unchanged from DATA.formation --
-// only where the backs/receivers line up differs by split side).
-function renderSplitDiagram(stage, splitSide) {
+// ---- Render the Split formation's lineup, plus whichever of the play's
+// existing Shotgun blocking assignments transfer over unchanged ----
+// DATA.split.Left/.Right hold real-coordinate positions for 5, 6, 3, 4, 1, 2,
+// derived from Nathan's Split Right/Split Left reference diagrams and
+// corrected per his follow-up (Split Right's 2/3/4 were rotated one slot in
+// the first pass). Same O-line row as Shotgun, reused unchanged from
+// DATA.formation. The pattern that held once corrected: 5 is always on the
+// left / 6 always on the right (tight-on-the-line on the non-split side,
+// split out wide on the split side); 1 is always the QB at Shotgun's exact
+// center-backfield anchor; whichever of 2 (right identity) / 3 (left
+// identity) sits on the side OPPOSITE the split is the backfield companion,
+// snapped to that exact Shotgun backfield anchor, while the other one
+// flexes out to a perimeter spot on the split side; 4 is always the flex
+// spot on the side opposite the split (matching Nathan's original "#4 is
+// always opposite the split" rule).
+//
+// Because the O-line, the QB (1), and the direction-appropriate ball
+// carrier all sit at the *exact same real coordinates* in Split as they do
+// in Shotgun, their existing blocking/ballcarrier paths for
+// direction = splitSide (Nathan: "any run calls would go to the same side
+// as the split") transfer over with zero changes. Same for whichever of
+// 5/6 stays tight on the line -- it blocks exactly like it already does in
+// Shotgun. What does NOT transfer: the flexed-out back, player 4, and the
+// wide one of 5/6 -- in Split those three run routes instead of blocking
+// (Nathan: "even if the team runs the receivers still run their assigned
+// routes"), and the actual route shapes (Houston/Seattle/Florida) aren't
+// authored yet, so those three are left out of the reused paths rather than
+// shown blocking, which would be wrong.
+function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
+  const variant = getVariant(playType, splitSide, insideOutside, readPosition);
+  const wideNum = splitSide === 'Right' ? 6 : 5;
+  const flexBackNum = splitSide === 'Right' ? 2 : 3;
+  const excluded = new Set([wideNum, flexBackNum, 4]);
+  return (variant.paths || []).filter(p => {
+    if (p.optionLine || p.dualSideBlock) return false; // Option-style relative blocking isn't wired for Split yet
+    return p.player === null || !excluded.has(p.player);
+  });
+}
+
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
+  const pathsLayer = svgEl('g', {});
+  const circlesLayer = svgEl('g', {});
   const pos = DATA.split[splitSide];
 
   function drawCircle(x, y, label, fontSize, r) {
@@ -634,17 +669,122 @@ function renderSplitDiagram(stage, splitSide) {
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: '#111' });
     t.textContent = label;
     wrap.appendChild(t);
+    wrap.circleEl = wrap.children[0]; wrap.textEl = t;
     return wrap;
   }
 
+  const playerCircles = {};
   ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
-    g.appendChild(drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22));
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22);
+    circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
-    g.appendChild(drawCircle(pos[num][0], pos[num][1], num, 34));
+    const c = drawCircle(pos[num][0], pos[num][1], num, 34);
+    circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 
+  const lastRenderedPaths = [];
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (playType) {
+    getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(p => {
+      const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+      const points = p.points;
+      const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
+      const wrap = svgEl('g', {});
+      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+      if (p.fake) attrs['stroke-dasharray'] = '10 8';
+      const pathEl = svgEl('path', attrs);
+      wrap.appendChild(pathEl);
+      let arrowEl = null;
+      if (!p.fake) {
+        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        wrap.appendChild(arrowEl);
+        placeArrowAtFraction(arrowEl, pathEl, 1);
+      }
+      pathsLayer.appendChild(wrap);
+      const ownerKey = p.player !== null ? String(p.player) : p.id;
+      const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
+      lastRenderedPaths.push({
+        el: pathEl, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+      });
+    });
+  }
+
+  g.appendChild(pathsLayer);
+  g.appendChild(circlesLayer);
   stage.appendChild(g);
+
+  stage._mainGroup = g;
+  stage._circlesLayerRef = circlesLayer;
+  stage._lastRenderedPaths = lastRenderedPaths;
+}
+
+// ---- Play the animation for a Split card's run (linemen/QB/carrier/tight
+// blocker only -- see getSplitBlockingPaths above for what's not included
+// yet). Mirrors playCardAnimation below, minus the Wing/Motion/Boot/
+// selected-player machinery that doesn't apply to Split. ----
+async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef) {
+  if (isPlayingRef.value) return;
+  isPlayingRef.value = true;
+
+  const animMs = 1400 * speedMultiplier;
+  const mainGroup = stage._mainGroup;
+  const circlesLayerRef = stage._circlesLayerRef;
+  const lastRenderedPaths = stage._lastRenderedPaths || [];
+
+  const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
+  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
+  const qbPos = { x: DATA.split[splitSide]['1'][0], y: DATA.split[splitSide]['1'][1] };
+  ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
+  mainGroup.insertBefore(ball, circlesLayerRef);
+
+  await wait(250 * speedMultiplier);
+  await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+  await wait(150 * speedMultiplier);
+
+  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl }) =>
+    animatePathDraw(el, arrowEl, animMs, (delayMs || 0) * speedMultiplier, circleEl, textEl));
+
+  const ballEntry = lastRenderedPaths.find(p => p.isBall);
+  const OFFY = 50;
+  if (ballEntry && ballEntry.circleEl) {
+    await wait((ballEntry.delayMs || 0) * speedMultiplier);
+    const carrier = ballEntry.circleEl;
+    let cx = qbPos.x, cy = qbPos.y;
+    let catchingUp = true;
+    function catchUpFrame() {
+      const targetX = Number(carrier.getAttribute('cx'));
+      const targetY = Number(carrier.getAttribute('cy')) + OFFY;
+      cx += (targetX - cx) * 0.25;
+      cy += (targetY - cy) * 0.25;
+      ball.setAttribute('cx', cx);
+      ball.setAttribute('cy', cy);
+      const dist = Math.hypot(targetX - cx, targetY - cy);
+      if (catchingUp && dist > 3) {
+        requestAnimationFrame(catchUpFrame);
+      } else {
+        catchingUp = false;
+        track();
+      }
+    }
+    catchUpFrame();
+    let tracking = true;
+    function track() {
+      if (!tracking) return;
+      ball.setAttribute('cx', carrier.getAttribute('cx'));
+      ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
+      requestAnimationFrame(track);
+    }
+    await wait(animMs);
+    tracking = false;
+  } else {
+    await wait(animMs);
+  }
+  await Promise.all(pathPromises);
+  await wait(300 * speedMultiplier);
+  ball.remove();
+  isPlayingRef.value = false;
 }
 
 // ---- Play the animation for a card ----
@@ -931,7 +1071,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, splitSide); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   }
 
@@ -949,7 +1089,13 @@ function buildCard(combo) {
   playBtn.className = 'card-btn play-btn';
   playBtn.innerHTML = '&#9654;';
   playBtn.addEventListener('click', () => {
-    if (formation === 'split') return; // lineup only for now -- routes/animation are next
+    if (formation === 'split') {
+      // Pass negates the run and isn't wired yet (routes aren't authored) --
+      // only animate the run case for now, see getSplitBlockingPaths above.
+      if (passOn) return;
+      playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
+      return;
+    }
     playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   });
 
