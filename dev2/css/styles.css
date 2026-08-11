@@ -482,6 +482,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   /* Row 1: Wing + Dir, every play has both, always in this order. */
   .toggle-row-basics {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
   }

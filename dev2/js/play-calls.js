@@ -727,7 +727,13 @@ function buildCard(combo) {
   // while the back (the actual signal walkthrough) is fully real.
   let formation = 'shotgun';
   let splitSide = 'Left';
-  let passCall = ''; // '' = run, else 'pass1' | 'pass2' | 'pass3'
+  // Pass is its own on/off switch, separate from which of the three calls
+  // (Houston/Seattle/Florida signals -- Pass 1/2/3 in the card catalog) gets
+  // used when it's on. Off always means run; the picker only matters, and
+  // only shows, while Pass is on.
+  let passOn = false;
+  let passNum = 'pass1';
+  function currentPassCall() { return passOn ? passNum : ''; }
   // 4x3 removed as an option -- everything is 4x4 now.
   const defenseMode = '4x4';
   let insideOutside = 'Outside';
@@ -792,9 +798,11 @@ function buildCard(combo) {
 
   // Split's own row -- one Split Side toggle (the signal sequence always
   // calls the second direction as whichever side is opposite this, so
-  // there's no separate Direction toggle to show here) plus the optional
-  // Pass 1/2/3 call, which negates the run without changing anything else
-  // about who's eligible -- receivers run their routes either way.
+  // there's no separate Direction toggle to show here) plus a Pass on/off
+  // switch. Off = run (normal blocking, nothing extra called). On adds
+  // whichever of Pass 1/2/3 is picked as the final signal in the sequence --
+  // negates the run without changing who's eligible; receivers run their
+  // assigned routes either way.
   const splitRow = document.createElement('div');
   splitRow.className = 'toggle-row-basics';
   const splitSideToggle = buildToggleGroup('orange', [
@@ -802,13 +810,24 @@ function buildCard(combo) {
     { value: 'Right', label: 'Split R' },
   ], splitSide, (v) => { if (isPlayingRef.value) return; splitSide = v; onComboChanged(); });
   splitRow.appendChild(splitSideToggle);
-  const passToggle = buildToggleGroup('red', [
-    { value: '', label: 'Run' },
+  const passSwitch = buildSwitchToggle('Pass', passOn, (v) => {
+    if (isPlayingRef.value) return;
+    passOn = v;
+    updatePassNumRow();
+    onComboChanged();
+  });
+  splitRow.appendChild(passSwitch);
+  const passNumToggle = buildToggleGroup('red', [
     { value: 'pass1', label: 'Pass 1' },
     { value: 'pass2', label: 'Pass 2' },
     { value: 'pass3', label: 'Pass 3' },
-  ], passCall, (v) => { if (isPlayingRef.value) return; passCall = v; onComboChanged(); });
-  splitRow.appendChild(passToggle);
+  ], passNum, (v) => { if (isPlayingRef.value) return; passNum = v; onComboChanged(); });
+  splitRow.appendChild(passNumToggle);
+  function updatePassNumRow() {
+    passNumToggle.style.display = passOn ? '' : 'none';
+    requestAnimationFrame(() => placeToggleThumb(passNumToggle));
+  }
+  updatePassNumRow();
   toggleRow.appendChild(splitRow);
 
   function updateFormationRows() {
@@ -973,7 +992,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passCall);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, currentPassCall());
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -1014,7 +1033,7 @@ function buildCard(combo) {
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
       parts.push(oppositeOfSplit);
-      if (passCall) parts.push(PASS_SIGNAL_LABELS[passCall]);
+      if (passOn) parts.push(PASS_SIGNAL_LABELS[passNum]);
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
       // after the wing spot is set), then In/Out if this play has it, then
