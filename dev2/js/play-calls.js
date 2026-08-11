@@ -715,15 +715,17 @@ function buildCard(combo) {
 
   let wingSide = 'Left';
   let direction = 'Left';
-  // Split formation -- a second, independent formation alongside Wing (see
-  // the formationToggle below). 'wing' keeps every bit of existing
-  // behavior; 'split' uses its own signal order (buildSplitSignalSequence)
-  // and its own single Split Side toggle instead of Wing/Direction. The
-  // field diagram for Split is still coming (tracked separately) -- for
-  // now the front of the card shows a placeholder instead of a wrong or
-  // misleading Wing-formation diagram, while the back (the actual signal
-  // walkthrough) is fully real.
-  let formation = 'wing';
+  // Split formation -- a second, independent formation alongside Shotgun
+  // (the existing Wing-based formation; every play up to now has been run
+  // out of Shotgun, it's just never been called out explicitly since it's
+  // the default -- see the formationToggle below). 'shotgun' keeps every
+  // bit of existing behavior; 'split' uses its own signal order
+  // (buildSplitSignalSequence) and its own single Split Side toggle instead
+  // of Wing/Direction. The field diagram for Split is still coming
+  // (tracked separately) -- for now the front of the card shows a
+  // placeholder instead of a wrong or misleading Shotgun-formation diagram,
+  // while the back (the actual signal walkthrough) is fully real.
+  let formation = 'shotgun';
   let splitSide = 'Left';
   let passCall = ''; // '' = run, else 'pass1' | 'pass2' | 'pass3'
   // 4x3 removed as an option -- everything is 4x4 now.
@@ -759,13 +761,13 @@ function buildCard(combo) {
   const toggleRow = document.createElement('div');
   toggleRow.className = 'card-toggle-row';
 
-  // Formation -- Wing (existing, default) vs Split (new). Its own row, above
-  // Wing/Dir, so switching it is always in the same spot regardless of
-  // which formation-specific row is showing underneath.
+  // Formation -- Shotgun (existing, default) vs Split (new). Its own row,
+  // above Wing/Dir, so switching it is always in the same spot regardless
+  // of which formation-specific row is showing underneath.
   const formationRow = document.createElement('div');
   formationRow.className = 'toggle-row-basics';
   const formationToggle = buildToggleGroup('green', [
-    { value: 'wing', label: 'Wing' },
+    { value: 'shotgun', label: 'Shotgun' },
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
@@ -810,7 +812,7 @@ function buildCard(combo) {
   toggleRow.appendChild(splitRow);
 
   function updateFormationRows() {
-    basicsRow.style.display = formation === 'wing' ? '' : 'none';
+    basicsRow.style.display = formation === 'shotgun' ? '' : 'none';
     splitRow.style.display = formation === 'split' ? '' : 'none';
     requestAnimationFrame(() => {
       [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
