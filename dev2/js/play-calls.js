@@ -1388,13 +1388,18 @@ function buildCard(combo) {
     rerenderDiagram();
     let parts;
     if (formation === 'split') {
-      // Same order as buildSplitSignalSequence: Split side, then the play,
-      // then the (always-opposite) direction, then Pass if it's on.
-      const oppositeOfSplit = splitSide === 'Left' ? 'Right' : 'Left';
+      // Split Side IS the run direction -- "Split Right, the ball is always
+      // run to the right" (Nathan). Unlike buildSplitSignalSequence's card
+      // sequence below (which intentionally calls out a second, ALWAYS-
+      // opposite "Direction" as part of the verbal signal convention he set
+      // up), the title bar describes what the diagram actually shows, so it
+      // must not echo that opposite side here -- doing so previously made a
+      // Split Right card's title read "...Left" while the ball ran right,
+      // which looked like a direction bug even though the run itself was
+      // already correct.
       parts = [`Split ${splitSide}`];
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
-      parts.push(oppositeOfSplit);
       if (passOn) parts.push('Pass');
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
