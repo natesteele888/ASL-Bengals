@@ -420,7 +420,14 @@ function loadSavedPlaysFromCloud() {
       gotAny = true;
     }
     if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-      DATA.splitRoutes = savedSplitRoutes;
+      // repairStaleSplitRoutes (play-calls.js) self-heals a pre-fix cloud
+      // snapshot of the Right-side Seattle/Florida swap. Doing this here too
+      // (not just in the read-only Play Calls view) matters: this is the
+      // editor's OWN load path, so without it, re-opening Edit Plays would
+      // keep showing -- and re-saving -- the same stale swap forever. With
+      // it, the very next "Save to Cloud" persists the corrected routes and
+      // this repair becomes a permanent no-op after that.
+      DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
       gotAny = true;
     }
     cloudStatusEl.textContent = gotAny ? 'Showing the latest saved play edits.' : 'No saved edits found -- showing the built-in defaults.';

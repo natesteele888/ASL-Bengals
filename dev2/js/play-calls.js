@@ -133,6 +133,42 @@ function normalizePlayData(playTypes) {
   return playTypes;
 }
 
+// Same "Firebase always wins over the shipped file" problem as
+// repairStaleDirectionOrientation above, but for Split's Houston/Seattle/
+// Florida routes (DATA.splitRoutes, saved separately to splitRouteEdits.json
+// -- see edit-plays.js). Nathan confirmed he'd used Save to Cloud from the
+// Split route editor before the Seattle/Florida swap on the Right side was
+// fixed (see plays.json's splitRoutes.Right + the swap-fix commit), so that
+// cloud snapshot carries the same bug forward on every load forever,
+// exactly like the Option direction bug -- even though the shipped file
+// itself has been correct since that fix.
+//
+// There's no per-field flag to check here the way SHIPPED_PLAY_FLAGS uses
+// `directionFixed` (a coach's already-saved cloud JSON has no such flag to
+// read), so this detects staleness directly: if the loaded copy's
+// Right-side seattle route still exactly matches the known PRE-fix shape,
+// swap it back with florida's. Safe to run on every load -- once a coach
+// re-saves from the (now-fixed) editor, the cloud copy will already be
+// correct, this comparison simply won't match, and the swap becomes a
+// permanent no-op.
+const STALE_SPLIT_RIGHT_WIDE_SEATTLE = JSON.stringify([[1512, 204], [1352, 338], [1195, 236]]);
+const STALE_SPLIT_RIGHT_FLEX_SEATTLE = JSON.stringify([[1362, 289], [1370, -118]]);
+function repairStaleSplitRoutes(splitRoutes) {
+  const right = splitRoutes && splitRoutes.Right;
+  if (!right) return splitRoutes;
+  if (right.wide && JSON.stringify(right.wide.seattle) === STALE_SPLIT_RIGHT_WIDE_SEATTLE) {
+    const tmp = right.wide.seattle;
+    right.wide.seattle = right.wide.florida;
+    right.wide.florida = tmp;
+  }
+  if (right.flex && JSON.stringify(right.flex.seattle) === STALE_SPLIT_RIGHT_FLEX_SEATTLE) {
+    const tmp = right.flex.seattle;
+    right.flex.seattle = right.flex.florida;
+    right.flex.florida = tmp;
+  }
+  return splitRoutes;
+}
+
 // ---- Shared toggle-group pill component ----
 // Declared at top level (not inside either file's IIFE), same reasoning
 // as DATA/normalizePlayData above: play-calls.js loads before
@@ -1541,7 +1577,7 @@ function buildGrid() {
           gotAny = true;
         }
         if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-          DATA.splitRoutes = savedSplitRoutes;
+          DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
           gotAny = true;
         }
         if (statusEl) statusEl.textContent = gotAny ? 'Showing the latest saved routes from the builder tool.' : 'Showing built-in default routes (no saved edits found).';
