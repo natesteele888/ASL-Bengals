@@ -354,6 +354,21 @@ const SPLIT_TOUCH_ID = 31;
 // keep the defense from pattern-reading a fixed sign.
 const PASS_SIGNAL_IDS = [28, 29, 30];
 
+// The three named audibles (Houston/Seattle/Florida) a coach can call at
+// the line for the wide receiver and, independently, for the flexed-out
+// inside receiver -- "both the left and right receivers can get any of the
+// 3 calls at the line." DATA.splitRoutes[splitSide].wide/.flex each hold
+// the real-coordinate route for all three calls, digitized from Nathan's
+// two route-diagram images (players 2/6 for Split Right, 5/3 for Split
+// Left) the same way the formation positions were: calibrated against the
+// player's own real Split anchor point, not assumed to mirror between
+// sides -- the two reference images turned out to assign different route
+// shapes to the wide vs. flex role depending on side, so each side's three
+// routes are stored and used exactly as drawn rather than derived from one
+// another.
+const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida'];
+const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida' };
+
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
   const options = exclude !== undefined ? pool.filter(id => id !== exclude) : pool;
@@ -654,7 +669,25 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
   });
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition) {
+// The two route calls always run, independent of run/pass ("even if the
+// team runs the receivers still run their assigned routes") -- one path
+// for the wide receiver, one for the flexed-out inside receiver, each
+// looked up by whichever of Seattle/Houston/Florida is currently picked
+// for that role.
+function getSplitRoutePaths(splitSide, wideCall, flexCall) {
+  const routes = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+  if (!routes) return [];
+  const out = [];
+  if (routes.wide && routes.wide[wideCall]) {
+    out.push({ points: routes.wide[wideCall], player: routes.wide.player, width: 7 });
+  }
+  if (routes.flex && routes.flex[flexCall]) {
+    out.push({ points: routes.flex[flexCall], player: routes.flex.player, width: 7 });
+  }
+  return out;
+}
+
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, wideCall, flexCall) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -684,32 +717,35 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   });
 
   const lastRenderedPaths = [];
-  const playType = DATA.playTypes.find(p => p.key === playKey);
-  if (playType) {
-    getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(p => {
-      const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
-      const points = p.points;
-      const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
-      const wrap = svgEl('g', {});
-      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
-      if (p.fake) attrs['stroke-dasharray'] = '10 8';
-      const pathEl = svgEl('path', attrs);
-      wrap.appendChild(pathEl);
-      let arrowEl = null;
-      if (!p.fake) {
-        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
-        wrap.appendChild(arrowEl);
-        placeArrowAtFraction(arrowEl, pathEl, 1);
-      }
-      pathsLayer.appendChild(wrap);
-      const ownerKey = p.player !== null ? String(p.player) : p.id;
-      const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
-      lastRenderedPaths.push({
-        el: pathEl, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
-        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
-      });
+  function drawPath(p) {
+    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+    const points = p.points;
+    const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
+    const wrap = svgEl('g', {});
+    const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+    if (p.fake) attrs['stroke-dasharray'] = '10 8';
+    const pathEl = svgEl('path', attrs);
+    wrap.appendChild(pathEl);
+    let arrowEl = null;
+    if (!p.fake) {
+      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+      wrap.appendChild(arrowEl);
+      placeArrowAtFraction(arrowEl, pathEl, 1);
+    }
+    pathsLayer.appendChild(wrap);
+    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
+    lastRenderedPaths.push({
+      el: pathEl, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+      circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
     });
   }
+
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (playType) {
+    getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+  }
+  getSplitRoutePaths(splitSide, wideCall, flexCall).forEach(drawPath);
 
   g.appendChild(pathsLayer);
   g.appendChild(circlesLayer);
@@ -912,6 +948,13 @@ function buildCard(combo) {
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
+  // Which of Seattle/Houston/Florida the wide receiver and the flexed-out
+  // inside receiver are each running -- independent choices, per Nathan:
+  // "both the left and right receivers can get any of the 3 calls at the
+  // line." Always in effect (drawn and animated) regardless of Pass, since
+  // receivers run their routes on every play, run or pass.
+  let wideCall = 'seattle';
+  let flexCall = 'seattle';
   // 4x3 removed as an option -- everything is 4x4 now.
   const defenseMode = '4x4';
   let insideOutside = 'Outside';
@@ -997,9 +1040,32 @@ function buildCard(combo) {
   splitRow.appendChild(passSwitch);
   toggleRow.appendChild(splitRow);
 
+  // Route calls -- one picker for the wide receiver, one for the flexed
+  // inside receiver, each independently choosing Seattle/Houston/Florida.
+  // Own row below splitRow so it only shows in Split mode alongside it.
+  function labeledGroup(labelText, group) {
+    const wrap = document.createElement('div');
+    wrap.className = 'switch-control';
+    const lbl = document.createElement('span');
+    lbl.className = 'switch-label';
+    lbl.textContent = labelText;
+    wrap.appendChild(lbl);
+    wrap.appendChild(group);
+    return wrap;
+  }
+  const splitRoutesRow = document.createElement('div');
+  splitRoutesRow.className = 'toggle-row-basics';
+  const routeCallOptions = SPLIT_ROUTE_CALLS.map(v => ({ value: v, label: SPLIT_ROUTE_LABELS[v] }));
+  const wideCallToggle = buildToggleGroup('green', routeCallOptions, wideCall, (v) => { if (isPlayingRef.value) return; wideCall = v; onComboChanged(); }, 'toggle-tiny');
+  const flexCallToggle = buildToggleGroup('brown', routeCallOptions, flexCall, (v) => { if (isPlayingRef.value) return; flexCall = v; onComboChanged(); }, 'toggle-tiny');
+  splitRoutesRow.appendChild(labeledGroup('Wide', wideCallToggle));
+  splitRoutesRow.appendChild(labeledGroup('In', flexCallToggle));
+  toggleRow.appendChild(splitRoutesRow);
+
   function updateFormationRows() {
     basicsRow.style.display = formation === 'shotgun' ? '' : 'none';
     splitRow.style.display = formation === 'split' ? '' : 'none';
+    splitRoutesRow.style.display = formation === 'split' ? '' : 'none';
     requestAnimationFrame(() => {
       [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
     });
@@ -1071,7 +1137,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, wideCall, flexCall); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   }
 
