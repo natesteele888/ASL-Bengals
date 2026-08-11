@@ -728,6 +728,42 @@ function getSplitRoutePaths(splitSide, leftCall, rightCall) {
   return out;
 }
 
+// Split's defensive look. Split's blocking is already reused generically
+// across every play (see getSplitBlockingPaths above) rather than authored
+// per play, so the defense mirrors that same approach: one base front/
+// linebacker level lined up on the O-line (identical real coordinates to
+// Shotgun's, so these numbers are shared), plus perimeter defenders (CB/
+// nickel/CB) shaded toward whichever receivers are actually split out for
+// this side -- Split's wide/flex spots sit at different real coordinates
+// than Shotgun's tight/wing spots, so the perimeter can't just be copied
+// from a Shotgun variant's defense list.
+function getSplitDefense(splitSide) {
+  const pos = DATA.split[splitSide];
+  if (!pos) return [];
+  const wideNum = splitSide === 'Right' ? 6 : 5;
+  const flexNum = splitSide === 'Right' ? 2 : 3;
+  const wide = pos[wideNum], flex = pos[flexNum], lone = pos['4'];
+  // Sign that nudges a defender's x inward, toward the ball, from wherever
+  // his receiver is standing -- the split side's receivers sit further
+  // right the more they're split out, so "toward center" is negative x
+  // there and positive x on the lone side (which sits left of center).
+  const in_ = splitSide === 'Right' ? -1 : 1;
+  return [
+    { id: 'DE_L', label: 'DE', pos: [436, 110] },
+    { id: 'DT_L', label: 'DT', pos: [662, 110] },
+    { id: 'DT_R', label: 'DT', pos: [949, 110] },
+    { id: 'DE_R', label: 'DE', pos: [1183, 110] },
+    { id: 'OLB_L', label: 'LB', pos: [600, -20] },
+    { id: 'MLB', label: 'LB', pos: [805, -20] },
+    { id: 'OLB_R', label: 'LB', pos: [1010, -20] },
+    { id: 'CB_WIDE', label: 'CB', pos: [wide[0] + in_ * 25, wide[1] - 110] },
+    { id: 'NB_FLEX', label: 'NB', pos: [flex[0] + in_ * 15, flex[1] - 90] },
+    { id: 'CB_LONE', label: 'CB', pos: [lone[0] - in_ * 25, lone[1] - 110] },
+    { id: 'FS', label: 'S', pos: [650, -190] },
+    { id: 'SS', label: 'S', pos: [960, -190] },
+  ];
+}
+
 function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
@@ -737,15 +773,20 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   const circlesLayer = svgEl('g', {});
   const pos = DATA.split[splitSide];
 
-  function drawCircle(x, y, label, fontSize, r) {
+  function drawCircle(x, y, label, fontSize, r, stroke) {
+    stroke = stroke || '#111';
     const wrap = svgEl('g', {});
-    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke: '#111', 'stroke-width': 8 }));
-    const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: '#111' });
+    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': 8 }));
+    const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
     wrap.circleEl = wrap.children[0]; wrap.textEl = t;
     return wrap;
   }
+
+  getSplitDefense(splitSide).forEach(d => {
+    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR));
+  });
 
   const playerCircles = {};
   ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
@@ -1031,9 +1072,22 @@ function buildCard(combo) {
   const toggleRow = document.createElement('div');
   toggleRow.className = 'card-toggle-row';
 
-  // Formation -- Shotgun (existing, default) vs Split (new). Its own row,
-  // above Wing/Dir, so switching it is always in the same spot regardless
-  // of which formation-specific row is showing underneath.
+  function labeledGroup(labelText, group) {
+    const wrap = document.createElement('div');
+    wrap.className = 'switch-control';
+    const lbl = document.createElement('span');
+    lbl.className = 'switch-label';
+    lbl.textContent = labelText;
+    wrap.appendChild(lbl);
+    wrap.appendChild(group);
+    return wrap;
+  }
+
+  // Formation -- Shotgun (existing, default) vs Split (new). Split's own
+  // Side toggle + Pass switch share this SAME row (rather than a row of
+  // their own) so switching to Split never adds an extra row of vertical
+  // space above the diagram -- that used to push the field diagram down
+  // far enough to get cut off on shorter screens.
   const formationRow = document.createElement('div');
   formationRow.className = 'toggle-row-basics';
   const formationToggle = buildToggleGroup('green', [
@@ -1041,6 +1095,26 @@ function buildCard(combo) {
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
+
+  // Split Side (the signal sequence always calls the second direction as
+  // whichever side is opposite this, so there's no separate Direction
+  // toggle to show for Split) plus a Pass on/off switch. Off = run (normal
+  // blocking, nothing extra called). On adds a randomized Pass 1/2/3 card
+  // as the final signal in the sequence -- negates the run without
+  // changing who's eligible; receivers run their assigned routes either
+  // way. Which of the three cards shows isn't a coach-facing choice (see
+  // PASS_SIGNAL_IDS above), so there's no picker.
+  const splitSideToggle = buildToggleGroup('orange', [
+    { value: 'Left', label: 'Split L' },
+    { value: 'Right', label: 'Split R' },
+  ], splitSide, (v) => { if (isPlayingRef.value) return; splitSide = v; onComboChanged(); });
+  formationRow.appendChild(splitSideToggle);
+  const passSwitch = buildSwitchToggle('Pass', passOn, (v) => {
+    if (isPlayingRef.value) return;
+    passOn = v;
+    onComboChanged();
+  });
+  formationRow.appendChild(passSwitch);
   toggleRow.appendChild(formationRow);
 
   const basicsRow = document.createElement('div');
@@ -1060,61 +1134,17 @@ function buildCard(combo) {
 
   toggleRow.appendChild(basicsRow);
 
-  // Split's own row -- one Split Side toggle (the signal sequence always
-  // calls the second direction as whichever side is opposite this, so
-  // there's no separate Direction toggle to show here) plus a Pass on/off
-  // switch. Off = run (normal blocking, nothing extra called). On adds a
-  // randomized Pass 1/2/3 card as the final signal in the sequence --
-  // negates the run without changing who's eligible; receivers run their
-  // assigned routes either way. Which of the three cards shows isn't a
-  // coach-facing choice (see PASS_SIGNAL_IDS above), so there's no picker.
-  const splitRow = document.createElement('div');
-  splitRow.className = 'toggle-row-basics';
-  const splitSideToggle = buildToggleGroup('orange', [
-    { value: 'Left', label: 'Split L' },
-    { value: 'Right', label: 'Split R' },
-  ], splitSide, (v) => { if (isPlayingRef.value) return; splitSide = v; onComboChanged(); });
-  splitRow.appendChild(splitSideToggle);
-  const passSwitch = buildSwitchToggle('Pass', passOn, (v) => {
-    if (isPlayingRef.value) return;
-    passOn = v;
-    onComboChanged();
-  });
-  splitRow.appendChild(passSwitch);
-  toggleRow.appendChild(splitRow);
-
   // Route calls -- one picker for whatever's called to the LEFT side of
   // the play, one for the RIGHT side, each independently choosing Seattle/
-  // Houston/Florida. Own row below splitRow so it only shows in Split mode
-  // alongside it.
-  function labeledGroup(labelText, group) {
-    const wrap = document.createElement('div');
-    wrap.className = 'switch-control';
-    const lbl = document.createElement('span');
-    lbl.className = 'switch-label';
-    lbl.textContent = labelText;
-    wrap.appendChild(lbl);
-    wrap.appendChild(group);
-    return wrap;
-  }
-  const splitRoutesRow = document.createElement('div');
-  splitRoutesRow.className = 'toggle-row-basics';
+  // Houston/Florida. These live in the extras row below, swapped in for
+  // Motion/Boot (which don't apply to Split -- renderSplitDiagram/
+  // playSplitAnimation don't read either toggle) so Split never needs a
+  // row of its own for them either.
   const routeCallOptions = SPLIT_ROUTE_CALLS.map(v => ({ value: v, label: SPLIT_ROUTE_LABELS[v] }));
   const leftCallToggle = buildToggleGroup('green', routeCallOptions, leftCall, (v) => { if (isPlayingRef.value) return; leftCall = v; onComboChanged(); }, 'toggle-tiny');
   const rightCallToggle = buildToggleGroup('brown', routeCallOptions, rightCall, (v) => { if (isPlayingRef.value) return; rightCall = v; onComboChanged(); }, 'toggle-tiny');
-  splitRoutesRow.appendChild(labeledGroup('Left', leftCallToggle));
-  splitRoutesRow.appendChild(labeledGroup('Right', rightCallToggle));
-  toggleRow.appendChild(splitRoutesRow);
-
-  function updateFormationRows() {
-    basicsRow.style.display = formation === 'shotgun' ? '' : 'none';
-    splitRow.style.display = formation === 'split' ? '' : 'none';
-    splitRoutesRow.style.display = formation === 'split' ? '' : 'none';
-    requestAnimationFrame(() => {
-      [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
-    });
-  }
-  updateFormationRows();
+  const leftCallWrap = labeledGroup('Left', leftCallToggle);
+  const rightCallWrap = labeledGroup('Right', rightCallToggle);
 
   const extrasRow = document.createElement('div');
   extrasRow.className = 'toggle-row-extras';
@@ -1131,11 +1161,13 @@ function buildCard(combo) {
   extrasRow.appendChild(ioSlot);
 
   // #4 is the only player who ever goes in motion, so this is a simple
-  // on/off rather than a direction pick. Every play has this slot.
+  // on/off rather than a direction pick. Every play has this slot in
+  // Shotgun; in Split it's swapped out for the Left route-call picker.
   const motionSlot = document.createElement('div');
   motionSlot.className = 'toggle-slot';
   const motionToggle = buildSwitchToggle('Motion', motionOn, (v) => { if (isPlayingRef.value) return; motionOn = v; onComboChanged(); });
   motionSlot.appendChild(motionToggle);
+  motionSlot.appendChild(leftCallWrap);
   extrasRow.appendChild(motionSlot);
 
   // Boot: QB (#1) keeps the ball instead of handing off -- everything else
@@ -1143,13 +1175,16 @@ function buildCard(combo) {
   // swaps who's carrying for this card's diagram/animation. Doesn't apply
   // to plays where #1 already has the ball or already has a built-in fake
   // (Option, Option Pass, Double Blast) -- noBoot in the data leaves this
-  // slot empty rather than hiding it and letting Read slide over.
+  // slot empty rather than hiding it and letting Read slide over. In Split
+  // it's swapped out for the Right route-call picker.
   const bootSlot = document.createElement('div');
   bootSlot.className = 'toggle-slot';
+  let bootToggle = null;
   if (!combo.noBoot) {
-    const bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
+    bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
   }
+  bootSlot.appendChild(rightCallWrap);
   extrasRow.appendChild(bootSlot);
 
   const readSlot = document.createElement('div');
@@ -1165,6 +1200,21 @@ function buildCard(combo) {
 
   toggleRow.appendChild(extrasRow);
   front.appendChild(toggleRow);
+
+  function updateFormationRows() {
+    const isSplit = formation === 'split';
+    basicsRow.style.display = isSplit ? 'none' : '';
+    splitSideToggle.style.display = isSplit ? '' : 'none';
+    passSwitch.style.display = isSplit ? '' : 'none';
+    motionToggle.style.display = isSplit ? 'none' : '';
+    leftCallWrap.style.display = isSplit ? '' : 'none';
+    if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
+    rightCallWrap.style.display = isSplit ? '' : 'none';
+    requestAnimationFrame(() => {
+      [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
+    });
+  }
+  updateFormationRows();
 
   // Groups built above may not be in the live DOM yet (buildCard() runs
   // before the caller appends its result), so their thumbs would measure
@@ -1415,16 +1465,25 @@ function buildGrid() {
       return;
     }
     if (statusEl) statusEl.textContent = 'Checking for the latest saved routes\u2026';
-    window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`)
-      .then(url => fetch(url))
-      .then(r => r.ok ? r.json() : null)
-      .then(saved => {
+    Promise.all([
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+      // Split's Houston/Seattle/Florida routes save to their own key (see
+      // edit-plays.js) rather than being folded into playEdits.json's
+      // bare-array shape -- fetched alongside so coach-saved route edits
+      // show up here too, not just in the builder tool.
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/splitRouteEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+    ])
+      .then(([saved, savedSplitRoutes]) => {
+        let gotAny = false;
         if (saved && Array.isArray(saved) && saved.length) {
           DATA.playTypes = normalizePlayData(saved);
-          if (statusEl) statusEl.textContent = 'Showing the latest saved routes from the builder tool.';
-        } else {
-          if (statusEl) statusEl.textContent = 'Showing built-in default routes (no saved edits found).';
+          gotAny = true;
         }
+        if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
+          DATA.splitRoutes = savedSplitRoutes;
+          gotAny = true;
+        }
+        if (statusEl) statusEl.textContent = gotAny ? 'Showing the latest saved routes from the builder tool.' : 'Showing built-in default routes (no saved edits found).';
         playCallsDataLoaded = true;
         finishBuilding();
       })

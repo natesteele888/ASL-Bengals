@@ -111,6 +111,31 @@
 <div id="editPlaysMode" class="modePanel">
 <div class="controls">
   <div class="inline-control">
+    <label>Formation</label>
+    <div class="toggle-group toggle-green" id="editFormationToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Shotgun</button>
+      <button class="toggle-btn" data-value="split" aria-pressed="false">Split</button>
+    </div>
+  </div>
+  <div class="inline-control" id="splitSideWrap" style="display:none;">
+    <label>Split Side</label>
+    <div class="toggle-group toggle-orange" id="editSplitSideToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+    </div>
+  </div>
+  <div class="inline-control" id="splitCallWrap" style="display:none;">
+    <label>Route Call</label>
+    <div class="toggle-group toggle-brown" id="editSplitCallToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="seattle" aria-pressed="true">Seattle</button>
+      <button class="toggle-btn" data-value="houston" aria-pressed="false">Houston</button>
+      <button class="toggle-btn" data-value="florida" aria-pressed="false">Florida</button>
+    </div>
+  </div>
+  <div class="inline-control">
     <label>Wing</label>
     <div class="toggle-group toggle-orange" id="wingToggle">
       <span class="toggle-thumb"></span>
@@ -229,6 +254,7 @@
 </div>
 <div class="hint" id="cloudStatus" style="font-weight:700; color:#999;">Checking for saved play edits\u2026</div>
 <div class="hint">Wing side and play direction are independent -- set them separately. Tap a player's circle in the diagram to highlight just his path; tap it again to show everyone.</div>
+<div class="hint" id="splitEditHint" style="display:none;">Editing Split's Houston/Seattle/Florida routes. Tap the wide or inside receiver's circle to edit his route for this call. Player 4's route on the open side is mirrored automatically from the inside route on the other side -- it isn't edited directly.</div>
 
 </div>
 

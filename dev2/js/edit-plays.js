@@ -39,6 +39,18 @@ let mainGroup = null;
 let circlesLayerRef = null;
 let lastRenderedPaths = []; // [{el, player, isBall}] -- populated on every render
 
+// Split route editing -- entirely separate data shape from Shotgun's
+// playType/direction/variant.paths (DATA.splitRoutes[side].wide/.flex[call]
+// are plain absolute point arrays, not authored per play), so it gets its
+// own small parallel state instead of being threaded through the Shotgun-
+// specific render()/writeBackPoint() machinery above.
+let editorFormation = 'shotgun'; // 'shotgun' | 'split'
+let splitSide = 'Left';
+let splitCall = 'seattle';
+let splitEditTarget = null; // 'wide' | 'flex' | null
+let splitSelectedHandle = null; // {arr, index} | null
+const SPLIT_ROUTE_LABELS_EDIT = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida' };
+
 const wingToggle = document.getElementById('wingToggle');
 const dirToggle = document.getElementById('dirToggle');
 const playSelect = document.getElementById('playSelect');
@@ -139,6 +151,52 @@ window.wireToggle = wireToggle;
 wireToggle(wingToggle, () => wingSide, v => wingSide = v);
 wireToggle(dirToggle, () => direction, v => direction = v);
 
+// Formation -- Shotgun (existing editor, unchanged above) vs Split. Split
+// has no Play/Wing/Dir/Motion/Boot/Blocking/Read/In-Out/Ball-Carrier
+// concept -- those controls hide, and Split Side + Route Call show instead.
+const editFormationToggle = document.getElementById('editFormationToggle');
+const splitSideWrap = document.getElementById('splitSideWrap');
+const splitCallWrap = document.getElementById('splitCallWrap');
+const editSplitSideToggle = document.getElementById('editSplitSideToggle');
+const editSplitCallToggle = document.getElementById('editSplitCallToggle');
+const splitEditHint = document.getElementById('splitEditHint');
+const wingWrap = wingToggle.closest('.inline-control');
+const dirWrap = dirToggle.closest('.inline-control');
+const playWrapEl = document.getElementById('playWrap');
+
+function updateFormationControlsVisibility() {
+  const isSplit = editorFormation === 'split';
+  [wingWrap, playWrapEl, dirWrap, motionToggle.closest('.inline-control'), bootToggle.closest('.inline-control'), blockingToggle.closest('.inline-control')].forEach(el => {
+    if (el) el.style.display = isSplit ? 'none' : '';
+  });
+  splitSideWrap.style.display = isSplit ? '' : 'none';
+  splitCallWrap.style.display = isSplit ? '' : 'none';
+  splitEditHint.style.display = isSplit ? '' : 'none';
+  playBtn.style.display = isSplit ? 'none' : '';
+  if (isSplit) {
+    document.getElementById('ballCarrierWrap').style.display = 'none';
+    readPosGroup.style.display = 'none';
+    insideOutsideGroup.style.display = 'none';
+  } else {
+    updateReadPosVisibility(); // restores whatever the currently selected Shotgun play needs
+  }
+  requestAnimationFrame(() => {
+    [editFormationToggle, editSplitSideToggle, editSplitCallToggle].forEach(el => placeToggleThumb(el));
+  });
+}
+
+wireToggle(editFormationToggle, () => editorFormation, v => {
+  editorFormation = v;
+  editTarget = null;
+  selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
+  settingBallCarrier = false;
+  updateFormationControlsVisibility();
+});
+wireToggle(editSplitSideToggle, () => splitSide, v => { splitSide = v; splitEditTarget = null; splitSelectedHandle = null; });
+wireToggle(editSplitCallToggle, () => splitCall, v => { splitCall = v; splitSelectedHandle = null; });
+
 const motionToggle = document.getElementById('motionToggle');
 wireToggle(motionToggle, () => (motionOn ? 'on' : 'off'), v => motionOn = (v === 'on'));
 
@@ -217,10 +275,12 @@ wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
   editMode = (v === 'on');
   editTarget = null;
   selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
   settingBallCarrier = false;
   exportBtn.style.display = editMode ? '' : 'none';
   saveCloudBtn.style.display = editMode ? '' : 'none';
-  document.getElementById('ballCarrierWrap').style.display = editMode ? '' : 'none';
+  document.getElementById('ballCarrierWrap').style.display = (editMode && editorFormation !== 'split') ? '' : 'none';
 });
 
 document.getElementById('ballCarrierBtn').addEventListener('click', () => {
@@ -238,7 +298,7 @@ wireToggle(speedToggle, () => (speedMultiplier === 2 ? 'half' : 'normal'), v => 
 exportBtn.addEventListener('click', () => {
   const modal = document.getElementById('exportModal');
   const text = document.getElementById('exportText');
-  text.value = JSON.stringify(DATA.playTypes, null, 2);
+  text.value = JSON.stringify({ playTypes: DATA.playTypes, splitRoutes: DATA.splitRoutes }, null, 2);
   modal.style.display = 'block';
 });
 document.getElementById('exportCloseBtn').addEventListener('click', () => {
@@ -297,22 +357,40 @@ function sanitizeBlockingDistances(playTypes) {
 const FIREBASE_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
 const cloudStatusEl = document.getElementById('cloudStatus');
 
+// Split's Houston/Seattle/Florida routes save to their own Firebase key
+// rather than being folded into playEdits.json's shape (which Play Calls
+// and this tool both already expect to be a bare array of playTypes) --
+// keeps this additive instead of risking the well-tested existing save/
+// load path for Shotgun plays.
+const SPLIT_ROUTES_URL = `${FIREBASE_URL}/splitRouteEdits.json`;
+
 saveCloudBtn.addEventListener('click', async () => {
   saveCloudBtn.textContent = 'Saving\u2026';
-  const url = await window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`);
-  fetch(url, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(sanitizeBlockingDistances(DATA.playTypes)),
-  }).then(async r => {
-    if (r.ok) {
+  const [playsUrl, splitUrl] = await Promise.all([
+    window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`),
+    window.firebaseAuthed(SPLIT_ROUTES_URL),
+  ]);
+  Promise.all([
+    fetch(playsUrl, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(sanitizeBlockingDistances(DATA.playTypes)),
+    }),
+    fetch(splitUrl, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(DATA.splitRoutes),
+    }),
+  ]).then(async ([r1, r2]) => {
+    if (r1.ok && r2.ok) {
       saveCloudBtn.textContent = 'Saved!';
       cloudStatusEl.textContent = 'Showing the latest saved play edits.';
     } else {
-      const bodyText = await r.text().catch(() => '');
+      const failed = !r1.ok ? r1 : r2;
+      const bodyText = await failed.text().catch(() => '');
       saveCloudBtn.textContent = 'Save Failed';
-      cloudStatusEl.textContent = `Save failed (HTTP ${r.status}): ${bodyText.slice(0, 200)}`;
-      console.error('Save to Cloud failed:', r.status, bodyText);
+      cloudStatusEl.textContent = `Save failed (HTTP ${failed.status}): ${bodyText.slice(0, 200)}`;
+      console.error('Save to Cloud failed:', r1.status, r2.status, bodyText);
     }
     setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
   }).catch(err => {
@@ -324,28 +402,31 @@ saveCloudBtn.addEventListener('click', async () => {
 });
 
 function loadSavedPlaysFromCloud() {
-  return window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`)
-    .then(url => fetch(url))
-    .then(r => r.ok ? r.json() : null)
-    .then(saved => {
-      if (saved && Array.isArray(saved) && saved.length) {
-        DATA.playTypes = normalizePlayData(saved);
-        cloudStatusEl.textContent = 'Showing the latest saved play edits.';
-        rebuildPlaySelectOptions();
-        // guard against the loaded data not including whatever play was
-        // already selected (e.g. a partial save) -- fall back to the first
-        // available play rather than crashing on an undefined lookup
-        if (!DATA.playTypes.some(p => p.key === playKey)) {
-          playKey = DATA.playTypes[0].key;
-          playSelect.value = playKey;
-        }
-      } else {
-        cloudStatusEl.textContent = 'No saved edits found -- showing the built-in defaults.';
+  return Promise.all([
+    window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+    window.firebaseAuthed(SPLIT_ROUTES_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+  ]).then(([savedPlays, savedSplitRoutes]) => {
+    let gotAny = false;
+    if (savedPlays && Array.isArray(savedPlays) && savedPlays.length) {
+      DATA.playTypes = normalizePlayData(savedPlays);
+      rebuildPlaySelectOptions();
+      // guard against the loaded data not including whatever play was
+      // already selected (e.g. a partial save) -- fall back to the first
+      // available play rather than crashing on an undefined lookup
+      if (!DATA.playTypes.some(p => p.key === playKey)) {
+        playKey = DATA.playTypes[0].key;
+        playSelect.value = playKey;
       }
-    })
-    .catch(() => {
-      cloudStatusEl.textContent = 'Could not reach the cloud -- showing the built-in defaults.';
-    });
+      gotAny = true;
+    }
+    if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
+      DATA.splitRoutes = savedSplitRoutes;
+      gotAny = true;
+    }
+    cloudStatusEl.textContent = gotAny ? 'Showing the latest saved play edits.' : 'No saved edits found -- showing the built-in defaults.';
+  }).catch(() => {
+    cloudStatusEl.textContent = 'Could not reach the cloud -- showing the built-in defaults.';
+  });
 }
 
 function updateReadPosVisibility() {
@@ -790,6 +871,20 @@ stage.addEventListener('click', (ev) => {
   if (!editMode) return;
   const target = ev.target;
   if (target.classList && target.classList.contains('edit-handle')) return; // handled by its own listener
+  if (editorFormation === 'split') {
+    if (splitSelectedHandle) {
+      const local = svgPointFromEvent(ev);
+      splitSelectedHandle.arr[splitSelectedHandle.index] = [local.x, local.y];
+      splitSelectedHandle = null;
+      render();
+      return;
+    }
+    if (splitEditTarget) {
+      splitEditTarget = null;
+      render();
+    }
+    return;
+  }
   if (selectedHandle) {
     // clicked empty canvas while a handle is selected -> move it here
     const local = svgPointFromEvent(ev);
@@ -893,10 +988,26 @@ endTypeBlockBtn.addEventListener('click', () => setEditTargetEndType('block'));
 document.getElementById('doneEditingBtn').addEventListener('click', () => {
   editTarget = null;
   selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
   render();
 });
 
 document.getElementById('addPointBtn').addEventListener('click', () => {
+  if (editorFormation === 'split') {
+    if (!splitEditTarget) return;
+    const routeData = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+    const arr = routeData && routeData[splitEditTarget] && routeData[splitEditTarget][splitCall];
+    if (!arr) return;
+    const insertAfter = splitSelectedHandle && splitSelectedHandle.arr === arr ? splitSelectedHandle.index : arr.length - 1;
+    const a = arr[insertAfter];
+    const b = arr[Math.min(insertAfter + 1, arr.length - 1)];
+    const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+    arr.splice(insertAfter + 1, 0, mid);
+    splitSelectedHandle = null;
+    render();
+    return;
+  }
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getPlayVariant(playType, direction);
   const p = findEditTargetPath(variant);
@@ -911,7 +1022,156 @@ document.getElementById('addPointBtn').addEventListener('click', () => {
   selectedHandle = null;
   render();
 });
+// ---- Split route editor: an entirely separate render path from Shotgun's
+// render() below. DATA.splitRoutes[side].wide/.flex[call] are plain
+// absolute point arrays (no blockRelative/dualSideBlock/wingSeamRelative
+// special-casing like Shotgun's player-4 paths have), so editing them just
+// means mutating that array directly -- same drag-a-handle / add-point /
+// delete-point interactions as the Shotgun editor, reimplemented small and
+// self-contained rather than threaded through render()'s Shotgun-specific
+// logic. Player 4's route isn't shown here -- it's automatically re-derived
+// (reanchored) from the flex route on the opposite side, not stored data
+// of its own, so there's nothing to edit for him directly. ----
+function renderSplitEditor() {
+  const [vw, vh] = DATA.viewBox;
+  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  stage.innerHTML = '';
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:'#ffffff'}));
+
+  const g = svgEl('g', {transform: `translate(0,${DATA.topPad})`});
+  const pathsLayer = svgEl('g', {});
+  const circlesLayer = svgEl('g', {});
+  const handlesLayer = svgEl('g', {});
+  const pos = DATA.split[splitSide];
+
+  function drawCircle(x, y, label, fontSize, r, stroke) {
+    stroke = stroke || '#111111';
+    const wrap = svgEl('g', {});
+    const circleEl = svgEl('circle', {cx:x, cy:y, r: r || CIRCLE_R, fill:'#ffffff', stroke, 'stroke-width':8});
+    wrap.appendChild(circleEl);
+    const t = svgEl('text', {x, y:y+12, 'font-size':fontSize, 'font-weight':900, 'font-style':'italic',
+      'text-anchor':'middle', fill:stroke});
+    t.textContent = label;
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  ['LT','LG','C','RG','RT'].forEach(k => {
+    circlesLayer.appendChild(drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22));
+  });
+
+  const wideNum = splitSide === 'Right' ? 6 : 5;
+  const flexNum = splitSide === 'Right' ? 2 : 3;
+  ['5', '6', '3', '4', '1', '2'].forEach(num => {
+    const role = (Number(num) === wideNum) ? 'wide' : (Number(num) === flexNum) ? 'flex' : null;
+    const isTarget = role && splitEditTarget === role;
+    const stroke = isTarget ? '#1a8c3a' : '#111111';
+    const c = drawCircle(pos[num][0], pos[num][1], num, 34, null, stroke);
+    if (role && editMode) {
+      c.style.cursor = 'pointer';
+      c.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        splitEditTarget = (splitEditTarget === role) ? null : role;
+        splitSelectedHandle = null;
+        render();
+      });
+    }
+    circlesLayer.appendChild(c);
+  });
+
+  function drawRoute(role, arr, color) {
+    if (!arr || !arr.length) return;
+    const d = arr.length === 5 ? multiCurvePathD(arr) : (arr.length === 2 ? straightPathD(arr) : quadPathD(arr));
+    const path = svgEl('path', {d, fill:'none', stroke: color, 'stroke-width': 7, 'stroke-linecap': 'round'});
+    pathsLayer.appendChild(path);
+    const arrowEl = buildEndCapEl('run', color, 7);
+    pathsLayer.appendChild(arrowEl);
+    placeArrowAtFraction(arrowEl, path, 1);
+
+    if (editMode && splitEditTarget === role) {
+      const guideD = arr.map((pt, i) => (i === 0 ? 'M' : 'L') + ` ${pt[0]} ${pt[1]}`).join(' ');
+      handlesLayer.appendChild(svgEl('path', {d: guideD, class: 'edit-handle-line'}));
+      arr.forEach((pt, idx) => {
+        const isPicked = splitSelectedHandle && splitSelectedHandle.arr === arr && splitSelectedHandle.index === idx;
+        const h = svgEl('circle', {cx: pt[0], cy: pt[1], r: isPicked ? 19 : 16,
+          class: 'edit-handle' + (isPicked ? ' picked' : '')});
+        h.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          splitSelectedHandle = isPicked ? null : { arr, index: idx };
+          render();
+        });
+        handlesLayer.appendChild(h);
+
+        if (isPicked && arr.length > 2) {
+          const bx = pt[0] + 26, by = pt[1] - 26;
+          const delBadge = svgEl('g', {});
+          delBadge.appendChild(svgEl('circle', {cx:bx, cy:by, r:15, fill:'#e0201a', stroke:'#fff', 'stroke-width':2}));
+          const xMark = svgEl('text', {x:bx, y:by+6, 'font-size':18, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          xMark.textContent = '✕';
+          delBadge.appendChild(xMark);
+          delBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            arr.splice(idx, 1);
+            splitSelectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(delBadge);
+        }
+        if (isPicked) {
+          const ax = pt[0] - 26, ay = pt[1] - 26;
+          const addBadge = svgEl('g', {});
+          addBadge.appendChild(svgEl('circle', {cx:ax, cy:ay, r:15, fill:'#1a8c3a', stroke:'#fff', 'stroke-width':2}));
+          const plusMark = svgEl('text', {x:ax, y:ay+6, 'font-size':20, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          plusMark.textContent = '+';
+          addBadge.appendChild(plusMark);
+          addBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const a = arr[idx];
+            const b = arr[Math.min(idx + 1, arr.length - 1)];
+            const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+            arr.splice(idx + 1, 0, mid);
+            splitSelectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(addBadge);
+        }
+      });
+    }
+  }
+
+  const routeData = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+  if (routeData) {
+    drawRoute('wide', routeData.wide && routeData.wide[splitCall], NOBALL_COLOR);
+    drawRoute('flex', routeData.flex && routeData.flex[splitCall], BALL_COLOR);
+  }
+
+  g.appendChild(pathsLayer);
+  g.appendChild(circlesLayer);
+  g.appendChild(handlesLayer);
+  circlesLayerRef = circlesLayer;
+  mainGroup = g;
+  stage.appendChild(g);
+
+  const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
+    'text-anchor':'middle', fill:'#111111'});
+  title.textContent = `SPLIT ${splitSide.toUpperCase()} – ${SPLIT_ROUTE_LABELS_EDIT[splitCall].toUpperCase()}`;
+  stage.appendChild(title);
+
+  const addPointBtn = document.getElementById('addPointBtn');
+  if (!editMode || !splitEditTarget) {
+    editToolbar.style.display = 'none';
+    assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
+  } else {
+    editToolbar.style.display = 'flex';
+    addPointBtn.style.display = '';
+    assignPanel.style.display = 'none'; // no blocking/chip-block concept for a route
+    endTypePanel.style.display = 'none'; // routes are always a run-style arrow here, no T-bar concept
+  }
+}
+
 function render() {
+  if (editorFormation === 'split') { renderSplitEditor(); return; }
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getPlayVariant(playType, direction);
 
