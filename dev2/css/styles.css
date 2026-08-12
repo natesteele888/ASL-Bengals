@@ -712,12 +712,23 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   .replay-btn:active { background: var(--bengal-orange); color: #fff; }
 
   .edit-handle { fill: #ffde00; stroke: #111; stroke-width: 2; }
-  /* Nathan: "the others are too washed out, makes it difficult to see
-     whats going on" -- was .15 (basically invisible); still clearly
-     de-emphasized next to full-op's 1, but the rest of the play stays
-     readable instead of nearly disappearing. */
-  .dimmed { opacity: .45; }
+  /* Nathan: "I actually don't like the call out being lower opacity for the
+     others. Let's keep them full opacity but have an orange pulsing glow
+     to the indicated player." Play Calls' own diagrams (renderCardDiagram/
+     renderSplitDiagram in play-calls.js) no longer emit 'dimmed' at all --
+     everyone always renders at full opacity, and the selected player's
+     circle/path additionally gets 'selected-glow'. This rule is left in
+     place (opacity 1, a no-op) only because Edit Plays' own, separate
+     selection UI still uses 'dimmed'/'full-op' for its own purpose -- see
+     the #editPlaysMode-scoped override further down, which is what
+     actually controls that one. */
+  .dimmed { opacity: 1; }
   .full-op { opacity: 1; }
+  @keyframes selectedGlowPulse {
+    0%, 100% { filter: drop-shadow(0 0 2px var(--bengal-orange)) drop-shadow(0 0 2px var(--bengal-orange)); }
+    50% { filter: drop-shadow(0 0 8px var(--bengal-orange)) drop-shadow(0 0 14px var(--bengal-orange)); }
+  }
+  .selected-glow { animation: selectedGlowPulse 1.3s ease-in-out infinite; }
 
   
 .pcInfoOverlay {

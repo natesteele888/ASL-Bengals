@@ -549,18 +549,22 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
-  const anySelected = selectedPlayer !== null;
-  // A LINE position selected (selectedPlayer is a string id) isolates the
-  // O-line the same way a numbered selection isolates skill players; a
-  // NUMBERED selection leaves the O-line circles alone (full-op), matching
-  // their paths never dimming either -- they're background context.
+  // Nathan: "I don't like how washed out the others are, makes it
+  // difficult to see whats going on... keep them full opacity but have an
+  // orange pulsing glow to the indicated player." Nobody dims anymore --
+  // everyone always renders at full opacity -- the selected player's own
+  // circle/path just gets an extra `selected-glow` class (see styles.css)
+  // instead. A LINE position selected (selectedPlayer is a string id)
+  // glows the matching O-line spot; a NUMBERED selection glows the
+  // matching numbered circle. Defenders are never selectable, so they
+  // never glow either way.
   const isLineSelectedForCircles = typeof selectedPlayer === 'string';
   const wingPos = DATA.wing[wingSide];
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
 
-  function drawCircle(x, y, label, stroke, fontSize, dim, r, playerNum) {
+  function drawCircle(x, y, label, stroke, fontSize, isSelected, r, playerNum) {
     r = r || CIRCLE_R;
-    const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
+    const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
     wrap.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: '#fff', stroke, 'stroke-width': 8 }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
@@ -579,25 +583,25 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
     const r = CIRCLE_R;
     const fs = 26;
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, anySelected, r));
+    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, false, r));
   });
 
-  const c5Dim = anySelected && selectedPlayer !== 5;
-  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111', 34, c5Dim, null, 5);
+  const c5Selected = selectedPlayer === 5;
+  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111', 34, c5Selected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
-  // O-line circles were never selectable/highlightable at all (dim
-  // hardcoded false, no playerNum -> no click listener) -- added so a
-  // player whose position is an O-line spot (LT/LG/C/RG/RT) can have it
-  // auto-highlighted the same way numbered positions already were. Only
-  // dims for a LINE selection (isLineSelectedForCircles) -- a numbered
-  // selection leaves these alone, same as it always has.
+  // O-line circles were never selectable/highlightable at all originally
+  // (no playerNum -> no click listener) -- added so a player whose
+  // position is an O-line spot (LT/LG/C/RG/RT) can have it auto-highlighted
+  // the same way numbered positions already were. Only glows for a LINE
+  // selection (isLineSelectedForCircles) -- a numbered selection leaves
+  // these alone, same as it always has.
   ['LT','LG','C','RG','RT'].forEach(k => {
-    const dim = anySelected && isLineSelectedForCircles && selectedPlayer !== k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, dim, null, k);
+    const isSelected = isLineSelectedForCircles && selectedPlayer === k;
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, isSelected, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
-  const c6Dim = anySelected && selectedPlayer !== 6;
-  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111', 34, c6Dim, null, 6);
+  const c6Selected = selectedPlayer === 6;
+  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111', 34, c6Selected, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   // Motion is now a pure playback choice, exactly like Wing L/R and Dir L/R
@@ -614,8 +618,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // spot, occasionally clear off screen.
   const p4Side = motionOn ? oppositeWingSide : wingSide;
 
-  const wingDim = anySelected && selectedPlayer !== 4;
-  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingDim, null, 4);
+  const wingSelected = selectedPlayer === 4;
+  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingSelected, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
   if (motionOn) {
@@ -626,26 +630,23 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   }
 
   ['3','1','2'].forEach(num => {
-    const dim = anySelected && String(selectedPlayer) !== num;
-    const c = drawCircle(DATA.backfield[num][0], DATA.backfield[num][1], num, '#111', 34, dim, null, Number(num));
+    const isSelected = String(selectedPlayer) === num;
+    const c = drawCircle(DATA.backfield[num][0], DATA.backfield[num][1], num, '#111', 34, isSelected, null, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 
   const lastRenderedPaths = [];
   // O-line blocking paths (and any other isBlocking path with player:null,
   // e.g. #4/5/6 staying in to block) carry an `id` like 'LT' instead of a
-  // player number -- see the O-line circles above. When a LINE position is
-  // selected (selectedPlayer is a string), match on id and dim every OTHER
-  // blocking path too, so "just show me my assignment" actually isolates
-  // it. When a NUMBERED position is selected (the original, unchanged
-  // behavior), blocking paths never dim -- they're always background
-  // context for whoever's route/carry is highlighted.
+  // player number -- see the O-line circles above. A LINE position selected
+  // (selectedPlayer is a string) glows the matching block; a NUMBERED
+  // position selected glows the matching route/carry. Everything else stays
+  // full opacity either way -- no more "background context" dimming
+  // exception to reason about now that dimming itself is gone.
   const isLineSelected = typeof selectedPlayer === 'string';
   variant.paths.forEach(p => {
-    const matchesSelected = isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer);
-    const isSelected = anySelected && matchesSelected;
-    const dim = anySelected && (isLineSelected ? !matchesSelected : (!p.isBlocking && (p.player === null || p.player !== selectedPlayer)));
-    const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
+    const isSelected = selectedPlayer !== null && (isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer));
+    const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
 
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
     if (p.dualSideBlock) {
@@ -918,40 +919,43 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   const pos = DATA.split[splitSide];
 
   // Auto-highlight the signed-in player's own position, same idea as
-  // renderCardDiagram (Shotgun) -- but purely passive here, no click-to-
-  // toggle support in Split's diagram yet, so `selectedPlayer` only ever
-  // comes from defaultHighlightForSignedInPlayer(), never a manual tap.
+  // renderCardDiagram (Shotgun). Also now click-to-toggle just like
+  // Shotgun -- `selectedPlayer` starts from defaultHighlightForSignedInPlayer()
+  // but a tap on any circle here dispatches the same 'playerclick' event
+  // buildCard already listens for, so no other wiring changed.
   selectedPlayer = selectedPlayer === undefined ? null : selectedPlayer;
-  const anySelected = selectedPlayer !== null;
   const isLineSelected = typeof selectedPlayer === 'string';
 
-  function drawCircle(x, y, label, fontSize, r, stroke, dim) {
+  function drawCircle(x, y, label, fontSize, r, stroke, isSelected, playerNum) {
     stroke = stroke || '#111';
-    const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
+    const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
     wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': 8 }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
     wrap.circleEl = wrap.children[0]; wrap.textEl = t;
+    if (playerNum !== undefined) {
+      wrap.style.cursor = 'pointer';
+      wrap.addEventListener('click', (ev) => { ev.stopPropagation(); stage.dispatchEvent(new CustomEvent('playerclick', { detail: playerNum })); });
+    }
     return wrap;
   }
 
   getSplitDefense().forEach(d => {
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR, anySelected));
+    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR, false));
   });
 
   const playerCircles = {};
   ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
-    // Same rule as renderCardDiagram's Shotgun O-line circles: only dims
-    // for a LINE selection, not a numbered one (their paths/blocks are
-    // background context either way, matching the numbered case).
-    const dim = anySelected && isLineSelected && selectedPlayer !== k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22, null, null, dim);
+    // Same rule as renderCardDiagram's Shotgun O-line circles: only glows
+    // for a LINE selection, not a numbered one.
+    const isSelected = isLineSelected && selectedPlayer === k;
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22, null, null, isSelected, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
-    const dim = anySelected && selectedPlayer !== Number(num);
-    const c = drawCircle(pos[num][0], pos[num][1], num, 34, null, null, dim);
+    const isSelected = selectedPlayer === Number(num);
+    const c = drawCircle(pos[num][0], pos[num][1], num, 34, null, null, isSelected, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 
@@ -960,13 +964,11 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
     const points = p.points;
     const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
-    // Same matching rules as renderCardDiagram's Shotgun path: a numbered
-    // selection never dims blocking paths (always background context); a
-    // LINE selection (O-line id) isolates just that one block, dimming
-    // every other path including other blocking stubs.
-    const matchesSelected = isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer);
-    const dimThis = anySelected && (isLineSelected ? !matchesSelected : (!p.isBlocking && (p.player === null || p.player !== selectedPlayer)));
-    const wrap = svgEl('g', { class: dimThis ? 'dimmed' : 'full-op' });
+    // Same matching rule as renderCardDiagram's Shotgun path: a numbered
+    // selection glows the matching route/carry; a LINE selection (O-line
+    // id) glows just that one block. Everything else stays full opacity.
+    const isSelected = selectedPlayer !== null && (isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer));
+    const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
     const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
     if (p.fake) attrs['stroke-dasharray'] = '10 8';
     const pathEl = svgEl('path', attrs);

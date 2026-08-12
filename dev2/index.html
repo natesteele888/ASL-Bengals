@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260812f">
+<link rel="stylesheet" href="css/styles.css?v=20260812g">
 </head>
 <body>
 <script>
@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12f (less-washed-out-dimmed-players) -->
+<!-- BUILD_VERSION: 2026-08-12g (orange-glow-highlight-not-dimming) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -253,7 +253,7 @@
   </div>
   <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
   <div class="play-grid" id="playCallsGrid"></div>
-  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player to highlight him, tap the flip icon to see the signal call.</div>
+  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Shotgun or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
 </div>
 
 
@@ -327,7 +327,7 @@
           <div class="mockPlayerCircle">3</div>
           <div class="mockTapHint">👆 Tap your number, then ▶ Play</div>
         </div>
-        <p class="pcTutorialText"><strong>Tap your number</strong> on the diagram to light up just your path. Tap <strong>▶</strong> to watch the play run. Tap your number again to see everyone.</p>
+        <p class="pcTutorialText"><strong>Tap your number</strong> on the diagram to give it an orange glow so it's easy to follow. Tap <strong>▶</strong> to watch the play run. Tap your number again to turn the glow off. Set your position from the name menu and this happens automatically — in Split too.</p>
       </div>
       <div class="pcTutorialStep" data-step="4">
         <div class="pcTutorialHeader">🔄 Flip for the signal</div>
@@ -591,7 +591,7 @@
       <li>🎓 <b>Study Signals</b> — tap a category to expand it and see every signal in it.</li>
       <li>🏈 <b>Quiz</b> — pick the right meaning, several rounds of 6, and build your streak!</li>
       <li>⏱️ <b>Timed Quiz</b> — race the clock through every signal in the book; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
-      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change.</li>
+      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change. Tap any player's number to give him an orange glow so it's easy to track just his job — set your position from the name menu and this happens automatically every time you open a play.</li>
       <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching Wing/Motion/Play/In-Out/Direction/Boot answer. Starts easy and gets tougher round by round.</li>
       <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
       <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Timed and Play Quiz boards (Quiz Scores isn't ranked — most players clear it, so it wouldn't mean much).</li>
@@ -634,7 +634,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812f';
+  const BUILD_V = '20260812g';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
