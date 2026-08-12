@@ -719,17 +719,27 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 // like he was taking off on a scramble rather than setting up to pass.
 //
 // The backfield companion (whichever of 2/3 isn't flexed out) is the one
-// exception that DOES still depend on which play is selected: Nathan --
-// "the running back in the backside still runs his fake handoff then looks
-// to pickup anyone coming in on the qb." So he runs the exact same path he
-// would have carried the ball on (reused from the play's own run data,
-// same as getSplitBlockingPaths reuses it for a real run), drawn as a fake
-// (dashed, no ball, no arrowhead -- same convention as Option's fake dive),
-// then comes back from wherever that fake ends to a spot near the QB to
-// check for a blitzer. The three route-runners (wide, flex, player 4) are
-// unaffected either way -- getSplitRoutePaths already draws their routes
-// regardless of run/pass, per "even if the team runs the receivers still
-// run their assigned routes."
+// exception that DOES still depend on which play is selected. Nathan
+// refined this twice:
+//   1. "the running back in the backside still runs his fake handoff then
+//      looks to pickup anyone coming in on the qb" -- first version had him
+//      run the real run path as a fake, then continue on to a separate
+//      computed spot nearer the QB to block from.
+//   2. "the running back has to fake the handoff by running through the
+//      handoff and blocking at the hole they would hit on the run. so an
+//      inside blast, they would run the blast path and block someone
+//      coming through the hole" -- that "separate spot nearer the QB" was
+//      wrong; the block happens right at the hole itself, i.e. wherever the
+//      real run path ends, not somewhere else downfield toward the QB.
+// So he runs the exact same path he would have carried the ball on (reused
+// from the play's own run data, same as getSplitBlockingPaths reuses it for
+// a real run), drawn as a fake (dashed, no ball, no arrowhead -- same
+// convention as Option's fake dive), then plants and blocks right there
+// with a short stub in the same kick-slide-back style as the O-line's own
+// block stubs above, rather than traveling anywhere else. The three
+// route-runners (wide, flex, player 4) are unaffected either way --
+// getSplitRoutePaths already draws their routes regardless of run/pass, per
+// "even if the team runs the receivers still run their assigned routes."
 function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
   const pos = DATA.split[splitSide];
   const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
@@ -752,9 +762,10 @@ function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPos
     paths.push({ player: companionNum, ball: false, fake: true, width: 9, points: realBallPath.points });
     fakeEnd = realBallPath.points[realBallPath.points.length - 1];
   }
+  // Block right at the hole -- wherever the fake run path ends -- with a
+  // short stub, same style/direction as the O-line's own block stubs above.
+  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [fakeEnd, [fakeEnd[0], fakeEnd[1] + 22]] });
   const [qx, qy] = pos['1'];
-  const pickupSpot = [(fakeEnd[0] + qx) / 2, qy + 30];
-  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [fakeEnd, pickupSpot] });
 
   // QB: fake the handoff toward the companion's mesh point (short, dashed,
   // no ball -- generic regardless of which run this pass is dressed up as,
