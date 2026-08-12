@@ -23,7 +23,7 @@
   }
 </script>
 <div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
-<!-- BUILD_VERSION: 2026-08-11f (accurate-tooltips-for-coach-share) -->
+<!-- BUILD_VERSION: 2026-08-12a (player-position-auto-highlight) -->
 <script>
   // The dev2 banner above is position:fixed (so it stays put on scroll)
   // which takes it out of normal document flow -- without this, it just
@@ -53,6 +53,7 @@
     <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span></button>
     <div class="playerMenuDropdown" id="playerMenuDropdown">
       <button id="myStatsBtn">📊 My Stats</button>
+      <button id="myPositionBtn">🏈 My Position</button>
       <button id="playerIdSwitchBtn">🚪 Sign Out</button>
     </div>
   </div>
@@ -527,6 +528,28 @@
   </div>
 </div>
 
+<div class="lbOverlay" id="posPromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3 id="posPromptTitle">🏈 What position do you play?</h3>
+    <div class="lbSub">Picking your number highlights your job automatically every time you open a play. You can change this anytime from your name menu.</div>
+    <div class="posPillGrid" id="posPillGrid">
+      <button class="posPill" data-position="1">QB<span class="posPillSub">#1</span></button>
+      <button class="posPill" data-position="2">RB<span class="posPillSub">#2</span></button>
+      <button class="posPill" data-position="3">RB<span class="posPillSub">#3</span></button>
+      <button class="posPill" data-position="4">Wing<span class="posPillSub">#4</span></button>
+      <button class="posPill" data-position="5">TE<span class="posPillSub">#5</span></button>
+      <button class="posPill" data-position="6">TE<span class="posPillSub">#6</span></button>
+      <button class="posPill" data-position="LT">LT</button>
+      <button class="posPill" data-position="LG">LG</button>
+      <button class="posPill" data-position="C">C</button>
+      <button class="posPill" data-position="RG">RG</button>
+      <button class="posPill" data-position="RT">RT</button>
+      <button class="posPill" data-position="COACH">Coach</button>
+    </div>
+    <button class="navBtn secondary lbCloseBtn" id="posPromptSkipBtn" style="width:100%;">Skip for now</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="historyOverlay">
   <div class="lbCard">
     <h3>📜 Your History</h3>
@@ -615,7 +638,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260811f';
+  const BUILD_V = '20260812a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([

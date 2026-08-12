@@ -202,6 +202,17 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbName{flex:1;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
 .lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
+
+/* ===== Position picker (posPromptOverlay) -- reuses .lbOverlay/.lbCard chrome ===== */
+.posPillGrid{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin:4px 0 14px}
+.posPill{background:var(--paper);border:2px solid var(--line);border-radius:10px;padding:12px 6px;
+  font-size:13px;font-weight:800;color:var(--ink);cursor:pointer;text-align:center;line-height:1.25}
+.posPill .posPillSub{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-top:1px}
+.posPill:active{background:#fff4e8}
+.posPill.active{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+.posPill.active .posPillSub{color:rgba(255,255,255,.85)}
+[data-theme="dark"] .posPill{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .posPill.active{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
 .lbOfflineNote{text-align:center;color:#b0722f;font-size:10.5px;padding:8px 6px 2px;line-height:1.4}
 .lbCloseBtn{width:100%}
 

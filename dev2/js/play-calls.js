@@ -525,6 +525,11 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
   const anySelected = selectedPlayer !== null;
+  // A LINE position selected (selectedPlayer is a string id) isolates the
+  // O-line the same way a numbered selection isolates skill players; a
+  // NUMBERED selection leaves the O-line circles alone (full-op), matching
+  // their paths never dimming either -- they're background context.
+  const isLineSelectedForCircles = typeof selectedPlayer === 'string';
   const wingPos = DATA.wing[wingSide];
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
 
@@ -555,8 +560,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const c5Dim = anySelected && selectedPlayer !== 5;
   const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111', 34, c5Dim, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
+  // O-line circles were never selectable/highlightable at all (dim
+  // hardcoded false, no playerNum -> no click listener) -- added so a
+  // player whose position is an O-line spot (LT/LG/C/RG/RT) can have it
+  // auto-highlighted the same way numbered positions already were. Only
+  // dims for a LINE selection (isLineSelectedForCircles) -- a numbered
+  // selection leaves these alone, same as it always has.
   ['LT','LG','C','RG','RT'].forEach(k => {
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, false);
+    const dim = anySelected && isLineSelectedForCircles && selectedPlayer !== k;
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, dim, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   const c6Dim = anySelected && selectedPlayer !== 6;
@@ -595,9 +607,19 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   });
 
   const lastRenderedPaths = [];
+  // O-line blocking paths (and any other isBlocking path with player:null,
+  // e.g. #4/5/6 staying in to block) carry an `id` like 'LT' instead of a
+  // player number -- see the O-line circles above. When a LINE position is
+  // selected (selectedPlayer is a string), match on id and dim every OTHER
+  // blocking path too, so "just show me my assignment" actually isolates
+  // it. When a NUMBERED position is selected (the original, unchanged
+  // behavior), blocking paths never dim -- they're always background
+  // context for whoever's route/carry is highlighted.
+  const isLineSelected = typeof selectedPlayer === 'string';
   variant.paths.forEach(p => {
-    const isSelected = anySelected && p.player === selectedPlayer;
-    const dim = anySelected && !p.isBlocking && (p.player === null || p.player !== selectedPlayer);
+    const matchesSelected = isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer);
+    const isSelected = anySelected && matchesSelected;
+    const dim = anySelected && (isLineSelected ? !matchesSelected : (!p.isBlocking && (p.player === null || p.player !== selectedPlayer)));
     const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
 
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
@@ -653,7 +675,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
       circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
   });
 
@@ -861,7 +883,7 @@ function getSplitDefense() {
   ];
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn) {
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer) {
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -870,9 +892,17 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   const circlesLayer = svgEl('g', {});
   const pos = DATA.split[splitSide];
 
-  function drawCircle(x, y, label, fontSize, r, stroke) {
+  // Auto-highlight the signed-in player's own position, same idea as
+  // renderCardDiagram (Shotgun) -- but purely passive here, no click-to-
+  // toggle support in Split's diagram yet, so `selectedPlayer` only ever
+  // comes from defaultHighlightForSignedInPlayer(), never a manual tap.
+  selectedPlayer = selectedPlayer === undefined ? null : selectedPlayer;
+  const anySelected = selectedPlayer !== null;
+  const isLineSelected = typeof selectedPlayer === 'string';
+
+  function drawCircle(x, y, label, fontSize, r, stroke, dim) {
     stroke = stroke || '#111';
-    const wrap = svgEl('g', {});
+    const wrap = svgEl('g', { class: dim ? 'dimmed' : 'full-op' });
     wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': 8 }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
@@ -882,16 +912,21 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   }
 
   getSplitDefense().forEach(d => {
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR));
+    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR, anySelected));
   });
 
   const playerCircles = {};
   ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22);
+    // Same rule as renderCardDiagram's Shotgun O-line circles: only dims
+    // for a LINE selection, not a numbered one (their paths/blocks are
+    // background context either way, matching the numbered case).
+    const dim = anySelected && isLineSelected && selectedPlayer !== k;
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22, null, null, dim);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
-    const c = drawCircle(pos[num][0], pos[num][1], num, 34);
+    const dim = anySelected && selectedPlayer !== Number(num);
+    const c = drawCircle(pos[num][0], pos[num][1], num, 34, null, null, dim);
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 
@@ -900,7 +935,13 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
     const points = p.points;
     const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
-    const wrap = svgEl('g', {});
+    // Same matching rules as renderCardDiagram's Shotgun path: a numbered
+    // selection never dims blocking paths (always background context); a
+    // LINE selection (O-line id) isolates just that one block, dimming
+    // every other path including other blocking stubs.
+    const matchesSelected = isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer);
+    const dimThis = anySelected && (isLineSelected ? !matchesSelected : (!p.isBlocking && (p.player === null || p.player !== selectedPlayer)));
+    const wrap = svgEl('g', { class: dimThis ? 'dimmed' : 'full-op' });
     const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
     if (p.fake) attrs['stroke-dasharray'] = '10 8';
     const pathEl = svgEl('path', attrs);
@@ -915,7 +956,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
     lastRenderedPaths.push({
-      el: pathEl, arrowEl, player: p.player, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+      el: pathEl, arrowEl, player: p.player, id: p.id, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
       circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
     });
   }
@@ -1016,10 +1057,17 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const allPaths = stage._lastRenderedPaths;
   // if a player is selected, animate his path plus all blocking (blocking
   // supports the play regardless of which skill player is being isolated);
-  // otherwise animate everyone
+  // otherwise animate everyone. A LINE position (selectedPlayer is a
+  // string id like 'LT') is the exception -- matches the render-time dim
+  // logic in renderCardDiagram, where selecting a lineman isolates just
+  // his own block instead of leaving every block stub shown, since now
+  // there's something meaningful to isolate TO.
+  const isLineSelected = typeof selectedPlayer === 'string';
   const lastRenderedPaths = selectedPlayer === null
     ? allPaths
-    : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
+    : isLineSelected
+      ? allPaths.filter(p => p.id === selectedPlayer)
+      : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
@@ -1102,6 +1150,23 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   isPlayingRef.value = false;
 }
 
+// Signed-in player's stored position (player-identity.js), translated into
+// whatever renderCardDiagram/renderSplitDiagram's selectedPlayer expects --
+// a NUMBER for the six numbered spots, a STRING id ('LT'/'LG'/'C'/'RG'/'RT')
+// for the O-line, or null for "nothing to auto-highlight" (no position set,
+// or they picked Coach). Every play card defaults its highlight to this
+// instead of nobody, so a kid's own job is called out automatically without
+// needing to tap their own number every single time -- Nathan: "either
+// that position is called out on the plays or there is a study guide...".
+// Re-read live (not cached at module load) since My Position can change
+// the session's stored value at any point while Play Calls is already open.
+function defaultHighlightForSignedInPlayer() {
+  const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+  const pos = session && session.position;
+  if (!pos || pos === 'COACH') return null;
+  return /^[1-6]$/.test(pos) ? Number(pos) : pos;
+}
+
 // ---- Build a single flip-card ----
 function buildCard(combo) {
   const outer = document.createElement('div');
@@ -1146,7 +1211,12 @@ function buildCard(combo) {
   // this just lets a coach/player flip between the two alignments to see
   // both gap reads. Only Inside Zone has this (hasReadToggle in the data).
   let readPosition = 'A';
-  let selectedPlayer = null;
+  // Defaults to the signed-in player's own position instead of nobody --
+  // see defaultHighlightForSignedInPlayer above. A manual tap on a
+  // different number still works for the rest of that view; it's just
+  // onComboChanged (below) that snaps it back to their own position,
+  // same as every other toggle-driven reset already did before this.
+  let selectedPlayer = defaultHighlightForSignedInPlayer();
   let speedMultiplier = 1;
   // Both Motion and Boot default off -- they're modifiers on top of the
   // play as authored, not a state most cards should start in.
@@ -1330,7 +1400,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
   }
 
@@ -1442,7 +1512,7 @@ function buildCard(combo) {
   function stopSignalSequence() { if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; } }
 
   function onComboChanged() {
-    selectedPlayer = null;
+    selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
     if (formation === 'split') {
