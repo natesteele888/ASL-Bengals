@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12d (remove-dev2-banner) -->
+<!-- BUILD_VERSION: 2026-08-12e (hide-study-guide-for-now) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -31,7 +31,12 @@
       <div class="playerMenuDropdown" id="playerMenuDropdown">
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
-        <button id="studyGuideBtn">📖 Study Guide</button>
+        <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
+             info per position. Keeping the button/overlay/study-guide.js in
+             place so this is a one-line toggle to bring back once it has
+             more substance (see js/study-guide.js for the "Lite vs Full"
+             scoping notes). -->
+        <button id="studyGuideBtn" style="display:none">📖 Study Guide</button>
         <button id="playerIdSwitchBtn">🚪 Sign Out</button>
       </div>
     </div>
@@ -629,7 +634,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812d';
+  const BUILD_V = '20260812e';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
