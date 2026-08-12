@@ -712,7 +712,11 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   .replay-btn:active { background: var(--bengal-orange); color: #fff; }
 
   .edit-handle { fill: #ffde00; stroke: #111; stroke-width: 2; }
-  .dimmed { opacity: .15; }
+  /* Nathan: "the others are too washed out, makes it difficult to see
+     whats going on" -- was .15 (basically invisible); still clearly
+     de-emphasized next to full-op's 1, but the rest of the play stays
+     readable instead of nearly disappearing. */
+  .dimmed { opacity: .45; }
   .full-op { opacity: 1; }
 
   
