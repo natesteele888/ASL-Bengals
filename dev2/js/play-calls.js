@@ -133,37 +133,27 @@ function normalizePlayData(playTypes) {
   return playTypes;
 }
 
-// Same "Firebase always wins over the shipped file" problem as
-// repairStaleDirectionOrientation above, but for Split's Houston/Seattle/
-// Florida routes (DATA.splitRoutes, saved separately to splitRouteEdits.json
-// -- see edit-plays.js). Nathan confirmed he'd used Save to Cloud from the
-// Split route editor before the Seattle/Florida swap on the Right side was
-// fixed, so that cloud snapshot carries the same bug forward on every load
-// forever, exactly like the Option direction bug -- even though the shipped
-// file itself has been correct since that fix.
-//
-// First attempt at this (since reverted) tried to detect staleness by
-// comparing the loaded copy's Right-side seattle route against the exact
-// known PRE-fix coordinates, and swap it back if they matched. That still
-// showed the swapped routes after deploying -- the cloud copy apparently
-// doesn't exactly match the specific pre-fix snapshot this was written
-// against (maybe a different save, maybe minor drift from an earlier
-// widen/re-space edit), so the exact-match check silently never fired.
-// Rather than keep guessing at what's actually sitting in Firebase (which
-// isn't inspectable from here), this now just unconditionally forces the
-// Right side back to the shipped, known-correct routes every time --
-// there's no evidence anyone has ever intentionally hand-edited Right's
-// Seattle/Houston/Florida shapes through the point-dragging editor (every
-// report about them has been describing this same swap bug, not asking to
-// preserve custom edits), so there's nothing legitimate to lose. Left's
-// routes are untouched -- they've never been reported wrong.
-const SHIPPED_SPLIT_ROUTES_RIGHT = (window.DATA.splitRoutes && window.DATA.splitRoutes.Right)
-  ? JSON.parse(JSON.stringify(window.DATA.splitRoutes.Right))
-  : null;
+// Split's Houston/Seattle/Florida routes (DATA.splitRoutes, saved
+// separately to splitRouteEdits.json -- see edit-plays.js) went through two
+// rounds of an auto-repair here that are now BOTH removed:
+//   1. Detect the Right side's known pre-fix (Seattle/Florida swapped)
+//      shape and swap it back -- never actually fired, because whatever
+//      was really sitting in Firebase didn't exactly match the assumed
+//      snapshot.
+//   2. Unconditionally force the Right side back to the shipped routes on
+//      every load, sidestepping the detection problem entirely -- this
+//      DID work, but it also silently discarded every future save, because
+//      it can't tell "stale pre-fix data" apart from "a coach's brand new,
+//      more accurate hand-edit." Nathan hit exactly that: he was actively
+//      re-drawing Right's routes in the editor because the shipped ones
+//      were "generic... less accurate," and his saves kept reverting.
+// So this is back to a plain pass-through again -- whatever's saved to
+// splitRouteEdits.json is trusted as-is, Left and Right both, same as
+// every other cloud save in this app. The actual fix for the original
+// swap bug lives in the shipped file's data (see plays.json) and in
+// whatever Nathan saves next from the editor now that it's unlocked; there
+// is no longer any code-level correction layered on top of it.
 function repairStaleSplitRoutes(splitRoutes) {
-  if (splitRoutes && SHIPPED_SPLIT_ROUTES_RIGHT) {
-    splitRoutes.Right = JSON.parse(JSON.stringify(SHIPPED_SPLIT_ROUTES_RIGHT));
-  }
   return splitRoutes;
 }
 
@@ -720,8 +710,13 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 // and the tight one of 5/6 (not split out) stay in and take a short,
 // generic kick-slide step to protect instead of releasing downfield --
 // that part is the same regardless of which of the 6 plays is on the card.
-// The QB drops back with the ball instead of handing it off, since on a
-// pass there's no run to hand off to.
+// The QB himself also sells a fake handoff (a short dashed step toward the
+// mesh point, same "sell the fake" convention as the companion's dashed
+// fake path below) before pulling the ball back and dropping one short
+// step to throw from -- Nathan: "QB fakes the handoff and drops a step
+// back to throw." That replaced an earlier version that just had him carry
+// the ball 90 units straight back with a run-style arrow, which looked
+// like he was taking off on a scramble rather than setting up to pass.
 //
 // The backfield companion (whichever of 2/3 isn't flexed out) is the one
 // exception that DOES still depend on which play is selected: Nathan --
@@ -761,7 +756,15 @@ function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPos
   const pickupSpot = [(fakeEnd[0] + qx) / 2, qy + 30];
   paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [fakeEnd, pickupSpot] });
 
-  paths.push({ player: 1, ball: true, endType: 'run', width: 9, points: [[qx, qy], [qx, qy + 90]] });
+  // QB: fake the handoff toward the companion's mesh point (short, dashed,
+  // no ball -- generic regardless of which run this pass is dressed up as,
+  // same as every other pre-snap look on this card), then a short drop
+  // step straight back to throw from. Not the old 90-unit straight run.
+  const meshSign = cx >= qx ? 1 : -1;
+  const fakeMeshSpot = [qx + meshSign * 40, qy - 15];
+  paths.push({ player: 1, ball: false, fake: true, width: 9, points: [[qx, qy], fakeMeshSpot] });
+  const dropSpot = [qx, qy + 35];
+  paths.push({ player: 1, ball: true, endType: 'run', width: 9, points: [fakeMeshSpot, dropSpot] });
 
   return paths;
 }

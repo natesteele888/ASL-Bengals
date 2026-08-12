@@ -420,19 +420,14 @@ function loadSavedPlaysFromCloud() {
       gotAny = true;
     }
     if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-      // repairStaleSplitRoutes (play-calls.js) now unconditionally forces
-      // the Right side's Seattle/Houston/Florida routes back to the shipped
-      // (correct) shapes, regardless of whatever's actually sitting in this
-      // cloud snapshot -- see the comment on that function for why. Applying
-      // it here too, not just in the read-only Play Calls view, means this
-      // editor will always show Right's routes correctly, but it ALSO means
-      // any future point-drag edit to Right's Seattle/Houston/Florida made
-      // in here and saved to cloud will look right for the rest of THIS
-      // session but get silently overwritten back to shipped on the next
-      // load -- Right's side of this editor is effectively read-only via
-      // the cloud path until this override is intentionally removed. Left's
-      // routes are unaffected and still fully editable/persistable as
-      // before.
+      // repairStaleSplitRoutes (play-calls.js) is now a plain pass-through
+      // -- an earlier version forced Right's routes back to shipped on
+      // every load, which also silently discarded any real point-drag edit
+      // made here and saved to cloud. Nathan needs Right's Seattle/Houston/
+      // Florida routes to be editable/persistable again (the shipped ones
+      // are "generic... less accurate" and he's redrawing them by hand), so
+      // this editor now trusts the cloud copy as-is, same as Left always
+      // has.
       DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
       gotAny = true;
     }
