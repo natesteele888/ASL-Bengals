@@ -45,11 +45,17 @@ body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFo
 .loginContent.shake{animation:loginShake .4s}
 
 header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
-.topToolbar{position:fixed;top:8px;right:8px;z-index:1100;display:flex;gap:6px}
+/* Column layout so the tiny DEV2 tag can sit under the toolbar buttons
+   instead of needing its own full-width bar across the top of the page. */
+.topToolbar{position:fixed;top:8px;right:8px;z-index:1100;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.toolbarRow{display:flex;gap:6px}
 .toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .toolbarBtn:active{background:rgba(17,17,17,.85)}
+.dev2Tag{font-size:8px;font-weight:800;letter-spacing:.05em;color:rgba(255,255,255,.6);
+  background:rgba(17,17,17,.5);border:1px solid rgba(255,255,255,.2);border-radius:4px;
+  padding:1px 5px;backdrop-filter:blur(3px)}
 .playerMenuWrap{position:relative}
 .playerMenuBtn{height:20px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:700;cursor:pointer;
@@ -63,12 +69,15 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .playerMenuDropdown button:active{background:var(--paper)}
 .playerMenuDropdown button + button{border-top:1px solid var(--line)}
 [data-theme="dark"] .playerMenuDropdown{background:var(--card)}
-.headerRow{display:flex;align-items:center;gap:12px;padding:10px 14px}
+/* A couple px taller than before (10px -> 13px vertical padding) so the
+   toolbar's button row + tiny DEV2 tag underneath it both fit comfortably
+   within the header instead of crowding its bottom edge. */
+.headerRow{display:flex;align-items:center;gap:12px;padding:13px 14px}
 .headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 
-.modeTabs{position:sticky;top:57px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
+.modeTabs{position:sticky;top:63px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
   background:none;cursor:pointer}
