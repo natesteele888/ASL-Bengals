@@ -23,7 +23,7 @@
   }
 </script>
 <div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
-<!-- BUILD_VERSION: 2026-08-12b (sweep-signal-fix + split-mobile-spacing) -->
+<!-- BUILD_VERSION: 2026-08-12c (personal-study-guide-v1) -->
 <script>
   // The dev2 banner above is position:fixed (so it stays put on scroll)
   // which takes it out of normal document flow -- without this, it just
@@ -54,6 +54,7 @@
     <div class="playerMenuDropdown" id="playerMenuDropdown">
       <button id="myStatsBtn">📊 My Stats</button>
       <button id="myPositionBtn">🏈 My Position</button>
+      <button id="studyGuideBtn">📖 Study Guide</button>
       <button id="playerIdSwitchBtn">🚪 Sign Out</button>
     </div>
   </div>
@@ -528,6 +529,14 @@
   </div>
 </div>
 
+<div class="lbOverlay" id="studyGuideOverlay">
+  <div class="lbCard">
+    <h3>📖 Study Guide</h3>
+    <div id="studyGuideBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="studyGuideCloseBtn">Close</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="posPromptOverlay">
   <div class="lbCard" style="max-width:380px;">
     <h3 id="posPromptTitle">🏈 What position do you play?</h3>
@@ -638,7 +647,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812b';
+  const BUILD_V = '20260812c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
@@ -648,7 +657,7 @@
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');

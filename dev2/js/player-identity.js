@@ -396,6 +396,16 @@
       openPositionPicker(session, { isFirstAsk: false });
     });
   }
+  const studyGuideBtn = document.getElementById('studyGuideBtn');
+  if(studyGuideBtn){
+    studyGuideBtn.addEventListener('click', () => {
+      menuDropdown.classList.remove('show');
+      // showStudyGuide() lives in study-guide.js, which loads after this
+      // file (right after play-calls.js) -- already a global by the time
+      // anyone can actually click this button.
+      if(typeof window.showStudyGuide === 'function') window.showStudyGuide();
+    });
+  }
 
   // ---- The mandatory gate ----
   function gate(onReady){
