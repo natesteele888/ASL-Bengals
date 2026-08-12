@@ -23,7 +23,7 @@
   }
 </script>
 <div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
-<!-- BUILD_VERSION: 2026-08-11d (split-pass-rb-blocks-at-the-hole) -->
+<!-- BUILD_VERSION: 2026-08-11e (split-pass-rb-just-runs-the-path) -->
 <script>
   // The dev2 banner above is position:fixed (so it stays put on scroll)
   // which takes it out of normal document flow -- without this, it just
@@ -593,7 +593,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260811d';
+  const BUILD_V = '20260811e';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([

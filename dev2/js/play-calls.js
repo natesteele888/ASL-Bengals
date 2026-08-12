@@ -720,7 +720,7 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 //
 // The backfield companion (whichever of 2/3 isn't flexed out) is the one
 // exception that DOES still depend on which play is selected. Nathan
-// refined this twice:
+// refined this three times:
 //   1. "the running back in the backside still runs his fake handoff then
 //      looks to pickup anyone coming in on the qb" -- first version had him
 //      run the real run path as a fake, then continue on to a separate
@@ -728,18 +728,20 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 //   2. "the running back has to fake the handoff by running through the
 //      handoff and blocking at the hole they would hit on the run. so an
 //      inside blast, they would run the blast path and block someone
-//      coming through the hole" -- that "separate spot nearer the QB" was
-//      wrong; the block happens right at the hole itself, i.e. wherever the
-//      real run path ends, not somewhere else downfield toward the QB.
-// So he runs the exact same path he would have carried the ball on (reused
-// from the play's own run data, same as getSplitBlockingPaths reuses it for
-// a real run), drawn as a fake (dashed, no ball, no arrowhead -- same
-// convention as Option's fake dive), then plants and blocks right there
-// with a short stub in the same kick-slide-back style as the O-line's own
-// block stubs above, rather than traveling anywhere else. The three
-// route-runners (wide, flex, player 4) are unaffected either way --
-// getSplitRoutePaths already draws their routes regardless of run/pass, per
-// "even if the team runs the receivers still run their assigned routes."
+//      coming through the hole" -- swapped that computed spot for a short
+//      block stub starting exactly where the fake run path ends.
+//   3. "dont do this. you made it so the path goes but the RB 2 starts over
+//      the line of scrimmage then slides back along the line. just have
+//      him run the path" -- that stub is gone too now. No second segment
+//      at all: he just runs the exact same path he would have carried the
+//      ball on (reused from the play's own run data, same as
+//      getSplitBlockingPaths reuses it for a real run), drawn as a fake
+//      (dashed, no ball, no arrowhead -- same convention as Option's fake
+//      dive). That alone is the whole assignment now -- no separate block
+//      indicator drawn after it. The three route-runners (wide, flex,
+//      player 4) are unaffected either way -- getSplitRoutePaths already
+//      draws their routes regardless of run/pass, per "even if the team
+//      runs the receivers still run their assigned routes."
 function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
   const pos = DATA.split[splitSide];
   const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
@@ -754,17 +756,13 @@ function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPos
   const [tx, ty] = pos[tightNum];
   paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
 
-  const [cx, cy] = pos[companionNum];
-  let fakeEnd = [cx, cy];
+  const [cx] = pos[companionNum]; // only the x is needed now, for the QB's mesh-step direction below
   const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
   const realBallPath = variant && (variant.paths || []).find(p => p.player === companionNum && p.ball && !p.optionLine);
   if (realBallPath) {
+    // Just run the path -- no separate block segment tacked on after it.
     paths.push({ player: companionNum, ball: false, fake: true, width: 9, points: realBallPath.points });
-    fakeEnd = realBallPath.points[realBallPath.points.length - 1];
   }
-  // Block right at the hole -- wherever the fake run path ends -- with a
-  // short stub, same style/direction as the O-line's own block stubs above.
-  paths.push({ player: companionNum, isBlocking: true, endType: 'block', width: 7, points: [fakeEnd, [fakeEnd[0], fakeEnd[1] + 22]] });
   const [qx, qy] = pos['1'];
 
   // QB: fake the handoff toward the companion's mesh point (short, dashed,
