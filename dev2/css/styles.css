@@ -512,6 +512,21 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
     justify-content: center;
     min-height: 30px;
   }
+  /* Split formation: In/Out and Read don't apply, so their slots are hidden
+     entirely (see updateFormationRows in play-calls.js) and the remaining
+     Left/Right route-call slots each get a full half of the row instead of
+     a cramped quarter. */
+  .toggle-row-extras.split-extras {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Route-call picker (Left/Right + Seattle/Houston/Florida): stack the
+     label above the pills instead of beside them -- side-by-side, the label
+     plus a 3-option pill group don't fit in these slots on a phone and ran
+     together illegibly. */
+  .switch-control.route-call-wrap {
+    flex-direction: column;
+    gap: 3px;
+  }
   /* Shared toggle-group pill system -- used for every L/R-style toggle in
      the app (Wing, Dir, Motion, Boot, In/Out, Read, and Edit Plays' own
      Wing/Dir/Motion/Boot/Blocking/Speed/Edit controls). One reusable

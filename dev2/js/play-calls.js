@@ -99,6 +99,20 @@ const SHIPPED_DUAL_SIDE_BLOCKS = {};
 // DATA.playTypes, so loaded data behaves identically to the built-in JSON.
 function normalizePlayData(playTypes) {
   (playTypes || []).forEach(pt => {
+    // Same "Firebase always wins" problem, this time for which signal card
+    // a play's flip side shows -- Nathan: "Sweep play shows Double blast as
+    // the signal on the flipped card. needs to correctly use signal #17
+    // (sweep)." PLAY_TYPE_SIGNAL_ID is the canonical, code-owned mapping
+    // (below), but a play's own signalCardId field, if a coach's saved
+    // snapshot happens to carry one (e.g. authored by copy/pasting from a
+    // similar play, or from before this play existed in PLAY_TYPE_SIGNAL_ID
+    // at all), takes priority over that map wherever it's read -- so a
+    // stale/wrong value baked into an old cloud snapshot sticks around
+    // forever otherwise, same as every other "cloud always wins" bug on
+    // this page. Only overrides plays the map actually knows about --
+    // 'boot' has no map entry precisely because it NEEDS its own
+    // signalCardId (26) to work at all, so that one's left alone.
+    if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
     // Force the behavioral flags back to whatever's actually shipped in
     // code, regardless of what this particular cloud snapshot has (or is
     // missing) for them -- see SHIPPED_PLAY_FLAGS above for why.
@@ -132,6 +146,24 @@ function normalizePlayData(playTypes) {
   });
   return playTypes;
 }
+
+// Canonical playType-key -> signal-card-id/label mapping. Declared here, at
+// top level outside the IIFE below (like normalizePlayData and the SHIPPED_*
+// tables above it), specifically so normalizePlayData can reach it -- it
+// used to live inside the IIFE (where the signal-sequence builder functions
+// that also use it are defined), which meant it was invisible to
+// normalizePlayData's own closure scope and silently threw a
+// ReferenceError the moment cloud data actually needed the sweep-signal
+// repair below (never caught by any existing test, since none of them
+// exercised normalizePlayData against a play carrying its own signalCardId
+// until the Sweep bug was diagnosed).
+const PLAY_TYPE_SIGNAL_ID = {
+  inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
+};
+const PLAY_TYPE_SIGNAL_LABEL = {
+  inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
+  option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
+};
 
 // Split's Houston/Seattle/Florida routes (DATA.splitRoutes, saved
 // separately to splitRouteEdits.json -- see edit-plays.js) went through two
@@ -351,13 +383,6 @@ function buildPlayList() {
 const WING_TOUCH_ID = 7;
 const FINGER_RIGHT_IDS = [4, 5, 6];  // 0 (fist), 2, 4 fingers -- all mean EVEN = RIGHT
 const FINGER_LEFT_IDS = [1, 2, 3];   // 1, 3, 5 fingers -- all mean ODD = LEFT
-const PLAY_TYPE_SIGNAL_ID = {
-  inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
-};
-const PLAY_TYPE_SIGNAL_LABEL = {
-  inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
-  option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
-};
 // Two different real signals both mean "motion is on" -- picking randomly
 // between them (same idea as the finger-count randomization below) keeps
 // the defense from pattern-reading a single fixed sign. Boot only has one
@@ -1314,6 +1339,12 @@ function buildCard(combo) {
   const rightCallToggle = buildToggleGroup('brown', routeCallOptions, rightCall, (v) => { if (isPlayingRef.value) return; rightCall = v; onComboChanged(); }, 'toggle-tiny');
   const leftCallWrap = labeledGroup('Left', leftCallToggle);
   const rightCallWrap = labeledGroup('Right', rightCallToggle);
+  // Label-over-pills instead of label-beside-pills -- "Left"/"Right" plus a
+  // 3-option Seattle/Houston/Florida picker is too much to fit on one line
+  // in these narrow slots on a phone (Nathan: "the receivers calls are too
+  // wide with Left and Right and options all written in-line").
+  leftCallWrap.classList.add('route-call-wrap');
+  rightCallWrap.classList.add('route-call-wrap');
 
   const extrasRow = document.createElement('div');
   extrasRow.className = 'toggle-row-extras';
@@ -1379,6 +1410,13 @@ function buildCard(combo) {
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
     rightCallWrap.style.display = isSplit ? '' : 'none';
+    // In/Out and Read don't apply to Split at all (their slots are just
+    // empty placeholders there), so hide those two slots outright and let
+    // Left/Right's route-call pickers each claim a full half of the row
+    // instead of being squeezed into one of four equal columns.
+    ioSlot.style.display = isSplit ? 'none' : '';
+    readSlot.style.display = isSplit ? 'none' : '';
+    extrasRow.classList.toggle('split-extras', isSplit);
     requestAnimationFrame(() => {
       [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
     });
