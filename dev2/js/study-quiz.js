@@ -788,7 +788,8 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
 });
 
 /* ============================================================
-   SIGNAL QUIZ — multiple choice, 5 rounds of 6, 2x2 answers
+   SIGNAL QUIZ — multiple choice, rounds of up to 6 (count derived
+   from ALL_CARDS.length below, not hardcoded), 2x2 answers
    ============================================================ */
 const SIG_ROUND_SIZE = 6;
 const SIG_TOTAL_ROUNDS = Math.ceil(ALL_CARDS.length / SIG_ROUND_SIZE);
@@ -1010,7 +1011,8 @@ document.getElementById('practiceMissedBtn').addEventListener('click', ()=>{
 sigBuildQuiz();
 
 /* ============================================================
-   TIMED CHALLENGE — all 30 signals, clock runs continuously.
+   TIMED CHALLENGE — every signal (ALL_CARDS.length), clock runs
+   continuously.
    Right answer -> instant advance. Wrong answer -> flash red,
    reveal the correct meaning, then the card goes to the back of
    the queue so it comes back around later. Finishes when every
@@ -1093,10 +1095,15 @@ function timedStartRun(){
   timedRenderQuestion();
 }
 function timedUpdateStats(){
+  // Was hardcoded to 30 -- broke (could never show "31 of 31", and the
+  // running "solved" count came out wrong) once the Split Formation signal
+  // was added as card #31. Derive the total from ALL_CARDS itself so this
+  // can't drift out of sync with the deck again.
+  const total = ALL_CARDS.length;
   const remaining = timedDeck.length;
-  const solved = 30 - remaining;
+  const solved = total - remaining;
   timedClockBig.textContent = formatClock(timedElapsedMs);
-  timedStatsLine.textContent = `Solved ${solved} of 30  •  ✗ ${timedMistakes}`;
+  timedStatsLine.textContent = `Solved ${solved} of ${total}  •  ✗ ${timedMistakes}`;
 }
 function timedRenderQuestion(){
   if(timedDeck.length === 0){ timedFinishQuiz(); return; }

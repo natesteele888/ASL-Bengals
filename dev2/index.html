@@ -23,7 +23,7 @@
   }
 </script>
 <div id="dev2Banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#7a2e00;color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:-apple-system,Helvetica,Arial,sans-serif;">DEV2 — internal build, not the site coaches are reviewing</div>
-<!-- BUILD_VERSION: 2026-08-11e (split-pass-rb-just-runs-the-path) -->
+<!-- BUILD_VERSION: 2026-08-11f (accurate-tooltips-for-coach-share) -->
 <script>
   // The dev2 banner above is position:fixed (so it stays put on scroll)
   // which takes it out of normal document flow -- without this, it just
@@ -264,7 +264,7 @@
   </div>
   <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
   <div class="play-grid" id="playCallsGrid"></div>
-  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle. Tap ▶ to watch the play, tap a player to highlight him, tap the flip icon to see the signal call.</div>
+  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">DEV PREVIEW — not live for players yet. Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player to highlight him, tap the flip icon to see the signal call.</div>
 </div>
 
 
@@ -311,6 +311,28 @@
         <p class="pcTutorialText">Every play can change. Flip <strong>Wing</strong> to move #4, flip <strong>Direction</strong> to run it the other way. Some plays also have <strong>Motion</strong> or <strong>Boot</strong> — try those too!</p>
       </div>
       <div class="pcTutorialStep" data-step="2">
+        <div class="pcTutorialHeader">🏈 New: Split formation</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockToggleRow">
+            <div class="toggle-group toggle-green mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="false">Shotgun</button>
+              <button class="toggle-btn" aria-pressed="true">Split</button>
+            </div>
+          </div>
+          <div class="mockToggleRow">
+            <div class="switch-control mockToggle">
+              <span class="switch-label">Pass</span>
+              <button class="switch-toggle" aria-pressed="false">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </button>
+            </div>
+          </div>
+          <div class="mockTapHint">👆 Flip Formation to Split</div>
+        </div>
+        <p class="pcTutorialText">Some plays can also line up in <strong>Split</strong>. Pick <strong>Split L</strong> or <strong>Split R</strong>, then flip <strong>Pass</strong> on to fake the run and throw instead. With Pass on, each side calls its own route — <strong>Seattle</strong>, <strong>Houston</strong>, or <strong>Florida</strong>.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="3">
         <div class="pcTutorialHeader">✅ Know your job</div>
         <div class="pcTutorialIllustration">
           <div class="mockPlayerCircle">3</div>
@@ -318,7 +340,7 @@
         </div>
         <p class="pcTutorialText"><strong>Tap your number</strong> on the diagram to light up just your path. Tap <strong>▶</strong> to watch the play run. Tap your number again to see everyone.</p>
       </div>
-      <div class="pcTutorialStep" data-step="3">
+      <div class="pcTutorialStep" data-step="4">
         <div class="pcTutorialHeader">🔄 Flip for the signal</div>
         <div class="pcTutorialIllustration">
           <div class="mockFlipBtn">&#8635;</div>
@@ -548,12 +570,12 @@
     <div class="lbSub">A few quick tips to get started</div>
     <ul class="tipsList">
       <li>🎓 <b>Study Signals</b> — tap a category to expand it and see every signal in it.</li>
-      <li>🏈 <b>Quiz</b> — pick the right meaning, 5 rounds of 6, and build your streak!</li>
-      <li>⏱️ <b>Timed Quiz</b> — race the clock through all 30 signals; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
-      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles to see exactly how the call and the diagram change.</li>
+      <li>🏈 <b>Quiz</b> — pick the right meaning, several rounds of 6, and build your streak!</li>
+      <li>⏱️ <b>Timed Quiz</b> — race the clock through every signal in the book; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
+      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change.</li>
       <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching Wing/Motion/Play/In-Out/Direction/Boot answer. Starts easy and gets tougher round by round.</li>
       <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
-      <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on each board.</li>
+      <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Timed and Play Quiz boards (Quiz Scores isn't ranked — most players clear it, so it wouldn't mean much).</li>
       <li>🌙 Tap the moon/sun to switch between dark and light mode.</li>
       <li>🔊 Tap the speaker to mute or unmute the music.</li>
       <li>? Tap this icon anytime to see these tips again.</li>
@@ -593,7 +615,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260811e';
+  const BUILD_V = '20260811f';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([

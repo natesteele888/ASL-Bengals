@@ -63,7 +63,13 @@
   if(!themeBtn) return;
 
   function isDark(){ return document.documentElement.getAttribute('data-theme') === 'dark'; }
-  function updateIcon(){ themeBtn.textContent = isDark() ? '☀️' : '🌙'; }
+  // title used to always read "Dark mode" even once already in dark mode,
+  // where clicking it actually switches back to light -- keep it in sync
+  // with the icon instead.
+  function updateIcon(){
+    themeBtn.textContent = isDark() ? '☀️' : '🌙';
+    themeBtn.title = isDark() ? 'Light mode' : 'Dark mode';
+  }
   updateIcon();
 
   themeBtn.addEventListener('click', function(){
