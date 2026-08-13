@@ -110,6 +110,81 @@
       .catch(() => {}); // best-effort; not being able to log a timestamp shouldn't block anyone
   }
 
+  // ---- Session-duration tracking (Nathan: "show me metrics of how often
+  // they are using it, how long they are using it") -----------------------
+  // Nothing in the app tracked elapsed time before this -- lastSeen is a
+  // single rolling "last activity" stamp, not a log of visits. This logs
+  // one row per visit to analytics/sessions, and keeps it roughly current
+  // via a periodic heartbeat while the tab is open, same fire-and-forget
+  // spirit as touchLastSeen and cloudPush elsewhere -- never blocks the
+  // app, and a missed write just means one slightly-stale duration number,
+  // not a broken session.
+  const SESSION_HEARTBEAT_MS = 25000;
+  // A forgotten-open tab shouldn't be able to report a multi-day "session"
+  // -- cap how much a single heartbeat can advance duration by, same idea
+  // as the route-clamping elsewhere in this app.
+  const SESSION_MAX_MS = 3 * 60 * 60 * 1000; // 3 hours
+  let sessionTrackingStarted = false;
+
+  function startSessionTracking(playerId, name){
+    if(sessionTrackingStarted) return; // once per page load is enough -- gate() can run more than once
+    sessionTrackingStarted = true;
+    const startedAtMs = Date.now();
+    // Updated on every tap/keypress (cheap, in-memory only -- no network
+    // call here) so an idle-but-open tab stops padding duration once a kid
+    // walks away; the heartbeat interval below is what actually persists
+    // it, on its own fixed cadence, not once per tap.
+    let lastActivityMs = startedAtMs;
+    let sessionKey = null;
+
+    function currentDurationMs(){
+      return Math.min(lastActivityMs - startedAtMs, SESSION_MAX_MS);
+    }
+    function writeHeartbeat(){
+      if(!sessionKey) return;
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/analytics/sessions/${sessionKey}.json`)
+        .then(url => fetch(url, {
+          method: 'PATCH',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            lastActivityAt: new Date(lastActivityMs).toISOString(),
+            durationMs: currentDurationMs(),
+          }),
+        }))
+        .catch(() => {});
+    }
+    function markActivity(){ lastActivityMs = Date.now(); }
+    ['click', 'touchstart', 'keydown'].forEach(evt => {
+      document.addEventListener(evt, markActivity, { passive: true });
+    });
+
+    window.firebaseAuthed(`${FIREBASE_DB_URL}/analytics/sessions.json`)
+      .then(url => fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          playerId: playerId, name: name,
+          startedAt: new Date(startedAtMs).toISOString(),
+          lastActivityAt: new Date(startedAtMs).toISOString(),
+          durationMs: 0,
+        }),
+      }))
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if(data && data.name) sessionKey = data.name; // Firebase POST response key is the generated push ID
+      })
+      .catch(() => {});
+
+    setInterval(writeHeartbeat, SESSION_HEARTBEAT_MS);
+    // Opportunistic extra write the moment the tab goes to the background --
+    // may not always finish before the browser suspends things, but costs
+    // nothing to try, and catches a lot of real "closed the app" moments
+    // the next scheduled heartbeat would otherwise miss by up to 25s.
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden) writeHeartbeat();
+    });
+  }
+
   // Admin-only: wipes a player's tracked Play Calls Quiz stats (best score,
   // last score, play count) -- e.g. clearing out a coach's own test runs so
   // they don't show up as a real score on the leaderboard/admin view.
@@ -160,10 +235,12 @@
   }
 
   // Records one Play Calls Quiz result against the signed-in player,
-  // bumping their best score if this run beat it. First step toward "what
-  // scores they're getting even if they aren't submitting it" -- scoped to
-  // the Play Calls Quiz for now; Study/Timed Quiz aren't wired to player
-  // IDs yet. Fire-and-forget by design, same spirit as touchLastSeen.
+  // bumping their best score if this run beat it, AND (Nathan: "keep all
+  // record history available to see") appends a full-history row to
+  // analytics/pcqResults -- the player record itself still only carries
+  // best/last (cheap to read for the leaderboard/My Stats), but the coach
+  // dashboard's real history/trend view reads the append-only log instead.
+  // Fire-and-forget by design, same spirit as touchLastSeen.
   async function recordQuizResult(score, maxScore){
     const session = getSession();
     if(!session) return null;
@@ -187,6 +264,16 @@
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(patch),
       });
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/analytics/pcqResults.json`)
+        .then(historyUrl => fetch(historyUrl, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            playerId: session.playerId, name: session.name,
+            score: score, maxScore: maxScore, date: new Date().toISOString(),
+          }),
+        }))
+        .catch(() => {});
       return { isNewBest: isNewBest, bestScore: isNewBest ? score : prevBest, bestMaxScore: isNewBest ? maxScore : (existing && existing.pcqBestMaxScore) || maxScore };
     } catch(e){ return null; } // best-effort; a failed save shouldn't block the done screen
   }
@@ -329,6 +416,7 @@
       setSession(session);
       updateBadge(session.name);
       hideOverlay();
+      startSessionTracking(session.playerId, session.name);
       if(pendingReady){ const cb = pendingReady; pendingReady = null; cb(); }
       // Fire-and-forget -- app usability never waits on this, per Nathan
       // ("skippable and changeable later").
@@ -413,6 +501,7 @@
     if(session && session.name){
       updateBadge(session.name);
       touchLastSeen(session.playerId);
+      startSessionTracking(session.playerId, session.name);
       onReady();
       // Fire-and-forget, same as the fresh-sign-in path above -- covers
       // every returning player whose account predates this feature.
