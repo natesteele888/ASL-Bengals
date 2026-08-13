@@ -740,7 +740,18 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   }
   .selected-glow { animation: selectedGlowPulse 1.3s ease-in-out infinite; }
 
-  
+  /* Nathan: "this needs to be a bigger callout - have the CB flash..." --
+     the Option TE-read callout's block target. A hard on/off flash (steps,
+     not ease-in-out) so it reads as an alert, distinct from the smooth
+     selected-player glow above -- and red (matches the callout text) not
+     orange, so it doesn't look like a position-highlight selection. */
+  @keyframes teReadFlashPulse {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50% { filter: drop-shadow(0 0 10px #e0201a) drop-shadow(0 0 18px #e0201a) drop-shadow(0 0 26px #e0201a); }
+  }
+  .te-read-flash { animation: teReadFlashPulse 0.7s steps(1, jump-none) infinite; }
+
+
 .pcInfoOverlay {
   position: fixed;
   inset: 0;

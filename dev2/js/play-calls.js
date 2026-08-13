@@ -144,7 +144,16 @@ function normalizePlayData(playTypes) {
       });
     });
   });
-  return playTypes;
+  // Nathan: "boot was added as a play call. needs to be removed - its just
+  // an add on option for other plays." Removed from the shipped data, but
+  // a cloud snapshot saved (via Edit Plays' "Save to Cloud") before this
+  // change still has it as a whole playType entry -- same "cloud always
+  // wins" class of bug as everything else on this page, so without this it
+  // would silently reappear in the grid. This only drops the standalone
+  // 'boot' PLAY; the Boot on/off TOGGLE that other plays use (BOOT_SIGNAL_ID,
+  // bootOn throughout this file) is a completely separate mechanism and is
+  // untouched.
+  return playTypes.filter(pt => pt.key !== 'boot');
 }
 
 // Canonical playType-key -> signal-card-id/label mapping. Declared here, at
@@ -605,23 +614,45 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // Short on-diagram callout for a play/path that has a conditional,
   // situational assignment the static arrow alone can't show (currently
   // just Option's cross-side TE block -- see the crossNote comment above).
-  // Full explanation goes in a <title> for hover/screen-reader access; the
-  // visible text stays short enough to actually fit on a phone-size card.
+  // Full explanation goes in a <title> for hover/screen-reader access.
+  // Nathan: "this needs to be a bigger callout - have the CB flash and
+  // have this text above the CB show and be x3 the size." -- endPoint is
+  // the block target's own position (crossPoints lands exactly on the
+  // defender), so it doubles as the anchor for placing the text above him.
   function buildReadNoteEl(endPoint, fullText) {
     const [ex, ey] = endPoint;
     const g = svgEl('g', {});
     const title = svgEl('title', {});
     title.textContent = fullText;
     g.appendChild(title);
+    const fontSize = 45; // 15 * 3
+    const lineHeight = 51; // 17 * 3
+    const gapAboveCircle = 14;
+    const line2Y = ey - CIRCLE_R - gapAboveCircle;
+    const line1Y = line2Y - lineHeight;
     const t = svgEl('text', {
-      x: ex, y: ey + 46, 'text-anchor': 'middle', 'font-size': 15,
+      x: ex, y: line1Y, 'text-anchor': 'middle', 'font-size': fontSize,
       'font-weight': 800, 'font-style': 'italic', fill: READKEY_COLOR,
     });
     const line1 = svgEl('tspan', { x: ex, dy: 0 }); line1.textContent = 'TE READS:';
-    const line2 = svgEl('tspan', { x: ex, dy: 17 }); line2.textContent = 'LB or CB';
+    const line2 = svgEl('tspan', { x: ex, dy: lineHeight }); line2.textContent = 'LB or CB';
     t.appendChild(line1); t.appendChild(line2);
     g.appendChild(t);
     return g;
+  }
+
+  // Find whichever defender's circle sits at this exact spot (crossPoints
+  // always lands squarely on the actual block target) so it can flash --
+  // populated below, keyed by defender id, as the defense circles get drawn.
+  const defenseCircles = {};
+  function flashDefenderAt(pt) {
+    const [px, py] = pt;
+    let bestId = null, bestDist = Infinity;
+    activeDefense.forEach(d => {
+      const dist = Math.hypot(d.pos[0] - px, d.pos[1] - py);
+      if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+    });
+    if (bestId && defenseCircles[bestId]) defenseCircles[bestId].classList.add('te-read-flash');
   }
 
   activeDefense.forEach(d => {
@@ -629,7 +660,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
     const r = CIRCLE_R;
     const fs = 26;
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, false, r));
+    const dc = drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, false, r);
+    circlesLayer.appendChild(dc);
+    defenseCircles[d.id] = dc;
   });
 
   const c5Selected = selectedPlayer === 5;
@@ -762,6 +795,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     pathsLayer.appendChild(wrap);
 
     if (readNoteToShow) {
+      flashDefenderAt(points[points.length - 1]);
       pathsLayer.appendChild(buildReadNoteEl(points[points.length - 1], readNoteToShow));
     }
 
