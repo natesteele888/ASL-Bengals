@@ -628,15 +628,22 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const fontSize = 45; // 15 * 3
     const lineHeight = 51; // 17 * 3
     const gapAboveCircle = 14;
-    const line2Y = ey - CIRCLE_R - gapAboveCircle;
-    const line1Y = line2Y - lineHeight;
+    // Nathan: "TE READ:LB or CB / Needs to say TE READ: If no LB behind DE,
+    // take the CB" -- wrapped across short lines (rather than one long one)
+    // so it stays centered on the defender without running off the left or
+    // right edge of the diagram when he's out near the sideline.
+    const lines = ['TE READ:', 'If no LB', 'behind DE,', 'take the CB'];
+    const lastLineY = ey - CIRCLE_R - gapAboveCircle;
+    const firstLineY = lastLineY - lineHeight * (lines.length - 1);
     const t = svgEl('text', {
-      x: ex, y: line1Y, 'text-anchor': 'middle', 'font-size': fontSize,
+      x: ex, y: firstLineY, 'text-anchor': 'middle', 'font-size': fontSize,
       'font-weight': 800, 'font-style': 'italic', fill: READKEY_COLOR,
     });
-    const line1 = svgEl('tspan', { x: ex, dy: 0 }); line1.textContent = 'TE READS:';
-    const line2 = svgEl('tspan', { x: ex, dy: lineHeight }); line2.textContent = 'LB or CB';
-    t.appendChild(line1); t.appendChild(line2);
+    lines.forEach((line, i) => {
+      const tspan = svgEl('tspan', { x: ex, dy: i === 0 ? 0 : lineHeight });
+      tspan.textContent = line;
+      t.appendChild(tspan);
+    });
     g.appendChild(t);
     return g;
   }
