@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260812l">
+<link rel="stylesheet" href="css/styles.css?v=20260812m">
 </head>
 <body>
 <script>
@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12p (fix mobile route-call abbreviation specificity bug) -->
+<!-- BUILD_VERSION: 2026-08-12q (V2 banner tag; Steele Sports branding on help screen) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -48,7 +48,7 @@
   <!-- Nathan: replace the old full-width "DEV2 -- internal build" banner
        with a small, out-of-the-way tag instead -- still visibly marks this
        as the dev build, just doesn't eat a whole bar across the top. -->
-  <div class="dev2Tag">DEV2</div>
+  <div class="dev2Tag">V2</div>
 </div>
 
 <div class="loginScreen" id="loginScreen">
@@ -670,6 +670,7 @@
       <li>? Tap this icon anytime to see these tips again.</li>
     </ul>
     <button class="navBtn" id="tipsGotItBtn" style="width:100%">Got it!</button>
+    <div class="tipsBrand">A Steele Sports Product — Patent Pending</div>
   </div>
 </div>
 
@@ -704,7 +705,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812p';
+  const BUILD_V = '20260812q';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([

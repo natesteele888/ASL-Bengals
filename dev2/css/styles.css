@@ -185,6 +185,13 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbCard h3{margin:0 0 4px;font-size:16px;color:var(--ink);text-align:center}
 .lbCard .lbSub{text-align:center;color:var(--muted);font-size:11px;margin-bottom:14px}
 
+/* Nathan: "want this to be branded on the help screen at the bottom as a
+   Steele Sports Product - Patent Pending." Small, out-of-the-way footer
+   line under the tips overlay's "Got it!" button -- same muted/quiet
+   treatment as .lbSub, not meant to compete with the actual tips. */
+.tipsBrand{text-align:center;color:var(--muted);font-size:9.5px;font-weight:600;
+  letter-spacing:.02em;margin-top:10px}
+
 .lbCardCool{padding:0;position:relative}
 .lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
   padding:22px 18px 20px;text-align:center;margin-bottom:16px;border-radius:16px 16px 0 0}
