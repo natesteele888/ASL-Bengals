@@ -185,7 +185,31 @@ const PLAY_TYPE_SIGNAL_LABEL = {
 // swap bug lives in the shipped file's data (see plays.json) and in
 // whatever Nathan saves next from the editor now that it's unlocked; there
 // is no longer any code-level correction layered on top of it.
+//
+// One narrow exception, added when Boston shipped: a cloud save made
+// before a route call existed simply doesn't have that key at all -- that
+// isn't a coach's edit to respect, it's just missing, and the whole-object
+// assignment at the call site (DATA.splitRoutes = repairStaleSplitRoutes(...))
+// was silently dropping it, leaving nothing to show or edit ("There are no
+// paths showing up for Boston. Needs to be editable"). So: fill in ONLY
+// route calls the saved data doesn't have yet, per side/slot, from the
+// shipped defaults -- every call the coach actually has saved (including a
+// from-scratch Boston edit) is left completely untouched.
 function repairStaleSplitRoutes(splitRoutes) {
+  const shipped = DATA.splitRoutes;
+  if (!shipped) return splitRoutes;
+  ['Left', 'Right'].forEach(side => {
+    if (!splitRoutes[side] || !shipped[side]) return;
+    ['wide', 'flex'].forEach(slot => {
+      const savedSlot = splitRoutes[side][slot];
+      const shippedSlot = shipped[side][slot];
+      if (!savedSlot || !shippedSlot) return;
+      Object.keys(shippedSlot).forEach(call => {
+        if (call === 'player') return; // metadata (which player number), not a route call
+        if (!(call in savedSlot)) savedSlot[call] = shippedSlot[call];
+      });
+    });
+  });
   return splitRoutes;
 }
 

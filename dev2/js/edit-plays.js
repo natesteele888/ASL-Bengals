@@ -420,14 +420,14 @@ function loadSavedPlaysFromCloud() {
       gotAny = true;
     }
     if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-      // repairStaleSplitRoutes (play-calls.js) is now a plain pass-through
-      // -- an earlier version forced Right's routes back to shipped on
-      // every load, which also silently discarded any real point-drag edit
-      // made here and saved to cloud. Nathan needs Right's Seattle/Houston/
-      // Florida routes to be editable/persistable again (the shipped ones
-      // are "generic... less accurate" and he's redrawing them by hand), so
-      // this editor now trusts the cloud copy as-is, same as Left always
-      // has.
+      // repairStaleSplitRoutes (play-calls.js) trusts the cloud copy as-is
+      // for anything actually saved -- an earlier version forced Right's
+      // routes back to shipped on every load, which also silently
+      // discarded real point-drag edits made here. It only fills in a
+      // route call that's flat-out missing from the saved data (e.g. a
+      // cloud save made before Boston existed), per side/slot, from the
+      // shipped defaults, so a not-yet-edited call still shows up with
+      // *something* to look at and drag instead of nothing at all.
       DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
       gotAny = true;
     }
