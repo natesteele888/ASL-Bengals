@@ -246,9 +246,13 @@ function placeToggleThumb(group) {
 // Builds a complete two-button toggle-group. `color` is one of the
 // toggle-<color> modifier classes (orange/black/green/red/brown), `extraClass`
 // is an optional additional class (e.g. 'toggle-tiny'), `options` is
-// [{value, label}, {value, label}], `initialValue` picks which one starts
-// pressed, and `onChange(value)` fires on every click (including re-clicks
-// of the already-active button, same as the old .active-class toggles did).
+// [{value, label}, {value, label}] -- an option can also carry an optional
+// `short` field (e.g. 'BOS' for 'Boston') which a narrow-screen CSS rule
+// swaps to via `content: attr(data-short)` when the full label doesn't fit
+// (see the Split route-call toggles below); options without `short` are
+// unaffected. `initialValue` picks which one starts pressed, and
+// `onChange(value)` fires on every click (including re-clicks of the
+// already-active button, same as the old .active-class toggles did).
 function buildToggleGroup(color, options, initialValue, onChange, extraClass) {
   const group = document.createElement('div');
   group.className = `toggle-group toggle-${color}` + (extraClass ? ' ' + extraClass : '');
@@ -261,6 +265,7 @@ function buildToggleGroup(color, options, initialValue, onChange, extraClass) {
     btn.className = 'toggle-btn';
     btn.dataset.value = opt.value;
     btn.textContent = opt.label;
+    if (opt.short) btn.dataset.short = opt.short;
     btn.setAttribute('aria-pressed', opt.value === initialValue ? 'true' : 'false');
     group.appendChild(btn);
     return btn;
@@ -450,6 +455,12 @@ const PASS_SIGNAL_IDS = [28, 29, 30];
 // another.
 const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida', 'boston'];
 const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida', boston: 'Boston' };
+// Nathan: "on split, you cant see boston on the right side because it
+// takes up too much room -- maybe we abbreviate them on mobile view to
+// SEA HOU FLO BOS." Full names still show at normal width; a narrow-screen
+// CSS rule (`.toggle-btn[data-short]`) swaps to these on phones -- see
+// buildToggleGroup's optional `short` option field below.
+const SPLIT_ROUTE_SHORT_LABELS = { seattle: 'SEA', houston: 'HOU', florida: 'FLO', boston: 'BOS' };
 
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
@@ -1435,7 +1446,7 @@ function buildCard(combo) {
   // Motion/Boot (which don't apply to Split -- renderSplitDiagram/
   // playSplitAnimation don't read either toggle) so Split never needs a
   // row of its own for them either.
-  const routeCallOptions = SPLIT_ROUTE_CALLS.map(v => ({ value: v, label: SPLIT_ROUTE_LABELS[v] }));
+  const routeCallOptions = SPLIT_ROUTE_CALLS.map(v => ({ value: v, label: SPLIT_ROUTE_LABELS[v], short: SPLIT_ROUTE_SHORT_LABELS[v] }));
   const leftCallToggle = buildToggleGroup('green', routeCallOptions, leftCall, (v) => { if (isPlayingRef.value) return; leftCall = v; onComboChanged(); }, 'toggle-tiny');
   const rightCallToggle = buildToggleGroup('brown', routeCallOptions, rightCall, (v) => { if (isPlayingRef.value) return; rightCall = v; onComboChanged(); }, 'toggle-tiny');
   const leftCallWrap = labeledGroup('Left', leftCallToggle);

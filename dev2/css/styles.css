@@ -1210,6 +1210,16 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
       aspect-ratio: auto;
       height: 420px;
     }
+    /* Nathan: "on split, you cant see boston on the right side because it
+       takes up too much room -- maybe we abbreviate them on mobile view to
+       SEA HOU FLO BOS." Full names ("Seattle") don't fit 4-across in the
+       Left/Right route-call pickers on a phone -- "Boston" especially ran
+       past the edge of its slot. buildToggleGroup stamps a `data-short`
+       attribute (e.g. "BOS") onto any option that provides one; hide the
+       real label and show that instead, only at this width. Desktop/
+       tablet still show the full names untouched. */
+    .toggle-btn[data-short] { font-size: 0; }
+    .toggle-btn[data-short]::after { content: attr(data-short); font-size: 10px; }
   }
 
   @media (min-width: 640px) {
