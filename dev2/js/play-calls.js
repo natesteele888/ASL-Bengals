@@ -1123,20 +1123,12 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
   const circlesLayerRef = stage._circlesLayerRef;
-  const allPaths = stage._lastRenderedPaths;
-  // if a player is selected, animate his path plus all blocking (blocking
-  // supports the play regardless of which skill player is being isolated);
-  // otherwise animate everyone. A LINE position (selectedPlayer is a
-  // string id like 'LT') is the exception -- matches the render-time dim
-  // logic in renderCardDiagram, where selecting a lineman isolates just
-  // his own block instead of leaving every block stub shown, since now
-  // there's something meaningful to isolate TO.
-  const isLineSelected = typeof selectedPlayer === 'string';
-  const lastRenderedPaths = selectedPlayer === null
-    ? allPaths
-    : isLineSelected
-      ? allPaths.filter(p => p.id === selectedPlayer)
-      : allPaths.filter(p => p.player === selectedPlayer || p.isBlocking);
+  // Nathan: "it should default to all paths are moving... have the
+  // highlighted path glow but show all paths run." Selecting a player only
+  // adds the glow (see renderCardDiagram) -- it no longer narrows down
+  // which paths the ▶ animation actually plays. Matches Split, which
+  // never filtered by selection to begin with.
+  const lastRenderedPaths = stage._lastRenderedPaths;
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
@@ -1152,7 +1144,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // before the snap, otherwise it'd look identical to just picking the
   // other wing side to begin with.
   if (motionOn) {
-    const p4Entry = lastRenderedPaths.find(p => p.player === 4) || allPaths.find(p => p.player === 4);
+    const p4Entry = lastRenderedPaths.find(p => p.player === 4);
     if (p4Entry && p4Entry.circleEl) {
       const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
       const startPos = { x: DATA.wing[wingSide][0], y: DATA.wing[wingSide][1] };
@@ -1788,7 +1780,13 @@ function buildGrid() {
   // of the real control (open a play, try a toggle, tap your number, flip
   // for the signal). Shows automatically the first time a player opens
   // Play Calls each session, and any time via the "i" button.
-  const pcTutorialSteps = [...document.querySelectorAll('.pcTutorialStep')];
+  // Scoped to this tutorial's own #pcTutorialSteps container -- an
+  // unscoped document-wide query here used to also pick up the separate
+  // welcome/crash-course popup's steps (same .pcTutorialStep class, shared
+  // for consistent styling), corrupting both tutorials' step count and
+  // indexing (extra dots, blank steps).
+  const pcTutorialStepsContainer = document.getElementById('pcTutorialSteps') || document;
+  const pcTutorialSteps = [...pcTutorialStepsContainer.querySelectorAll('.pcTutorialStep')];
   const pcTutorialDotsEl = document.getElementById('pcTutorialDots');
   const pcTutorialBackBtn = document.getElementById('pcTutorialBackBtn');
   const pcTutorialNextBtn = document.getElementById('pcTutorialNextBtn');
