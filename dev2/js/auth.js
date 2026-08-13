@@ -1,16 +1,41 @@
 /* ============================================================
-   "WHAT'S NEW" POPUP — one-time notice so kids/parents already
-   using the app aren't confused by the update. Shows once (ever,
-   per device/browser) on top of whatever screen the page lands on
-   -- login screen for new/signed-out visitors, or straight over the
-   app for anyone who was already logged in on this device. Purely
-   informational: dismissing just hides it and sets a flag.
+   WELCOME / CRASH-COURSE POPUP — Nathan: "the app update screen is
+   far too little. The kids haven't seen the play calls at all or
+   the play quiz. They need a crash course for using it. Both
+   shotgun and split formations." A short multi-step walkthrough
+   (same look/mechanics as the in-app Play Calls "i" tutorial, just
+   its own instance) covering what's new, Play Calls in Shotgun,
+   Play Calls in Split, and Play Quiz. Shows once (ever, per
+   device/browser) on top of whatever screen the page lands on --
+   login screen for new/signed-out visitors, or straight over the
+   app for anyone already logged in on this device from before this
+   shipped. Purely informational: dismissing just sets a flag.
    ============================================================ */
 (function(){
   var SEEN_KEY = 'bengalsWhatsNewSeen';
-  var overlay = document.getElementById('whatsNewOverlay');
-  var gotItBtn = document.getElementById('whatsNewGotItBtn');
-  if(!overlay || !gotItBtn) return;
+  var overlay = document.getElementById('welcomeOverlay');
+  var stepsEl = document.getElementById('welcomeTutorialSteps');
+  var dotsEl = document.getElementById('welcomeTutorialDots');
+  var backBtn = document.getElementById('welcomeTutorialBackBtn');
+  var nextBtn = document.getElementById('welcomeTutorialNextBtn');
+  if(!overlay || !stepsEl || !dotsEl || !backBtn || !nextBtn) return;
+
+  var steps = [].slice.call(stepsEl.querySelectorAll('.pcTutorialStep'));
+  steps.forEach(function(){
+    var d = document.createElement('div');
+    d.className = 'pcTutorialDot';
+    dotsEl.appendChild(d);
+  });
+  var dots = [].slice.call(dotsEl.children);
+  var index = 0;
+
+  function showStep(i){
+    index = i;
+    steps.forEach(function(el, idx){ el.classList.toggle('active', idx === i); });
+    dots.forEach(function(d, idx){ d.classList.toggle('active', idx === i); });
+    backBtn.disabled = i === 0;
+    nextBtn.textContent = i === steps.length - 1 ? "Let's go!" : 'Next';
+  }
 
   function alreadySeen(){
     try { return localStorage.getItem(SEEN_KEY) === '1'; } catch(e) { return false; }
@@ -19,10 +44,19 @@
     overlay.classList.remove('show');
     try { localStorage.setItem(SEEN_KEY, '1'); } catch(e) {}
   }
+
+  showStep(0);
   if(!alreadySeen()){
     overlay.classList.add('show');
   }
-  gotItBtn.addEventListener('click', dismiss);
+
+  backBtn.addEventListener('click', function(){
+    if(index > 0) showStep(index - 1);
+  });
+  nextBtn.addEventListener('click', function(){
+    if(index < steps.length - 1) showStep(index + 1);
+    else dismiss();
+  });
 })();
 
 /* ============================================================

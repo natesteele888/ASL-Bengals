@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260812h">
+<link rel="stylesheet" href="css/styles.css?v=20260812i">
 </head>
 <body>
 <script>
@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12i (whats-new popup) -->
+<!-- BUILD_VERSION: 2026-08-12j (welcome crash-course popup) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -64,22 +64,71 @@
   </div>
 </div>
 
-<!-- Nathan: one-time "what's new" popup so returning kids/parents aren't
-     confused by the update -- shown once (tracked in localStorage), on top
-     of whichever screen they land on (new browser: loginScreen; already
-     logged in on this device: whatever mode they were last in). Dismissing
-     doesn't sign anyone out or reset progress, it's purely informational. -->
-<div class="lbOverlay whatsNewOverlay" id="whatsNewOverlay">
-  <div class="lbCard lbCardCool">
-    <div class="lbHeroHeader">
-      <div class="lbHeroTrophy">🏈</div>
-      <h3>App Update!</h3>
-      <p class="lbSub">Same team code, some new stuff</p>
+<!-- Nathan: "the app update screen is far too little. The kids haven't
+     seen the play calls at all or the play quiz. They need a crash course
+     for using it. Both shotgun and split formations." -- a real multi-step
+     walkthrough (same look/mechanics as the in-app Play Calls "i" tutorial,
+     just its own instance/IDs) shown once, on top of whichever screen the
+     page lands on. Covers: what's new, Play Calls in Shotgun, Play Calls
+     in Split (route calls), and Play Quiz. Dismissing (via the last step's
+     "Let's go!") just sets a flag -- doesn't touch auth state or progress,
+     and doesn't replace the existing Play Calls "i" tutorial, which still
+     also shows itself the first time someone actually opens that tab. -->
+<div class="pcInfoOverlay welcomeOverlay" id="welcomeOverlay">
+  <div class="pcInfoCard pcTutorialCard" id="welcomeTutorialCard">
+    <div id="welcomeTutorialSteps">
+
+      <div class="pcTutorialStep active" data-step="0">
+        <div class="pcTutorialHeader">🏈 The app got an upgrade!</div>
+        <div class="pcTutorialIllustration">
+          <div style="font-size:40px">🎉</div>
+          <div class="mockTapHint">A quick look at what's new before you dive in</div>
+        </div>
+        <p class="pcTutorialText">Same team code, same login as always. First time picking a name? Just make one up along with a 4-digit code — that's yours from now on. A few new screens are worth a quick look first.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="1">
+        <div class="pcTutorialHeader">📋 Play Calls — Shotgun</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockAccordionHeader">Inside Zone <span class="mockChevron">▾</span></div>
+          <div class="mockPillRow">
+            <span class="mockPill active">Wing L</span><span class="mockPill">Wing R</span>
+            <span class="mockPill active">Dir L</span><span class="mockPill">Dir R</span>
+          </div>
+          <div class="mockTapHint">👆 Tap a play, flip a toggle, tap your number</div>
+        </div>
+        <p class="pcTutorialText">Open the <strong>Play Calls</strong> tab and tap any play to see its diagram. Flip <strong>Wing</strong> or <strong>Direction</strong> to see it run the other way. <strong>Tap your number</strong> on the diagram to glow it orange, then tap ▶ to watch it run. Tap the flip icon to see the hand signal.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="2">
+        <div class="pcTutorialHeader">🔀 Play Calls — Split</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPillRow">
+            <span class="mockPill">Shotgun</span><span class="mockPill active">Split</span>
+          </div>
+          <div class="mockPillRow">
+            <span class="mockPill active">Split L</span><span class="mockPill">Split R</span>
+            <span class="mockPill active">Pass On</span>
+          </div>
+          <div class="mockTapHint">👆 Flip Formation to Split, then Pass on</div>
+        </div>
+        <p class="pcTutorialText">Some plays also line up in <strong>Split</strong>. Pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on, and each side calls its own route: <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or the new <strong>Boston</strong>. Tap-to-glow works here too.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="3">
+        <div class="pcTutorialHeader">🧠 Play Quiz</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockFlipBtn">🧠</div>
+          <div class="mockTapHint">Watch the signal, then set up the call</div>
+        </div>
+        <p class="pcTutorialText">Head to the <strong>Play Quiz</strong> tab to test yourself. It plays a hand signal (twice), then you set the toggles to match what you saw and submit. Ten rounds, easiest to hardest, and it saves your best score on the leaderboard.</p>
+      </div>
+
     </div>
-    <div style="padding:0 18px 18px;font-size:13px;line-height:1.5;color:var(--ink)">
-      <p style="margin:0 0 10px">The Playbook got an upgrade — new Split formation routes, clearer diagrams, and a Play Quiz to test yourself.</p>
-      <p style="margin:0 0 14px">Log in the same way as always. First time picking a name? Just make one up along with a 4-digit code — that's yours from now on.</p>
-      <button class="loginBtn" id="whatsNewGotItBtn" style="width:100%">Got it!</button>
+    <div class="pcTutorialDots" id="welcomeTutorialDots"></div>
+    <div class="pcTutorialNav">
+      <button id="welcomeTutorialBackBtn" class="pcTutorialNavBtn secondary">Back</button>
+      <button id="welcomeTutorialNextBtn" class="pcTutorialNavBtn primary">Next</button>
     </div>
   </div>
 </div>
@@ -655,7 +704,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812i';
+  const BUILD_V = '20260812j';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
