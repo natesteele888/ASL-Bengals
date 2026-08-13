@@ -415,8 +415,8 @@ const PASS_SIGNAL_IDS = [28, 29, 30];
 // shapes to the wide vs. flex role depending on side, so each side's three
 // routes are stored and used exactly as drawn rather than derived from one
 // another.
-const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida'];
-const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida' };
+const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida', 'boston'];
+const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida', boston: 'Boston' };
 
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
@@ -578,6 +578,28 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   }
   const playerCircles = {};
 
+  // Short on-diagram callout for a play/path that has a conditional,
+  // situational assignment the static arrow alone can't show (currently
+  // just Option's cross-side TE block -- see the crossNote comment above).
+  // Full explanation goes in a <title> for hover/screen-reader access; the
+  // visible text stays short enough to actually fit on a phone-size card.
+  function buildReadNoteEl(endPoint, fullText) {
+    const [ex, ey] = endPoint;
+    const g = svgEl('g', {});
+    const title = svgEl('title', {});
+    title.textContent = fullText;
+    g.appendChild(title);
+    const t = svgEl('text', {
+      x: ex, y: ey + 46, 'text-anchor': 'middle', 'font-size': 15,
+      'font-weight': 800, 'font-style': 'italic', fill: READKEY_COLOR,
+    });
+    const line1 = svgEl('tspan', { x: ex, dy: 0 }); line1.textContent = 'TE READS:';
+    const line2 = svgEl('tspan', { x: ex, dy: 17 }); line2.textContent = 'LB or CB';
+    t.appendChild(line1); t.appendChild(line2);
+    g.appendChild(t);
+    return g;
+  }
+
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
@@ -649,6 +671,21 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
 
     let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+    // Set below when this path is a dualSideBlock currently showing its
+    // cross-side target AND has a crossNote -- Nathan: "On the play call
+    // Option, when the call is option left and the wing is to the right,
+    // the TE on the left side will look to block the LB that is stacked
+    // behind the DE, but if there is no outside LB there behind the DE,
+    // the TE would go out to block the CB. I want it to be called out on
+    // the diagram someway." The diagram can only draw ONE fixed arrow (to
+    // the CB, cross-side's actual target), so this renders a short text
+    // callout next to it explaining the real, conditional read -- rather
+    // than the diagram silently implying "always blocks the CB" as if it
+    // were the only assignment. Data-driven (crossNote on the path itself)
+    // so it's specific to whichever play/path actually has one -- doesn't
+    // affect Double Blast's or the Wing's own dualSideBlock-style paths,
+    // which don't set it.
+    let readNoteToShow = null;
     if (p.dualSideBlock) {
       // Fixed-position blocker (e.g. the Option play's playside TE) whose
       // block target depends on whether the wing is on the same side as the
@@ -657,6 +694,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       const baseKey = sameSide ? 'sameSidePoints' : 'crossPoints';
       const fieldKey = defenseMode === '4x4' ? baseKey + '4x4' : baseKey;
       points = p[fieldKey] || p.points;
+      if (!sameSide && p.crossNote) readNoteToShow = p.crossNote;
     } else if (p.player === 4 && !p.optionLine) {
       if (p.wingSeamRelative) {
         const sameSide = p4Side === direction;
@@ -698,6 +736,10 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       placeArrowAtFraction(arrowEl, path, 1);
     }
     pathsLayer.appendChild(wrap);
+
+    if (readNoteToShow) {
+      pathsLayer.appendChild(buildReadNoteEl(points[points.length - 1], readNoteToShow));
+    }
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;

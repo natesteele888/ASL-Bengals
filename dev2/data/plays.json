@@ -77,13 +77,15 @@
         "player": 6,
         "seattle": [[1512, 204], [1515, 60], [1252, -61]],
         "houston": [[1512, 204], [1518, -206]],
-        "florida": [[1512, 204], [1352, 338], [1195, 236]]
+        "florida": [[1512, 204], [1352, 338], [1195, 236]],
+        "boston": [[1512, 204], [1314, 94], [1496, 85]]
       },
       "flex": {
         "player": 2,
         "seattle": [[1362, 289], [1523, 108], [1580, 139]],
         "houston": [[1362, 289], [1362, 119], [1318, 103]],
-        "florida": [[1362, 289], [1370, -118]]
+        "florida": [[1362, 289], [1370, -118]],
+        "boston": [[1362, 289], [1128, 137]]
       }
     },
     "Left": {
@@ -91,13 +93,15 @@
         "player": 5,
         "seattle": [[98, 204], [94, 45], [352, -60]],
         "houston": [[98, 204], [94, -204]],
-        "florida": [[98, 204], [418, 237], [259, -145]]
+        "florida": [[98, 204], [418, 237], [259, -145]],
+        "boston": [[98, 204], [296, 94], [114, 85]]
       },
       "flex": {
         "player": 3,
         "seattle": [[248, 269], [88, 122], [20, 122]],
         "houston": [[248, 269], [248, 95], [304, 75]],
-        "florida": [[248, 269], [243, -138]]
+        "florida": [[248, 269], [243, -138]],
+        "boston": [[248, 269], [482, 117]]
       }
     }
   },
@@ -3274,7 +3278,8 @@
               "sameSidePoints": [[462, 204], [586.2, 2.4]],
               "crossPoints": [[462, 204], [181.2, 101.4]],
               "sameSidePoints4x4": [[462, 204], [496.2, 2.4]],
-              "crossPoints4x4": [[462, 204], [181.2, 101.4]]
+              "crossPoints4x4": [[462, 204], [181.2, 101.4]],
+              "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
             },
             {
               "player": null,
@@ -3946,7 +3951,8 @@
               "sameSidePoints": [[1149, 204], [1023.9, 2.4]],
               "crossPoints": [[1149, 204], [1428.9, 101.4]],
               "sameSidePoints4x4": [[1149, 204], [1104.9, 2.4]],
-              "crossPoints4x4": [[1149, 204], [1428.9, 101.4]]
+              "crossPoints4x4": [[1149, 204], [1428.9, 101.4]],
+              "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
             },
             {
               "player": 4,

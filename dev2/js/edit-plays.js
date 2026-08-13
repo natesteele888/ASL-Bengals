@@ -49,7 +49,7 @@ let splitSide = 'Left';
 let splitCall = 'seattle';
 let splitEditTarget = null; // 'wide' | 'flex' | null
 let splitSelectedHandle = null; // {arr, index} | null
-const SPLIT_ROUTE_LABELS_EDIT = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida' };
+const SPLIT_ROUTE_LABELS_EDIT = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida', boston: 'Boston' };
 
 const wingToggle = document.getElementById('wingToggle');
 const dirToggle = document.getElementById('dirToggle');
