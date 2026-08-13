@@ -246,11 +246,26 @@ async function cloudFetch(path){
   } catch(e) { return null; } // null means "could not reach it", distinct from an empty board
 }
 
+/* Nathan: "once players start to register with name and pin, keep all
+   record history available to see... metrics of how often they are using
+   it." Every analytics write in this file used to be anonymous -- a date
+   string with no player attached, so a coach could see "37 timed-quiz
+   starts happened" but never "who." This tags whichever signed-in player
+   is on this device onto every analytics entry going forward (older
+   entries stay anonymous -- there's no way to retroactively attribute
+   them). Returns {} if nobody's signed in yet (shouldn't normally happen,
+   since the identity gate runs before any quiz mode is reachable, but this
+   keeps every write safe either way). */
+function currentPlayerTag(){
+  const session = window.PlayerIdentity && window.PlayerIdentity.getSession();
+  return session ? { playerId: session.playerId, name: session.name } : {};
+}
+
 /* Fire-and-forget usage counters — logs every time someone actually starts
    a quiz (not just opens the tab), so the coach can see real usage instead
    of just who bothered to save a score. Doesn't block the UI either way. */
 function logQuizStart(kind){
-  cloudPush(`analytics/${kind}`, { date: new Date().toISOString() });
+  cloudPush(`analytics/${kind}`, Object.assign({ date: new Date().toISOString() }, currentPlayerTag()));
 }
 
 /* ============================================================
@@ -306,13 +321,16 @@ async function openAdminStats(){
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading…</div>';
 
-  const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries] = await Promise.all([
+  const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts] = await Promise.all([
     cloudFetch('analytics/timedStarts'),
     cloudFetch('analytics/standardStarts'),
     cloudFetch('analytics/standardResults'),
     cloudFetch('analytics/timedResults'),
     cloudFetch('analytics/signalAttempts'),
     cloudFetch('timedLeaderboard'),
+    cloudFetch('analytics/sessions'),
+    cloudFetch('analytics/pcqResults'),
+    cloudFetch('analytics/pcqRoundAttempts'),
   ]);
   const players = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
 
@@ -434,6 +452,137 @@ async function openAdminStats(){
   const hardestHtml = hardest.length ? hardest.map(signalRowHtml).join('') : '<div class="lbEmpty">Not enough team data yet.</div>';
   const easiestHtml = easiest.length ? easiest.map(signalRowHtml).join('') : '<div class="lbEmpty">Not enough team data yet.</div>';
 
+  // ---- Player Activity & Highlights -- Nathan: "once players start to
+  // register with name and pin, keep all record history available to
+  // see. show me metrics of how often they are using it, how long they
+  // are using it, what scores they are getting, create a little report
+  // with highlights and players who are excelling then those who are
+  // struggling and what they could do." Everything here reads from the
+  // newly-added analytics/sessions, analytics/pcqResults, and
+  // analytics/pcqRoundAttempts logs -- entries from before this feature
+  // shipped won't have a playerId (or won't exist at all for sessions),
+  // so history/highlights only start building up from here forward, not
+  // retroactively.
+  const sessionsSafe = sessions || [];
+  const pcqResultsSafe = pcqResults || [];
+  const pcqRoundAttemptsSafe = pcqRoundAttempts || [];
+  const nowMs = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const nonCoachPlayers = playerRows.filter(p => !p.isCoach);
+
+  const activePlayers7d = nonCoachPlayers.filter(p =>
+    p.lastSeen && (nowMs - new Date(p.lastSeen).getTime()) <= SEVEN_DAYS_MS).length;
+  const sessions7dCount = sessionsSafe.filter(s =>
+    s.startedAt && (nowMs - new Date(s.startedAt).getTime()) <= SEVEN_DAYS_MS).length;
+  const sessionsWithDuration = sessionsSafe.filter(s => typeof s.durationMs === 'number' && s.durationMs > 0);
+  const avgSessionMsTeam = sessionsWithDuration.length
+    ? sessionsWithDuration.reduce((sum, s) => sum + s.durationMs, 0) / sessionsWithDuration.length
+    : 0;
+  const teamPcqAttempts = pcqResultsSafe.filter(r => r.maxScore);
+  const teamPcqAvgPct = teamPcqAttempts.length
+    ? Math.round(teamPcqAttempts.reduce((s,r) => s + r.score/r.maxScore, 0) / teamPcqAttempts.length * 100)
+    : null;
+
+  function fmtDuration(ms){
+    if(!ms) return '—';
+    const mins = Math.round(ms/60000);
+    if(mins < 1) return '<1 min';
+    if(mins < 60) return mins + ' min';
+    return `${Math.floor(mins/60)}h ${mins%60}m`;
+  }
+
+  // Per-player Play Calls Quiz attempt history (newest first).
+  const pcqByPlayer = {};
+  pcqResultsSafe.forEach(r => {
+    if(!r.playerId) return; // pre-instrumentation entries can't be attributed
+    (pcqByPlayer[r.playerId] = pcqByPlayer[r.playerId] || []).push(r);
+  });
+  Object.keys(pcqByPlayer).forEach(id => pcqByPlayer[id].sort((a,b) => new Date(b.date) - new Date(a.date)));
+
+  // Per-player, per-play-call miss rate -- powers the "what they could do"
+  // tip on a struggling player's card with something specific instead of
+  // a generic "practice more."
+  const roundsByPlayer = {};
+  pcqRoundAttemptsSafe.forEach(a => {
+    if(!a.playerId) return;
+    const byKey = (roundsByPlayer[a.playerId] = roundsByPlayer[a.playerId] || {});
+    const entry = (byKey[a.playKey] = byKey[a.playKey] || {attempts:0, misses:0});
+    entry.attempts++;
+    if(!a.correct) entry.misses++;
+  });
+  function playLabel(key){
+    const pt = (window.DATA && DATA.playTypes || []).find(p => p.key === key);
+    return pt ? pt.label : key;
+  }
+  function weakestPlayFor(playerId){
+    const byKey = roundsByPlayer[playerId];
+    if(!byKey) return null;
+    const candidates = Object.keys(byKey)
+      .map(k => Object.assign({key:k, missRate: byKey[k].misses / byKey[k].attempts}, byKey[k]))
+      .filter(c => c.attempts >= 2 && c.misses > 0);
+    if(!candidates.length) return null;
+    candidates.sort((a,b) => b.missRate - a.missRate);
+    return playLabel(candidates[0].key);
+  }
+
+  const playerActivityRows = nonCoachPlayers.map(p => {
+    const history = pcqByPlayer[p.id] || [];
+    const scored = history.filter(r => r.maxScore);
+    const avgPct = scored.length ? Math.round(scored.reduce((s,r) => s + r.score/r.maxScore, 0) / scored.length * 100) : null;
+    const playerSessions = sessionsSafe.filter(s => s.playerId === p.id);
+    const playerSessionsWithDur = playerSessions.filter(s => typeof s.durationMs === 'number' && s.durationMs > 0);
+    const avgDur = playerSessionsWithDur.length
+      ? playerSessionsWithDur.reduce((s,x) => s + x.durationMs, 0) / playerSessionsWithDur.length
+      : 0;
+    return {
+      id: p.id, name: p.name, attempts: scored.length, avgPct: avgPct,
+      sessionsCount: playerSessions.length, avgSessionMs: avgDur,
+      lastSeen: p.lastSeen, history: history.slice(0, 5),
+    };
+  });
+
+  // Needs at least 2 scored attempts before showing up in either list --
+  // one lucky/unlucky run shouldn't brand someone as excelling or
+  // struggling.
+  const MIN_ATTEMPTS_FOR_HIGHLIGHT = 2;
+  const eligibleForHighlights = playerActivityRows.filter(p => p.attempts >= MIN_ATTEMPTS_FOR_HIGHLIGHT && p.avgPct !== null);
+  const excelling = [...eligibleForHighlights].sort((a,b) => b.avgPct - a.avgPct).slice(0,3);
+  const needsAttention = [...eligibleForHighlights].sort((a,b) => a.avgPct - b.avgPct).slice(0,3);
+
+  function highlightRowHtml(p, isExcelling){
+    const icon = isExcelling ? '🌟' : '🧭';
+    const weak = !isExcelling ? weakestPlayFor(p.id) : null;
+    const tip = isExcelling
+      ? `Averaging ${p.avgPct}% across ${p.attempts} plays.`
+      : (weak
+        ? `Missing "${weak}" calls most -- worth a few extra reps there.`
+        : `Averaging ${p.avgPct}% across ${p.attempts} plays -- keep at it!`);
+    return `<div class="lbRow"><div class="lbRank">${icon}</div>
+      <div class="lbNameTip"><div class="lbNameTipTitle">${p.name}</div><div class="lbTip">${tip}</div></div>
+      <div class="lbScore">${p.avgPct}%</div></div>`;
+  }
+  const excellingHtml = excelling.length ? excelling.map(p => highlightRowHtml(p, true)).join('') : '<div class="lbEmpty">Not enough Play Calls Quiz data yet (needs at least 2 scored attempts per player).</div>';
+  const needsAttentionHtml = needsAttention.length ? needsAttention.map(p => highlightRowHtml(p, false)).join('') : '<div class="lbEmpty">Not enough Play Calls Quiz data yet (needs at least 2 scored attempts per player).</div>';
+
+  const activitySorted = playerActivityRows.slice().sort((a,b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
+  function activityRowHtml(p){
+    const historyHtml = p.history.length
+      ? p.history.map(h => {
+          const d = new Date(h.date);
+          const dateStr = isNaN(d) ? '' : d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+          const pct = h.maxScore ? Math.round(h.score/h.maxScore*100) : null;
+          return `<div class="activityHistoryRow"><span>${dateStr}</span><span>${h.score}/${h.maxScore}${pct !== null ? ` (${pct}%)` : ''}</span></div>`;
+        }).join('')
+      : '<div class="activityHistoryRow" style="opacity:.6;">No Play Calls Quiz attempts yet.</div>';
+    return `<details class="activityDetails">
+      <summary class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(p.lastSeen)}</div>
+        <div class="lbName">${p.name}</div>
+        <div class="lbScore" style="font-size:10px;text-align:right;">${p.sessionsCount} visit${p.sessionsCount===1?'':'s'} • ${fmtDuration(p.avgSessionMs)} avg</div></summary>
+      <div class="activityHistoryList">${historyHtml}</div>
+    </details>`;
+  }
+  const activityListHtml = activitySorted.length ? activitySorted.map(activityRowHtml).join('') : '<div class="lbEmpty">No one has signed in with a name+code yet.</div>';
+
   // ---- Dashboard shell: a home screen of buttons instead of one long
   // scroll -- each button opens exactly one panel below, with a Back
   // button to return. Panels are all rendered up front (data's already
@@ -446,6 +595,7 @@ async function openAdminStats(){
         ${statCard(standardStarts.length, 'Standard Quiz Starts')}
       </div>
       <div class="adminDashGrid">
+        <button class="adminDashBtn" data-panel="activity">📈 Player Activity &amp; Highlights</button>
         <button class="adminDashBtn" data-panel="players">👤 Registered Players<span class="adminDashCount">${playerRows.length}</span></button>
         <button class="adminDashBtn" data-panel="standard">📝 Standard Quiz</button>
         <button class="adminDashBtn" data-panel="timed">⏱️ Timed Quiz</button>
@@ -454,6 +604,22 @@ async function openAdminStats(){
       </div>
     </div>
     <button class="navBtn secondary adminBackBtn" id="adminBackBtn" style="display:none;">‹ Back to Dashboard</button>
+    <div class="adminPanel" data-panel="activity" style="display:none;">
+      <div class="lbSectionHeader">📈 Team Snapshot</div>
+      <div class="adminStatGrid">
+        ${statCard(activePlayers7d, 'Active Players (7d)')}
+        ${statCard(sessions7dCount, 'Visits (7d)')}
+        ${statCard(fmtDuration(avgSessionMsTeam), 'Avg. Session')}
+        ${statCard(teamPcqAvgPct !== null ? teamPcqAvgPct + '%' : '—', 'Team PCQ Avg')}
+      </div>
+      <div class="lbSectionHeader">🌟 Excelling</div>
+      <div class="lbList">${excellingHtml}</div>
+      <div class="lbSectionHeader">🧭 Needs Attention</div>
+      <div class="lbList">${needsAttentionHtml}</div>
+      <div class="lbSectionHeader">🕓 Every Player</div>
+      <div class="lbList" style="max-height:340px;overflow-y:auto;">${activityListHtml}</div>
+      <div class="lbSub" style="margin:8px 0 12px;">Tap a player to see their recent Play Calls Quiz history. Highlights need at least 2 scored attempts per player. Visits/session length only cover time since this feature shipped -- nothing before that was tracked.</div>
+    </div>
     <div class="adminPanel" data-panel="players" style="display:none;">
       <div class="lbSectionHeader">👤 Registered Players (${playerRows.length})</div>
       <div class="lbList" style="max-height:340px;overflow-y:auto;">${playersHtml}</div>
@@ -481,7 +647,7 @@ async function openAdminStats(){
       <div class="lbList">${easiestHtml}</div>
       <div class="lbSub">Needs at least 3 team-wide attempts per signal to show.</div>
     </div>
-    <div class="lbSub" style="opacity:.5;margin-top:14px;">build 2026-08-09 v4 (dashboard)</div>`;
+    <div class="lbSub" style="opacity:.5;margin-top:14px;">build 2026-08-13 v5 (player activity + highlights)</div>`;
 
   const homeEl = body.querySelector('#adminHome');
   const backBtn = body.querySelector('#adminBackBtn');
@@ -917,7 +1083,7 @@ function sigRenderQuestion(){
       sigAnswered = true;
       const correct = Number(btn.dataset.id) === c.id;
       recordSignalAttempt(c.id, correct);
-      cloudPush('analytics/signalAttempts', { signalId: c.id, correct, date: new Date().toISOString() });
+      cloudPush('analytics/signalAttempts', Object.assign({ signalId: c.id, correct, date: new Date().toISOString() }, currentPlayerTag()));
       if(correct){
         sigScore++; sigRoundScore++; playSound(correctSound);
         sigCurrentStreak++;
@@ -984,7 +1150,7 @@ function sigFinishQuiz(){
     reviewRow.style.display = sigMissedCards.length ? 'flex' : 'none';
     document.getElementById('reviewMissedBtn').textContent = `📖 Review Missed (${sigMissedCards.length})`;
     logHistory({ date: new Date().toISOString(), mode: 'standard', score: sigScore, total: sigDeck.length, bestStreak: sigBestStreakThisRun });
-    cloudPush('analytics/standardResults', { score: sigScore, total: sigDeck.length, mistakes: sigDeck.length-sigScore, bestStreak: sigBestStreakThisRun, date: new Date().toISOString() });
+    cloudPush('analytics/standardResults', Object.assign({ score: sigScore, total: sigDeck.length, mistakes: sigDeck.length-sigScore, bestStreak: sigBestStreakThisRun, date: new Date().toISOString() }, currentPlayerTag()));
   }
 }
 document.getElementById('sigRestartBtn').addEventListener('click', sigBuildQuiz);
@@ -1134,7 +1300,7 @@ function timedRenderQuestion(){
       timedTotalAnswered++;
       const correct = Number(btn.dataset.id) === c.id;
       recordSignalAttempt(c.id, correct);
-      cloudPush('analytics/signalAttempts', { signalId: c.id, correct, date: new Date().toISOString() });
+      cloudPush('analytics/signalAttempts', Object.assign({ signalId: c.id, correct, date: new Date().toISOString() }, currentPlayerTag()));
       timedChoices.querySelectorAll('.seq-choice').forEach(b=>{
         b.disabled = true;
         if(Number(b.dataset.id)===c.id) b.classList.add('correct');
@@ -1175,7 +1341,7 @@ function timedFinishQuiz(){
   timedDoneText.textContent = `Final time: ${formatClock(finalMs)}  •  ${timedMistakes} mistake${timedMistakes===1?'':'s'}` +
     (isNewBest ? `  —  🏆 New best time on this device!` : `  •  Best on this device: ${formatClock(getBestTimeEver())}`);
   logHistory({ date: new Date().toISOString(), mode: 'timed', timeMs: finalMs, mistakes: timedMistakes });
-  cloudPush('analytics/timedResults', { timeMs: finalMs, mistakes: timedMistakes, date: new Date().toISOString() });
+  cloudPush('analytics/timedResults', Object.assign({ timeMs: finalMs, mistakes: timedMistakes, date: new Date().toISOString() }, currentPlayerTag()));
 }
 document.getElementById('timedRestartBtn').addEventListener('click', timedBuildQuiz);
 timedStartOverlay.addEventListener('click', timedStartRun);

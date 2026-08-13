@@ -229,6 +229,28 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
 .lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
 
+/* Nathan: "players who are excelling then those who are struggling and
+   what they could do." Same lbRow layout as everywhere else in this
+   panel, but the name needs a second, wrapping line underneath for the
+   data-driven tip -- .lbName itself is nowrap+ellipsis (fine for a bare
+   name, wrong for a two-line tip), so this is a separate stack instead of
+   reusing it. */
+.lbNameTip{flex:1;min-width:0;}
+.lbNameTipTitle{font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbTip{font-size:9.5px;font-weight:600;color:var(--muted);margin-top:2px;line-height:1.3}
+
+/* Per-player expandable history (Nathan: "keep all record history
+   available to see") -- plain <details>/<summary> so no extra JS wiring
+   is needed to open/close each player's row; just strip the browser's
+   default marker/list-item styling and let .lbRow's flex layout drive it. */
+.activityDetails{margin-bottom:6px;}
+.activityDetails summary{list-style:none;cursor:pointer;}
+.activityDetails summary::-webkit-details-marker{display:none;}
+.activityDetails summary.lbRow{border-radius:9px;}
+.activityDetails[open] summary.lbRow{border-radius:9px 9px 0 0;}
+.activityHistoryList{background:var(--paper);border-radius:0 0 9px 9px;padding:2px 14px 10px 46px;}
+.activityHistoryRow{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink);padding:2px 0;}
+
 /* ===== Position picker (posPromptOverlay) -- reuses .lbOverlay/.lbCard chrome ===== */
 .posPillGrid{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin:4px 0 14px}
 .posPill{background:var(--paper);border:2px solid var(--line);border-radius:10px;padding:12px 6px;
