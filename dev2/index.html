@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12j (welcome crash-course popup) -->
+<!-- BUILD_VERSION: 2026-08-12k (animate all paths on play + tutorial dots fix) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -704,7 +704,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812j';
+  const BUILD_V = '20260812k';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
