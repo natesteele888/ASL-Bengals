@@ -1217,9 +1217,17 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
        past the edge of its slot. buildToggleGroup stamps a `data-short`
        attribute (e.g. "BOS") onto any option that provides one; hide the
        real label and show that instead, only at this width. Desktop/
-       tablet still show the full names untouched. */
-    .toggle-btn[data-short] { font-size: 0; }
-    .toggle-btn[data-short]::after { content: attr(data-short); font-size: 10px; }
+       tablet still show the full names untouched.
+       Route-call toggles use the .toggle-tiny modifier, whose own
+       `.toggle-group.toggle-tiny .toggle-btn` font-size rule (3 classes)
+       otherwise outranks a plain `.toggle-btn[data-short]` (class +
+       attribute = 2) regardless of source order -- CSS specificity, not
+       cascade position, decides ties, so the real "Seattle" text was
+       never actually shrinking to 0 and both labels rendered at once
+       ("SeattleSEA"). Matching the fuller `.toggle-group.toggle-tiny
+       .toggle-btn[data-short]` selector here beats it outright. */
+    .toggle-group.toggle-tiny .toggle-btn[data-short] { font-size: 0; }
+    .toggle-group.toggle-tiny .toggle-btn[data-short]::after { content: attr(data-short); font-size: 10px; }
   }
 
   @media (min-width: 640px) {
