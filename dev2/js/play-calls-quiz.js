@@ -312,6 +312,19 @@
       feedbackEl.textContent = `❌ Not quite. It was: ${describeRound(r)}`;
       feedbackEl.className = 'seq-feedback bad';
     }
+    // Nathan: "keep all record history available... players who are
+    // excelling then those who are struggling and what they could do."
+    // Per-round log (which play was being called, right or wrong) so the
+    // coach dashboard can point at a specific weak spot ("struggles most
+    // with Option calls") instead of just a raw score. cloudPush and
+    // currentPlayerTag are globals from study-quiz.js, which loads before
+    // this file. Same fire-and-forget spirit as everywhere else -- a
+    // failed write here should never interrupt the quiz itself.
+    if (typeof cloudPush === 'function') {
+      cloudPush('analytics/pcqRoundAttempts', Object.assign({
+        playKey: r.playKey, correct: correct, date: new Date().toISOString(),
+      }, (typeof currentPlayerTag === 'function') ? currentPlayerTag() : {}));
+    }
     replayBtn.style.display = 'none';
     nextBtn.style.display = '';
   });
