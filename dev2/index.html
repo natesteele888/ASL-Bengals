@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260812g">
+<link rel="stylesheet" href="css/styles.css?v=20260812h">
 </head>
 <body>
 <script>
@@ -22,7 +22,7 @@
     document.documentElement.setAttribute('data-theme', 'dark');
   }
 </script>
-<!-- BUILD_VERSION: 2026-08-12h (boston-route + option-te-read-callout) -->
+<!-- BUILD_VERSION: 2026-08-12i (whats-new popup) -->
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
@@ -61,6 +61,26 @@
       autocomplete="off" autocapitalize="off" spellcheck="false">
     <button class="loginBtn" id="loginBtn">Log In</button>
     <div class="loginError" id="loginError"></div>
+  </div>
+</div>
+
+<!-- Nathan: one-time "what's new" popup so returning kids/parents aren't
+     confused by the update -- shown once (tracked in localStorage), on top
+     of whichever screen they land on (new browser: loginScreen; already
+     logged in on this device: whatever mode they were last in). Dismissing
+     doesn't sign anyone out or reset progress, it's purely informational. -->
+<div class="lbOverlay whatsNewOverlay" id="whatsNewOverlay">
+  <div class="lbCard lbCardCool">
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏈</div>
+      <h3>App Update!</h3>
+      <p class="lbSub">Same team code, some new stuff</p>
+    </div>
+    <div style="padding:0 18px 18px;font-size:13px;line-height:1.5;color:var(--ink)">
+      <p style="margin:0 0 10px">The Playbook got an upgrade — new Split formation routes, clearer diagrams, and a Play Quiz to test yourself.</p>
+      <p style="margin:0 0 14px">Log in the same way as always. First time picking a name? Just make one up along with a 4-digit code — that's yours from now on.</p>
+      <button class="loginBtn" id="whatsNewGotItBtn" style="width:100%">Got it!</button>
+    </div>
   </div>
 </div>
 
@@ -635,7 +655,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260812h';
+  const BUILD_V = '20260812i';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([

@@ -1,4 +1,31 @@
 /* ============================================================
+   "WHAT'S NEW" POPUP — one-time notice so kids/parents already
+   using the app aren't confused by the update. Shows once (ever,
+   per device/browser) on top of whatever screen the page lands on
+   -- login screen for new/signed-out visitors, or straight over the
+   app for anyone who was already logged in on this device. Purely
+   informational: dismissing just hides it and sets a flag.
+   ============================================================ */
+(function(){
+  var SEEN_KEY = 'bengalsWhatsNewSeen';
+  var overlay = document.getElementById('whatsNewOverlay');
+  var gotItBtn = document.getElementById('whatsNewGotItBtn');
+  if(!overlay || !gotItBtn) return;
+
+  function alreadySeen(){
+    try { return localStorage.getItem(SEEN_KEY) === '1'; } catch(e) { return false; }
+  }
+  function dismiss(){
+    overlay.classList.remove('show');
+    try { localStorage.setItem(SEEN_KEY, '1'); } catch(e) {}
+  }
+  if(!alreadySeen()){
+    overlay.classList.add('show');
+  }
+  gotItBtn.addEventListener('click', dismiss);
+})();
+
+/* ============================================================
    BACKGROUND MUSIC — mellow loop, mute toggle in the corner,
    preference remembered per device.
    ============================================================ */
