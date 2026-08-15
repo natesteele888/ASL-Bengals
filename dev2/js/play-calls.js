@@ -28,6 +28,23 @@ const SHIPPED_PLAY_FLAGS = {};
   };
 });
 
+// Same "cloud always wins" problem, one level up: a coach's "Save to Cloud"
+// snapshot (edit-plays.js) writes the *entire* DATA.playTypes array it has
+// loaded at that moment, wholesale. If a whole new play (like Sweep) ships
+// in the code after that snapshot was saved -- or a play that used to only
+// exist as cloud data (Sweep's original situation) isn't present in a given
+// cloud snapshot for any other reason -- the cloud array simply doesn't have
+// an entry for it at all, and normalizePlayData's per-play repairs below
+// have nothing to repair: there's no play object there to fix. Without this,
+// every browser that successfully loads real cloud data would silently lose
+// any play the shipped file has that the cloud snapshot doesn't, forever,
+// the same way Sweep itself first went missing. Snapshotted once, right now,
+// before cloud data ever gets a chance to replace DATA.playTypes.
+const SHIPPED_PLAY_TYPES_BY_KEY = {};
+(window.DATA.playTypes || []).forEach(pt => {
+  SHIPPED_PLAY_TYPES_BY_KEY[pt.key] = pt;
+});
+
 // The Option play's Direction Left/Right were themselves swapped for a
 // while (Left's ball path actually ran right) -- fixed by swapping the
 // direction-carrying paths (players 1/2/3 and the dashed option-read line)
@@ -98,7 +115,21 @@ const SHIPPED_DUAL_SIDE_BLOCKS = {};
 // Called right after fetching playEdits.json, before it's assigned to
 // DATA.playTypes, so loaded data behaves identically to the built-in JSON.
 function normalizePlayData(playTypes) {
-  (playTypes || []).forEach(pt => {
+  playTypes = playTypes || [];
+  // Graft in any shipped play that's entirely missing from this cloud
+  // snapshot (see SHIPPED_PLAY_TYPES_BY_KEY above) BEFORE the per-play
+  // repairs below run, so a newly-grafted play gets every other repair
+  // (signal card id, readKeyId default, dualSideBlock, etc.) applied to it
+  // exactly like any other play -- additive only, and only for keys the
+  // cloud data doesn't already have, so a coach's own edits (including a
+  // coach's own from-scratch version of that play) are never touched.
+  const presentKeys = new Set(playTypes.map(pt => pt.key));
+  Object.keys(SHIPPED_PLAY_TYPES_BY_KEY).forEach(key => {
+    if (!presentKeys.has(key)) {
+      playTypes.push(JSON.parse(JSON.stringify(SHIPPED_PLAY_TYPES_BY_KEY[key])));
+    }
+  });
+  playTypes.forEach(pt => {
     // Same "Firebase always wins" problem, this time for which signal card
     // a play's flip side shows -- Nathan: "Sweep play shows Double blast as
     // the signal on the flipped card. needs to correctly use signal #17
