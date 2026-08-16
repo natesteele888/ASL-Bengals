@@ -117,52 +117,38 @@
   }
 
   // ---- Off-screen SVG stage the live render functions draw into ----
+  // Wrapped in a hidden container DIV (not styled on the svg itself) so
+  // nothing about how it's hidden on the live page can ever leak into what
+  // svg2pdf.js reads off of it.
   function makeStage(vw, vh) {
+    const wrap = document.createElement('div');
+    wrap.style.position = 'fixed';
+    wrap.style.left = '-99999px';
+    wrap.style.top = '0';
+    wrap.style.width = '0';
+    wrap.style.height = '0';
+    wrap.style.overflow = 'hidden';
+    document.body.appendChild(wrap);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    // Explicit xmlns attribute (not just the createElementNS namespace) --
-    // required for the serialized string below to parse as a valid,
-    // self-contained SVG document once it's no longer attached to this
-    // page. Without it, browsers happily fire the resulting <img>'s load
-    // event (no error) but render nothing -- which is exactly what was
-    // happening: every cell box, border and label showed up fine (all
-    // drawn separately, straight into the PDF via jsPDF) while the one
-    // thing routed through this SVG->image conversion came out blank.
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
-    svg.style.position = 'fixed';
-    svg.style.left = '-99999px';
-    svg.style.top = '0';
-    svg.style.background = '#fff';
-    document.body.appendChild(svg);
-    return svg;
+    wrap.appendChild(svg);
+    return { svg, wrap };
   }
 
-  // Rasterizes whatever's currently drawn in `stage` to a PNG data URL at
-  // `scale`x the requested print size, so it stays crisp when printed.
-  // Uses a data: URI rather than a Blob/ObjectURL -- more consistently
-  // supported across browsers for the "serialize SVG -> Image -> canvas"
-  // conversion, and side-steps any ObjectURL revocation timing issues.
-  function svgToPng(stage, cellWpt, cellHpt, scale) {
-    return new Promise((resolve, reject) => {
-      const xml = new XMLSerializer().serializeToString(stage);
-      const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-      const img = new Image();
-      img.onload = () => {
-        const canvasEl = document.createElement('canvas');
-        canvasEl.width = Math.round(cellWpt * scale);
-        canvasEl.height = Math.round(cellHpt * scale);
-        const ctx = canvasEl.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-        ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
-        resolve(canvasEl.toDataURL('image/png'));
-      };
-      img.onerror = (e) => reject(e);
-      img.src = dataUri;
-    });
+  // Shared by call-sheet-pdf.js too, so both documents always agree on
+  // which families/colors exist in the live data.
+  function liveFamilies() {
+    return FAMILY_META
+      .filter(([key]) => window.DATA.playTypes.some(p => p.key === key))
+      .map(([key, color]) => ({ key, color, label: window.DATA.playTypes.find(p => p.key === key).label }));
   }
+  window.playbookLiveFamilies = liveFamilies;
+  window.playbookVariantList = variantList;
+  window.playbookSplitVariantList = splitVariantList;
+  window.playbookDefaultSubvariant = defaultSubvariant;
+  window.playbookForceSingleVariant = FORCE_SINGLE_VARIANT;
 
   async function generatePlaybookPDF(onProgress) {
     if (!window.DATA || !window.DATA.playTypes) throw new Error('Play data not loaded yet.');
@@ -172,18 +158,23 @@
     const { jsPDF } = window.jspdf;
     const [VW, VH] = window.DATA.viewBox;
 
-    // ---- Layout (points), same proportions as the old print layout ----
+    // ---- Layout (points), same proportions as the old print layout, but
+    // bigger cards -- Nathan: "expand the PDF so the play image cards are a
+    // little bigger on the page so they can be referenced but not used all
+    // the time" (i.e. this is now a reference booklet, not the primary
+    // sideline quick-call tool -- see the new Call Sheet PDF for that).
+    // 3-per-row instead of 4 gives each diagram ~28% more linear size.
     const PAGE_W = 792, PAGE_H = 612; // landscape letter
-    const MARGIN = 22, COLS = 4, CELL_GAP = 6, CELL_W = 180;
+    const MARGIN = 22, COLS = 3, CELL_GAP = 10, CELL_W = 230;
     const CELL_H = CELL_W * (VH / VW);
-    const LABEL_H = 12, ROW_H = LABEL_H + CELL_H;
-    const SECTION_HEADER_H = 14, SECTION_GAP = 5, ROW_GAP = 3;
+    const LABEL_H = 14, ROW_H = LABEL_H + CELL_H;
+    const SECTION_HEADER_H = 15, SECTION_GAP = 6, ROW_GAP = 4;
     const USABLE_W = PAGE_W - 2 * MARGIN;
     const GRID_W = COLS * CELL_W + (COLS - 1) * CELL_GAP;
     const GRID_X0 = MARGIN + (USABLE_W - GRID_W) / 2;
-    const RASTER_SCALE = 3; // renders at 3x cell size for crisp print quality
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    if (typeof doc.svg !== 'function') throw new Error('svg2pdf.js did not load -- doc.svg() is missing.');
     let y = MARGIN;
     let firstPage = true;
 
@@ -204,17 +195,15 @@
       doc.rect(MARGIN, y, USABLE_W, SECTION_HEADER_H, 'F');
       doc.setTextColor('#ffffff');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.text(label.toUpperCase(), MARGIN + 6, y + SECTION_HEADER_H - 4.5);
+      doc.setFontSize(10);
+      doc.text(label.toUpperCase(), MARGIN + 6, y + SECTION_HEADER_H - 5);
       y += SECTION_HEADER_H;
     }
 
-    const stage = makeStage(VW, VH);
+    const { svg: stage, wrap: stageWrap } = makeStage(VW, VH);
     let cellsDone = 0, cellsTotal = 0;
 
-    const families = FAMILY_META
-      .filter(([key]) => window.DATA.playTypes.some(p => p.key === key))
-      .map(([key, color]) => ({ key, color, label: window.DATA.playTypes.find(p => p.key === key).label }));
+    const families = liveFamilies();
 
     // Pre-count total cells for progress reporting.
     families.forEach(f => {
@@ -225,13 +214,15 @@
 
     async function drawCell(cellX0, rowTopY, label, color, renderFn) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.4);
+      doc.setFontSize(8.6);
       doc.setTextColor(color);
-      doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 2.5, { align: 'center' });
+      doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 3, { align: 'center' });
       const diagramY = rowTopY + LABEL_H;
       renderFn();
-      const png = await svgToPng(stage, CELL_W, CELL_H, RASTER_SCALE);
-      doc.addImage(png, 'PNG', cellX0, diagramY, CELL_W, CELL_H);
+      // Draws the LIVE stage SVG element directly into the PDF as vector
+      // content -- no serialize/rasterize round trip, so nothing about how
+      // it's hidden on the page or how it gets re-parsed can go wrong.
+      await doc.svg(stage, { x: cellX0, y: diagramY, width: CELL_W, height: CELL_H });
       doc.setDrawColor('#cccccc');
       doc.setLineWidth(0.6);
       doc.rect(cellX0, diagramY, CELL_W, CELL_H);
@@ -239,7 +230,7 @@
       if (onProgress) onProgress(cellsDone, cellsTotal);
     }
 
-    async function drawRows(items, color, renderFor, continuationLabel) {
+    async function drawRows(items, color, renderFor) {
       const rows = [];
       let cur = [];
       for (const it of items) { cur.push(it); if (cur.length === COLS) { rows.push(cur); cur = []; } }
@@ -274,7 +265,7 @@
       window.renderSplitDiagram(stage, v.playKey, v.side, v.io, v.rp, v.leftCall, v.rightCall, v.passOn, null);
     });
 
-    stage.remove();
+    stageWrap.remove();
     return doc;
   }
 

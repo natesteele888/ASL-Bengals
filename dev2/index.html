@@ -23,6 +23,13 @@
      never drift out of sync with live coach edits the way the old
      externally-synced static PDF did. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- svg2pdf.js: adds a doc.svg(element, {x,y,width,height}) method to jsPDF
+     that converts a LIVE svg element straight into vector PDF content --
+     no serialize-to-image round trip (that path silently produced blank
+     cells: the browser accepted the re-parsed SVG without erroring, but
+     rendered nothing from it). This walks the actual DOM element directly,
+     so there's no re-parsing step to go wrong. -->
+<script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.4.0/dist/svg2pdf.umd.min.js"></script>
 <script>
   // Registers sw.js so the app qualifies for a full "Install app" / Add to
   // Home Screen prompt on Chrome (some Android versions require a service
@@ -679,7 +686,8 @@
     <h3>🔐 Coach Stats</h3>
     <div class="lbSub">Team-wide usage — not visible to players</div>
     <div id="adminStatsBody"><div class="lbEmpty">Loading…</div></div>
-    <button class="navBtn" id="adminPdfDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📄 Save Sideline Playbook PDF</button>
+    <button class="navBtn" id="adminPdfDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📄 Save Playbook Reference PDF</button>
+    <button class="navBtn" id="adminCallSheetDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📋 Save Call Sheet PDF</button>
     <button class="navBtn secondary lbCloseBtn" id="adminCloseBtn">Close</button>
   </div>
 </div>
@@ -747,7 +755,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816f';
+  const BUILD_V = '20260816g';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
@@ -777,7 +785,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
