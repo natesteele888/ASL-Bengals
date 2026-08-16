@@ -58,7 +58,7 @@
   <!-- Nathan: replace the old full-width "DEV2 -- internal build" banner
        with a small, out-of-the-way tag instead -- still visibly marks this
        as the dev build, just doesn't eat a whole bar across the top. -->
-  <div class="dev2Tag">V2</div>
+  <div class="dev2Tag">V3</div>
 </div>
 
 <div class="loginScreen" id="loginScreen">
@@ -726,7 +726,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816a';
+  const BUILD_V = '20260816b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
