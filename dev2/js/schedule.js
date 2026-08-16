@@ -41,21 +41,51 @@
 
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
 
-  // Shared with game-stats-pdf.js (window.gameStatColumns) so the printed
-  // blank sheet and this in-app entry table always have identical columns,
-  // in the same order.
+  // Nathan shared a reference stat sheet (tidyforms.com-style) that covers a
+  // lot more than the first pass here -- separate Rushing/Passing/Receiving
+  // sections, penalties, first downs, a full drive chart, quarter-by-quarter
+  // scoring. Went with "richer box score, skip the play-by-play": still one
+  // row per player (not a play-by-play log -- that needs a dedicated person
+  // charting every snap live, not realistic solo on the sideline), but with
+  // real categories across offense AND defense/special teams instead of the
+  // handful this started with. Split into two grouped tables (STAT_GROUPS)
+  // mirroring how the reference sheet visually separates Rushing/Passing/
+  // Receiving from the Misc/Defense tallies -- same underlying row per
+  // player either way, just which columns each table shows.
+  //
+  // Shared with game-stats-pdf.js (window.gameStatColumns / .gameStatGroups)
+  // so the printed blank sheet and this in-app entry table always have
+  // identical columns, in the same order.
   const STAT_COLUMNS = [
     { key: 'num', label: '#', type: 'text', pdfW: 26 },
-    { key: 'name', label: 'Name', type: 'text', pdfW: 90 },
-    { key: 'runAtt', label: 'Runs', type: 'number', pdfW: 50 },
-    { key: 'rushYds', label: 'Rush Yds', type: 'number', pdfW: 60 },
-    { key: 'passLine', label: 'Pass (C/A)', type: 'text', pdfW: 60 },
-    { key: 'passYds', label: 'Pass Yds', type: 'number', pdfW: 60 },
-    { key: 'td', label: 'TD', type: 'number', pdfW: 40 },
-    { key: 'tackles', label: 'Tackles', type: 'number', pdfW: 55 },
-    { key: 'sacks', label: 'Sacks', type: 'number', pdfW: 50 },
+    { key: 'name', label: 'Name', type: 'text', pdfW: 88 },
+    { key: 'rushAtt', label: 'Rush Att', type: 'number', pdfW: 44 },
+    { key: 'rushYds', label: 'Rush Yds', type: 'number', pdfW: 48 },
+    { key: 'passAtt', label: 'Pass Att', type: 'number', pdfW: 44 },
+    { key: 'passComp', label: 'Pass Comp', type: 'number', pdfW: 48 },
+    { key: 'passInt', label: 'Pass Int', type: 'number', pdfW: 44 },
+    { key: 'passYds', label: 'Pass Yds', type: 'number', pdfW: 48 },
+    { key: 'rec', label: 'Rec', type: 'number', pdfW: 38 },
+    { key: 'recYds', label: 'Rec Yds', type: 'number', pdfW: 48 },
+    { key: 'td', label: 'TD', type: 'number', pdfW: 36 },
+    { key: 'tackles', label: 'Tackles', type: 'number', pdfW: 50 },
+    { key: 'sacks', label: 'Sacks', type: 'number', pdfW: 44 },
+    { key: 'fumLost', label: 'Fum Lost', type: 'number', pdfW: 48 },
+    { key: 'defInt', label: 'INT', type: 'number', pdfW: 36 },
+    { key: 'krYds', label: 'KR Yds', type: 'number', pdfW: 44 },
+    { key: 'prYds', label: 'PR Yds', type: 'number', pdfW: 44 },
   ];
+  const STAT_COL_BY_KEY = {};
+  STAT_COLUMNS.forEach(c => { STAT_COL_BY_KEY[c.key] = c; });
+
+  const STAT_GROUPS = [
+    { title: '🏃 Offense (Rushing / Passing / Receiving)', keys: ['num', 'name', 'rushAtt', 'rushYds', 'passAtt', 'passComp', 'passInt', 'passYds', 'rec', 'recYds', 'td'] },
+    { title: '🛡️ Defense & Special Teams', keys: ['tackles', 'sacks', 'fumLost', 'defInt', 'krYds', 'prYds'] },
+  ];
+
   window.gameStatColumns = STAT_COLUMNS;
+  window.gameStatColByKey = STAT_COL_BY_KEY;
+  window.gameStatGroups = STAT_GROUPS;
 
   let games = [];     // [{id, opponent, date, time, homeAway, location, ourScore, oppScore, writeup, stats:[], updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
@@ -275,69 +305,103 @@
     });
   }
 
-  // ---- Stats table -- exact same columns (STAT_COLUMNS) as the printable
-  // blank sheet. Read-only mode renders a plain table from current.stats;
-  // edit mode adds inputs whose oninput mutates current.stats[i][key]
+  // ---- Stats tables -- exact same columns/groups (STAT_GROUPS) as the
+  // printable blank sheet, split into an Offense table and a Defense &
+  // Special Teams table, same underlying current.stats row per player for
+  // both (see STAT_GROUPS comment above). Read-only mode renders plain
+  // tables; edit mode adds inputs whose oninput mutates current.stats[i][key]
   // directly (current.stats IS the live source of truth -- no separate
   // "harvest on save" step, same pattern Drive Builder's play list uses),
   // so only Add/Remove Row need a full re-render.
+  function rowHasAnyStat(r) {
+    return STAT_COLUMNS.some(c => c.key !== 'num' && c.key !== 'name' && r[c.key]) || !!r.name;
+  }
+
   function renderStatsTable(readOnly) {
     const wrap = document.getElementById('schedStatsWrap');
     if (!wrap) return;
     const rows = current.stats || [];
+    wrap.innerHTML = '';
 
     if (readOnly) {
-      if (!rows.length) {
+      if (!rows.length || !rows.some(rowHasAnyStat)) {
         wrap.innerHTML = '<div class="lbEmpty">Not entered yet.</div>';
         return;
       }
-      const hasAnyValue = rows.some(r => STAT_COLUMNS.some(c => c.key !== 'num' && c.key !== 'name' && r[c.key]));
-      if (!hasAnyValue && !rows.some(r => r.name)) {
-        wrap.innerHTML = '<div class="lbEmpty">Not entered yet.</div>';
-        return;
-      }
-      let html = '<table class="statsTable"><thead><tr>' + STAT_COLUMNS.map(c => `<th>${c.label}</th>`).join('') + '</tr></thead><tbody>';
-      rows.forEach(r => {
-        html += '<tr>' + STAT_COLUMNS.map(c => `<td>${escapeHtml(String(r[c.key] || (c.type === 'number' ? '0' : '—')))}</td>`).join('') + '</tr>';
+      STAT_GROUPS.forEach(group => {
+        const heading = document.createElement('div');
+        heading.className = 'statsGroupHeading';
+        heading.textContent = group.title;
+        wrap.appendChild(heading);
+        // Defense/ST group doesn't include num/name in its own keys (see
+        // STAT_GROUPS) -- always shown first so each row is still
+        // identifiable without repeating editable identity fields.
+        const keys = group.keys.includes('num') ? group.keys : ['num', 'name', ...group.keys];
+        let html = '<table class="statsTable"><thead><tr>' + keys.map(k => `<th>${STAT_COL_BY_KEY[k].label}</th>`).join('') + '</tr></thead><tbody>';
+        rows.forEach(r => {
+          html += '<tr>' + keys.map(k => {
+            const c = STAT_COL_BY_KEY[k];
+            return `<td>${escapeHtml(String(r[k] || (c.type === 'number' ? '0' : '—')))}</td>`;
+          }).join('') + '</tr>';
+        });
+        html += '</tbody></table>';
+        wrap.insertAdjacentHTML('beforeend', html);
       });
-      html += '</tbody></table>';
-      wrap.innerHTML = html;
       return;
     }
 
     // ---- Editable ----
-    const table = document.createElement('table');
-    table.className = 'statsTable statsTableEdit';
-    const thead = document.createElement('thead');
-    thead.innerHTML = '<tr>' + STAT_COLUMNS.map(c => `<th>${c.label}</th>`).join('') + '<th></th></tr>';
-    table.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    rows.forEach((row, i) => {
-      const tr = document.createElement('tr');
-      STAT_COLUMNS.forEach(c => {
-        const td = document.createElement('td');
-        const input = document.createElement('input');
-        input.type = c.type === 'number' ? 'number' : 'text';
-        input.value = row[c.key] || '';
-        input.className = 'statsCellInput';
-        if (c.key === 'name') input.style.width = '110px';
-        input.addEventListener('input', () => { row[c.key] = input.value; });
-        td.appendChild(input);
-        tr.appendChild(td);
+    STAT_GROUPS.forEach((group, groupIdx) => {
+      const isOffense = groupIdx === 0; // Offense table owns the editable # / Name / Remove Row controls
+      const heading = document.createElement('div');
+      heading.className = 'statsGroupHeading';
+      heading.textContent = group.title;
+      wrap.appendChild(heading);
+
+      const keys = isOffense ? group.keys : ['num', 'name', ...group.keys];
+      const table = document.createElement('table');
+      table.className = 'statsTable statsTableEdit';
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr>' + keys.map(k => `<th>${STAT_COL_BY_KEY[k].label}</th>`).join('') + (isOffense ? '<th></th>' : '') + '</tr>';
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      rows.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        keys.forEach(k => {
+          const td = document.createElement('td');
+          if (!isOffense && (k === 'num' || k === 'name')) {
+            // Identity fields are only editable in the Offense table --
+            // shown here as plain read-only text so the same row's # /
+            // Name can't drift out of sync between the two tables.
+            td.textContent = row[k] || '—';
+            td.className = 'statsIdentityCell';
+          } else {
+            const c = STAT_COL_BY_KEY[k];
+            const input = document.createElement('input');
+            input.type = c.type === 'number' ? 'number' : 'text';
+            input.value = row[k] || '';
+            input.className = 'statsCellInput';
+            if (k === 'name') input.style.width = '100px';
+            input.addEventListener('input', () => { row[k] = input.value; });
+            td.appendChild(input);
+          }
+          tr.appendChild(td);
+        });
+        if (isOffense) {
+          const tdRm = document.createElement('td');
+          const rmBtn = document.createElement('button');
+          rmBtn.type = 'button';
+          rmBtn.textContent = '✕';
+          rmBtn.className = 'statsRmBtn';
+          rmBtn.addEventListener('click', () => { current.stats.splice(i, 1); renderStatsTable(false); });
+          tdRm.appendChild(rmBtn);
+          tr.appendChild(tdRm);
+        }
+        tbody.appendChild(tr);
       });
-      const tdRm = document.createElement('td');
-      const rmBtn = document.createElement('button');
-      rmBtn.type = 'button';
-      rmBtn.textContent = '✕';
-      rmBtn.className = 'statsRmBtn';
-      rmBtn.addEventListener('click', () => { current.stats.splice(i, 1); renderStatsTable(false); });
-      tdRm.appendChild(rmBtn);
-      tr.appendChild(tdRm);
-      tbody.appendChild(tr);
+      table.appendChild(tbody);
+      wrap.appendChild(table);
     });
-    table.appendChild(tbody);
-    wrap.innerHTML = '';
-    wrap.appendChild(table);
 
     const addBtn = document.createElement('button');
     addBtn.type = 'button';

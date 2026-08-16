@@ -1363,6 +1363,9 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .statsCellInput { width: 46px; border: none; background: transparent; text-align: center; font-size: 12px; font-family: inherit; padding: 3px 2px; }
 .statsCellInput:focus { outline: 2px solid var(--bengal-orange); border-radius: 4px; }
 .statsRmBtn { border: none; background: none; color: #c0342a; font-size: 13px; cursor: pointer; padding: 2px 6px; }
+.statsGroupHeading { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); margin: 14px 0 4px; }
+.statsGroupHeading:first-child { margin-top: 0; }
+.statsIdentityCell { font-weight: 700; font-size: 12px; color: var(--ink); background: rgba(0,0,0,.03); }
 [data-theme="dark"] .statsTable td { border-color: var(--line); color: var(--ink); }
 [data-theme="dark"] .statsTable tbody tr:nth-child(even) { background: rgba(255,255,255,.04); }
 [data-theme="dark"] .statsCellInput { color: var(--ink); }
