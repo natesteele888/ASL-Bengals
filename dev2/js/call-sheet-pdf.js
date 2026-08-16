@@ -57,6 +57,12 @@
     if (!window.jspdf) throw new Error('PDF library not loaded yet.');
     if (!window.playbookLiveFamilies) throw new Error('Playbook helper not loaded yet.');
 
+    // Same freshness fix as playbook-pdf.js -- pull the coach's real saved
+    // edits (noBoot flags etc. come from window.DATA.playTypes) before
+    // building the index, so this doesn't silently read stale bootstrap
+    // data either.
+    if (window.loadLiveEditsIntoData) await window.loadLiveEditsIntoData();
+
     const { jsPDF } = window.jspdf;
     const PAGE_W = 792, PAGE_H = 612; // landscape letter
     const MARGIN = 20;

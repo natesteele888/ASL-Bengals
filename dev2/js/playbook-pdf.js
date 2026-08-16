@@ -193,6 +193,18 @@
     if (!window.renderCardDiagram || !window.renderSplitDiagram) throw new Error('Play renderer not loaded yet.');
     if (!window.jspdf) throw new Error('PDF library not loaded yet.');
 
+    // Nathan kept seeing this PDF print old/unedited routes even when Play
+    // Calls itself showed the correct ones -- because play-calls.js only
+    // fetched the coach's real saved edits (playEdits.json/splitRouteEdits
+    // .json) lazily, the first time someone opened the Play Calls tab.
+    // Force that fetch here too, so exporting straight from Coach Stats
+    // (without ever opening Play Calls first this session) still pulls the
+    // latest saved routes into window.DATA before anything below reads it.
+    if (window.loadLiveEditsIntoData) {
+      if (onProgress) onProgress(0, 1);
+      await window.loadLiveEditsIntoData();
+    }
+
     const { jsPDF } = window.jspdf;
     const [VW, VH] = window.DATA.viewBox;
 

@@ -1810,6 +1810,44 @@ function buildGrid() {
   // but this at least keeps the actual password out of plain view in the JS.
   const PC_PASSWORD_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
 
+  // Nathan kept seeing the PDF exports print OLD/unedited routes even right
+  // after confirming Play Calls itself showed the correct, edited ones --
+  // root cause: THIS fetch (playEdits.json/splitRouteEdits.json, the
+  // coach's real saved edits) only ever ran lazily, the first time someone
+  // actually opened the password-gated Play Calls tab in a given session.
+  // window.DATA otherwise sits on the initial bootstrap snapshot index.html
+  // loaded before any scripts ran (dev2PlayData/plays.json), which mirrors
+  // the shipped defaults, not live edits. A coach going straight from
+  // login to the 5-tap Coach Stats panel to export a PDF would never
+  // trigger this fetch at all. Extracted out to its own function, exposed
+  // on window, so playbook-pdf.js/call-sheet-pdf.js can force it to run
+  // before generating -- one fetch, one overwrite, used by both paths.
+  let liveEditsLoaded = false;
+  function loadLiveEditsIntoData() {
+    if (liveEditsLoaded) return Promise.resolve(true);
+    return Promise.all([
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+      // Split's Houston/Seattle/Florida routes save to their own key (see
+      // edit-plays.js) rather than being folded into playEdits.json's
+      // bare-array shape -- fetched alongside so coach-saved route edits
+      // show up here too, not just in the builder tool.
+      window.firebaseAuthed(`${FIREBASE_DB_URL}/splitRouteEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+    ]).then(([saved, savedSplitRoutes]) => {
+      let gotAny = false;
+      if (saved && Array.isArray(saved) && saved.length) {
+        DATA.playTypes = normalizePlayData(saved);
+        gotAny = true;
+      }
+      if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
+        DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
+        gotAny = true;
+      }
+      liveEditsLoaded = true;
+      return gotAny;
+    });
+  }
+  window.loadLiveEditsIntoData = loadLiveEditsIntoData;
+
   function proceedIntoPlayCalls() {
     const grid = document.getElementById('playCallsGrid');
     const statusEl = document.getElementById('playCallsCloudStatus');
@@ -1832,24 +1870,8 @@ function buildGrid() {
       return;
     }
     if (statusEl) statusEl.textContent = 'Checking for the latest saved routes\u2026';
-    Promise.all([
-      window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
-      // Split's Houston/Seattle/Florida routes save to their own key (see
-      // edit-plays.js) rather than being folded into playEdits.json's
-      // bare-array shape -- fetched alongside so coach-saved route edits
-      // show up here too, not just in the builder tool.
-      window.firebaseAuthed(`${FIREBASE_DB_URL}/splitRouteEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
-    ])
-      .then(([saved, savedSplitRoutes]) => {
-        let gotAny = false;
-        if (saved && Array.isArray(saved) && saved.length) {
-          DATA.playTypes = normalizePlayData(saved);
-          gotAny = true;
-        }
-        if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
-          DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
-          gotAny = true;
-        }
+    loadLiveEditsIntoData()
+      .then(gotAny => {
         if (statusEl) statusEl.textContent = gotAny ? 'Showing the latest saved routes from the builder tool.' : 'Showing built-in default routes (no saved edits found).';
         playCallsDataLoaded = true;
         finishBuilding();
