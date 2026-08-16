@@ -282,6 +282,36 @@
      Tools section (see topSections above) -- Coach Dashboard (task #28)
      will join it here later as a second area. -->
 <div id="coachtoolsMode" class="modePanel">
+  <!-- Nathan: "when I go to the Coach Tools - I should have the option to
+       Print the Playbook, Print the Play Sheet, and Print and input the
+       stats for to then assign to a game." Print Playbook / Print Play
+       Sheet reuse the same generatePlaybookPDF/generateCallSheetPDF as the
+       admin panel. The Stats tool tracks one standalone "draft" stat sheet
+       (not tied to a Schedule game yet) using the shared editor from
+       js/game-stats-editor.js, then "Assign to Game" attaches it to an
+       existing or brand-new Schedule game. See js/coachtools-print.js. -->
+  <div class="lbSectionHeader" style="text-align:center;">🖨️ Print &amp; Game Stats</div>
+  <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Print materials for game day, or track a game's stats electronically -- even before it's on the Schedule -- then assign the finished sheet to a game.</div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:520px;margin:0 auto 20px;">
+    <button class="navBtn" id="coachPrintPlaybookBtn" style="flex:1 1 210px;">📘 Print Playbook</button>
+    <button class="navBtn" id="coachPrintCallSheetBtn" style="flex:1 1 210px;">📋 Print Play Sheet</button>
+  </div>
+
+  <div id="coachStatsToolWrap" style="max-width:700px;margin:0 auto 24px;border-top:2px solid #eee;padding-top:16px;">
+    <div class="lbSectionHeader" style="margin:0 0 4px;">🏈 Game Stats</div>
+    <div class="lbSub" style="margin:0 0 10px;">Print a blank sheet for the sideline, or enter stats live below and assign the finished sheet to a game when you're done.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="lbLinkBtn" id="coachPrintBlankStatsBtn">🖨️ Print Blank Stat Sheet</button>
+      <button class="lbLinkBtn" id="coachSaveStatsDraftBtn">💾 Save Draft</button>
+      <button class="lbLinkBtn" id="coachAssignStatsBtn">📌 Assign to Game</button>
+      <button class="lbLinkBtn" id="coachDiscardStatsBtn">🗑 Discard Draft</button>
+    </div>
+    <div id="coachAssignPickerWrap" style="display:none;border:2px solid #eee;border-radius:10px;padding:12px;margin-bottom:14px;"></div>
+    <div id="coachStatsDraftWrap"></div>
+    <div id="coachStatsStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+
   <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
   <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a named, ordered list of plays ahead of time -- an opening script, a red zone package, a 2-minute drill -- and pull it back up here on the sideline.</div>
 
@@ -911,7 +941,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817b';
+  const BUILD_V = '20260817c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -955,7 +985,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
