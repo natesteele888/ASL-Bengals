@@ -234,14 +234,19 @@
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
       const gameTime = g.gameTime || g.time || ''; // g.time is the pre-Arrive/Warmup/Game-split field
-      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
-      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
+      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
+      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+      const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
       row.innerHTML = `
-        <span class="scheduleRowDate">${fmtDate(g.date)}${gameTime ? ' • ' + escapeHtml(gameTime) : ''}${g.location ? ' • ' + escapeHtml(g.location) : ''}</span>
+        <span class="scheduleRowDate">${locLine}</span>
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
-          <span class="scheduleRowCenter"><span class="scheduleRowLoc" style="max-width:none;">${g.homeAway === 'Away' ? '@' : 'vs'}</span>${badge}</span>
-          <span class="scheduleTeamSide away">${themScore}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${opponentBadgeHtml(g.opponent)}</span>
+          <span class="scheduleRowCenter">
+            <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
+            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
+            ${badge}
+          </span>
+          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
         </span>`;
       row.addEventListener('click', () => openDetail(g.id));
       listEl.appendChild(row);
@@ -284,6 +289,13 @@
     editControls.style.display = approved ? '' : 'none';
     if (deleteBtn) deleteBtn.style.display = games.some(g => g.id === current.id) ? '' : 'none';
 
+    // Arrive/Warm-up sit on the hero's top line (context info, unique to
+    // this hero); kickoff time moves into the center with the date, same
+    // spot the list card uses -- see the CSS comment on .scheduleRowCenter.
+    const preGameTimesLine = [
+      current.arriveTime ? `Arrive ${escapeHtml(current.arriveTime)}` : '',
+      current.warmupTime ? `Warm-up ${escapeHtml(current.warmupTime)}` : '',
+    ].filter(Boolean).join(' • ');
     const timesLine = [
       current.arriveTime ? `Arrive ${escapeHtml(current.arriveTime)}` : '',
       current.warmupTime ? `Warm-up ${escapeHtml(current.warmupTime)}` : '',
@@ -295,15 +307,20 @@
       const badgeHtml = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
-      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
+      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : '';
+      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
+      const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${preGameTimesLine ? ' • ' + preGameTimesLine : ''}`;
       return `
         <div class="scheduleDetailHero">
-          <div class="scheduleRowDate" style="text-align:center;margin-bottom:10px;">${fmtDate(current.date)}${timesLine ? ' • ' + timesLine : ''}</div>
+          <div class="scheduleRowDate" style="text-align:center;margin-bottom:10px;">${topLine}</div>
           <div class="scheduleRowMatchup">
             <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
-            <span class="scheduleRowCenter">${badgeHtml}</span>
-            <span class="scheduleTeamSide away">${themScore}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span>${opponentBadgeHtml(current.opponent)}</span>
+            <span class="scheduleRowCenter">
+              <span class="scheduleRowCenterDate">${fmtDate(current.date)}</span>
+              ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(current.gameTime)}</span>` : ''}
+              ${badgeHtml}
+            </span>
+            <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span>${themScore}</span>
           </div>
         </div>`;
     })();
@@ -312,7 +329,7 @@
       // ---- Read-only view ----
       body.innerHTML = `
         ${heroHtml}
-        <div class="lbSub" style="margin-bottom:10px;text-align:center;">${escapeHtml(current.location || 'Location TBD')} • ${current.homeAway || 'Home'}</div>
+        <div class="lbSub" style="margin-bottom:10px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
@@ -444,6 +461,7 @@
   window.openScheduleGame = function (gameId) {
     if (typeof window.setSection === 'function') window.setSection('schedule');
     else if (typeof setSection === 'function') setSection('schedule');
+    if (window.showScheduleGamesTab) window.showScheduleGamesTab();
     function actuallyOpen() {
       document.getElementById('scheduleListWrap').style.display = 'none';
       document.getElementById('scheduleDetail').style.display = '';

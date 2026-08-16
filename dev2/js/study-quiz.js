@@ -42,7 +42,7 @@ function setMode(mode){
   if(mode==='editplays') openEditPlaysGated();
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
   if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
-  if(mode==='schedule' && typeof window.initSchedule === 'function') window.initSchedule();
+  if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260817a">
+<link rel="stylesheet" href="css/styles.css?v=20260817b">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -365,26 +365,65 @@
      needs the Stats feature (task #31, still pending) before it can show
      anything real. -->
 <div id="scheduleMode" class="modePanel">
-  <div id="scheduleListWrap" style="max-width:560px;margin:0 auto;">
-    <div id="scheduleList"></div>
-    <div id="scheduleAddWrap" style="display:none;">
-      <button class="navBtn" id="scheduleNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Game</button>
+  <!-- Nathan: "I also wants to add in practices to the app to - not sure
+       they should all be together in the same list." Games and Practices
+       stay two separate lists (a practice has no score/opponent/stat sheet,
+       so the ESPN-style scoreboard card doesn't fit it) under one Schedule
+       section, switched with these two CTAs rather than a whole new
+       top-level tab. -->
+  <div class="gameplanPickerGrid" id="scheduleSubNav" style="margin-bottom:16px;"></div>
+
+  <div id="scheduleGamesPanel">
+    <div id="scheduleListWrap" style="max-width:560px;margin:0 auto;">
+      <div id="scheduleList"></div>
+      <div id="scheduleAddWrap" style="display:none;">
+        <button class="navBtn" id="scheduleNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Game</button>
+      </div>
+      <div id="scheduleCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
-    <div id="scheduleCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+
+    <div id="scheduleDetail" style="display:none;max-width:600px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="scheduleBackBtn">‹ All Games</button>
+      </div>
+      <div id="scheduleDetailBody"></div>
+      <div id="scheduleDetailEditControls" style="display:none;margin-top:16px;">
+        <div style="display:flex;gap:8px;">
+          <button class="navBtn" id="scheduleSaveBtn" style="flex:1;">Save Game</button>
+          <button class="navBtn secondary" id="scheduleDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+        </div>
+      </div>
+      <div id="scheduleDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
   </div>
 
-  <div id="scheduleDetail" style="display:none;max-width:600px;margin:20px auto 0;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-      <button class="lbLinkBtn" id="scheduleBackBtn">‹ All Games</button>
-    </div>
-    <div id="scheduleDetailBody"></div>
-    <div id="scheduleDetailEditControls" style="display:none;margin-top:16px;">
-      <div style="display:flex;gap:8px;">
-        <button class="navBtn" id="scheduleSaveBtn" style="flex:1;">Save Game</button>
-        <button class="navBtn secondary" id="scheduleDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+  <!-- Nathan: "They need date, time and location with map function. Once
+       season starts, there will be a film night instead of practice so we
+       need an option for that." One list, each entry tagged Practice or
+       Film Night via a chip toggle (same date/time/location/map shape
+       either way) -- see js/practices.js. -->
+  <div id="schedulePracticesPanel" style="display:none;">
+    <div id="practicesListWrap" style="max-width:560px;margin:0 auto;">
+      <div id="practicesList"></div>
+      <div id="practicesAddWrap" style="display:none;">
+        <button class="navBtn" id="practicesNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Practice / Film Night</button>
       </div>
+      <div id="practicesCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
-    <div id="scheduleDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+
+    <div id="practicesDetail" style="display:none;max-width:600px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="practicesBackBtn">‹ All Practices</button>
+      </div>
+      <div id="practicesDetailBody"></div>
+      <div id="practicesDetailEditControls" style="display:none;margin-top:16px;">
+        <div style="display:flex;gap:8px;">
+          <button class="navBtn" id="practicesSaveBtn" style="flex:1;">Save</button>
+          <button class="navBtn secondary" id="practicesDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+        </div>
+      </div>
+      <div id="practicesDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
   </div>
 </div>
 
@@ -968,7 +1007,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817f';
+  const BUILD_V = '20260817h';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1012,7 +1051,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/schedule.js', 'js/practices.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
