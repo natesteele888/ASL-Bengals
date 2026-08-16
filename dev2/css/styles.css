@@ -1353,5 +1353,17 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] .scheduleRow { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .scheduleWriteup { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .scheduleResultBadge.upcoming { background: #333; color: #ccc; }
+
+/* ---- Game stats table ---- */
+.statsTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+.statsTable th { background: var(--bengal-black); color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; padding: 6px 4px; text-align: center; }
+.statsTable td { border: 1px solid var(--line); padding: 4px; text-align: center; }
+.statsTable tbody tr:nth-child(even) { background: rgba(0,0,0,.03); }
+.statsCellInput { width: 46px; border: none; background: transparent; text-align: center; font-size: 12px; font-family: inherit; padding: 3px 2px; }
+.statsCellInput:focus { outline: 2px solid var(--bengal-orange); border-radius: 4px; }
+.statsRmBtn { border: none; background: none; color: #c0342a; font-size: 13px; cursor: pointer; padding: 2px 6px; }
+[data-theme="dark"] .statsTable td { border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .statsTable tbody tr:nth-child(even) { background: rgba(255,255,255,.04); }
+[data-theme="dark"] .statsCellInput { color: var(--ink); }
   }
 

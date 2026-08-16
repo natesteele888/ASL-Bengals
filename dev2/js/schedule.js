@@ -12,20 +12,51 @@
 // Builder, rather than needing the season schedule handed over to be
 // hardcoded.
 //
-// The "more info" detail view has a spot reserved for a real stat line, but
-// there's no play-by-play stat entry yet (task #31, still pending) -- shows
-// a placeholder until that exists.
+// Nathan: "stats tracking with the complementary printable stat sheet for
+// games with runs, yards, passes, tackles, sacks, TDs, etc." -- and, from
+// earlier: "I need a way to record the stats on the sidelines on a printed
+// sheet so that I can input in the same format on the app after the game."
+// Stats now live per-game right here in the Schedule detail view (the
+// "more info" panel), same place the write-up already lives, using the
+// EXACT same columns as the printable blank sheet (game-stats-pdf.js) so a
+// coach transcribing from paper never has to remap anything. Read-only for
+// everyone once entered; only an approved coach can enter/edit them, same
+// gate as the rest of a game's details. Opponent stats aren't tracked
+// per-player (Nathan: "will try and keep stats for other team as well" was
+// a stretch goal, not the core ask) -- final score already covers the team
+// level for them.
 // ---------------------------------------------------------------------------
 (function () {
 
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
 
-  let games = [];     // [{id, opponent, date, time, homeAway, location, ourScore, oppScore, writeup, updatedAt}]
+  // Shared with game-stats-pdf.js (window.gameStatColumns) so the printed
+  // blank sheet and this in-app entry table always have identical columns,
+  // in the same order.
+  const STAT_COLUMNS = [
+    { key: 'num', label: '#', type: 'text', pdfW: 26 },
+    { key: 'name', label: 'Name', type: 'text', pdfW: 90 },
+    { key: 'runAtt', label: 'Runs', type: 'number', pdfW: 50 },
+    { key: 'rushYds', label: 'Rush Yds', type: 'number', pdfW: 60 },
+    { key: 'passLine', label: 'Pass (C/A)', type: 'text', pdfW: 60 },
+    { key: 'passYds', label: 'Pass Yds', type: 'number', pdfW: 60 },
+    { key: 'td', label: 'TD', type: 'number', pdfW: 40 },
+    { key: 'tackles', label: 'Tackles', type: 'number', pdfW: 55 },
+    { key: 'sacks', label: 'Sacks', type: 'number', pdfW: 50 },
+  ];
+  window.gameStatColumns = STAT_COLUMNS;
+
+  let games = [];     // [{id, opponent, date, time, homeAway, location, ourScore, oppScore, writeup, stats:[], updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
 
   function genId() {
     return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+  function blankStatRow() {
+    const row = {};
+    STAT_COLUMNS.forEach(c => { row[c.key] = ''; });
+    return row;
   }
 
   function resultFor(g) {
@@ -131,8 +162,9 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', time: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', updatedAt: null };
+      current = { id: genId(), opponent: '', date: '', time: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', stats: [], updatedAt: null };
     }
+    if (!Array.isArray(current.stats)) current.stats = []; // older saved games predate this field
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
@@ -165,9 +197,10 @@
         <div class="lbSub" style="margin-bottom:10px;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(current.time) : ''} • ${escapeHtml(current.location || 'Location TBD')} • ${current.homeAway || 'Home'}</div>
         <div style="text-align:center;margin:10px 0;">${badgeHtml}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📊 Stats</div>
-        <div class="lbEmpty">Not tracked yet -- coming with the Stats feature.</div>
+        <div id="schedStatsWrap"></div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>`;
+      renderStatsTable(true);
       return;
     }
 
@@ -187,10 +220,23 @@
         <input type="number" id="schedOppScore" placeholder="Them" style="width:64px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span class="lbSub" style="margin:0;">(leave blank until played)</span>
       </div>
-      <div class="lbSectionHeader">📊 Stats</div>
-      <div class="lbEmpty">Not tracked yet -- coming with the Stats feature.</div>
-      <div class="lbSectionHeader" style="margin-top:10px;">📝 Game Write-Up</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+        <div class="lbSectionHeader" style="margin:0;">📊 Stats</div>
+        <button class="lbLinkBtn" id="schedPrintStatSheetBtn">🖨️ Print Blank Stat Sheet</button>
+      </div>
+      <div class="lbSub" style="margin:2px 0 8px;">Enter the same numbers you recorded on the printed sheet -- these columns match it exactly.</div>
+      <div id="schedStatsWrap"></div>
+      <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>`;
+
+    document.getElementById('schedPrintStatSheetBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (window.generateGameStatSheetPDF) {
+        const doc = window.generateGameStatSheetPDF(current);
+        doc.save(`ASL_Bengals_Stat_Sheet_${(current.opponent || 'game').replace(/[^a-z0-9]+/gi, '_')}.pdf`);
+      }
+    });
+    renderStatsTable(false);
 
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedDate').value = current.date || '';
@@ -209,6 +255,79 @@
       chip.addEventListener('click', () => { current.homeAway = v; renderDetail(); });
       haGrid.appendChild(chip);
     });
+  }
+
+  // ---- Stats table -- exact same columns (STAT_COLUMNS) as the printable
+  // blank sheet. Read-only mode renders a plain table from current.stats;
+  // edit mode adds inputs whose oninput mutates current.stats[i][key]
+  // directly (current.stats IS the live source of truth -- no separate
+  // "harvest on save" step, same pattern Drive Builder's play list uses),
+  // so only Add/Remove Row need a full re-render.
+  function renderStatsTable(readOnly) {
+    const wrap = document.getElementById('schedStatsWrap');
+    if (!wrap) return;
+    const rows = current.stats || [];
+
+    if (readOnly) {
+      if (!rows.length) {
+        wrap.innerHTML = '<div class="lbEmpty">Not entered yet.</div>';
+        return;
+      }
+      const hasAnyValue = rows.some(r => STAT_COLUMNS.some(c => c.key !== 'num' && c.key !== 'name' && r[c.key]));
+      if (!hasAnyValue && !rows.some(r => r.name)) {
+        wrap.innerHTML = '<div class="lbEmpty">Not entered yet.</div>';
+        return;
+      }
+      let html = '<table class="statsTable"><thead><tr>' + STAT_COLUMNS.map(c => `<th>${c.label}</th>`).join('') + '</tr></thead><tbody>';
+      rows.forEach(r => {
+        html += '<tr>' + STAT_COLUMNS.map(c => `<td>${escapeHtml(String(r[c.key] || (c.type === 'number' ? '0' : '—')))}</td>`).join('') + '</tr>';
+      });
+      html += '</tbody></table>';
+      wrap.innerHTML = html;
+      return;
+    }
+
+    // ---- Editable ----
+    const table = document.createElement('table');
+    table.className = 'statsTable statsTableEdit';
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr>' + STAT_COLUMNS.map(c => `<th>${c.label}</th>`).join('') + '<th></th></tr>';
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    rows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      STAT_COLUMNS.forEach(c => {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = c.type === 'number' ? 'number' : 'text';
+        input.value = row[c.key] || '';
+        input.className = 'statsCellInput';
+        if (c.key === 'name') input.style.width = '110px';
+        input.addEventListener('input', () => { row[c.key] = input.value; });
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+      const tdRm = document.createElement('td');
+      const rmBtn = document.createElement('button');
+      rmBtn.type = 'button';
+      rmBtn.textContent = '✕';
+      rmBtn.className = 'statsRmBtn';
+      rmBtn.addEventListener('click', () => { current.stats.splice(i, 1); renderStatsTable(false); });
+      tdRm.appendChild(rmBtn);
+      tr.appendChild(tdRm);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.innerHTML = '';
+    wrap.appendChild(table);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'lbLinkBtn';
+    addBtn.style.marginTop = '6px';
+    addBtn.textContent = '+ Add Player Row';
+    addBtn.addEventListener('click', () => { current.stats.push(blankStatRow()); renderStatsTable(false); });
+    wrap.appendChild(addBtn);
   }
 
   function saveCurrent() {
