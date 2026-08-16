@@ -47,6 +47,7 @@
 (function () {
 
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
+  const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
 
   let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
@@ -57,10 +58,26 @@
   }
 
   // ---- Team badges -- Nathan: "I want the app to look like the styling of
-  // ESPN mobile app with team logos." No real opponent logo art exists, so
-  // opponents get an auto-generated colored initials badge (deterministic
-  // color from the name, so the same opponent always looks the same);
-  // Bengals always use the real mascot logo already shipped for the header.
+  // ESPN mobile app with team logos." Real opponent logo art gets uploaded
+  // by a coach right on the game's edit page (stored small, as a data URL,
+  // in opponentLogos.json keyed by a normalized opponent name -- so
+  // uploading Clinton's logo once covers every game against Clinton, past
+  // or future, not just the one it was uploaded on). A few opponents ship
+  // bundled as static assets (BUNDLED_LOGOS) so they work with zero setup;
+  // uploaded logos in Firebase take priority if both exist. Anyone without
+  // a logo on file yet gets an auto-generated colored initials badge
+  // (deterministic color from the name) as a placeholder. Bengals always
+  // use the real mascot logo already shipped for the header.
+  const BUNDLED_LOGOS = {
+    clinton: 'assets/images/opponents/clinton.png',
+  };
+  let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
+
+  function normalizeOpponentKey(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim(); // drop "(Scrimmage)" etc -- not part of the team name
+    const firstWord = cleaned.split(/\s+/).filter(Boolean)[0] || '';
+    return firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
   function hashColor(str) {
     let hash = 0;
     for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
@@ -68,16 +85,65 @@
     return `hsl(${hue}, 55%, 38%)`;
   }
   function initials(name) {
-    const words = (name || '?').trim().split(/\s+/).filter(Boolean);
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    const words = cleaned.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
     if (!words.length) return '?';
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return (words[0][0] + words[1][0]).toUpperCase();
+    const letter = w => (w.match(/[a-zA-Z]/) || ['?'])[0];
+    if (words.length === 1) return words[0].replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '?';
+    return (letter(words[0]) + letter(words[1])).toUpperCase();
   }
   function bengalsBadgeHtml() {
     return `<span class="scheduleTeamBadge"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
   }
+  function opponentLogoSrc(name) {
+    const key = normalizeOpponentKey(name);
+    return opponentLogos[key] || BUNDLED_LOGOS[key] || null;
+  }
   function opponentBadgeHtml(name) {
+    const logo = opponentLogoSrc(name);
+    if (logo) return `<span class="scheduleTeamBadge"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
     return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
+  }
+
+  function loadOpponentLogos() {
+    return window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => { opponentLogos = (data && typeof data === 'object') ? data : {}; })
+      .catch(err => { console.error('Could not load opponent logos:', err); opponentLogos = {}; });
+  }
+  function saveOpponentLogo(name, dataUrl, afterOk, afterFail) {
+    const key = normalizeOpponentKey(name);
+    if (!key) { if (afterFail) afterFail('Enter an opponent name first.'); return; }
+    opponentLogos[key] = dataUrl;
+    window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opponentLogos),
+    })).then(r => { if (r.ok) { if (afterOk) afterOk(); } else if (afterFail) afterFail(`HTTP ${r.status}`); })
+      .catch(err => { console.error('Logo save failed:', err); if (afterFail) afterFail(err.message); });
+  }
+  // Downscales an uploaded image client-side (coaches will drop in whatever
+  // size photo/logo they have) to a small badge-sized PNG before it goes
+  // into Firebase -- keeps the whole opponentLogos.json record light.
+  function fileToBadgeDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const max = 200;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   function mapUrl(address) {
@@ -116,16 +182,13 @@
   function loadGames() {
     const statusEl = document.getElementById('scheduleCloudStatus');
     if (statusEl) statusEl.textContent = 'Loading schedule…';
-    return window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
-      .then(data => {
-        games = Array.isArray(data) ? data.filter(g => g && g.id) : [];
-        if (statusEl) statusEl.textContent = '';
-        renderList();
-      })
-      .catch(err => {
-        console.error('Could not load schedule:', err);
-        if (statusEl) statusEl.textContent = 'Could not reach the cloud -- showing nothing saved yet.';
-      });
+    const gamesFetch = window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => { games = Array.isArray(data) ? data.filter(g => g && g.id) : []; })
+      .catch(err => { console.error('Could not load schedule:', err); if (statusEl) statusEl.textContent = 'Could not reach the cloud -- showing nothing saved yet.'; });
+    return Promise.all([gamesFetch, loadOpponentLogos()]).then(() => {
+      if (statusEl) statusEl.textContent = '';
+      renderList();
+    });
   }
 
   function persistGames(afterOk) {
@@ -268,6 +331,10 @@
     body.innerHTML = `
       ${heroHtml}
       <input type="text" id="schedOpponent" placeholder="Opponent" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Team Logo<input type="file" id="schedLogoInput" accept="image/*" style="display:none;"></label>
+        <span id="schedLogoStatus" class="lbSub" style="margin:0;"></span>
+      </div>
       <input type="date" id="schedDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <input type="text" id="schedArriveTime" placeholder="Arrive by (e.g. 8:30 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
@@ -320,6 +387,24 @@
     }
     document.getElementById('schedLocation').addEventListener('input', refreshMapPreview);
     refreshMapPreview();
+
+    const logoInput = document.getElementById('schedLogoInput');
+    const logoStatus = document.getElementById('schedLogoStatus');
+    if (logoInput) {
+      logoInput.addEventListener('change', () => {
+        const file = logoInput.files && logoInput.files[0];
+        if (!file) return;
+        const opponentName = document.getElementById('schedOpponent').value.trim() || current.opponent;
+        if (!opponentName) { logoStatus.textContent = 'Enter the opponent name first.'; return; }
+        logoStatus.textContent = 'Uploading…';
+        fileToBadgeDataUrl(file).then(dataUrl => {
+          saveOpponentLogo(opponentName, dataUrl, () => {
+            logoStatus.textContent = `Saved -- used for every ${opponentName} game.`;
+            renderDetail(); // repaint the hero with the new logo immediately
+          }, msg => { logoStatus.textContent = `Upload failed: ${msg}`; });
+        }).catch(err => { console.error('Logo processing failed:', err); logoStatus.textContent = 'Could not read that image.'; });
+      });
+    }
 
     const haGrid = document.getElementById('schedHomeAwayGrid');
     ['Home', 'Away'].forEach(v => {
