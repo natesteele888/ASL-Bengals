@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816f">
+<link rel="stylesheet" href="css/styles.css?v=20260816g">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -206,6 +206,7 @@
 <div class="topSections" id="topSections">
   <button class="modeBtn active" data-section="play"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
   <button class="modeBtn" data-section="thisweek"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
+  <button class="modeBtn" data-section="schedule"><span class="modeIcon">📅</span><span class="modeLabel">Schedule</span></button>
   <!-- Coach-only top-level section (Drive Builder now, Coach Dashboard
        later) -- hidden by default, only shown to an approved coach profile
        (window.isApprovedCoachProfile(), see auth.js) once a name/session is
@@ -290,6 +291,42 @@
       <button class="navBtn secondary" id="driveScriptDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
     </div>
     <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- Nathan: "there was a schedule button that shows an interactive schedule
+     for the year. All games listed with home or away, time and location in
+     a whiteboard style display. After game results are added it shows a W
+     in green or L in red to show the result. It should show score and have
+     a button to show a write up for the game." Visible to everyone (not
+     coach-only, like This Week) -- only the add/edit controls are gated to
+     an approved coach profile. Games are entered by coaches through this
+     page itself (same self-serve pattern as This Week / Drive Builder)
+     rather than needing the season schedule handed to Claude to hardcode.
+     The "more info" panel has a placeholder for a real stat line -- that
+     needs the Stats feature (task #31, still pending) before it can show
+     anything real. -->
+<div id="scheduleMode" class="modePanel">
+  <div id="scheduleListWrap" style="max-width:560px;margin:0 auto;">
+    <div id="scheduleList"></div>
+    <div id="scheduleAddWrap" style="display:none;">
+      <button class="navBtn" id="scheduleNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Game</button>
+    </div>
+    <div id="scheduleCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+
+  <div id="scheduleDetail" style="display:none;max-width:600px;margin:20px auto 0;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="lbLinkBtn" id="scheduleBackBtn">‹ All Games</button>
+    </div>
+    <div id="scheduleDetailBody"></div>
+    <div id="scheduleDetailEditControls" style="display:none;margin-top:16px;">
+      <div style="display:flex;gap:8px;">
+        <button class="navBtn" id="scheduleSaveBtn" style="flex:1;">Save Game</button>
+        <button class="navBtn secondary" id="scheduleDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+      </div>
+    </div>
+    <div id="scheduleDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
 
@@ -845,7 +882,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816t';
+  const BUILD_V = '20260816u';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -889,7 +926,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/schedule.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

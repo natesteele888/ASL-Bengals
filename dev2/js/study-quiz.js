@@ -21,6 +21,7 @@ const playcallsquizModeEl = document.getElementById('playcallsquizMode');
 const editPlaysModeEl = document.getElementById('editPlaysMode');
 const thisweekModeEl = document.getElementById('thisweekMode');
 const coachtoolsModeEl = document.getElementById('coachtoolsMode');
+const scheduleModeEl = document.getElementById('scheduleMode');
 function setMode(mode){
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   studyModeEl.classList.toggle('show', mode==='study');
@@ -31,6 +32,7 @@ function setMode(mode){
   editPlaysModeEl.classList.toggle('show', mode==='editplays');
   if (thisweekModeEl) thisweekModeEl.classList.toggle('show', mode==='thisweek');
   if (coachtoolsModeEl) coachtoolsModeEl.classList.toggle('show', mode==='coachtools');
+  if (scheduleModeEl) scheduleModeEl.classList.toggle('show', mode==='schedule');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -40,6 +42,7 @@ function setMode(mode){
   if(mode==='editplays') openEditPlaysGated();
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
   if(mode==='coachtools' && typeof window.initDriveBuilder === 'function') window.initDriveBuilder();
+  if(mode==='schedule' && typeof window.initSchedule === 'function') window.initSchedule();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });
@@ -56,7 +59,7 @@ const topSectionsEl = document.getElementById('topSections');
 let lastPlaySubMode = 'study';
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek' || section === 'coachtools') {
+  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule') {
     modeTabsEl.style.display = 'none';
     setMode(section);
   } else {
