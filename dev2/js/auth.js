@@ -160,11 +160,19 @@
   var lockTimer = null;
 
   try {
-    if(localStorage.getItem(STORAGE_KEY) === '1'){
+    // Only auto-skip the code screen if this device both (a) was
+    // remembered as logged-in before, AND (b) already has a real gate
+    // session saved (cloud-auth.js). (b) will be missing exactly once,
+    // for anyone who logged in before this file shipped -- their old
+    // "remembered" flag has nothing real backing it, so they fall through
+    // to the visible login screen below and re-enter their code one more
+    // time, which establishes the real session going forward.
+    if(localStorage.getItem(STORAGE_KEY) === '1' && window.hasGateSession && window.hasGateSession()){
       screenEl.classList.add('hide'); window.startBgMusic();
       if(localStorage.getItem('bengalsCoachSession') === '1'){
         window.isCoachSession = true;
       }
+      if(window.__resolveBengalsAuth) window.__resolveBengalsAuth();
       // This runs the instant auth.js executes, before the later scripts
       // (including player-identity.js) have necessarily finished loading --
       // poll briefly rather than assume a fixed delay is always enough.
@@ -218,13 +226,29 @@
     }
     var hash = await sha256Hex(inputEl.value);
     if(hash === CODE_HASH || hash === COACH_CODE_HASH){
-      if(hash === COACH_CODE_HASH){
+      var isCoach = hash === COACH_CODE_HASH;
+      // Establish a real, non-anonymous Firebase session tied to this
+      // code before doing anything else -- the database rules now
+      // require this for the actual play/card data, so if this fails
+      // (e.g. offline), treat it the same as a wrong code rather than
+      // showing an app that will silently fail to load its data.
+      try {
+        await window.signInWithGate(isCoach ? 'coach' : 'player', hash);
+      } catch(gateErr) {
+        console.error('Gate sign-in failed:', gateErr);
+        errorEl.textContent = "Couldn't verify that code right now -- check your connection and try again.";
+        inputEl.value = '';
+        inputEl.focus();
+        return;
+      }
+      if(isCoach){
         window.isCoachSession = true;
         try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
         var epBtn2 = document.getElementById('editPlaysTabBtn');
         if (epBtn2) epBtn2.style.display = '';
       }
       try { localStorage.setItem(STORAGE_KEY, '1'); } catch(e) {}
+      if(window.__resolveBengalsAuth) window.__resolveBengalsAuth();
       try {
         var roar = document.getElementById('roarSound');
         roar.currentTime = 0;

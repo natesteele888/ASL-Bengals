@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
 <link rel="stylesheet" href="css/styles.css?v=20260813c">
+
+<!-- PWA / Add to Home Screen support -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/images/icon-192.png">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bengals">
 </head>
 <body>
 <script>
@@ -691,6 +701,15 @@
 
 
 <script>
+// Resolved by auth.js once a real (non-anonymous) gate session exists --
+// either immediately, if this device already had one saved, or once a
+// correct code is typed. Declared before anything else loads so auth.js
+// can resolve it whenever that happens, no matter how boot() below is
+// timed. Used below to know when it's safe to mirror the shipped play
+// data into the database (see cloud-auth.js's __seedBengalsPlayData).
+window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBengalsAuth = resolve; });
+</script>
+<script>
 // Loads the card/play data files, then the feature scripts in the same
 // order they used to run as inline <script> blocks in the old single file.
 // Everything downstream (auth.js, study-quiz.js, play-calls.js,
@@ -705,7 +724,7 @@
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260813c';
+  const BUILD_V = '20260815a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   const [cardsRes, playsRes] = await Promise.all([
@@ -725,6 +744,14 @@
       document.body.appendChild(s);
     });
   }
+
+  // Migration step (see cloud-auth.js): once a real gate session exists,
+  // mirror this shipped play/card data into the database if nobody has
+  // already. Fire-and-forget -- never blocks the app from loading, and a
+  // failed/late seed just means the next successful login tries again.
+  window.__bengalsAuthReady
+    .then(function(){ return window.__seedBengalsPlayData && window.__seedBengalsPlayData(); })
+    .catch(function(e){ console.error('Play data seed check failed:', e); });
 })();
 </script>
 
