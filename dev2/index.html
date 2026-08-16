@@ -66,7 +66,7 @@
   <div class="loginGlow"></div>
   <div class="loginContent">
     <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
-    <h1 class="loginTitle"><span class="bengalsBig">Bengals</span><span class="loginSubtitle">Signal Study Guide</span></h1>
+    <h1 class="loginTitle"><span class="bengalsBig">11U Bengals</span><span class="loginSubtitle">Signal &amp; Play Study Guide</span></h1>
     <input class="loginInput" id="loginCode" type="password" placeholder="Enter access code"
       autocomplete="off" autocapitalize="off" spellcheck="false">
     <button class="loginBtn" id="loginBtn">Log In</button>
@@ -726,7 +726,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816b';
+  const BUILD_V = '20260816c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
