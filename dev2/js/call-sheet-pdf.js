@@ -6,18 +6,20 @@
 // next even number, mirroring the odd/even Left/Right convention in the
 // reference sheet.
 //
-// Design notes from Nathan's feedback:
+// Design notes from Nathan's feedback (in order of how the design evolved):
 // - Read A/B (inside_zone's hasReadToggle) is something the ball carrier
-//   reads on the field after the snap, not something a coach calls -- so it
-//   is NOT its own numbered entry. One base number covers both reads.
+//   reads on the field after the snap, not something a coach calls -- one
+//   base number covers both reads.
 // - Motion and Boot are optional ADD-ONS layered onto a base call, not
-//   separate numbered plays of their own -- e.g. there's no separate "13 =
-//   Inside Zone Boot," just "1 = Inside Zone Left" plus "+ Boot" if the
-//   coach adds it. Each base row lists which add-ons are actually legal for
-//   it (Boot isn't available on every play -- see each play type's noBoot).
-// - Wing L/R is its own independent alignment call (which side #4 lines up
-//   on before the snap), not tied to which way the play runs -- listed in
-//   the add-on legend rather than baked into the base numbering.
+//   separate numbered plays -- listed in an Add-Ons column per row instead.
+// - Wing L/R is its own independent alignment call, not tied to which way
+//   the play runs -- also an add-on, not baked into the base numbering.
+// - Split formation doesn't need its own separate numbered section --
+//   every base play can also be run out of Split, so "Split" is just
+//   another add-on on the same base number rather than a whole second list.
+// - Route Calls (Seattle/Houston/Florida/Boston) are called live at the
+//   line, not planned ahead by number -- kept as a plain reference table,
+//   not part of the numbered system.
 //
 // IMPORTANT: this app has no pre-existing play-numbering convention
 // (coaches call plays by hand signal, not a shouted number) -- the
@@ -32,6 +34,7 @@
       const pt = window.DATA.playTypes.find(p => p.key === fam.key);
       const addOns = ['Wing L/R', 'Motion'];
       if (!pt.noBoot) addOns.push('Boot');
+      addOns.push('Split');
       ['Left', 'Right'].forEach(direction => {
         rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction, addOns });
       });
@@ -39,23 +42,11 @@
     return rows;
   }
 
-  function buildSplitIndex(families) {
-    let n = 1;
+  function buildRouteCallReference() {
     const rows = [];
-    families.forEach(fam => {
-      ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} Run` });
-      });
-    });
-    families.forEach(fam => {
-      ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} Pass Pro` });
-      });
-    });
     ['seattle', 'houston', 'florida', 'boston'].forEach(call => {
       ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: 'Route Call', color: '#1a6b6b', side,
-          name: `${call[0].toUpperCase()}${call.slice(1)}` });
+        rows.push({ side, name: `${call[0].toUpperCase()}${call.slice(1)}` });
       });
     });
     return rows;
@@ -74,7 +65,7 @@
 
     const families = window.playbookLiveFamilies();
     const baseRows = buildPlayNumberIndex(families);
-    const splitRows = buildSplitIndex(families);
+    const routeRows = buildRouteCallReference();
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
@@ -132,6 +123,30 @@
       y += ROW_H;
     });
 
+    // ==== ROUTE CALL REFERENCE, below the base table -- called live at the
+    // line, not part of the numbered system, so it's visually distinct
+    // (gray, no numbers) rather than looking like more numbered plays.
+    y += 10;
+    doc.setFillColor('#777777');
+    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor('#ffffff');
+    doc.text('ROUTE CALLS (Split formation — called at the line, not numbered)', MARGIN + 4, y + HEADER_H - 4);
+    y += HEADER_H + 3;
+
+    const ROUTE_COLS = 4;
+    const ROUTE_COL_W = (TABLE_W - (ROUTE_COLS - 1) * 8) / ROUTE_COLS;
+    let rx = MARGIN, ry = y;
+    routeRows.forEach((row, i) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor('#333333');
+      doc.text(`${row.name} — ${row.side}`, rx + 4, ry + 10);
+      if ((i + 1) % ROUTE_COLS === 0) { rx = MARGIN; ry += 14; }
+      else { rx += ROUTE_COL_W + 8; }
+    });
+
     // ==== ADD-ON LEGEND, to the right of the base table ====
     const legendX = MARGIN + TABLE_W + 24;
     const legendW = USABLE_W - TABLE_W - 24;
@@ -148,6 +163,7 @@
       ['Wing L/R', 'Sets which side #4 lines up on before the snap. Independent of which way the play runs — call it either side regardless of direction.'],
       ['Motion', 'Sends the wing in motion to the opposite side just before the snap.'],
       ['Boot', 'QB fakes the handoff and rolls out. Only legal on plays marked "Boot" in Add-Ons — not every play allows it.'],
+      ['Split', 'Runs the same numbered play out of Split formation instead of Shotgun. Direction still applies the same way.'],
     ];
     doc.setTextColor('#111111');
     legend.forEach(([term, desc]) => {
@@ -163,49 +179,6 @@
       ly += lines.length * 9 + 8;
       doc.setTextColor('#111111');
     });
-
-    // ==== SPLIT FORMATION index, below the base table ====
-    y += 10;
-    if (y + HEADER_H + 30 > PAGE_H - MARGIN) { doc.addPage(); y = MARGIN; }
-    doc.setFillColor('#1a6b6b');
-    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor('#ffffff');
-    doc.text('SPLIT FORMATION', MARGIN + 4, y + HEADER_H - 4);
-    y += HEADER_H + 3;
-
-    const SPLIT_COLS = 2;
-    const SPLIT_COL_W = (TABLE_W - 12) / SPLIT_COLS;
-    const perCol = Math.ceil(splitRows.length / SPLIT_COLS);
-    let idx = 0;
-    for (let col = 0; col < SPLIT_COLS; col++) {
-      const colX = MARGIN + col * (SPLIT_COL_W + 12);
-      let cy = y;
-      let curFam = null;
-      const colRows = splitRows.slice(idx, idx + perCol);
-      idx += perCol;
-      colRows.forEach(row => {
-        if (row.familyLabel !== curFam) {
-          curFam = row.familyLabel;
-          doc.setFillColor(row.color);
-          doc.rect(colX, cy, SPLIT_COL_W, 10, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.5);
-          doc.setTextColor('#ffffff');
-          doc.text(curFam.toUpperCase(), colX + 3, cy + 7.5);
-          cy += 10;
-        }
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor('#111111');
-        doc.text(String(row.number), colX + 3, cy + 8);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(6.8);
-        doc.text(`Split ${row.side} - ${row.name}`, colX + 20, cy + 8);
-        cy += 10.5;
-      });
-    }
 
     return doc;
   }
