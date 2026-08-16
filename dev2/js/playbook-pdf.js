@@ -207,16 +207,16 @@
     const { jsPDF } = window.jspdf;
     const [VW, VH] = window.DATA.viewBox;
 
-    // ---- Layout (points) -- Nathan first asked for bigger cards, then
-    // "the images are a little too big" and "the margins on the pdf are too
-    // big" once he saw the result. This splits the difference: slimmer page
-    // margins (more usable width) and a more moderate card size than the
-    // first attempt, still noticeably bigger than the original 180pt cards.
+    // ---- Layout (points) -- sizing has moved a few times: bigger, then
+    // "a little too big" with "too much margin", then Nathan flagged most
+    // pages weren't using the available space and asked for 4-per-row with
+    // less padding all around. Tighter margins/gaps/label heights below so
+    // more rows actually fit per page instead of forcing early page breaks.
     const PAGE_W = 792, PAGE_H = 612; // landscape letter
-    const MARGIN = 14, COLS = 3, CELL_GAP = 8, CELL_W = 196;
+    const MARGIN = 12, COLS = 4, CELL_GAP = 6, CELL_W = 175;
     const CELL_H = CELL_W * (VH / VW);
-    const LABEL_H = 12, ROW_H = LABEL_H + CELL_H;
-    const SECTION_HEADER_H = 14, SECTION_GAP = 5, ROW_GAP = 3;
+    const LABEL_H = 10, ROW_H = LABEL_H + CELL_H;
+    const SECTION_HEADER_H = 12, SECTION_GAP = 4, ROW_GAP = 2;
     const USABLE_W = PAGE_W - 2 * MARGIN;
     const GRID_W = COLS * CELL_W + (COLS - 1) * CELL_GAP;
     const GRID_X0 = MARGIN + (USABLE_W - GRID_W) / 2;
@@ -243,8 +243,8 @@
       doc.rect(MARGIN, y, USABLE_W, SECTION_HEADER_H, 'F');
       doc.setTextColor('#ffffff');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text(label.toUpperCase(), MARGIN + 6, y + SECTION_HEADER_H - 5);
+      doc.setFontSize(8.5);
+      doc.text(label.toUpperCase(), MARGIN + 5, y + SECTION_HEADER_H - 3.5);
       y += SECTION_HEADER_H;
     }
 
@@ -262,9 +262,9 @@
 
     async function drawCell(cellX0, rowTopY, label, color, renderFn) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.6);
+      doc.setFontSize(7);
       doc.setTextColor(color);
-      doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 3, { align: 'center' });
+      doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 2, { align: 'center' });
       const diagramY = rowTopY + LABEL_H;
       renderFn();
       flattenStageCurves(stage);

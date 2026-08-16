@@ -18,10 +18,23 @@
 // ---------------------------------------------------------------------------
 (function () {
 
+  // Nathan: "the plays also need to be complete: Wing L/R or Split L/R -
+  // Motion (optional) - Play Call - Direction - Boot (optional)" -- builds
+  // the full spoken/signaled call as one string, in that exact order,
+  // rather than the old terse "Family • Boot" labels that left out which
+  // way the play actually goes.
+  function buildCallLabel({ familyText, direction, motion, boot }) {
+    const parts = [`Wing ${direction}`];
+    if (motion) parts.push('Motion');
+    parts.push(familyText);
+    parts.push(direction);
+    if (boot) parts.push('Boot');
+    return parts.join(' - ');
+  }
+
   function buildPlayNumberIndex(families) {
     let n = 1;
     const rows = []; // { number, familyLabel, color, direction, name }
-    const defaultSubvariant = window.playbookDefaultSubvariant;
     const FORCE_SINGLE_VARIANT = window.playbookForceSingleVariant || {};
 
     families.forEach(fam => {
@@ -30,17 +43,17 @@
       const forcedIo = FORCE_SINGLE_VARIANT[pt.key];
       const hasIo = !!pt.hasInsideOutside && !forcedIo;
       const noBoot = !!pt.noBoot;
-      defaultSubvariant(pt); // (unused return here, kept for parity/clarity)
 
       const subVariants = hasRead ? [['A', 'Read A'], ['B', 'Read B']]
         : hasIo ? [['Inside', 'Inside'], ['Outside', 'Outside']]
         : [[null, null]];
 
       subVariants.forEach(([, subLabel]) => {
+        const familyText = subLabel ? `${fam.label} ${subLabel}` : fam.label;
         ['Left', 'Right'].forEach(direction => {
           rows.push({
             number: n++, familyLabel: fam.label, color: fam.color, direction,
-            name: subLabel ? `${fam.label} • ${subLabel}` : fam.label,
+            name: buildCallLabel({ familyText, direction, motion: false, boot: false }),
           });
         });
       });
@@ -48,12 +61,12 @@
       if (!noBoot) {
         ['Left', 'Right'].forEach(direction => {
           rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction,
-            name: `${fam.label} • Boot` });
+            name: buildCallLabel({ familyText: fam.label, direction, motion: false, boot: true }) });
         });
       }
       ['Left', 'Right'].forEach(direction => {
         rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction,
-          name: `${fam.label} • Motion` });
+          name: buildCallLabel({ familyText: fam.label, direction, motion: true, boot: false }) });
       });
     });
 
@@ -65,18 +78,20 @@
     const rows = [];
     families.forEach(fam => {
       ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} • Run` });
+        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side,
+          name: `Split ${side} - ${fam.label} Run` });
       });
     });
     families.forEach(fam => {
       ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} • Pass Pro` });
+        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side,
+          name: `Split ${side} - ${fam.label} Pass Pro` });
       });
     });
     ['seattle', 'houston', 'florida', 'boston'].forEach(call => {
       ['Left', 'Right'].forEach(side => {
         rows.push({ number: n++, familyLabel: 'Route Call', color: '#1a6b6b', side,
-          name: `${call[0].toUpperCase()}${call.slice(1)}` });
+          name: `Split ${side} - ${call[0].toUpperCase()}${call.slice(1)}` });
       });
     });
     return rows;
@@ -88,10 +103,10 @@
     if (!window.playbookLiveFamilies) throw new Error('Playbook helper not loaded yet.');
 
     const { jsPDF } = window.jspdf;
-    const PAGE_W = 612, PAGE_H = 792; // portrait letter
-    const MARGIN = 24;
+    const PAGE_W = 792, PAGE_H = 612; // landscape letter
+    const MARGIN = 20;
     const USABLE_W = PAGE_W - 2 * MARGIN;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
 
     const families = window.playbookLiveFamilies();
     // One combined, continuous list -- Shotgun rows, a Split Formation
@@ -114,10 +129,11 @@
 
     const topY = MARGIN + 26;
     const COLS = 3;
-    const COL_GAP = 16;
+    const COL_GAP = 14;
     const COL_W = (USABLE_W - COL_GAP * (COLS - 1)) / COLS;
     const ROW_H = 10.5;
     const HEADER_H = 12;
+    const NUM_GUTTER = 20; // room for the number before the call text starts
 
     // Fixed column-fill layout sized to fit one page: split the combined
     // row list into COLS equal-ish chunks up front (rather than filling
@@ -161,7 +177,8 @@
         doc.setTextColor('#111111');
         doc.text(String(row.number), colX + 4, y + ROW_H - 2.5);
         doc.setFont('helvetica', 'normal');
-        doc.text(row.name, colX + 24, y + ROW_H - 2.5);
+        doc.setFontSize(7.2);
+        doc.text(row.name, colX + NUM_GUTTER, y + ROW_H - 2.5);
         doc.setDrawColor('#e5e5e5');
         doc.setLineWidth(0.4);
         doc.line(colX, y + ROW_H, colX + COL_W, y + ROW_H);
