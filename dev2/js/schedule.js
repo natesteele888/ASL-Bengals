@@ -341,7 +341,8 @@
       // ---- Read-only view ----
       body.innerHTML = `
         ${heroHtml}
-        <div class="lbSub" style="margin-bottom:10px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div class="lbSub" style="margin-bottom:6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
@@ -352,6 +353,7 @@
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>`;
+      wireAddToCalendar();
       loadLinkedGamePlan();
       return;
     }
@@ -360,9 +362,10 @@
     body.innerHTML = `
       ${heroHtml}
       <input type="text" id="schedOpponent" placeholder="Opponent" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:8px;">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
         <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Team Logo<input type="file" id="schedLogoInput" accept="image/*" style="display:none;"></label>
         <span id="schedLogoStatus" class="lbSub" style="margin:0;"></span>
+        <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
       </div>
       <input type="date" id="schedDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
@@ -436,6 +439,7 @@
         }).catch(err => { console.error('Logo processing failed:', err); logoStatus.textContent = 'Could not read that image.'; });
       });
     }
+    wireAddToCalendar();
 
     const haGrid = document.getElementById('schedHomeAwayGrid');
     ['Home', 'Away'].forEach(v => {
@@ -462,6 +466,26 @@
   // its 3 Keys + featured plays onto this game's own page too -- Nathan:
   // "assign Weekly Goals and game plans to the upcoming games so players
   // can check them out and be prepared."
+  // Nathan: "give me the option of saving all the events to your device or
+  // Google calendars or Apple calendars" -- single-event .ics for whichever
+  // game is currently open (js/calendar-export.js has the full-schedule
+  // bulk version).
+  function wireAddToCalendar() {
+    const btn = document.getElementById('schedAddToCalBtn');
+    if (!btn || !current) return;
+    btn.addEventListener('click', () => {
+      if (!current.date) { alert('Add a date first.'); return; }
+      if (!window.buildICS || !window.downloadICS) return;
+      const ics = window.buildICS([{
+        uid: current.id, date: current.date, time: current.gameTime || current.time || '', durationMinutes: 120,
+        title: `ASL Bengals ${current.homeAway === 'Away' ? '@' : 'vs'} ${current.opponent || 'TBD'}${current.gameType && current.gameType !== 'Regular Season' ? ' (' + current.gameType + ')' : ''}`,
+        location: current.location || '',
+        description: [current.arriveTime ? `Arrive by ${current.arriveTime}` : '', current.warmupTime ? `Warm-up ${current.warmupTime}` : ''].filter(Boolean).join(' • '),
+      }]);
+      window.downloadICS(`ASL_Bengals_vs_${(current.opponent || 'game').replace(/[^a-z0-9]+/gi, '_')}.ics`, ics);
+    });
+  }
+
   function loadLinkedGamePlan() {
     const wrap = document.getElementById('schedGamePlanWrap');
     if (!wrap || !current) return;
@@ -551,5 +575,14 @@
       document.getElementById('scheduleListWrap').style.display = '';
       renderList();
     }
+  };
+
+  // Used by Full Schedule (js/schedule-full.js) to merge games in without
+  // needing the Games tab to have been opened first.
+  window.getGamesCached = () => games;
+  window.ensureGamesLoaded = function () {
+    if (loaded) return Promise.resolve(games);
+    loaded = true;
+    return loadGames().then(() => games);
   };
 })();

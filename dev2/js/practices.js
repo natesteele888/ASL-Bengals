@@ -27,6 +27,9 @@
     { key: 'practice', label: '🏃 Practice' },
     { key: 'film', label: '🎬 Film Night' },
   ];
+  // Index matches Date.getDay() (0 = Sunday) -- Nathan: "I need an option
+  // to repeat or set practice for multiple days."
+  const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   let items = [];     // [{id, type, date, time, location, notes, updatedAt}]
   let current = null; // item open in the detail view, or null (list view)
@@ -156,15 +159,26 @@
       body.innerHTML = `
         <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
         <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(current.time) : ''}</div>
-        <div class="lbSub" style="margin:4px 0 10px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<div style="text-align:center;"><a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a></div><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         ${current.notes ? `<div class="lbSectionHeader" style="margin-top:16px;">📝 Notes</div><div class="scheduleWriteup">${escapeHtml(current.notes).replace(/\n/g, '<br>')}</div>` : ''}`;
+      wireAddToCalendar();
       return;
     }
+
+    // Repeat is only offered when creating a brand-new entry -- turning it
+    // on while editing an already-saved practice would be ambiguous (does
+    // it turn the one entry into many, keep the original too?). Creating
+    // fresh, "Save" just generates one entry per matching date instead of
+    // one entry total -- each still its own independent record afterward
+    // (edit or cancel a single Tuesday without touching the rest).
+    const isNew = !items.some(p => p.id === current.id);
 
     // ---- Coach edit view ----
     body.innerHTML = `
       <div class="gameplanPickerGrid" id="practiceTypeGrid" style="margin-bottom:12px;"></div>
+      ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>` : ''}
       <input type="date" id="practiceDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <input type="text" id="practiceTime" placeholder="Time (e.g. 6:00 PM)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:4px;">
@@ -172,6 +186,14 @@
         <a id="practiceMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
       </div>
       <div id="practiceMapPreviewWrap" style="margin-bottom:8px;"></div>
+      ${isNew ? `
+      <div class="lbSectionHeader" style="margin-top:6px;">🔁 Repeat (optional)</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Pick the day(s) of the week and an end date to add this on every matching date at once -- each one saves as its own entry, so you can still move or cancel a single day later.</div>
+      <div class="gameplanPickerGrid" id="practiceRepeatDaysGrid" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <span class="lbSub" style="margin:0;white-space:nowrap;">Repeat until:</span>
+        <input type="date" id="practiceRepeatUntil" style="flex:1;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>` : ''}
       <div class="lbSectionHeader" style="margin-top:6px;">📝 Notes</div>
       <textarea id="practiceNotes" placeholder="e.g. &quot;Bring cleats and water, meet at the fieldhouse&quot;" style="width:100%;min-height:70px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>`;
 
@@ -190,6 +212,25 @@
       typeGrid.appendChild(chip);
     });
 
+    if (isNew) {
+      const repeatGrid = document.getElementById('practiceRepeatDaysGrid');
+      if (!current._repeatDays) current._repeatDays = [];
+      DAY_NAMES.forEach((label, idx) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'gameplanChip' + (current._repeatDays.includes(idx) ? ' active' : '');
+        chip.textContent = label;
+        chip.addEventListener('click', () => {
+          const pos = current._repeatDays.indexOf(idx);
+          if (pos >= 0) current._repeatDays.splice(pos, 1); else current._repeatDays.push(idx);
+          renderDetail();
+        });
+        repeatGrid.appendChild(chip);
+      });
+      const repeatUntilInput = document.getElementById('practiceRepeatUntil');
+      if (repeatUntilInput) repeatUntilInput.value = current._repeatUntil || '';
+    }
+
     function refreshMapPreview() {
       const loc = document.getElementById('practiceLocation').value.trim();
       const link = document.getElementById('practiceMapLink');
@@ -205,6 +246,41 @@
     }
     document.getElementById('practiceLocation').addEventListener('input', refreshMapPreview);
     refreshMapPreview();
+    if (!isNew) wireAddToCalendar();
+  }
+
+  // Nathan: "give me the option of saving all the events to your device or
+  // Google calendars or Apple calendars" -- single-event .ics for whichever
+  // practice/film night is open (js/schedule-full.js has the bulk version).
+  function wireAddToCalendar() {
+    const btn = document.getElementById('practiceAddToCalBtn');
+    if (!btn || !current) return;
+    btn.addEventListener('click', () => {
+      if (!current.date) { alert('Add a date first.'); return; }
+      if (!window.buildICS || !window.downloadICS) return;
+      const ics = window.buildICS([{
+        uid: current.id, date: current.date, time: current.time || '', durationMinutes: 105,
+        title: current.type === 'film' ? 'ASL Bengals Film Night' : 'ASL Bengals Practice',
+        location: current.location || '',
+        description: current.notes || '',
+      }]);
+      window.downloadICS(`ASL_Bengals_${current.type === 'film' ? 'Film_Night' : 'Practice'}_${current.date}.ics`, ics);
+    });
+  }
+
+  // Every date between start/end (inclusive) whose weekday is in
+  // dayIndexes -- local-date math throughout (no UTC), same care
+  // schedule.js's fmtDate takes to avoid off-by-one-day timezone shifts.
+  function datesInRange(startStr, endStr, dayIndexes) {
+    const start = new Date(...startStr.split('-').map((n, i) => i === 1 ? Number(n) - 1 : Number(n)));
+    const end = new Date(...endStr.split('-').map((n, i) => i === 1 ? Number(n) - 1 : Number(n)));
+    const out = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (dayIndexes.includes(d.getDay())) {
+        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      }
+    }
+    return out;
   }
 
   function saveCurrent() {
@@ -218,6 +294,33 @@
       if (statusEl) statusEl.textContent = 'Give it a date first.';
       return;
     }
+
+    const repeatUntilInput = document.getElementById('practiceRepeatUntil');
+    const repeatUntil = repeatUntilInput ? repeatUntilInput.value : '';
+    const repeatDays = current._repeatDays || [];
+
+    if (repeatDays.length && repeatUntil) {
+      if (repeatUntil < current.date) {
+        const statusEl = document.getElementById('practicesDetailStatus');
+        if (statusEl) statusEl.textContent = '"Repeat until" has to be on or after the start date.';
+        return;
+      }
+      const dates = datesInRange(current.date, repeatUntil, repeatDays);
+      if (!dates.length) {
+        const statusEl = document.getElementById('practicesDetailStatus');
+        if (statusEl) statusEl.textContent = 'No dates in that range match the selected day(s).';
+        return;
+      }
+      const now = new Date().toISOString();
+      dates.forEach(date => {
+        items.push({ id: genId(), type: current.type, date, time: current.time, location: current.location, notes: current.notes, updatedAt: now });
+      });
+      persistItems(() => closeDetail());
+      return;
+    }
+
+    delete current._repeatDays;
+    delete current._repeatUntil;
     current.updatedAt = new Date().toISOString();
     const idx = items.findIndex(p => p.id === current.id);
     if (idx >= 0) items[idx] = current; else items.push(current);
@@ -251,5 +354,22 @@
       document.getElementById('practicesListWrap').style.display = '';
       renderList();
     }
+  };
+
+  // Used by Full Schedule (js/schedule-full.js) to merge practices in with
+  // games without needing the Practices tab to have been opened first.
+  window.getPracticesCached = () => items;
+  window.ensurePracticesLoaded = function () {
+    if (loaded) return Promise.resolve(items);
+    loaded = true;
+    return loadItems().then(() => items);
+  };
+  // Lets Full Schedule jump straight into a specific practice's detail page.
+  window.openPracticeDetail = function (id) {
+    if (window.showSchedulePracticesTab) window.showSchedulePracticesTab();
+    wireControls();
+    document.getElementById('practicesListWrap').style.display = 'none';
+    document.getElementById('practicesDetail').style.display = '';
+    openDetail(id);
   };
 })();

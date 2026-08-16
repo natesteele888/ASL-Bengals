@@ -11,6 +11,7 @@
   const TABS = [
     { key: 'games', label: '🏈 Games', panel: 'scheduleGamesPanel', init: () => window.initSchedule && window.initSchedule() },
     { key: 'practices', label: '🏃 Practices', panel: 'schedulePracticesPanel', init: () => window.initPractices && window.initPractices() },
+    { key: 'full', label: '📅 Full Schedule', panel: 'scheduleFullPanel', init: () => window.initScheduleFull && window.initScheduleFull() },
   ];
 
   let activeTab = 'games';
@@ -48,4 +49,5 @@
   // window.openScheduleGame in schedule.js) so landing on a specific game
   // always lands on the Games tab, even if Practices was showing.
   window.showScheduleGamesTab = function () { setActiveTab('games'); };
+  window.showSchedulePracticesTab = function () { setActiveTab('practices'); };
 })();

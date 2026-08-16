@@ -1390,6 +1390,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .practiceTypeBadge { display: inline-block; font-size: 10.5px; font-weight: 900; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
 .practiceTypeBadge.practice { background: var(--bengal-orange); color: #fff; }
 .practiceTypeBadge.film { background: #4a5fc9; color: #fff; }
+.practiceTypeBadge.game { background: #1c6fc0; color: #fff; }
 .practiceRowDateTime { font-size: 14px; font-weight: 800; color: #fff; }
 .practiceRowLoc { font-size: 11.5px; color: #9aa4ae; }
 .practiceRowNotes { font-size: 11.5px; color: #cfd7de; }
