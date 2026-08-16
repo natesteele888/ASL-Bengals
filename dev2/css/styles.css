@@ -1319,5 +1319,20 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] .gameplanCard { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .thisweekKeyInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
 [data-theme="dark"] .gameplanChip { background: var(--paper); }
+
+/* ---- Drive Builder ---- */
+.driveScriptRow { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; }
+.driveScriptRow:active { background: #fff4e8; }
+.driveScriptRowName { font-weight: 800; font-size: 14px; color: var(--ink); }
+.driveScriptRowCount { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.driveScriptPlayList { list-style: none; margin: 0; padding: 0; }
+.driveScriptPlayRow, .driveScriptEmptyRow { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; }
+.driveScriptEmptyRow { color: var(--muted); font-size: 12.5px; justify-content: center; }
+.driveScriptPlayLabel { font-weight: 700; font-size: 13px; }
+.driveScriptRowControls { display: flex; gap: 4px; }
+.driveScriptRowControls button { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 26px; height: 26px; font-size: 13px; cursor: pointer; color: var(--ink); }
+.driveScriptRowControls button:disabled { opacity: .3; cursor: default; }
+[data-theme="dark"] .driveScriptRow, [data-theme="dark"] .driveScriptPlayRow, [data-theme="dark"] .driveScriptEmptyRow { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .driveScriptRowControls button { background: var(--paper); border-color: var(--line); color: var(--ink); }
   }
 

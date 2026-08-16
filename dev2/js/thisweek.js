@@ -26,21 +26,10 @@
   const MIN_RECOMMENDED = 5;
   const NUM_KEYS = 3;
 
-  // Nathan: "This is only for coach profiles: Coach Nate, Coach Shane,
-  // Aaron, Coachmatt, Coach Joe" -- several coaches share the same login
-  // code (window.isCoachSession), so that alone isn't a fine-grained enough
-  // check for who should be able to overwrite the team's shared 3 Keys.
-  // Matched against PlayerIdentity's session name (the "Who's playing?"
-  // name every login sets, coaches included), trimmed/lowercased so exact
-  // capitalization typed at login doesn't matter. Read-only viewing stays
-  // open to everyone regardless -- this list only gates the editor.
-  const COACH_PROFILE_NAMES = ['coach nate', 'coach shane', 'aaron', 'coachmatt', 'coach joe'];
-  function isApprovedCoachEditor() {
-    if (!window.isCoachSession) return false;
-    const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
-    const name = session && session.name ? session.name.trim().toLowerCase() : '';
-    return COACH_PROFILE_NAMES.includes(name);
-  }
+  // Coach-name allowlist now lives in auth.js (window.isApprovedCoachProfile)
+  // since Coach Tools / Drive Builder need the exact same check -- read-only
+  // viewing here stays open to everyone regardless, this only gates the
+  // editor.
 
   let saved = { keys: ['', '', ''], plays: [], updatedAt: null };
   let pendingSelection = []; // coach's in-progress play selection: [{key, direction}]
@@ -175,7 +164,7 @@
   function renderEditor() {
     const section = document.getElementById('thisweekEditSection');
     if (!section) return;
-    const approved = isApprovedCoachEditor();
+    const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     section.style.display = approved ? '' : 'none';
     if (!approved) return;
 

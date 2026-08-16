@@ -142,6 +142,24 @@
   });
 })();
 
+// Nathan: "This is only for coach profiles: Coach Nate, Coach Shane, Aaron,
+// Coachmatt, Coach Joe." Several coaches share the single coach login code
+// (isCoachSession below), so that alone isn't fine-grained enough for
+// anything that should only be visible/editable by these specific named
+// individuals (This Week's editor, the Coach Tools tab, Drive Builder, and
+// whatever coach-only tools come after it). Matched against PlayerIdentity's
+// session name (the "Who's playing?" name every login sets, coaches
+// included), trimmed/lowercased so exact capitalization typed at login
+// doesn't matter. Kept here (rather than duplicated per-feature) since every
+// coach-only feature needs the exact same check.
+window.COACH_PROFILE_NAMES = ['coach nate', 'coach shane', 'aaron', 'coachmatt', 'coach joe'];
+window.isApprovedCoachProfile = function(){
+  if (!window.isCoachSession) return false;
+  var session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+  var name = session && session.name ? session.name.trim().toLowerCase() : '';
+  return window.COACH_PROFILE_NAMES.indexOf(name) !== -1;
+};
+
 (function(){
   var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
   var COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';

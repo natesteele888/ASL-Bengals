@@ -509,7 +509,16 @@
   }
 
   // ---- The mandatory gate ----
-  function gate(onReady){
+  // Wrapping onReady (rather than sprinkling this at every call site) so
+  // it fires exactly once, right when a name/session is actually known,
+  // regardless of which of the two paths below got there -- coach-only nav
+  // (Coach Tools tab, etc.) reads window.isCoachSession/PlayerIdentity, so
+  // it can't be decided correctly any earlier than this.
+  function gate(rawOnReady){
+    const onReady = function(){
+      if (typeof window.refreshCoachToolsVisibility === 'function') window.refreshCoachToolsVisibility();
+      rawOnReady();
+    };
     const session = getSession();
     if(session && session.name){
       updateBadge(session.name);

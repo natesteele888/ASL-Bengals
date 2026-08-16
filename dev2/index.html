@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816e">
+<link rel="stylesheet" href="css/styles.css?v=20260816f">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -206,6 +206,12 @@
 <div class="topSections" id="topSections">
   <button class="modeBtn active" data-section="play"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
   <button class="modeBtn" data-section="thisweek"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
+  <!-- Coach-only top-level section (Drive Builder now, Coach Dashboard
+       later) -- hidden by default, only shown to an approved coach profile
+       (window.isApprovedCoachProfile(), see auth.js) once a name/session is
+       actually known. refreshCoachToolsVisibility() in study-quiz.js flips
+       this on/off. -->
+  <button class="modeBtn" data-section="coachtools" id="coachToolsSectionBtn" style="display:none;"><span class="modeIcon">🛠️</span><span class="modeLabel">Coach Tools</span></button>
 </div>
 
 <div class="modeTabs" id="modeTabs">
@@ -248,6 +254,42 @@
     <div class="gameplanPickerGrid" id="thisweekPickerGrid"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- Nathan: "I want to have a Drive Builder for coaches where they can
+     select either a goal such as run the ball for 30 yards, have a series
+     of plays ready to go." No yardage/outcome data is tracked per play yet
+     (Stats is a separate, still-pending feature), so a real goal-driven
+     generator has nothing to calculate from -- Nathan chose manual drive
+     scripting instead: build/name an ordered list of plays for a drive or
+     situation (e.g. "Opening Script", "Red Zone", "2-Minute"), saved and
+     pullable back up on the sideline. Lives inside the coach-only Coach
+     Tools section (see topSections above) -- Coach Dashboard (task #28)
+     will join it here later as a second area. -->
+<div id="coachtoolsMode" class="modePanel">
+  <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
+  <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a named, ordered list of plays ahead of time -- an opening script, a red zone package, a 2-minute drill -- and pull it back up here on the sideline.</div>
+
+  <div id="driveScriptListWrap" style="max-width:500px;margin:0 auto;">
+    <div id="driveScriptList"></div>
+    <button class="navBtn" id="driveScriptNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ New Drive Script</button>
+    <div id="driveScriptCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+
+  <div id="driveScriptEditor" style="display:none;max-width:700px;margin:20px auto 0;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="lbLinkBtn" id="driveScriptBackBtn">‹ All Scripts</button>
+    </div>
+    <input type="text" id="driveScriptNameInput" placeholder="Script name (e.g. &quot;Opening Script&quot;)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:12px;">
+    <ol id="driveScriptPlayList" class="driveScriptPlayList"></ol>
+    <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Tap a play to add it to the script</div>
+    <div class="gameplanPickerGrid" id="driveScriptPickerGrid"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="navBtn" id="driveScriptSaveBtn" style="flex:1;">Save Script</button>
+      <button class="navBtn secondary" id="driveScriptDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+    </div>
+    <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
 
@@ -803,7 +845,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816s';
+  const BUILD_V = '20260816t';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -847,7 +889,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

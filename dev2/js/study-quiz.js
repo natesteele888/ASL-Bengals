@@ -20,6 +20,7 @@ const playcallsModeEl = document.getElementById('playcallsMode');
 const playcallsquizModeEl = document.getElementById('playcallsquizMode');
 const editPlaysModeEl = document.getElementById('editPlaysMode');
 const thisweekModeEl = document.getElementById('thisweekMode');
+const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 function setMode(mode){
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   studyModeEl.classList.toggle('show', mode==='study');
@@ -29,6 +30,7 @@ function setMode(mode){
   playcallsquizModeEl.classList.toggle('show', mode==='playcallsquiz');
   editPlaysModeEl.classList.toggle('show', mode==='editplays');
   if (thisweekModeEl) thisweekModeEl.classList.toggle('show', mode==='thisweek');
+  if (coachtoolsModeEl) coachtoolsModeEl.classList.toggle('show', mode==='coachtools');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -37,6 +39,7 @@ function setMode(mode){
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
   if(mode==='editplays') openEditPlaysGated();
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
+  if(mode==='coachtools' && typeof window.initDriveBuilder === 'function') window.initDriveBuilder();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });
@@ -53,9 +56,9 @@ const topSectionsEl = document.getElementById('topSections');
 let lastPlaySubMode = 'study';
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek') {
+  if (section === 'thisweek' || section === 'coachtools') {
     modeTabsEl.style.display = 'none';
-    setMode('thisweek');
+    setMode(section);
   } else {
     modeTabsEl.style.display = '';
     setMode(lastPlaySubMode);
@@ -66,6 +69,23 @@ if (topSectionsEl) {
     btn.addEventListener('click', ()=> setSection(btn.dataset.section));
   });
 }
+
+// Coach Tools' top-level tab only exists for an approved coach profile
+// (window.isApprovedCoachProfile(), auth.js) -- called once a name/session
+// is actually known (see player-identity.js's gate() wrapper) and re-run
+// any time it might change (sign out, switch profile). If someone's
+// viewing Coach Tools when this determines they no longer qualify (e.g.
+// they just signed out), it bounces them back to Play rather than leaving
+// a coach-only page open under a non-coach session.
+window.refreshCoachToolsVisibility = function(){
+  const btn = document.getElementById('coachToolsSectionBtn');
+  if (!btn) return;
+  const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+  btn.style.display = approved ? '' : 'none';
+  if (!approved && btn.classList.contains('active')) {
+    setSection('play');
+  }
+};
 
 let editPlaysUnlocked = false;
 let editPlaysInitialized = false;
