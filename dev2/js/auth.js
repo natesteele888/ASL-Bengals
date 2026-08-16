@@ -258,7 +258,14 @@
       window.startBgMusic();
       setTimeout(function(){
         screenEl.classList.add('hide');
-        window.PlayerIdentity.gate(function(){ maybeShowTips(); });
+        // player-identity.js now finishes loading later than before (it
+        // waits behind the database data fetch), so don't assume it's
+        // ready the instant this fires -- poll briefly, same pattern as
+        // the "already logged in" fast path above.
+        (function waitForPlayerIdentity(){
+          if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
+          else setTimeout(waitForPlayerIdentity, 50);
+        })();
       }, 1500);
     } else {
       attempts++;

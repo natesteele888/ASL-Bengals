@@ -710,11 +710,13 @@
 window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBengalsAuth = resolve; });
 </script>
 <script>
-// Loads the card/play data files, then the feature scripts in the same
-// order they used to run as inline <script> blocks in the old single file.
-// Everything downstream (auth.js, study-quiz.js, play-calls.js,
-// edit-plays.js) expects window.ALL_CARDS and window.DATA to already be
-// populated by the time it runs, exactly like the old inline JSON blobs.
+// Loads auth first, then the play/card data (now from the database, not
+// public static files -- see below), then the rest of the feature
+// scripts, in the same order they used to run as inline <script> blocks
+// in the old single file. Everything downstream (study-quiz.js,
+// play-calls.js, edit-plays.js) expects window.ALL_CARDS and window.DATA
+// to already be populated by the time it runs, exactly like the old
+// inline JSON blobs.
 (async function boot(){
   // Cache-busting query string: without this, browsers (and mobile Safari
   // especially) can keep serving an old cached copy of a script/data file
@@ -724,34 +726,40 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260815a';
+  const BUILD_V = '20260816a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
-  const [cardsRes, playsRes] = await Promise.all([
-    fetch(withV('data/cards.json')),
-    fetch(withV('data/plays.json')),
-  ]);
-  window.ALL_CARDS = await cardsRes.json();
-  window.DATA = await playsRes.json();
-
-  const scripts = ['js/auth.js', 'js/cloud-auth.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
-  for (const src of scripts) {
-    await new Promise((resolve, reject) => {
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = withV(src);
+      s.src = src;
       s.onload = resolve;
       s.onerror = () => reject(new Error('Failed to load ' + src));
       document.body.appendChild(s);
     });
   }
 
-  // Migration step (see cloud-auth.js): once a real gate session exists,
-  // mirror this shipped play/card data into the database if nobody has
-  // already. Fire-and-forget -- never blocks the app from loading, and a
-  // failed/late seed just means the next successful login tries again.
-  window.__bengalsAuthReady
-    .then(function(){ return window.__seedBengalsPlayData && window.__seedBengalsPlayData(); })
-    .catch(function(e){ console.error('Play data seed check failed:', e); });
+  // Auth has to be established before anything else -- the play/card data
+  // below now lives in the database behind a real login, not in public
+  // static files, so nothing past this point can load for someone who
+  // hasn't typed a correct code. Resolves immediately if this device
+  // already has a saved session; otherwise waits for the login screen.
+  await loadScript(withV('js/auth.js'));
+  await loadScript(withV('js/cloud-auth.js'));
+  await window.__bengalsAuthReady;
+
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const [cardsRes, playsRes] = await Promise.all([
+    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`)),
+    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/plays.json`)),
+  ]);
+  window.ALL_CARDS = await cardsRes.json();
+  window.DATA = await playsRes.json();
+
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  for (const src of scripts) {
+    await loadScript(withV(src));
+  }
 })();
 </script>
 

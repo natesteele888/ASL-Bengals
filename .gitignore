@@ -1,0 +1,10 @@
+._*
+.DS_Store
+archive/_stripped_intermediate.html
+testfile_delete_me.txt
+
+# Play/card data now lives in the database (see js/cloud-auth.js) --
+# these local copies stay for tools/playbook-pdf's offline use, but no
+# longer need to be (and shouldn't be) published to the live site.
+dev2/data/plays.json
+dev2/data/cards.json
