@@ -10,7 +10,18 @@
 // (window.isApprovedCoachProfile(), auth.js). Games are entered by coaches
 // through this page itself, same self-serve pattern as This Week and Drive
 // Builder, rather than needing the season schedule handed over to be
-// hardcoded.
+// hardcoded. (Note: This Week and Schedule are both currently hidden from
+// player logins entirely per a later request -- see refreshCoachToolsVisibility
+// in study-quiz.js -- so "everyone" below means everyone who can currently
+// reach this tab, i.e. any coach login, not just the named allowlist.)
+//
+// Nathan: "We could also incorporate another section for the coming week
+// where coaches can call out... highlight any known tendencies or good
+// players on the upcoming opponent." Rather than a separate section that
+// has to track which game is "this week" on its own, that scouting info
+// lives right on the relevant game here -- a "Scouting Report" free-text
+// field, pre-game (shown above Stats/Write-Up, which are post-game), same
+// edit gate as the rest of a game's details.
 //
 // Nathan: "stats tracking with the complementary printable stat sheet for
 // games with runs, yards, passes, tackles, sacks, TDs, etc." -- and, from
@@ -162,9 +173,10 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', time: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', stats: [], updatedAt: null };
+      current = { id: genId(), opponent: '', date: '', time: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', scouting: '', stats: [], updatedAt: null };
     }
     if (!Array.isArray(current.stats)) current.stats = []; // older saved games predate this field
+    if (typeof current.scouting !== 'string') current.scouting = ''; // older saved games predate this field
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
@@ -196,6 +208,8 @@
         <div class="lbSectionHeader">${current.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(current.opponent || 'TBD')}</div>
         <div class="lbSub" style="margin-bottom:10px;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(current.time) : ''} • ${escapeHtml(current.location || 'Location TBD')} • ${current.homeAway || 'Home'}</div>
         <div style="text-align:center;margin:10px 0;">${badgeHtml}</div>
+        <div class="lbSectionHeader" style="margin-top:16px;">🔎 Scouting Report</div>
+        <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📊 Stats</div>
         <div id="schedStatsWrap"></div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
@@ -220,7 +234,10 @@
         <input type="number" id="schedOppScore" placeholder="Them" style="width:64px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span class="lbSub" style="margin:0;">(leave blank until played)</span>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+      <div class="lbSectionHeader" style="margin-top:6px;">🔎 Scouting Report</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
+      <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
         <div class="lbSectionHeader" style="margin:0;">📊 Stats</div>
         <button class="lbLinkBtn" id="schedPrintStatSheetBtn">🖨️ Print Blank Stat Sheet</button>
       </div>
@@ -245,6 +262,7 @@
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
     document.getElementById('schedWriteup').value = current.writeup || '';
+    document.getElementById('schedScouting').value = current.scouting || '';
 
     const haGrid = document.getElementById('schedHomeAwayGrid');
     ['Home', 'Away'].forEach(v => {
@@ -341,6 +359,7 @@
     current.ourScore = ourScoreRaw === '' ? '' : Number(ourScoreRaw);
     current.oppScore = oppScoreRaw === '' ? '' : Number(oppScoreRaw);
     current.writeup = document.getElementById('schedWriteup').value.trim();
+    current.scouting = document.getElementById('schedScouting').value.trim();
     if (!current.opponent) {
       const statusEl = document.getElementById('scheduleDetailStatus');
       if (statusEl) statusEl.textContent = 'Give the game an opponent first.';
