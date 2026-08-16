@@ -23,13 +23,11 @@
      never drift out of sync with live coach edits the way the old
      externally-synced static PDF did. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<!-- svg2pdf.js: adds a doc.svg(element, {x,y,width,height}) method to jsPDF
-     that converts a LIVE svg element straight into vector PDF content --
-     no serialize-to-image round trip (that path silently produced blank
-     cells: the browser accepted the re-parsed SVG without erroring, but
-     rendered nothing from it). This walks the actual DOM element directly,
-     so there's no re-parsing step to go wrong. -->
-<script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.4.0/dist/svg2pdf.umd.min.js"></script>
+<!-- (svg2pdf.js was tried here and dropped -- it kept mis-drawing curved
+     routes on anything more complex than a gentle bend, even after
+     flattening every curve to straight segments. js/playbook-pdf.js now
+     rasterizes each diagram via the browser's own native SVG rendering
+     instead, which can't have that class of bug. -->
 <script>
   // Registers sw.js so the app qualifies for a full "Install app" / Add to
   // Home Screen prompt on Chrome (some Android versions require a service
@@ -755,7 +753,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816k';
+  const BUILD_V = '20260816l';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){

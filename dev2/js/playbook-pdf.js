@@ -118,8 +118,8 @@
 
   // ---- Off-screen SVG stage the live render functions draw into ----
   // Wrapped in a hidden container DIV (not styled on the svg itself) so
-  // nothing about how it's hidden on the live page can ever leak into what
-  // svg2pdf.js reads off of it.
+  // nothing about how it's hidden on the live page can ever leak into the
+  // serialized SVG below.
   function makeStage(vw, vh) {
     const wrap = document.createElement('div');
     wrap.style.position = 'fixed';
@@ -130,6 +130,12 @@
     wrap.style.overflow = 'hidden';
     document.body.appendChild(wrap);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    // Explicit xmlns attribute -- required for the serialized string below
+    // to parse as a valid, self-contained SVG document once it's no longer
+    // attached to this page (createElementNS alone sets the DOM node's
+    // namespace but doesn't guarantee XMLSerializer writes out an xmlns
+    // attribute on the root element).
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
@@ -137,52 +143,35 @@
     return { svg, wrap };
   }
 
-  // Nathan: "the play calls do not show the correct running movements...
-  // For inside zone, it should be a convex curve going into the line but
-  // it's showing concave." play-calls.js builds every curved route as a
-  // plain SVG quadratic path (`M x y Q cx cy ex ey`, or a couple of those
-  // chained) -- correct on screen, but svg2pdf.js is mis-drawing the
-  // curvature of that same "Q" command once it's converted to native PDF
-  // vector content (getting the right start/end points but the wrong bulge
-  // direction). Rather than fight that library's curve support, this
-  // manually flattens every Q segment into a run of short straight
-  // line-to's using the actual quadratic Bezier formula, right before
-  // handing the stage to doc.svg() -- a many-segment polyline reads as a
-  // smooth curve at print size, and there's no "Q" left for svg2pdf.js to
-  // misinterpret.
-  const CURVE_STEPS = 22;
-  function flattenPathD(d) {
-    const tokens = d.trim().match(/[MLQ][^MLQ]*/g) || [];
-    let cur = null;
-    const out = [];
-    tokens.forEach(tok => {
-      const cmd = tok[0];
-      const nums = tok.slice(1).trim().split(/[\s,]+/).filter(Boolean).map(Number);
-      if (cmd === 'M') {
-        cur = [nums[0], nums[1]];
-        out.push(`M ${nums[0]} ${nums[1]}`);
-      } else if (cmd === 'L') {
-        cur = [nums[0], nums[1]];
-        out.push(`L ${nums[0]} ${nums[1]}`);
-      } else if (cmd === 'Q') {
-        const [cx, cy, ex, ey] = nums;
-        const p0 = cur;
-        for (let i = 1; i <= CURVE_STEPS; i++) {
-          const t = i / CURVE_STEPS;
-          const mt = 1 - t;
-          const x = mt * mt * p0[0] + 2 * mt * t * cx + t * t * ex;
-          const y = mt * mt * p0[1] + 2 * mt * t * cy + t * t * ey;
-          out.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`);
-        }
-        cur = [ex, ey];
-      }
-    });
-    return out.join(' ');
-  }
-  function flattenStageCurves(stage) {
-    stage.querySelectorAll('path').forEach(p => {
-      const d = p.getAttribute('d');
-      if (d && d.indexOf('Q') !== -1) p.setAttribute('d', flattenPathD(d));
+  // Nathan: "the play calls do not show the correct running movements" /
+  // "option pass not showing correctly." First tried svg2pdf.js (converts a
+  // live SVG element straight to PDF vector content) -- it kept getting
+  // curve/path shapes wrong on anything more complex than a gentle bend
+  // (confirmed even after flattening every curve into hundreds of straight
+  // line segments -- still wrong, so it isn't a curve-command parsing
+  // issue, something deeper in that library). Dropping it for something
+  // that can't have that class of bug: rasterize each diagram using the
+  // BROWSER'S OWN native SVG renderer -- the exact same engine that already
+  // draws Play Calls correctly on screen -- via a plain <img> decode, then
+  // draw that onto a canvas and embed the resulting PNG. This can't
+  // misinterpret a path the browser itself is rendering.
+  function svgToPng(stage, cellWpt, cellHpt, scale) {
+    return new Promise((resolve, reject) => {
+      const xml = new XMLSerializer().serializeToString(stage);
+      const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+      const img = new Image();
+      img.onload = () => {
+        const canvasEl = document.createElement('canvas');
+        canvasEl.width = Math.round(cellWpt * scale);
+        canvasEl.height = Math.round(cellHpt * scale);
+        const ctx = canvasEl.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
+        resolve(canvasEl.toDataURL('image/png'));
+      };
+      img.onerror = (e) => reject(e);
+      img.src = dataUri;
     });
   }
 
@@ -222,7 +211,7 @@
     const GRID_X0 = MARGIN + (USABLE_W - GRID_W) / 2;
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
-    if (typeof doc.svg !== 'function') throw new Error('svg2pdf.js did not load -- doc.svg() is missing.');
+    const RASTER_SCALE = 3; // renders at 3x cell size so it stays crisp when printed
     let y = MARGIN;
     let firstPage = true;
 
@@ -267,11 +256,8 @@
       doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 2, { align: 'center' });
       const diagramY = rowTopY + LABEL_H;
       renderFn();
-      flattenStageCurves(stage);
-      // Draws the LIVE stage SVG element directly into the PDF as vector
-      // content -- no serialize/rasterize round trip, so nothing about how
-      // it's hidden on the page or how it gets re-parsed can go wrong.
-      await doc.svg(stage, { x: cellX0, y: diagramY, width: CELL_W, height: CELL_H });
+      const png = await svgToPng(stage, CELL_W, CELL_H, RASTER_SCALE);
+      doc.addImage(png, 'PNG', cellX0, diagramY, CELL_W, CELL_H);
       doc.setDrawColor('#cccccc');
       doc.setLineWidth(0.6);
       doc.rect(cellX0, diagramY, CELL_W, CELL_H);
