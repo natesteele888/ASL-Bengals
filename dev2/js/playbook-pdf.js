@@ -119,6 +119,15 @@
   // ---- Off-screen SVG stage the live render functions draw into ----
   function makeStage(vw, vh) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    // Explicit xmlns attribute (not just the createElementNS namespace) --
+    // required for the serialized string below to parse as a valid,
+    // self-contained SVG document once it's no longer attached to this
+    // page. Without it, browsers happily fire the resulting <img>'s load
+    // event (no error) but render nothing -- which is exactly what was
+    // happening: every cell box, border and label showed up fine (all
+    // drawn separately, straight into the PDF via jsPDF) while the one
+    // thing routed through this SVG->image conversion came out blank.
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
@@ -132,11 +141,13 @@
 
   // Rasterizes whatever's currently drawn in `stage` to a PNG data URL at
   // `scale`x the requested print size, so it stays crisp when printed.
+  // Uses a data: URI rather than a Blob/ObjectURL -- more consistently
+  // supported across browsers for the "serialize SVG -> Image -> canvas"
+  // conversion, and side-steps any ObjectURL revocation timing issues.
   function svgToPng(stage, cellWpt, cellHpt, scale) {
     return new Promise((resolve, reject) => {
       const xml = new XMLSerializer().serializeToString(stage);
-      const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
+      const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
       const img = new Image();
       img.onload = () => {
         const canvasEl = document.createElement('canvas');
@@ -146,11 +157,10 @@
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
         ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
-        URL.revokeObjectURL(url);
         resolve(canvasEl.toDataURL('image/png'));
       };
-      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
-      img.src = url;
+      img.onerror = (e) => reject(e);
+      img.src = dataUri;
     });
   }
 
