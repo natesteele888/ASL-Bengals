@@ -73,19 +73,40 @@ if (topSectionsEl) {
   });
 }
 
-// Coach Tools' top-level tab only exists for an approved coach profile
-// (window.isApprovedCoachProfile(), auth.js) -- called once a name/session
-// is actually known (see player-identity.js's gate() wrapper) and re-run
-// any time it might change (sign out, switch profile). If someone's
-// viewing Coach Tools when this determines they no longer qualify (e.g.
-// they just signed out), it bounces them back to Play rather than leaving
-// a coach-only page open under a non-coach session.
+// Nathan: "have all these things be visible only on the coaching login
+// FrontSeat on not on the kids side until we add it over" -- This Week and
+// Schedule are still new/unfinished from a player's point of view, so they
+// only show for an actual coach login (window.isCoachSession -- the
+// coach-code vs. player-code gate, not the finer-grained named-coach
+// allowlist). Coach Tools stays on the stricter check (an approved coach
+// profile specifically), same as before. Called once a name/session is
+// actually known (see player-identity.js's gate() wrapper) and re-run any
+// time it might change (sign out, switch profile). If someone's viewing a
+// tab that this determines they no longer qualify for, it bounces them
+// back to Play rather than leaving a gated page open under a session that
+// shouldn't see it.
 window.refreshCoachToolsVisibility = function(){
-  const btn = document.getElementById('coachToolsSectionBtn');
-  if (!btn) return;
-  const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
-  btn.style.display = approved ? '' : 'none';
-  if (!approved && btn.classList.contains('active')) {
+  const isCoach = !!window.isCoachSession;
+  const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+
+  const thisweekBtn = document.getElementById('thisweekSectionBtn');
+  if (thisweekBtn) thisweekBtn.style.display = isCoach ? '' : 'none';
+  const scheduleBtn = document.getElementById('scheduleSectionBtn');
+  if (scheduleBtn) scheduleBtn.style.display = isCoach ? '' : 'none';
+  const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
+  if (thisweekMenuBtn) thisweekMenuBtn.style.display = isCoach ? '' : 'none';
+
+  const coachToolsBtn = document.getElementById('coachToolsSectionBtn');
+  if (coachToolsBtn) coachToolsBtn.style.display = approvedCoach ? '' : 'none';
+
+  const activeBtn = topSectionsEl && topSectionsEl.querySelector('.modeBtn.active');
+  const activeSection = activeBtn && activeBtn.dataset.section;
+  const stillAllowed =
+    activeSection === 'play' ||
+    (activeSection === 'thisweek' && isCoach) ||
+    (activeSection === 'schedule' && isCoach) ||
+    (activeSection === 'coachtools' && approvedCoach);
+  if (activeSection && !stillAllowed) {
     setSection('play');
   }
 };
