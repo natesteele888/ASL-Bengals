@@ -517,6 +517,7 @@
   function gate(rawOnReady){
     const onReady = function(){
       if (typeof window.refreshCoachToolsVisibility === 'function') window.refreshCoachToolsVisibility();
+      if (typeof window.refreshWhatsNewBadge === 'function') window.refreshWhatsNewBadge();
       rawOnReady();
     };
     const session = getSession();

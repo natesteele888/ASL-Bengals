@@ -99,6 +99,14 @@ function promptForPlayToDuplicate() {
   return DATA.playTypes[idx];
 }
 
+// Nathan: "within the whats new, it would be good to show new plays added
+// to the playbook." duplicatePlay() below is the only path that creates a
+// brand-new play key (as opposed to editing an existing one's routes) --
+// staged here in memory and only actually logged to whatsNew.json once
+// Save to Cloud succeeds (see saveCloudBtn below), so an abandoned/never-
+// saved duplicate never shows up as "new" to the team.
+let pendingNewPlays = [];
+
 function duplicatePlay(original) {
   const newLabel = prompt('Name for the new play (e.g. "Inside Zone Wham"):', original.label + ' Copy');
   if (!newLabel || !newLabel.trim()) return;
@@ -116,6 +124,7 @@ function duplicatePlay(original) {
   if (carriedSignal) { clone.signalCardId = carriedSignal.id; clone.signalLabel = carriedSignal.label; }
 
   DATA.playTypes.push(clone);
+  pendingNewPlays.push({ key: newKey, label: clone.label });
   rebuildPlaySelectOptions();
   playSelect.value = newKey;
   playKey = newKey;
@@ -363,6 +372,34 @@ const cloudStatusEl = document.getElementById('cloudStatus');
 // keeps this additive instead of risking the well-tested existing save/
 // load path for Shotgun plays.
 const SPLIT_ROUTES_URL = `${FIREBASE_URL}/splitRouteEdits.json`;
+const WHATS_NEW_URL = `${FIREBASE_URL}/whatsNew.json`;
+
+// Appends whatever's queued in pendingNewPlays to the shared What's New log
+// (read-modify-write, same pattern as Drive Builder/Schedule's whole-array
+// PUT) -- fire-and-forget from the caller's point of view; a failure here
+// shouldn't block or roll back the play save that already succeeded, it
+// just means the feed doesn't mention it this time.
+async function flushPendingNewPlaysToWhatsNew() {
+  if (!pendingNewPlays.length) return;
+  const toLog = pendingNewPlays.slice();
+  pendingNewPlays = [];
+  try {
+    const url = await window.firebaseAuthed(WHATS_NEW_URL);
+    const existing = await fetch(url).then(r => r.ok ? r.json() : null);
+    const list = Array.isArray(existing) ? existing : [];
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
+    const now = new Date().toISOString();
+    toLog.forEach(p => {
+      list.push({
+        id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        key: p.key, label: p.label, addedAt: now, addedBy: (session && session.name) || null,
+      });
+    });
+    await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) });
+  } catch (err) {
+    console.error('Could not log new play(s) to What\'s New:', err);
+  }
+}
 
 saveCloudBtn.addEventListener('click', async () => {
   saveCloudBtn.textContent = 'Saving\u2026';
@@ -385,6 +422,7 @@ saveCloudBtn.addEventListener('click', async () => {
     if (r1.ok && r2.ok) {
       saveCloudBtn.textContent = 'Saved!';
       cloudStatusEl.textContent = 'Showing the latest saved play edits.';
+      flushPendingNewPlaysToWhatsNew();
     } else {
       const failed = !r1.ok ? r1 : r2;
       const bodyText = await failed.text().catch(() => '');

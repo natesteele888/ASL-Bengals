@@ -58,9 +58,10 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   background:rgba(17,17,17,.5);border:1px solid rgba(255,255,255,.2);border-radius:4px;
   padding:1px 5px;backdrop-filter:blur(3px)}
 .playerMenuWrap{position:relative}
-.playerMenuBtn{height:20px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
+.playerMenuBtn{position:relative;height:20px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:700;cursor:pointer;
   backdrop-filter:blur(3px);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whatsNewDot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bengal-orange);border:1.5px solid #fff;}
 .playerMenuBtn:active{background:rgba(17,17,17,.85)}
 .playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
   box-shadow:0 6px 20px rgba(0,0,0,.25);display:none;min-width:150px;overflow:hidden;z-index:1200}

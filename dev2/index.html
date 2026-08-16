@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816h">
+<link rel="stylesheet" href="css/styles.css?v=20260816i">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -63,8 +63,9 @@
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
     <div class="playerMenuWrap" id="playerMenuWrap">
-      <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span></button>
+      <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
       <div class="playerMenuDropdown" id="playerMenuDropdown">
+        <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
         <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
@@ -762,6 +763,22 @@
   </div>
 </div>
 
+<!-- Nathan: "within the whats new, it would be good to show new plays added
+     to the playbook." A play only shows up here once it's an actual new
+     PLAY (created via the Duplicate flow in Edit Plays, not a route tweak
+     to an existing one) and a coach has hit Save to Cloud -- see
+     pendingNewPlays/flushPendingNewPlaysToWhatsNew in edit-plays.js. Visible
+     to everyone (players included) -- this one's meant as a discovery feed
+     for the team, unlike This Week/Schedule/Coach Tools. -->
+<div class="lbOverlay" id="whatsNewOverlay">
+  <div class="lbCard">
+    <h3>🆕 What's New</h3>
+    <div class="lbSub">New plays added to the playbook</div>
+    <div id="whatsNewBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="whatsNewCloseBtn">Close</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="studyGuideOverlay">
   <div class="lbCard">
     <h3>📖 Study Guide</h3>
@@ -894,7 +911,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816x';
+  const BUILD_V = '20260816y';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -938,7 +955,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
