@@ -15,6 +15,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bengals">
+<script>
+  // Registers sw.js so the app qualifies for a full "Install app" / Add to
+  // Home Screen prompt on Chrome (some Android versions require a service
+  // worker for this, not just a valid manifest). Safe no-op in browsers
+  // without service worker support.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(e){
+        console.error('Service worker registration failed:', e);
+      });
+    });
+  }
+</script>
 </head>
 <body>
 <script>
@@ -726,7 +739,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816c';
+  const BUILD_V = '20260816d';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
