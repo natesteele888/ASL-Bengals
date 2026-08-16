@@ -21,6 +21,59 @@
 
   const SCRIPTS_URL = `${FIREBASE_DB_URL}/driveScripts.json`;
 
+  // Nathan: "Can you draft some base scripts for us to start? Red Zone run
+  // heavy. 2 minute drill with more throwing, etc." Built from the real
+  // playbook (data/plays.json's playTypes: inside_zone, outside_zone,
+  // option, blast, double_blast, option_pass, sweep -- option_pass is the
+  // only pass-type call in this offense, so "more throwing" leans on that
+  // one repeated/mixed with quick-hitters rather than a dropback game that
+  // doesn't exist here). Offered as a one-tap "Add Starter Scripts" button
+  // on the list view rather than force-seeded, so a coach can also just
+  // build their own from scratch and never see these if they don't want
+  // them -- and re-tapping only fills in whichever of these four are
+  // missing by name, so it's safe to tap more than once.
+  const STARTER_SCRIPTS = [
+    {
+      name: 'Opening Script',
+      plays: [
+        { key: 'inside_zone', direction: 'Left' },
+        { key: 'outside_zone', direction: 'Right' },
+        { key: 'sweep', direction: 'Left' },
+        { key: 'option', direction: 'Right' },
+        { key: 'blast', direction: 'Left' },
+      ],
+    },
+    {
+      name: 'Red Zone (Run Heavy)',
+      plays: [
+        { key: 'blast', direction: 'Left' },
+        { key: 'double_blast', direction: 'Right' },
+        { key: 'inside_zone', direction: 'Right' },
+        { key: 'blast', direction: 'Right' },
+        { key: 'double_blast', direction: 'Left' },
+      ],
+    },
+    {
+      name: '2-Minute Drill',
+      plays: [
+        { key: 'option_pass', direction: 'Left' },
+        { key: 'sweep', direction: 'Right' },
+        { key: 'option_pass', direction: 'Right' },
+        { key: 'outside_zone', direction: 'Left' },
+        { key: 'option_pass', direction: 'Left' },
+      ],
+    },
+    {
+      name: 'Short Yardage / Goal Line',
+      plays: [
+        { key: 'double_blast', direction: 'Left' },
+        { key: 'blast', direction: 'Right' },
+        { key: 'double_blast', direction: 'Right' },
+        { key: 'blast', direction: 'Left' },
+      ],
+    },
+  ];
+
   let scripts = [];   // [{id, name, plays:[{key,direction}], updatedAt}]
   let current = null; // the script currently open in the editor, or null (list view)
   let loaded = false;
@@ -106,6 +159,18 @@
       row.addEventListener('click', () => openEditor(s.id));
       listEl.appendChild(row);
     });
+  }
+
+  function addStarterScripts() {
+    const existingNames = new Set(scripts.map(s => (s.name || '').trim().toLowerCase()));
+    const toAdd = STARTER_SCRIPTS.filter(s => !existingNames.has(s.name.toLowerCase()));
+    if (!toAdd.length) {
+      const statusEl = document.getElementById('driveScriptCloudStatus');
+      if (statusEl) { statusEl.textContent = 'Starter scripts are already on your list.'; setTimeout(() => { statusEl.textContent = ''; }, 2200); }
+      return;
+    }
+    toAdd.forEach(s => scripts.push({ id: genId(), name: s.name, plays: s.plays.map(p => ({ ...p })), updatedAt: new Date().toISOString() }));
+    persistScripts(() => renderList());
   }
 
   function escapeHtml(s) {
@@ -226,6 +291,8 @@
     if (controlsWired) return;
     controlsWired = true;
     document.getElementById('driveScriptNewBtn').addEventListener('click', () => { current = null; openEditor(null); });
+    const starterBtn = document.getElementById('driveScriptStarterBtn');
+    if (starterBtn) starterBtn.addEventListener('click', addStarterScripts);
     document.getElementById('driveScriptBackBtn').addEventListener('click', closeEditor);
     document.getElementById('driveScriptSaveBtn').addEventListener('click', saveCurrent);
     document.getElementById('driveScriptDeleteBtn').addEventListener('click', deleteCurrent);

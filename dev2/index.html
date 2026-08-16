@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816k">
+<link rel="stylesheet" href="css/styles.css?v=20260817a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -250,6 +250,12 @@
      + play picker) only show for a coach session; everyone else sees a
      read-only view of whatever's currently saved. -->
 <div id="thisweekMode" class="modePanel">
+  <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
+       the upcoming games so players can check them out and be prepared."
+       This Week stays one shared page, but can point at a specific
+       upcoming Schedule game -- shown as a tappable link here, and pulled
+       onto that game's own Schedule detail page too (see schedule.js). -->
+  <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
   </div>
@@ -261,6 +267,7 @@
 
   <div id="thisweekEditSection" style="display:none;max-width:900px;margin:22px auto 0;">
     <div class="lbSub" style="text-align:center;margin-bottom:10px;">🔐 Coach editing — the inputs below aren't visible to players, only the result above is</div>
+    <select id="thisweekGameSelect" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px;"></select>
     <input type="text" id="thisweekKeyInput0" class="thisweekKeyInput" maxlength="80" placeholder="Key #1 (e.g. &quot;Win the edge on outside runs&quot;)">
     <input type="text" id="thisweekKeyInput1" class="thisweekKeyInput" maxlength="80" placeholder="Key #2">
     <input type="text" id="thisweekKeyInput2" class="thisweekKeyInput" maxlength="80" placeholder="Key #3">
@@ -282,58 +289,66 @@
      Tools section (see topSections above) -- Coach Dashboard (task #28)
      will join it here later as a second area. -->
 <div id="coachtoolsMode" class="modePanel">
-  <!-- Nathan: "when I go to the Coach Tools - I should have the option to
-       Print the Playbook, Print the Play Sheet, and Print and input the
-       stats for to then assign to a game." Print Playbook / Print Play
-       Sheet reuse the same generatePlaybookPDF/generateCallSheetPDF as the
-       admin panel. The Stats tool tracks one standalone "draft" stat sheet
-       (not tied to a Schedule game yet) using the shared editor from
-       js/game-stats-editor.js, then "Assign to Game" attaches it to an
-       existing or brand-new Schedule game. See js/coachtools-print.js. -->
-  <div class="lbSectionHeader" style="text-align:center;">🖨️ Print &amp; Game Stats</div>
-  <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Print materials for game day, or track a game's stats electronically -- even before it's on the Schedule -- then assign the finished sheet to a game.</div>
+  <!-- Nathan: "I don't like how it's all in one list, it should be tabs at
+       the top or CTAs at the top that shows the different sections like
+       Resources where you have the option to print everything. Then theres
+       at stats section where you can add stats to a game on the schedule."
+       Four CTAs at the top switch between panels below; each panel's JS
+       lazy-inits the first time it's shown (js/coachtools.js). -->
+  <div class="gameplanPickerGrid" id="coachToolsSubNav" style="margin-bottom:18px;"></div>
 
-  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:520px;margin:0 auto 20px;">
-    <button class="navBtn" id="coachPrintPlaybookBtn" style="flex:1 1 210px;">📘 Print Playbook</button>
-    <button class="navBtn" id="coachPrintCallSheetBtn" style="flex:1 1 210px;">📋 Print Play Sheet</button>
+  <!-- ---- Resources: print everything ---- -->
+  <div id="coachResourcesPanel" class="coachToolsPanel">
+    <div class="lbSectionHeader" style="text-align:center;">🖨️ Resources</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Print materials for game day.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:520px;margin:0 auto;">
+      <button class="navBtn" id="coachPrintPlaybookBtn" style="flex:1 1 210px;">📘 Print Playbook</button>
+      <button class="navBtn" id="coachPrintCallSheetBtn" style="flex:1 1 210px;">📋 Print Play Sheet</button>
+      <button class="navBtn" id="coachPrintBlankStatsBtn" style="flex:1 1 210px;">🏈 Print Blank Stat Sheet</button>
+    </div>
   </div>
 
-  <div id="coachStatsToolWrap" style="max-width:700px;margin:0 auto 24px;border-top:2px solid #eee;padding-top:16px;">
-    <div class="lbSectionHeader" style="margin:0 0 4px;">🏈 Game Stats</div>
-    <div class="lbSub" style="margin:0 0 10px;">Print a blank sheet for the sideline, or enter stats live below and assign the finished sheet to a game when you're done.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-      <button class="lbLinkBtn" id="coachPrintBlankStatsBtn">🖨️ Print Blank Stat Sheet</button>
-      <button class="lbLinkBtn" id="coachSaveStatsDraftBtn">💾 Save Draft</button>
-      <button class="lbLinkBtn" id="coachAssignStatsBtn">📌 Assign to Game</button>
-      <button class="lbLinkBtn" id="coachDiscardStatsBtn">🗑 Discard Draft</button>
-    </div>
-    <div id="coachAssignPickerWrap" style="display:none;border:2px solid #eee;border-radius:10px;padding:12px;margin-bottom:14px;"></div>
-    <div id="coachStatsDraftWrap"></div>
-    <div id="coachStatsStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  <!-- ---- Stats: pick a game, enter its stats, see the leaderboard ---- -->
+  <div id="coachStatsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📊 Stats</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Add stats to a game on the Schedule -- they automatically roll up into the team leaderboard below.</div>
+    <div class="gameplanPickerGrid" id="coachStatsSubNav" style="margin-bottom:14px;"></div>
+    <div id="coachStatsBody" style="max-width:700px;margin:0 auto;"></div>
   </div>
 
-  <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
-  <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a named, ordered list of plays ahead of time -- an opening script, a red zone package, a 2-minute drill -- and pull it back up here on the sideline.</div>
-
-  <div id="driveScriptListWrap" style="max-width:500px;margin:0 auto;">
-    <div id="driveScriptList"></div>
-    <button class="navBtn" id="driveScriptNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ New Drive Script</button>
-    <div id="driveScriptCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  <!-- ---- Roster: name / # / position, feeds stat entry automatically ---- -->
+  <div id="coachRosterPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">👥 Team Roster</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every player added here is auto-assigned into a game's stat sheet the first time you open it -- no retyping names/numbers per game.</div>
+    <div id="coachRosterWrap" style="max-width:600px;margin:0 auto;"></div>
   </div>
 
-  <div id="driveScriptEditor" style="display:none;max-width:700px;margin:20px auto 0;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-      <button class="lbLinkBtn" id="driveScriptBackBtn">‹ All Scripts</button>
+  <!-- ---- Drive Scripts ---- -->
+  <div id="coachDriveScriptsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a named, ordered list of plays ahead of time -- an opening script, a red zone package, a 2-minute drill -- and pull it back up here on the sideline.</div>
+
+    <div id="driveScriptListWrap" style="max-width:500px;margin:0 auto;">
+      <div id="driveScriptList"></div>
+      <button class="navBtn" id="driveScriptNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ New Drive Script</button>
+      <button class="lbLinkBtn" id="driveScriptStarterBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">🌱 Add Starter Scripts (Opening, Red Zone, 2-Minute, Short Yardage)</button>
+      <div id="driveScriptCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
-    <input type="text" id="driveScriptNameInput" placeholder="Script name (e.g. &quot;Opening Script&quot;)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:12px;">
-    <ol id="driveScriptPlayList" class="driveScriptPlayList"></ol>
-    <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Tap a play to add it to the script</div>
-    <div class="gameplanPickerGrid" id="driveScriptPickerGrid"></div>
-    <div style="display:flex;gap:8px;margin-top:16px;">
-      <button class="navBtn" id="driveScriptSaveBtn" style="flex:1;">Save Script</button>
-      <button class="navBtn secondary" id="driveScriptDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+
+    <div id="driveScriptEditor" style="display:none;max-width:700px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="driveScriptBackBtn">‹ All Scripts</button>
+      </div>
+      <input type="text" id="driveScriptNameInput" placeholder="Script name (e.g. &quot;Opening Script&quot;)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:12px;">
+      <ol id="driveScriptPlayList" class="driveScriptPlayList"></ol>
+      <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Tap a play to add it to the script</div>
+      <div class="gameplanPickerGrid" id="driveScriptPickerGrid"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="navBtn" id="driveScriptSaveBtn" style="flex:1;">Save Script</button>
+        <button class="navBtn secondary" id="driveScriptDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+      </div>
+      <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
-    <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
 
@@ -809,6 +824,18 @@
   </div>
 </div>
 
+<!-- Nathan: "With rosters we can also have player profiles just as the
+     attached - season stats - career stats though it starts now - then
+     recent games for passing and rushing or defense only depending on
+     positioning." Opened via window.showPlayerProfile(num) from a roster
+     row or a leaderboard name -- see js/player-profile.js. -->
+<div class="lbOverlay" id="playerProfileOverlay">
+  <div class="lbCard">
+    <div id="playerProfileBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="playerProfileCloseBtn">Close</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="studyGuideOverlay">
   <div class="lbCard">
     <h3>📖 Study Guide</h3>
@@ -941,7 +968,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817c';
+  const BUILD_V = '20260817e';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -985,7 +1012,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/schedule.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

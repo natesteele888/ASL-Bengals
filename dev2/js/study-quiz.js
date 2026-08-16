@@ -41,8 +41,7 @@ function setMode(mode){
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
   if(mode==='editplays') openEditPlaysGated();
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
-  if(mode==='coachtools' && typeof window.initDriveBuilder === 'function') window.initDriveBuilder();
-  if(mode==='coachtools' && typeof window.initCoachToolsPrint === 'function') window.initCoachToolsPrint();
+  if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
   if(mode==='schedule' && typeof window.initSchedule === 'function') window.initSchedule();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
@@ -74,18 +73,18 @@ if (topSectionsEl) {
   });
 }
 
-// Nathan: "have all these things be visible only on the coaching login
-// FrontSeat on not on the kids side until we add it over" -- This Week and
-// Schedule are still new/unfinished from a player's point of view, so they
-// only show for an actual coach login (window.isCoachSession -- the
-// coach-code vs. player-code gate, not the finer-grained named-coach
-// allowlist). Coach Tools stays on the stricter check (an approved coach
-// profile specifically), same as before. Called once a name/session is
-// actually known (see player-identity.js's gate() wrapper) and re-run any
-// time it might change (sign out, switch profile). If someone's viewing a
-// tab that this determines they no longer qualify for, it bounces them
-// back to Play rather than leaving a gated page open under a session that
-// shouldn't see it.
+// Nathan (original): "have all these things be visible only on the coaching
+// login FrontSeat on not on the kids side until we add it over" -- This
+// Week and Schedule started coach-only while unfinished. Nathan later asked
+// specifically: "Schedule is added to player visibility automatically when
+// they exist on the schedule" -- so Schedule is now visible to every signed
+// in user (players included); This Week and Coach Tools stay behind their
+// original gates (isCoachSession / isApprovedCoachProfile respectively).
+// Called once a name/session is actually known (see player-identity.js's
+// gate() wrapper) and re-run any time it might change (sign out, switch
+// profile). If someone's viewing a tab that this determines they no longer
+// qualify for, it bounces them back to Play rather than leaving a gated
+// page open under a session that shouldn't see it.
 window.refreshCoachToolsVisibility = function(){
   const isCoach = !!window.isCoachSession;
   const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
@@ -93,7 +92,7 @@ window.refreshCoachToolsVisibility = function(){
   const thisweekBtn = document.getElementById('thisweekSectionBtn');
   if (thisweekBtn) thisweekBtn.style.display = isCoach ? '' : 'none';
   const scheduleBtn = document.getElementById('scheduleSectionBtn');
-  if (scheduleBtn) scheduleBtn.style.display = isCoach ? '' : 'none';
+  if (scheduleBtn) scheduleBtn.style.display = ''; // visible to everyone
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isCoach ? '' : 'none';
 
@@ -104,8 +103,8 @@ window.refreshCoachToolsVisibility = function(){
   const activeSection = activeBtn && activeBtn.dataset.section;
   const stillAllowed =
     activeSection === 'play' ||
+    activeSection === 'schedule' ||
     (activeSection === 'thisweek' && isCoach) ||
-    (activeSection === 'schedule' && isCoach) ||
     (activeSection === 'coachtools' && approvedCoach);
   if (activeSection && !stillAllowed) {
     setSection('play');

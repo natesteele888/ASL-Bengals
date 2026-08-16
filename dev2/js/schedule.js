@@ -20,36 +20,71 @@
 // players on the upcoming opponent." Rather than a separate section that
 // has to track which game is "this week" on its own, that scouting info
 // lives right on the relevant game here -- a "Scouting Report" free-text
-// field, pre-game (shown above Stats/Write-Up, which are post-game), same
-// edit gate as the rest of a game's details.
+// field, pre-game, same edit gate as the rest of a game's details.
 //
-// STATS -- rebuilt twice this session before landing here:
-//   v1: one row per player with fixed columns (runs/yards/passes/etc).
-//   v2: split into Offense / Defense box-score tables, richer categories.
-//   v3 -- Nathan: "What you created with big columns doesn't work - it will
-//   be updated as the game goes on..." (full quote lives in
-//   game-stats-editor.js now). Roster + per-category attempt grids.
+// STATS -- Nathan: "Stats on a game and schedule should be independent. It
+// should just be Add games to Schedule." Stats used to be embedded right in
+// this game detail view (three redesigns' worth, see js/game-stats-editor.js
+// for that history) -- now they live entirely in Coach Tools > Stats, which
+// picks a game from this same schedule.json and writes into its statSheet
+// field from over there. This file no longer touches statSheet UI at all,
+// only the plain game record.
 //
-// The actual stat-sheet editor (Roster, attempt grids, Tackles, Defensive
-// Extra, Turnovers) was extracted into js/game-stats-editor.js so Coach
-// Tools can run the identical UI on a standalone "draft" stat sheet that
-// isn't attached to a Schedule game yet (Nathan: "Print and input the stats
-// for to then assign to a game"). This file just owns the per-game record
-// (statSheet field) and calls window.renderGameStatSheet(wrap, statSheet,
-// readOnly) to draw it -- see renderStatSheet() below.
+// TIMES -- Nathan: "We also need an Arrive by Time - Warm Up Start Time -
+// Game Time." Replaces the old single free-text `time` field with three:
+// arriveTime, warmupTime, gameTime. Older saved games only have `time` --
+// openDetail() below folds that into gameTime on load so nothing old breaks.
+//
+// LOCATION -- Nathan: "need to be able to have Google recognize an address
+// to pin a location." Full Places Autocomplete needs a billing-enabled
+// Google Maps API key, which isn't set up here -- so `location` stays a
+// plain address text field, but every place it's shown now also gets a
+// "View on Map" link/embed built from a no-key Google Maps URL
+// (maps.google.com/maps?q=...) -- a real pin, zero setup. Swap in real
+// Autocomplete later by dropping a <script src="...maps.googleapis.com...">
+// tag in and initializing it on #schedLocation once a key exists.
 // ---------------------------------------------------------------------------
 (function () {
 
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
-  const blankStatSheet = () => window.blankGameStatSheet();
-  const normalizeStatSheet = (s) => window.normalizeGameStatSheet(s);
 
-  let games = [];     // [{id, opponent, date, time, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
+  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
 
   function genId() {
     return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // ---- Team badges -- Nathan: "I want the app to look like the styling of
+  // ESPN mobile app with team logos." No real opponent logo art exists, so
+  // opponents get an auto-generated colored initials badge (deterministic
+  // color from the name, so the same opponent always looks the same);
+  // Bengals always use the real mascot logo already shipped for the header.
+  function hashColor(str) {
+    let hash = 0;
+    for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 55%, 38%)`;
+  }
+  function initials(name) {
+    const words = (name || '?').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return '?';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  function bengalsBadgeHtml() {
+    return `<span class="scheduleTeamBadge"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
+  }
+  function opponentBadgeHtml(name) {
+    return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
+  }
+
+  function mapUrl(address) {
+    return `https://maps.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
+  }
+  function mapSearchUrl(address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   }
 
   function resultFor(g) {
@@ -135,14 +170,16 @@
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-      const scoreStr = result ? `${g.ourScore}-${g.oppScore}` : '';
+      const gameTime = g.gameTime || g.time || ''; // g.time is the pre-Arrive/Warmup/Game-split field
+      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
+      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
       row.innerHTML = `
-        <span class="scheduleRowDate">${fmtDate(g.date)}${g.time ? ' • ' + escapeHtml(g.time) : ''}</span>
-        <span class="scheduleRowMain">
-          <span class="scheduleRowOpp">${g.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(g.opponent || 'TBD')}</span>
-          <span class="scheduleRowLoc">${escapeHtml(g.location || '')}</span>
-        </span>
-        <span class="scheduleRowResult">${badge}${scoreStr ? `<span class="scheduleRowScore">${scoreStr}</span>` : ''}</span>`;
+        <span class="scheduleRowDate">${fmtDate(g.date)}${gameTime ? ' • ' + escapeHtml(gameTime) : ''}${g.location ? ' • ' + escapeHtml(g.location) : ''}</span>
+        <span class="scheduleRowMatchup">
+          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
+          <span class="scheduleRowCenter"><span class="scheduleRowLoc" style="max-width:none;">${g.homeAway === 'Away' ? '@' : 'vs'}</span>${badge}</span>
+          <span class="scheduleTeamSide away">${themScore}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${opponentBadgeHtml(g.opponent)}</span>
+        </span>`;
       row.addEventListener('click', () => openDetail(g.id));
       listEl.appendChild(row);
     });
@@ -155,10 +192,14 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', time: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: blankStatSheet(), updatedAt: null };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null };
     }
-    current.statSheet = normalizeStatSheet(current.statSheet); // older saved games predate this field / had the old shape
+    if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
+    if (!current.gameTime && current.time) current.gameTime = current.time; // fold in the old single-time field
+    current.arriveTime = current.arriveTime || '';
+    current.warmupTime = current.warmupTime || '';
+    current.gameTime = current.gameTime || '';
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
@@ -180,34 +221,64 @@
     editControls.style.display = approved ? '' : 'none';
     if (deleteBtn) deleteBtn.style.display = games.some(g => g.id === current.id) ? '' : 'none';
 
-    if (!approved) {
-      // ---- Read-only view ----
+    const timesLine = [
+      current.arriveTime ? `Arrive ${escapeHtml(current.arriveTime)}` : '',
+      current.warmupTime ? `Warm-up ${escapeHtml(current.warmupTime)}` : '',
+      current.gameTime ? `Kickoff ${escapeHtml(current.gameTime)}` : '',
+    ].filter(Boolean).join(' • ');
+
+    const heroHtml = (() => {
       const result = resultFor(current);
       const badgeHtml = result
-        ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result} ${current.ourScore}-${current.oppScore}</span>`
+        ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
+      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : `<span class="scheduleTeamScore tbd">—</span>`;
+      return `
+        <div class="scheduleDetailHero">
+          <div class="scheduleRowDate" style="text-align:center;margin-bottom:10px;">${fmtDate(current.date)}${timesLine ? ' • ' + timesLine : ''}</div>
+          <div class="scheduleRowMatchup">
+            <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
+            <span class="scheduleRowCenter">${badgeHtml}</span>
+            <span class="scheduleTeamSide away">${themScore}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span>${opponentBadgeHtml(current.opponent)}</span>
+          </div>
+        </div>`;
+    })();
+
+    if (!approved) {
+      // ---- Read-only view ----
       body.innerHTML = `
-        <div class="lbSectionHeader">${current.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(current.opponent || 'TBD')}</div>
-        <div class="lbSub" style="margin-bottom:10px;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(current.time) : ''} • ${escapeHtml(current.location || 'Location TBD')} • ${current.homeAway || 'Home'}</div>
-        <div style="text-align:center;margin:10px 0;">${badgeHtml}</div>
+        ${heroHtml}
+        <div class="lbSub" style="margin-bottom:10px;text-align:center;">${escapeHtml(current.location || 'Location TBD')} • ${current.homeAway || 'Home'}</div>
+        ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
+        <div id="schedGamePlanWrap" style="display:none;">
+          <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
+          <ol id="schedGamePlanKeys" class="thisweekKeysList"></ol>
+          <div class="gameplanCardsGrid" id="schedGamePlanCards"></div>
+        </div>
         <div class="lbSectionHeader" style="margin-top:16px;">🔎 Scouting Report</div>
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
-        <div class="lbSectionHeader" style="margin-top:16px;">📊 Stats</div>
-        <div id="schedStatsWrap"></div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>`;
-      renderStatSheet(true);
+      loadLinkedGamePlan();
       return;
     }
 
     // ---- Coach edit view ----
     body.innerHTML = `
+      ${heroHtml}
       <input type="text" id="schedOpponent" placeholder="Opponent" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:8px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="date" id="schedDate" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
-        <input type="text" id="schedTime" placeholder="Time (e.g. 10:00 AM)" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+      <input type="date" id="schedDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <input type="text" id="schedArriveTime" placeholder="Arrive by (e.g. 8:30 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <input type="text" id="schedWarmupTime" placeholder="Warm-up start (e.g. 9:00 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <input type="text" id="schedGameTime" placeholder="Game time (e.g. 10:00 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
       </div>
-      <input type="text" id="schedLocation" placeholder="Location" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:4px;">
+        <input type="text" id="schedLocation" placeholder="Address (e.g. 123 Field Rd, Leominster MA)" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <a id="schedMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
+      </div>
+      <div id="schedMapPreviewWrap" style="margin-bottom:8px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
         <span class="lbSub" style="margin:0;">Final score:</span>
@@ -219,32 +290,36 @@
       <div class="lbSectionHeader" style="margin-top:6px;">🔎 Scouting Report</div>
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
-        <div class="lbSectionHeader" style="margin:0;">📊 Stats</div>
-        <button class="lbLinkBtn" id="schedPrintStatSheetBtn">🖨️ Print Blank Stat Sheet</button>
-      </div>
-      <div class="lbSub" style="margin:2px 0 8px;">Tap a box to mark it a 1st down. Update this live as the game goes -- it saves whenever you hit Save Game below.</div>
-      <div id="schedStatsWrap"></div>
+      <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>`;
 
-    document.getElementById('schedPrintStatSheetBtn').addEventListener('click', (e) => {
-      e.preventDefault();
-      if (window.generateGameStatSheetPDF) {
-        const doc = window.generateGameStatSheetPDF(current);
-        doc.save(`ASL_Bengals_Stat_Sheet_${(current.opponent || 'game').replace(/[^a-z0-9]+/gi, '_')}.pdf`);
-      }
-    });
-    renderStatSheet(false);
-
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedDate').value = current.date || '';
-    document.getElementById('schedTime').value = current.time || '';
+    document.getElementById('schedArriveTime').value = current.arriveTime || '';
+    document.getElementById('schedWarmupTime').value = current.warmupTime || '';
+    document.getElementById('schedGameTime').value = current.gameTime || '';
     document.getElementById('schedLocation').value = current.location || '';
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
+
+    function refreshMapPreview() {
+      const loc = document.getElementById('schedLocation').value.trim();
+      const link = document.getElementById('schedMapLink');
+      const previewWrap = document.getElementById('schedMapPreviewWrap');
+      if (loc) {
+        link.href = mapSearchUrl(loc);
+        link.style.opacity = '1'; link.style.pointerEvents = '';
+        previewWrap.innerHTML = `<iframe src="${mapUrl(loc)}" style="width:100%;height:140px;border:0;border-radius:8px;" loading="lazy"></iframe>`;
+      } else {
+        link.href = '#'; link.style.opacity = '.4'; link.style.pointerEvents = 'none';
+        previewWrap.innerHTML = '';
+      }
+    }
+    document.getElementById('schedLocation').addEventListener('input', refreshMapPreview);
+    refreshMapPreview();
 
     const haGrid = document.getElementById('schedHomeAwayGrid');
     ['Home', 'Away'].forEach(v => {
@@ -257,19 +332,53 @@
     });
   }
 
-  // Thin delegate to the shared editor (js/game-stats-editor.js) -- keeps
-  // this file owning only the per-game record, not the stat-sheet UI itself.
-  function renderStatSheet(readOnly) {
-    const wrap = document.getElementById('schedStatsWrap');
-    if (!wrap || !window.renderGameStatSheet) return;
-    window.renderGameStatSheet(wrap, current.statSheet, readOnly);
+  // If This Week (js/thisweek.js) is currently pointed at this game, pull
+  // its 3 Keys + featured plays onto this game's own page too -- Nathan:
+  // "assign Weekly Goals and game plans to the upcoming games so players
+  // can check them out and be prepared."
+  function loadLinkedGamePlan() {
+    const wrap = document.getElementById('schedGamePlanWrap');
+    if (!wrap || !current) return;
+    const THISWEEK_URL = `${FIREBASE_DB_URL}/thisWeek.json`;
+    window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || data.gameId !== current.id) { wrap.style.display = 'none'; return; }
+        const keys = (Array.isArray(data.keys) ? data.keys : []).map(k => (k || '').trim()).filter(Boolean);
+        const plays = Array.isArray(data.plays) ? data.plays : [];
+        if (!keys.length && !plays.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        const keysList = document.getElementById('schedGamePlanKeys');
+        if (keysList) { keysList.innerHTML = ''; keys.forEach(k => { const li = document.createElement('li'); li.textContent = k; keysList.appendChild(li); }); }
+        if (window.renderFeaturedPlayCards) window.renderFeaturedPlayCards(document.getElementById('schedGamePlanCards'), plays);
+      })
+      .catch(err => console.error('Could not load linked This Week game plan:', err));
   }
+
+  // Lets other modules (This Week's "This week's game" link) jump straight
+  // to a specific game's detail page from outside this file.
+  window.openScheduleGame = function (gameId) {
+    if (typeof window.setSection === 'function') window.setSection('schedule');
+    else if (typeof setSection === 'function') setSection('schedule');
+    function actuallyOpen() {
+      document.getElementById('scheduleListWrap').style.display = 'none';
+      document.getElementById('scheduleDetail').style.display = '';
+      openDetail(gameId);
+    }
+    if (!loaded) {
+      loaded = true;
+      loadGames().then(actuallyOpen);
+    } else {
+      actuallyOpen();
+    }
+  };
 
   function saveCurrent() {
     if (!current) return;
     current.opponent = document.getElementById('schedOpponent').value.trim();
     current.date = document.getElementById('schedDate').value;
-    current.time = document.getElementById('schedTime').value.trim();
+    current.arriveTime = document.getElementById('schedArriveTime').value.trim();
+    current.warmupTime = document.getElementById('schedWarmupTime').value.trim();
+    current.gameTime = document.getElementById('schedGameTime').value.trim();
     current.location = document.getElementById('schedLocation').value.trim();
     const ourScoreRaw = document.getElementById('schedOurScore').value.trim();
     const oppScoreRaw = document.getElementById('schedOppScore').value.trim();

@@ -18,13 +18,20 @@
 // ---------------------------------------------------------------------------
 (function () {
 
+  // Nathan: "I want to see state with tendencies, where do we run, who runs
+  // where, etc." Rushing attempts (only) also tag a run direction
+  // (Left/Middle/Right) so Coach Tools > Stats can build a Tendencies
+  // breakdown -- kept off Passing/Receiving/Kickoffs to not clutter entry
+  // for stats where "direction" isn't the interesting question.
+  const RUN_DIRECTIONS = ['Left', 'Middle', 'Right'];
   const ATTEMPT_SECTIONS = [
-    { key: 'rushing', title: '🏃 Rushing', allowFD: true, passingMode: false },
+    { key: 'rushing', title: '🏃 Rushing', allowFD: true, passingMode: false, trackDirection: true },
     { key: 'passing', title: '🎯 Passing', allowFD: true, passingMode: true },
     { key: 'receiving', title: '🙌 Receiving', allowFD: true, passingMode: false },
     { key: 'kickoffs', title: '🦵 Kickoffs', allowFD: false, passingMode: false },
   ];
   window.gameStatAttemptSections = ATTEMPT_SECTIONS;
+  window.runDirections = RUN_DIRECTIONS;
 
   function blankStatSheet() {
     return { roster: [], rushing: [], passing: [], receiving: [], kickoffs: [], tackles: [], defExtra: [], turnovers: [] };
@@ -49,11 +56,28 @@
   }
   window.gameStatSheetHasAnything = statSheetHasAnything;
 
+  // Nathan: "I need the option on the coaching side to create a roster with
+  // positions, # and so on so they can be auto-assigned to games to add
+  // their stats." The first time a stat sheet's roster is empty and hasn't
+  // been seeded yet, pull every player straight from the team roster
+  // (js/roster.js) instead of making a coach retype names/numbers per game.
+  // ss._rosterSeeded remembers this happened so removing a player (e.g. an
+  // injury, a player who didn't play) doesn't just come back on next render.
+  function seedRosterFromTeam(ss) {
+    if (ss._rosterSeeded || ss.roster.length) return;
+    const team = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    if (!team.length) return;
+    ss.roster = team.slice().sort((a, b) => (Number(a.num) || 0) - (Number(b.num) || 0))
+      .map(p => ({ num: p.num, name: p.name, position: p.position || '' }));
+    ss._rosterSeeded = true;
+  }
+
   // wrap: a DOM element to render into. statSheet: the data object (mutated
   // in place). readOnly: hide all editing controls.
   window.renderGameStatSheet = function renderGameStatSheet(wrap, statSheet, readOnly) {
     if (!wrap || !statSheet) return;
     const ss = statSheet;
+    if (!readOnly) seedRosterFromTeam(ss);
     const rerender = () => renderGameStatSheet(wrap, statSheet, readOnly);
 
     function rosterName(num) {
@@ -127,6 +151,22 @@
         nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
         form.appendChild(numInput); form.appendChild(nameInput); form.appendChild(addBtn);
         box.appendChild(form);
+
+        // Team roster grew after this game's roster was seeded (new player
+        // joined mid-season) -- offer to pull in anyone missing rather than
+        // making the coach retype them.
+        const team = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+        const missing = team.filter(t => !roster.some(r => String(r.num) === String(t.num)));
+        if (missing.length) {
+          const syncBtn = document.createElement('button');
+          syncBtn.type = 'button'; syncBtn.className = 'lbLinkBtn'; syncBtn.style.display = 'block'; syncBtn.style.marginTop = '4px';
+          syncBtn.textContent = `+ Add ${missing.length} player${missing.length === 1 ? '' : 's'} from team roster`;
+          syncBtn.addEventListener('click', () => {
+            missing.forEach(t => roster.push({ num: t.num, name: t.name, position: t.position || '' }));
+            rerender();
+          });
+          box.appendChild(syncBtn);
+        }
       }
       return box;
     }
@@ -164,8 +204,15 @@
           const cell = document.createElement('div');
           cell.className = 'attemptBox' + (cfg.allowFD && a.fd ? ' fd' : '') + (cfg.passingMode && !a.comp ? ' incomplete' : '');
           cell.textContent = cfg.passingMode && !a.comp ? '-' : (a.yds === '' || a.yds === null || a.yds === undefined ? '' : a.yds);
+          if (cfg.trackDirection && a.dir) {
+            cell.title = `${a.yds ?? 0} yds — ${a.dir}${a.fd ? ' — 1st down' : ''}`;
+            const tag = document.createElement('span');
+            tag.className = 'attemptBoxDirTag';
+            tag.textContent = a.dir[0];
+            cell.appendChild(tag);
+          }
           if (!readOnly && cfg.allowFD) {
-            cell.title = 'Tap to mark/unmark 1st down';
+            cell.title = (cell.title ? cell.title + ' — ' : '') + 'Tap to mark/unmark 1st down';
             cell.addEventListener('click', () => { a.fd = !a.fd; rerender(); });
           }
           boxesWrap.appendChild(cell);
@@ -178,15 +225,28 @@
           input.type = 'text';
           input.placeholder = cfg.passingMode ? 'Yds or -' : 'Yds';
           input.className = 'attemptAddInput';
+          let dirSelect = null;
+          if (cfg.trackDirection) {
+            dirSelect = document.createElement('select');
+            dirSelect.className = 'statsSmallBtn';
+            RUN_DIRECTIONS.forEach(d => {
+              const opt = document.createElement('option');
+              opt.value = d; opt.textContent = d;
+              if (d === (rowData._lastDir || 'Middle')) opt.selected = true;
+              dirSelect.appendChild(opt);
+            });
+          }
           function commitAttempt() {
             const raw = input.value.trim();
             if (raw === '') return;
+            const dir = dirSelect ? dirSelect.value : undefined;
+            if (dir) rowData._lastDir = dir;
             if (cfg.passingMode) {
               if (raw === '-') rowData.attempts.push({ yds: null, comp: false, fd: false });
               else { const n = Number(raw); if (!isNaN(n)) rowData.attempts.push({ yds: n, comp: true, fd: false }); }
             } else {
               const n = Number(raw);
-              if (!isNaN(n)) rowData.attempts.push({ yds: n, fd: false });
+              if (!isNaN(n)) rowData.attempts.push(dir ? { yds: n, fd: false, dir } : { yds: n, fd: false });
             }
             input.value = '';
             rerender();
@@ -202,7 +262,9 @@
           const rmRowBtn = document.createElement('button');
           rmRowBtn.type = 'button'; rmRowBtn.className = 'statsRmBtn'; rmRowBtn.textContent = '✕ Row';
           rmRowBtn.addEventListener('click', () => { rows.splice(rowIdx, 1); rerender(); });
-          addWrap.appendChild(input); addWrap.appendChild(addBtn); addWrap.appendChild(undoBtn); addWrap.appendChild(rmRowBtn);
+          addWrap.appendChild(input);
+          if (dirSelect) addWrap.appendChild(dirSelect);
+          addWrap.appendChild(addBtn); addWrap.appendChild(undoBtn); addWrap.appendChild(rmRowBtn);
           boxesWrap.appendChild(addWrap);
         }
         rowEl.appendChild(boxesWrap);
