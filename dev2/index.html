@@ -15,6 +15,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bengals">
+
+<!-- jsPDF: powers the live, on-demand "Save Sideline Playbook PDF" export
+     (js/playbook-pdf.js) -- generates straight from whatever's actually
+     loaded in the browser right now (same DATA, same renderCardDiagram/
+     renderSplitDiagram the Play Calls tab itself uses), so the PDF can
+     never drift out of sync with live coach edits the way the old
+     externally-synced static PDF did. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
   // Registers sw.js so the app qualifies for a full "Install app" / Add to
   // Home Screen prompt on Chrome (some Android versions require a service
@@ -671,7 +679,7 @@
     <h3>🔐 Coach Stats</h3>
     <div class="lbSub">Team-wide usage — not visible to players</div>
     <div id="adminStatsBody"><div class="lbEmpty">Loading…</div></div>
-    <a class="navBtn" id="adminPdfDownloadBtn" href="playbook/ASL_Bengals_Sideline_Playbook.pdf" download="ASL_Bengals_Sideline_Playbook.pdf" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:8px">📄 Save Sideline Playbook PDF</a>
+    <button class="navBtn" id="adminPdfDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📄 Save Sideline Playbook PDF</button>
     <button class="navBtn secondary lbCloseBtn" id="adminCloseBtn">Close</button>
   </div>
 </div>
@@ -739,7 +747,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816d';
+  const BUILD_V = '20260816e';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
@@ -769,7 +777,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

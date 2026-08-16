@@ -601,6 +601,15 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
 // this whole file is wrapped in an IIFE, so without this the bare name
 // isn't reachable from other scripts.
 window.buildSignalSequence = buildSignalSequence;
+// Exposed the same way, for the exact same reason -- js/playbook-pdf.js
+// (loaded after this file) generates the sideline PDF by calling these
+// SAME render functions off-screen against a hidden SVG stage, instead of
+// re-deriving the play geometry a second time in a different language. That
+// guarantees the PDF can never show routes that disagree with what Play
+// Calls itself is showing on screen, which a separate reimplementation
+// could always silently drift from.
+window.renderCardDiagram = renderCardDiagram;
+window.renderSplitDiagram = renderSplitDiagram;
 
 // ---- Render a card's diagram into its SVG stage ----
 function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {
