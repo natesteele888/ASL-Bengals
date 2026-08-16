@@ -49,6 +49,13 @@
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
   const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
 
+  // Nathan: "I also need to tag the game as something - for instance the
+  // Clinton game is a scrimmage and the Marlborough game is the jamboree."
+  // 'Regular Season' is the default and deliberately shown nowhere -- most
+  // games ARE that, so only the exceptions (scrimmages, jamborees,
+  // playoffs) get a visible tag.
+  const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff'];
+
   let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
@@ -237,7 +244,9 @@
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
+      const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       row.innerHTML = `
+        ${gameTypeTag}
         <span class="scheduleRowDate">${locLine}</span>
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
@@ -260,7 +269,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -268,6 +277,7 @@
     current.arriveTime = current.arriveTime || '';
     current.warmupTime = current.warmupTime || '';
     current.gameTime = current.gameTime || '';
+    current.gameType = GAME_TYPES.includes(current.gameType) ? current.gameType : 'Regular Season'; // older saved games predate this field
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
@@ -310,8 +320,10 @@
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
       const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${preGameTimesLine ? ' • ' + preGameTimesLine : ''}`;
+      const gameTypeTag = current.gameType && current.gameType !== 'Regular Season' ? `<div style="text-align:center;margin-bottom:8px;"><span class="scheduleGameTypeTag">${escapeHtml(current.gameType)}</span></div>` : '';
       return `
         <div class="scheduleDetailHero">
+          ${gameTypeTag}
           <div class="scheduleRowDate" style="text-align:center;margin-bottom:10px;">${topLine}</div>
           <div class="scheduleRowMatchup">
             <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
@@ -363,6 +375,8 @@
         <a id="schedMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
       </div>
       <div id="schedMapPreviewWrap" style="margin-bottom:8px;"></div>
+      <div class="lbSub" style="margin:0 0 4px;">Game type:</div>
+      <div class="gameplanPickerGrid" id="schedGameTypeGrid" style="margin-bottom:12px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
         <span class="lbSub" style="margin:0;">Final score:</span>
@@ -431,6 +445,16 @@
       chip.textContent = v;
       chip.addEventListener('click', () => { current.homeAway = v; renderDetail(); });
       haGrid.appendChild(chip);
+    });
+
+    const gtGrid = document.getElementById('schedGameTypeGrid');
+    GAME_TYPES.forEach(v => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'gameplanChip' + (current.gameType === v ? ' active' : '');
+      chip.textContent = v;
+      chip.addEventListener('click', () => { current.gameType = v; renderDetail(); });
+      gtGrid.appendChild(chip);
     });
   }
 
