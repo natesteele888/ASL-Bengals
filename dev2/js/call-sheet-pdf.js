@@ -1,16 +1,23 @@
 // ---------------------------------------------------------------------------
 // Call Sheet PDF -- a numbered play index, text only (no diagrams). Modeled
 // on a call sheet example Nathan shared: a plain numbered list of every
-// callable play, grouped by family, so a play can be called/logged by
-// number instead of only by name. Left-direction variants get odd numbers,
-// Right gets the next even number, mirroring the odd/even Left/Right
-// convention in the reference sheet.
+// callable base play, grouped by family, so a play can be called/logged by
+// number instead of only by name. Left gets odd numbers, Right gets the
+// next even number, mirroring the odd/even Left/Right convention in the
+// reference sheet.
 //
-// (An earlier version of this file also generated a second, situational
-// call sheet -- Nathan: "the situational call sheet can be scrapped" --
-// removed. If a situational sheet comes back later, it should be its own
-// deliberate design pass with real scouting/tendency input, not a
-// first-guess auto-fill.)
+// Design notes from Nathan's feedback:
+// - Read A/B (inside_zone's hasReadToggle) is something the ball carrier
+//   reads on the field after the snap, not something a coach calls -- so it
+//   is NOT its own numbered entry. One base number covers both reads.
+// - Motion and Boot are optional ADD-ONS layered onto a base call, not
+//   separate numbered plays of their own -- e.g. there's no separate "13 =
+//   Inside Zone Boot," just "1 = Inside Zone Left" plus "+ Boot" if the
+//   coach adds it. Each base row lists which add-ons are actually legal for
+//   it (Boot isn't available on every play -- see each play type's noBoot).
+// - Wing L/R is its own independent alignment call (which side #4 lines up
+//   on before the snap), not tied to which way the play runs -- listed in
+//   the add-on legend rather than baked into the base numbering.
 //
 // IMPORTANT: this app has no pre-existing play-numbering convention
 // (coaches call plays by hand signal, not a shouted number) -- the
@@ -18,58 +25,17 @@
 // ---------------------------------------------------------------------------
 (function () {
 
-  // Nathan: "the plays also need to be complete: Wing L/R or Split L/R -
-  // Motion (optional) - Play Call - Direction - Boot (optional)" -- builds
-  // the full spoken/signaled call as one string, in that exact order,
-  // rather than the old terse "Family • Boot" labels that left out which
-  // way the play actually goes.
-  function buildCallLabel({ familyText, direction, motion, boot }) {
-    const parts = [`Wing ${direction}`];
-    if (motion) parts.push('Motion');
-    parts.push(familyText);
-    parts.push(direction);
-    if (boot) parts.push('Boot');
-    return parts.join(' - ');
-  }
-
   function buildPlayNumberIndex(families) {
     let n = 1;
-    const rows = []; // { number, familyLabel, color, direction, name }
-    const FORCE_SINGLE_VARIANT = window.playbookForceSingleVariant || {};
-
+    const rows = []; // { number, familyLabel, color, direction, addOns: [] }
     families.forEach(fam => {
       const pt = window.DATA.playTypes.find(p => p.key === fam.key);
-      const hasRead = !!pt.hasReadToggle;
-      const forcedIo = FORCE_SINGLE_VARIANT[pt.key];
-      const hasIo = !!pt.hasInsideOutside && !forcedIo;
-      const noBoot = !!pt.noBoot;
-
-      const subVariants = hasRead ? [['A', 'Read A'], ['B', 'Read B']]
-        : hasIo ? [['Inside', 'Inside'], ['Outside', 'Outside']]
-        : [[null, null]];
-
-      subVariants.forEach(([, subLabel]) => {
-        const familyText = subLabel ? `${fam.label} ${subLabel}` : fam.label;
-        ['Left', 'Right'].forEach(direction => {
-          rows.push({
-            number: n++, familyLabel: fam.label, color: fam.color, direction,
-            name: buildCallLabel({ familyText, direction, motion: false, boot: false }),
-          });
-        });
-      });
-
-      if (!noBoot) {
-        ['Left', 'Right'].forEach(direction => {
-          rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction,
-            name: buildCallLabel({ familyText: fam.label, direction, motion: false, boot: true }) });
-        });
-      }
+      const addOns = ['Wing L/R', 'Motion'];
+      if (!pt.noBoot) addOns.push('Boot');
       ['Left', 'Right'].forEach(direction => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction,
-          name: buildCallLabel({ familyText: fam.label, direction, motion: true, boot: false }) });
+        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction, addOns });
       });
     });
-
     return rows;
   }
 
@@ -78,20 +44,18 @@
     const rows = [];
     families.forEach(fam => {
       ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side,
-          name: `Split ${side} - ${fam.label} Run` });
+        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} Run` });
       });
     });
     families.forEach(fam => {
       ['Left', 'Right'].forEach(side => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side,
-          name: `Split ${side} - ${fam.label} Pass Pro` });
+        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, side, name: `${fam.label} Pass Pro` });
       });
     });
     ['seattle', 'houston', 'florida', 'boston'].forEach(call => {
       ['Left', 'Right'].forEach(side => {
         rows.push({ number: n++, familyLabel: 'Route Call', color: '#1a6b6b', side,
-          name: `Split ${side} - ${call[0].toUpperCase()}${call.slice(1)}` });
+          name: `${call[0].toUpperCase()}${call.slice(1)}` });
       });
     });
     return rows;
@@ -109,14 +73,8 @@
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
 
     const families = window.playbookLiveFamilies();
-    // One combined, continuous list -- Shotgun rows, a Split Formation
-    // divider, then Split rows -- flowed together into columns so it
-    // doesn't force a page break just because the source is two arrays.
-    const rows = [
-      ...buildPlayNumberIndex(families),
-      { divider: true, label: 'Split Formation' },
-      ...buildSplitIndex(families),
-    ];
+    const baseRows = buildPlayNumberIndex(families);
+    const splitRows = buildSplitIndex(families);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
@@ -125,64 +83,127 @@
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor('#666666');
-    doc.text('Odd = Left, Even = Right within each pair.', MARGIN, MARGIN + 12);
+    doc.text('Odd = Left, Even = Right. Add-Ons are called alongside the number, not their own numbers.', MARGIN, MARGIN + 12);
 
+    // ==== BASE PLAYS table: Number | Play | Dir | Add-Ons ====
     const topY = MARGIN + 26;
-    const COLS = 3;
-    const COL_GAP = 14;
-    const COL_W = (USABLE_W - COL_GAP * (COLS - 1)) / COLS;
-    const ROW_H = 10.5;
-    const HEADER_H = 12;
-    const NUM_GUTTER = 20; // room for the number before the call text starts
+    const TABLE_W = USABLE_W * 0.62;
+    const NUM_W = 22, PLAY_W = TABLE_W * 0.42, DIR_W = 30, ADDON_W = TABLE_W - NUM_W - PLAY_W - DIR_W;
+    const ROW_H = 15, HEADER_H = 14;
 
-    // Fixed column-fill layout sized to fit one page: split the combined
-    // row list into COLS equal-ish chunks up front (rather than filling
-    // column 1 all the way before starting column 2), so a family header
-    // never gets stranded alone at the bottom of a column with its rows
-    // pushed to the next one.
-    const perCol = Math.ceil(rows.length / COLS);
+    let y = topY;
+    doc.setFillColor('#111111');
+    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor('#ffffff');
+    doc.text('#', MARGIN + 4, y + HEADER_H - 4);
+    doc.text('PLAY', MARGIN + NUM_W + 4, y + HEADER_H - 4);
+    doc.text('DIR', MARGIN + NUM_W + PLAY_W + 4, y + HEADER_H - 4);
+    doc.text('ADD-ONS AVAILABLE', MARGIN + NUM_W + PLAY_W + DIR_W + 4, y + HEADER_H - 4);
+    y += HEADER_H;
+
+    let curFamily = null;
+    baseRows.forEach(row => {
+      if (row.familyLabel !== curFamily) {
+        curFamily = row.familyLabel;
+        doc.setFillColor(row.color);
+        doc.rect(MARGIN, y, TABLE_W, 11, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.8);
+        doc.setTextColor('#ffffff');
+        doc.text(curFamily.toUpperCase(), MARGIN + 4, y + 8);
+        y += 11;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor('#111111');
+      doc.text(String(row.number), MARGIN + 4, y + ROW_H - 5);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(row.familyLabel, MARGIN + NUM_W + 4, y + ROW_H - 5);
+      doc.text(row.direction, MARGIN + NUM_W + PLAY_W + 4, y + ROW_H - 5);
+      doc.setFontSize(7.3);
+      doc.setTextColor('#555555');
+      doc.text(row.addOns.join(', '), MARGIN + NUM_W + PLAY_W + DIR_W + 4, y + ROW_H - 5);
+      doc.setDrawColor('#e5e5e5');
+      doc.setLineWidth(0.4);
+      doc.line(MARGIN, y + ROW_H, MARGIN + TABLE_W, y + ROW_H);
+      y += ROW_H;
+    });
+
+    // ==== ADD-ON LEGEND, to the right of the base table ====
+    const legendX = MARGIN + TABLE_W + 24;
+    const legendW = USABLE_W - TABLE_W - 24;
+    let ly = topY;
+    doc.setFillColor('#111111');
+    doc.rect(legendX, ly, legendW, HEADER_H, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor('#ffffff');
+    doc.text('ADD-ON CALLS', legendX + 4, ly + HEADER_H - 4);
+    ly += HEADER_H + 4;
+
+    const legend = [
+      ['Wing L/R', 'Sets which side #4 lines up on before the snap. Independent of which way the play runs — call it either side regardless of direction.'],
+      ['Motion', 'Sends the wing in motion to the opposite side just before the snap.'],
+      ['Boot', 'QB fakes the handoff and rolls out. Only legal on plays marked "Boot" in Add-Ons — not every play allows it.'],
+    ];
+    doc.setTextColor('#111111');
+    legend.forEach(([term, desc]) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.text(term, legendX, ly);
+      ly += 11;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.3);
+      doc.setTextColor('#555555');
+      const lines = doc.splitTextToSize(desc, legendW);
+      doc.text(lines, legendX, ly);
+      ly += lines.length * 9 + 8;
+      doc.setTextColor('#111111');
+    });
+
+    // ==== SPLIT FORMATION index, below the base table ====
+    y += 10;
+    if (y + HEADER_H + 30 > PAGE_H - MARGIN) { doc.addPage(); y = MARGIN; }
+    doc.setFillColor('#1a6b6b');
+    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor('#ffffff');
+    doc.text('SPLIT FORMATION', MARGIN + 4, y + HEADER_H - 4);
+    y += HEADER_H + 3;
+
+    const SPLIT_COLS = 2;
+    const SPLIT_COL_W = (TABLE_W - 12) / SPLIT_COLS;
+    const perCol = Math.ceil(splitRows.length / SPLIT_COLS);
     let idx = 0;
-
-    for (let col = 0; col < COLS; col++) {
-      const colX = MARGIN + col * (COL_W + COL_GAP);
-      let y = topY;
-      let curFamily = null;
-      const colRows = rows.slice(idx, idx + perCol);
+    for (let col = 0; col < SPLIT_COLS; col++) {
+      const colX = MARGIN + col * (SPLIT_COL_W + 12);
+      let cy = y;
+      let curFam = null;
+      const colRows = splitRows.slice(idx, idx + perCol);
       idx += perCol;
-
       colRows.forEach(row => {
-        if (row.divider) {
-          doc.setFillColor('#111111');
-          doc.rect(colX, y, COL_W, HEADER_H, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          doc.setTextColor('#ffffff');
-          doc.text(row.label.toUpperCase(), colX + 4, y + HEADER_H - 3);
-          y += HEADER_H;
-          curFamily = null;
-          return;
-        }
-        if (row.familyLabel !== curFamily) {
-          curFamily = row.familyLabel;
+        if (row.familyLabel !== curFam) {
+          curFam = row.familyLabel;
           doc.setFillColor(row.color);
-          doc.rect(colX, y, COL_W, HEADER_H, 'F');
+          doc.rect(colX, cy, SPLIT_COL_W, 10, 'F');
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
+          doc.setFontSize(6.5);
           doc.setTextColor('#ffffff');
-          doc.text(curFamily.toUpperCase(), colX + 4, y + HEADER_H - 3);
-          y += HEADER_H;
+          doc.text(curFam.toUpperCase(), colX + 3, cy + 7.5);
+          cy += 10;
         }
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor('#111111');
-        doc.text(String(row.number), colX + 4, y + ROW_H - 2.5);
+        doc.text(String(row.number), colX + 3, cy + 8);
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.2);
-        doc.text(row.name, colX + NUM_GUTTER, y + ROW_H - 2.5);
-        doc.setDrawColor('#e5e5e5');
-        doc.setLineWidth(0.4);
-        doc.line(colX, y + ROW_H, colX + COL_W, y + ROW_H);
-        y += ROW_H;
+        doc.setFontSize(6.8);
+        doc.text(`Split ${row.side} - ${row.name}`, colX + 20, cy + 8);
+        cy += 10.5;
       });
     }
 

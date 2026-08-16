@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260813c">
+<link rel="stylesheet" href="css/styles.css?v=20260816a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -755,7 +755,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816j';
+  const BUILD_V = '20260816k';
   const withV = (path) => `${path}?v=${BUILD_V}`;
 
   function loadScript(src){
