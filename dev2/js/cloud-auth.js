@@ -119,7 +119,15 @@
   window.signInWithGate = async function(kind, passwordHash){
     const email = GATE_EMAILS[kind];
     if(!email) throw new Error('Unknown gate kind: ' + kind);
-    let res = await fetch(SIGNIN_URL, {
+    // Try creating the account first, not signing in first. Newer Firebase
+    // projects have "email enumeration protection" on by default, which
+    // makes sign-in deliberately return the same vague error whether the
+    // account is missing or the password's wrong -- so branching on a
+    // specific sign-in error code (e.g. EMAIL_NOT_FOUND) isn't reliable
+    // any more. Account *creation*, on the other hand, always still
+    // reports EMAIL_EXISTS unambiguously when the account is already
+    // there, so that's the reliable signal to branch on instead.
+    let res = await fetch(SIGNUP_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
@@ -127,19 +135,18 @@
     if(!res.ok){
       const errBody = await res.json().catch(() => ({}));
       const code = errBody.error && errBody.error.message;
-      if(code === 'EMAIL_NOT_FOUND'){
-        // First time this gate has been used since this shipped -- create
-        // it now. Safe to do from the client: nobody can sign into it
-        // again afterward without reproducing this same hash, which
-        // means knowing the real code.
-        res = await fetch(SIGNUP_URL, {
+      if(code === 'EMAIL_EXISTS'){
+        // Not the first time -- this gate account already exists, so sign
+        // into it instead. If this fails too, the code the person typed
+        // really doesn't match what the account was created with.
+        res = await fetch(SIGNIN_URL, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
         });
-        if(!res.ok) throw new Error('Gate account setup failed: HTTP ' + res.status);
+        if(!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
       } else {
-        throw new Error('Gate sign-in failed: ' + (code || res.status));
+        throw new Error('Gate account setup failed: ' + (code || res.status));
       }
     }
     const data = await res.json();
