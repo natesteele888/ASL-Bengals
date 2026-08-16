@@ -39,8 +39,33 @@ function setMode(mode){
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
-  btn.addEventListener('click', ()=> setMode(btn.dataset.mode));
+  btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });
 });
+
+/* ============================================================
+   TOP-LEVEL SECTIONS -- Play (the sub-tab bar above, unchanged) vs This
+   Week, with room for more sections later (Nathan: "other coaches and
+   players tabs to come"). Only one of these two exists today, so This
+   Week has no sub-tabs of its own yet -- it's just the one page setMode()
+   already knows how to show.
+   ============================================================ */
+const topSectionsEl = document.getElementById('topSections');
+let lastPlaySubMode = 'study';
+function setSection(section){
+  if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
+  if (section === 'thisweek') {
+    modeTabsEl.style.display = 'none';
+    setMode('thisweek');
+  } else {
+    modeTabsEl.style.display = '';
+    setMode(lastPlaySubMode);
+  }
+}
+if (topSectionsEl) {
+  topSectionsEl.querySelectorAll('.modeBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=> setSection(btn.dataset.section));
+  });
+}
 
 let editPlaysUnlocked = false;
 let editPlaysInitialized = false;

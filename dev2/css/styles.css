@@ -78,7 +78,14 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 
-.modeTabs{position:sticky;top:63px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
+/* Top-level section switcher (Play / This Week / ...), sits above the
+   existing sub-tab bar -- both sticky, so #modeTabs' top offset is pushed
+   down by this bar's own height (~50px) to stack cleanly instead of
+   overlapping while scrolling. */
+.topSections{position:sticky;top:63px;z-index:280;display:flex;background:var(--bengal-black);border-bottom:2px solid var(--bengal-orange)}
+.topSections .modeBtn{color:rgba(255,255,255,.55)}
+.topSections .modeBtn.active{color:#fff;border-bottom-color:var(--bengal-orange)}
+.modeTabs{position:sticky;top:113px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
   background:none;cursor:pointer}

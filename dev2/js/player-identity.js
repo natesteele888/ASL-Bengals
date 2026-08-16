@@ -488,10 +488,13 @@
   if(thisweekMenuBtn){
     thisweekMenuBtn.addEventListener('click', () => {
       menuDropdown.classList.remove('show');
-      // setMode() is a top-level function in study-quiz.js (loaded before
-      // this file), same sharing pattern as FIREBASE_DB_URL -- reachable
-      // as a bare global from any later classic script on this page.
-      if(typeof setMode === 'function') setMode('thisweek');
+      // setSection() is a top-level function in study-quiz.js (loaded
+      // before this file), same sharing pattern as FIREBASE_DB_URL --
+      // reachable as a bare global from any later classic script on this
+      // page. Goes through the top-level section switcher (not setMode()
+      // directly) so the Play sub-tab bar hides and the top nav shows
+      // "This Week" as active, matching what a tap on that top tab does.
+      if(typeof setSection === 'function') setSection('thisweek');
     });
   }
   const studyGuideBtn = document.getElementById('studyGuideBtn');

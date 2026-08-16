@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816d">
+<link rel="stylesheet" href="css/styles.css?v=20260816e">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -195,13 +195,25 @@
   </div>
 </header>
 
+<!-- Nathan: "I dont want This Week to appear as another tab - we will need
+     to have a seperate top tab to choose between play tabs and this week
+     and other coaches and players tabs to come." -- a top-level section
+     switcher sits above the existing sub-tab bar now: "Play" (everything
+     that used to be the whole nav -- Study/Quiz/Timed/Play Calls/Play
+     Quiz/Edit) and "This Week", with room to add more top-level sections
+     later (a Schedule section, a Coach section, etc. -- see the app
+     roadmap) without any of them crowding into the Play sub-tabs. -->
+<div class="topSections" id="topSections">
+  <button class="modeBtn active" data-section="play"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
+  <button class="modeBtn" data-section="thisweek"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
+</div>
+
 <div class="modeTabs" id="modeTabs">
   <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
   <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
   <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
   <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
   <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
-  <button class="modeBtn" data-mode="thisweek" id="thisweekTabBtn"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
   <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
 </div>
 
@@ -791,7 +803,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816r';
+  const BUILD_V = '20260816s';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
