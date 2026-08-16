@@ -99,8 +99,13 @@
     if (words.length === 1) return words[0].replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '?';
     return (letter(words[0]) + letter(words[1])).toUpperCase();
   }
+  // Nathan: "can we do PNG logos for the teams instead of having them in
+  // the little circles? I would also like the logo to appear bigger."
+  // hasLogo drops the circle crop/background for real team PNGs (shown
+  // full via object-fit:contain in CSS) -- the colored-circle-with-
+  // initials look is now reserved for the no-logo-on-file fallback only.
   function bengalsBadgeHtml() {
-    return `<span class="scheduleTeamBadge"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
+    return `<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
   }
   function opponentLogoSrc(name) {
     const key = normalizeOpponentKey(name);
@@ -108,7 +113,7 @@
   }
   function opponentBadgeHtml(name) {
     const logo = opponentLogoSrc(name);
-    if (logo) return `<span class="scheduleTeamBadge"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
+    if (logo) return `<span class="scheduleTeamBadge hasLogo"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
     return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
   }
 
@@ -139,7 +144,10 @@
         const img = new Image();
         img.onerror = reject;
         img.onload = () => {
-          const max = 200;
+          // Bumped from 200 -> 320: logos now render at full size (not
+          // cropped into a small circle), so they need more source
+          // resolution to still look sharp at the bigger display size.
+          const max = 320;
           const scale = Math.min(1, max / Math.max(img.width, img.height));
           const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
           const canvas = document.createElement('canvas');

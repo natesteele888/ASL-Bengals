@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260817b">
+<link rel="stylesheet" href="css/styles.css?v=20260817d">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -882,7 +882,7 @@
      positioning." Opened via window.showPlayerProfile(num) from a roster
      row or a leaderboard name -- see js/player-profile.js. -->
 <div class="lbOverlay" id="playerProfileOverlay">
-  <div class="lbCard">
+  <div class="lbCard lbCardCool playerCardModal">
     <div id="playerProfileBody"><div class="lbEmpty">Loading…</div></div>
     <button class="navBtn secondary lbCloseBtn" id="playerProfileCloseBtn">Close</button>
   </div>
@@ -1020,7 +1020,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817j';
+  const BUILD_V = '20260817l';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
