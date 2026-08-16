@@ -313,6 +313,24 @@
     });
 
     stageWrap.remove();
+
+    // Nathan: "the newest one is now showing the plays correctly" -- wants
+    // a build number stamped on the PDF itself so a printed sheet can be
+    // matched back to the app build that generated it (same BUILD_V shown
+    // on the login screen and Coach Stats panel), rather than having to
+    // trust that whatever's on paper is current. Stamped on every page,
+    // bottom-right, small -- won't compete with the diagrams but survives
+    // if pages get separated/printed individually on the sideline.
+    const buildLabel = window.BUILD_V ? `ASL Bengals Sideline Playbook — Build ${window.BUILD_V}` : 'ASL Bengals Sideline Playbook';
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pageCount; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor('#999999');
+      doc.text(`${buildLabel} · Page ${p}/${pageCount}`, PAGE_W - MARGIN, PAGE_H - 5, { align: 'right' });
+    }
+
     return doc;
   }
 

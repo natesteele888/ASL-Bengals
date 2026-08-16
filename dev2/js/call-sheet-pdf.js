@@ -186,6 +186,18 @@
       doc.setTextColor('#111111');
     });
 
+    // Same build stamp as the Sideline Playbook PDF, so a printed call
+    // sheet can be matched back to the app build that generated it.
+    const buildLabel = window.BUILD_V ? `ASL Bengals Call Sheet — Build ${window.BUILD_V}` : 'ASL Bengals Call Sheet';
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pageCount; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor('#999999');
+      doc.text(`${buildLabel} · Page ${p}/${pageCount}`, PAGE_W - MARGIN, PAGE_H - 5, { align: 'right' });
+    }
+
     return doc;
   }
 
