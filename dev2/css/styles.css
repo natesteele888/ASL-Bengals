@@ -1292,5 +1292,25 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] #playcallsquizMode select { background: var(--paper); color: var(--ink); border-color: var(--line); }
 #editPlaysMode .action-btn { flex: none; padding: 9px 18px; }
 #editPlaysMode .action-row { width: auto; }
+
+/* ---- This Week (3 Keys + featured plays) ---- */
+.thisweekKeysBox { max-width: 600px; margin: 14px auto; background: var(--card); border: 2px solid var(--bengal-orange); border-radius: 12px; padding: 14px 18px; }
+.thisweekKeysTitle { font-weight: 900; font-size: 14px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
+.thisweekKeysList { margin: 0; padding-left: 22px; }
+.thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
+.thisweekKeyInput { display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 2px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+.thisweekKeyInput:focus { border-color: var(--bengal-orange); outline: none; }
+.gameplanCardsGrid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 960px; margin: 0 auto; padding: 0 10px; }
+.gameplanCard { width: 220px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.gameplanCardLabel { font-size: 10.5px; font-weight: 800; text-align: center; padding: 6px 4px; text-transform: uppercase; letter-spacing: .02em; }
+.gameplanCardSvg { display: block; width: 100%; height: auto; background: #fff; }
+.gameplanPickerGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.gameplanChip { border: 2px solid var(--chip-color, var(--line)); background: #fff; color: var(--chip-color, var(--ink)); border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
+[data-theme="dark"] .thisweekKeysBox { background: var(--card); }
+[data-theme="dark"] .thisweekKeysList li { color: var(--ink); }
+[data-theme="dark"] .gameplanCard { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .thisweekKeyInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .gameplanChip { background: var(--paper); }
   }
 

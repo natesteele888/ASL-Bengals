@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260816c">
+<link rel="stylesheet" href="css/styles.css?v=20260816d">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -65,6 +65,7 @@
     <div class="playerMenuWrap" id="playerMenuWrap">
       <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span></button>
       <div class="playerMenuDropdown" id="playerMenuDropdown">
+        <button id="thisweekMenuBtn">🎯 This Week</button>
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
         <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
@@ -200,7 +201,42 @@
   <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
   <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
   <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
+  <button class="modeBtn" data-mode="thisweek" id="thisweekTabBtn"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
   <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
+</div>
+
+<!-- Nathan: "when a coach logs in, they can click their profile and choose
+     gameplan. They can write in a focus for the offense then choose 5-15
+     plays that will appear... featured or very important to the game plan."
+     Then, mid-build: "coaches should be able to click their profile name and
+     go to 'This Week' and they can add their 3 Keys to the week for all
+     players to see." -- so the focus text became a structured "3 Keys"
+     list, and it's reachable both from the main nav tab above and from the
+     profile dropdown (see playerMenuDropdown below). One shared team page
+     (not per-coach) -- any coach can edit it, every signed-in player/coach
+     sees the same "This Week" section. Editing controls (the 3 Keys inputs
+     + play picker) only show for a coach session; everyone else sees a
+     read-only view of whatever's currently saved. -->
+<div id="thisweekMode" class="modePanel">
+  <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
+    No keys or featured plays set for this week yet.
+  </div>
+  <div id="thisweekKeysBox" class="thisweekKeysBox" style="display:none;">
+    <div class="thisweekKeysTitle">🔑 3 Keys This Week</div>
+    <ol id="thisweekKeysList" class="thisweekKeysList"></ol>
+  </div>
+  <div class="gameplanCardsGrid" id="thisweekCardsGrid"></div>
+
+  <div id="thisweekEditSection" style="display:none;max-width:900px;margin:22px auto 0;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">🔐 Coach editing — the inputs below aren't visible to players, only the result above is</div>
+    <input type="text" id="thisweekKeyInput0" class="thisweekKeyInput" maxlength="80" placeholder="Key #1 (e.g. &quot;Win the edge on outside runs&quot;)">
+    <input type="text" id="thisweekKeyInput1" class="thisweekKeyInput" maxlength="80" placeholder="Key #2">
+    <input type="text" id="thisweekKeyInput2" class="thisweekKeyInput" maxlength="80" placeholder="Key #3">
+    <div id="thisweekPickerCount" class="lbSub" style="margin:14px 0 6px;text-align:center;">Featured plays</div>
+    <div class="gameplanPickerGrid" id="thisweekPickerGrid"></div>
+    <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
+    <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
 </div>
 
 <div id="editPlaysMode" class="modePanel">
@@ -755,7 +791,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260816q';
+  const BUILD_V = '20260816r';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -799,7 +835,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/thisweek.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

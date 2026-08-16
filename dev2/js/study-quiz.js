@@ -19,6 +19,7 @@ const timedModeEl = document.getElementById('timedMode');
 const playcallsModeEl = document.getElementById('playcallsMode');
 const playcallsquizModeEl = document.getElementById('playcallsquizMode');
 const editPlaysModeEl = document.getElementById('editPlaysMode');
+const thisweekModeEl = document.getElementById('thisweekMode');
 function setMode(mode){
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   studyModeEl.classList.toggle('show', mode==='study');
@@ -27,6 +28,7 @@ function setMode(mode){
   playcallsModeEl.classList.toggle('show', mode==='playcalls');
   playcallsquizModeEl.classList.toggle('show', mode==='playcallsquiz');
   editPlaysModeEl.classList.toggle('show', mode==='editplays');
+  if (thisweekModeEl) thisweekModeEl.classList.toggle('show', mode==='thisweek');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -34,6 +36,7 @@ function setMode(mode){
   if(mode==='timed' && typeof timedBuildQuiz === 'function') timedBuildQuiz();
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
   if(mode==='editplays') openEditPlaysGated();
+  if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> setMode(btn.dataset.mode));

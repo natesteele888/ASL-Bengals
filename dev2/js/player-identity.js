@@ -484,6 +484,16 @@
       openPositionPicker(session, { isFirstAsk: false });
     });
   }
+  const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
+  if(thisweekMenuBtn){
+    thisweekMenuBtn.addEventListener('click', () => {
+      menuDropdown.classList.remove('show');
+      // setMode() is a top-level function in study-quiz.js (loaded before
+      // this file), same sharing pattern as FIREBASE_DB_URL -- reachable
+      // as a bare global from any later classic script on this page.
+      if(typeof setMode === 'function') setMode('thisweek');
+    });
+  }
   const studyGuideBtn = document.getElementById('studyGuideBtn');
   if(studyGuideBtn){
     studyGuideBtn.addEventListener('click', () => {
