@@ -137,6 +137,55 @@
     return { svg, wrap };
   }
 
+  // Nathan: "the play calls do not show the correct running movements...
+  // For inside zone, it should be a convex curve going into the line but
+  // it's showing concave." play-calls.js builds every curved route as a
+  // plain SVG quadratic path (`M x y Q cx cy ex ey`, or a couple of those
+  // chained) -- correct on screen, but svg2pdf.js is mis-drawing the
+  // curvature of that same "Q" command once it's converted to native PDF
+  // vector content (getting the right start/end points but the wrong bulge
+  // direction). Rather than fight that library's curve support, this
+  // manually flattens every Q segment into a run of short straight
+  // line-to's using the actual quadratic Bezier formula, right before
+  // handing the stage to doc.svg() -- a many-segment polyline reads as a
+  // smooth curve at print size, and there's no "Q" left for svg2pdf.js to
+  // misinterpret.
+  const CURVE_STEPS = 22;
+  function flattenPathD(d) {
+    const tokens = d.trim().match(/[MLQ][^MLQ]*/g) || [];
+    let cur = null;
+    const out = [];
+    tokens.forEach(tok => {
+      const cmd = tok[0];
+      const nums = tok.slice(1).trim().split(/[\s,]+/).filter(Boolean).map(Number);
+      if (cmd === 'M') {
+        cur = [nums[0], nums[1]];
+        out.push(`M ${nums[0]} ${nums[1]}`);
+      } else if (cmd === 'L') {
+        cur = [nums[0], nums[1]];
+        out.push(`L ${nums[0]} ${nums[1]}`);
+      } else if (cmd === 'Q') {
+        const [cx, cy, ex, ey] = nums;
+        const p0 = cur;
+        for (let i = 1; i <= CURVE_STEPS; i++) {
+          const t = i / CURVE_STEPS;
+          const mt = 1 - t;
+          const x = mt * mt * p0[0] + 2 * mt * t * cx + t * t * ex;
+          const y = mt * mt * p0[1] + 2 * mt * t * cy + t * t * ey;
+          out.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`);
+        }
+        cur = [ex, ey];
+      }
+    });
+    return out.join(' ');
+  }
+  function flattenStageCurves(stage) {
+    stage.querySelectorAll('path').forEach(p => {
+      const d = p.getAttribute('d');
+      if (d && d.indexOf('Q') !== -1) p.setAttribute('d', flattenPathD(d));
+    });
+  }
+
   // Shared by call-sheet-pdf.js too, so both documents always agree on
   // which families/colors exist in the live data.
   function liveFamilies() {
@@ -158,17 +207,16 @@
     const { jsPDF } = window.jspdf;
     const [VW, VH] = window.DATA.viewBox;
 
-    // ---- Layout (points), same proportions as the old print layout, but
-    // bigger cards -- Nathan: "expand the PDF so the play image cards are a
-    // little bigger on the page so they can be referenced but not used all
-    // the time" (i.e. this is now a reference booklet, not the primary
-    // sideline quick-call tool -- see the new Call Sheet PDF for that).
-    // 3-per-row instead of 4 gives each diagram ~28% more linear size.
+    // ---- Layout (points) -- Nathan first asked for bigger cards, then
+    // "the images are a little too big" and "the margins on the pdf are too
+    // big" once he saw the result. This splits the difference: slimmer page
+    // margins (more usable width) and a more moderate card size than the
+    // first attempt, still noticeably bigger than the original 180pt cards.
     const PAGE_W = 792, PAGE_H = 612; // landscape letter
-    const MARGIN = 22, COLS = 3, CELL_GAP = 10, CELL_W = 230;
+    const MARGIN = 14, COLS = 3, CELL_GAP = 8, CELL_W = 196;
     const CELL_H = CELL_W * (VH / VW);
-    const LABEL_H = 14, ROW_H = LABEL_H + CELL_H;
-    const SECTION_HEADER_H = 15, SECTION_GAP = 6, ROW_GAP = 4;
+    const LABEL_H = 12, ROW_H = LABEL_H + CELL_H;
+    const SECTION_HEADER_H = 14, SECTION_GAP = 5, ROW_GAP = 3;
     const USABLE_W = PAGE_W - 2 * MARGIN;
     const GRID_W = COLS * CELL_W + (COLS - 1) * CELL_GAP;
     const GRID_X0 = MARGIN + (USABLE_W - GRID_W) / 2;
@@ -219,6 +267,7 @@
       doc.text(label, cellX0 + CELL_W / 2, rowTopY + LABEL_H - 3, { align: 'center' });
       const diagramY = rowTopY + LABEL_H;
       renderFn();
+      flattenStageCurves(stage);
       // Draws the LIVE stage SVG element directly into the PDF as vector
       // content -- no serialize/rasterize round trip, so nothing about how
       // it's hidden on the page or how it gets re-parsed can go wrong.
