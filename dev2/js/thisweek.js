@@ -113,14 +113,28 @@
   function buildWeekAheadText(games, practices) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const end = new Date(today);
-    end.setDate(end.getDate() + 6);
+    // Nathan: "Football typically has Sunday as part of the prior weekdays
+    // as prep. Monday through Sunday is the typical week." A plain
+    // "today through today+6" rolling window doesn't match that -- viewed
+    // on, say, a Wednesday, it spills a game on the following Tuesday into
+    // "this week" while still correctly catching Sunday; but viewed later
+    // in the week it can just as easily miss a Sunday game that's clearly
+    // still part of the current football week. Anchor explicitly to the
+    // most recent Monday through the following Sunday instead, so Sunday
+    // always counts as the close of *this* week no matter what day of the
+    // week this renders on.
+    const dow = today.getDay(); // 0=Sun..6=Sat
+    const mondayOffset = (dow + 6) % 7; // days since most recent Monday
+    const start = new Date(today);
+    start.setDate(start.getDate() - mondayOffset);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6); // Sunday
     const toDateOnly = (dateStr) => {
       const parts = (dateStr || '').split('-').map(Number);
       if (parts.length !== 3 || parts.some(isNaN)) return null;
       return new Date(parts[0], parts[1] - 1, parts[2]);
     };
-    const inWindow = (d) => d && d >= today && d <= end;
+    const inWindow = (d) => d && d >= start && d <= end;
     const weekdayShort = (d) => d.toLocaleDateString(undefined, { weekday: 'short' });
     const weekdayFull = (d) => d.toLocaleDateString(undefined, { weekday: 'long' });
 
@@ -140,7 +154,7 @@
     practiceEntries.sort((a, b) => a.d - b.d);
 
     if (!gameEntries.length && !practiceEntries.length) {
-      return 'Nothing on the Schedule for the next 7 days yet -- once games or practices are added, they’ll show up here.';
+      return 'Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they’ll show up here.';
     }
 
     const record = bengalsRecord(games);
