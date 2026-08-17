@@ -67,11 +67,49 @@
     return `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.date ? ' — ' + g.date : ''}`;
   }
 
-  // Nathan: "can we incorporate an AI generated look ahead for the team?
-  // Would be nice to be a little write up of the week ahead." Composed
-  // straight from Schedule's own games/practices in the next 7 days --
-  // see the index.html comment above #thisweekAheadBox for why this is a
-  // template instead of a live LLM call on a static, key-less site.
+  function resultFor(g) {
+    if (g.ourScore === null || g.ourScore === undefined || g.oppScore === null || g.oppScore === undefined || g.ourScore === '' || g.oppScore === '') return null;
+    const us = Number(g.ourScore), them = Number(g.oppScore);
+    if (isNaN(us) || isNaN(them)) return null;
+    if (us > them) return 'W'; if (us < them) return 'L'; return 'T';
+  }
+  // Same record math as js/schedule.js's bengalsRecord() -- duplicated
+  // locally rather than reaching into that file's closure.
+  function bengalsRecord(list) {
+    let w = 0, l = 0, t = 0;
+    (list || []).forEach(g => {
+      const r = resultFor(g);
+      if (r === 'W') w++; else if (r === 'L') l++; else if (r === 'T') t++;
+    });
+    if (w + l + t === 0) return '';
+    return t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
+  }
+  // Same fix as js/schedule.js/js/practices.js -- Game Time is a native
+  // time picker storing 24hr "HH:MM"; this displays it as "6:00 PM".
+  function to12h(str) {
+    if (!str) return '';
+    const m = str.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return str;
+    let h = Number(m[1]);
+    const min = m[2];
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${min} ${ap}`;
+  }
+  function joinList(items) {
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return items.join(' and ');
+    return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1];
+  }
+
+  // Nathan: "can we incorporate an AI generated look ahead for the team?"
+  // then, after seeing a first pass: "week ahead write up is a little
+  // weak, need more to it, written more like the game preview." Rewritten
+  // to give each game its own full sentence (matchup, type, time,
+  // location) the same way js/schedule.js's buildGamePreviewText does,
+  // instead of a bare "Wed Scrimmage @ Clinton" list. Still fully
+  // template-composed from Schedule's own data -- see the index.html
+  // comment above #thisweekAheadBox for why (static, key-less site).
   function buildWeekAheadText(games, practices) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -84,37 +122,59 @@
     };
     const inWindow = (d) => d && d >= today && d <= end;
     const weekdayShort = (d) => d.toLocaleDateString(undefined, { weekday: 'short' });
+    const weekdayFull = (d) => d.toLocaleDateString(undefined, { weekday: 'long' });
 
-    const entries = [];
+    const gameEntries = [];
+    const practiceEntries = [];
     (games || []).forEach(g => {
       const d = toDateOnly(g.date);
       if (!inWindow(d)) return;
-      const tag = g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'Game';
-      entries.push({ d, kind: 'game', text: `${tag} ${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}` });
+      gameEntries.push({ d, g });
     });
     (practices || []).forEach(p => {
       const d = toDateOnly(p.date);
       if (!inWindow(d)) return;
-      entries.push({ d, kind: p.type === 'film' ? 'film' : 'practice', text: p.type === 'film' ? 'Film Night' : 'Practice' });
+      practiceEntries.push({ d, p });
     });
-    entries.sort((a, b) => a.d - b.d);
+    gameEntries.sort((a, b) => a.d - b.d);
+    practiceEntries.sort((a, b) => a.d - b.d);
 
-    if (!entries.length) return 'Nothing on the Schedule for the next 7 days yet -- once games or practices are added, they’ll show up here.';
+    if (!gameEntries.length && !practiceEntries.length) {
+      return 'Nothing on the Schedule for the next 7 days yet -- once games or practices are added, they’ll show up here.';
+    }
 
-    const clauses = entries.map(e => `${weekdayShort(e.d)} ${e.text}`);
-    let joined;
-    if (clauses.length === 1) joined = clauses[0];
-    else if (clauses.length === 2) joined = clauses.join(' and ');
-    else joined = clauses.slice(0, -1).join(', ') + ', and ' + clauses[clauses.length - 1];
+    const record = bengalsRecord(games);
+    const recordPart = record ? ` (${record})` : '';
+    const practiceCount = practiceEntries.filter(e => e.p.type !== 'film').length;
+    const filmCount = practiceEntries.length - practiceCount;
 
-    const gameCount = entries.filter(e => e.kind === 'game').length;
-    const practiceCount = entries.length - gameCount;
-    const parts = [];
-    if (practiceCount) parts.push(`${practiceCount} practice${practiceCount !== 1 ? 's' : ''}`);
-    if (gameCount) parts.push(`${gameCount} game${gameCount !== 1 ? 's' : ''}`);
-    const tail = parts.length ? ` ${parts.join(' and ')} on the schedule -- be ready.` : '';
+    const sentences = [];
 
-    return `This week: ${joined}.${tail}`;
+    // Opening line -- what's on tap this week, at a glance.
+    const openParts = [];
+    if (gameEntries.length) openParts.push(`${gameEntries.length} game${gameEntries.length !== 1 ? 's' : ''}`);
+    if (practiceCount) openParts.push(`${practiceCount} practice${practiceCount !== 1 ? 's' : ''}`);
+    if (filmCount) openParts.push(`${filmCount} film night${filmCount !== 1 ? 's' : ''}`);
+    sentences.push(`The Bengals${recordPart} have ${openParts.length ? joinList(openParts) : 'nothing new'} on tap this week.`);
+
+    // Practice/film-night days, grouped into one line rather than a
+    // sentence per day.
+    const practiceDays = practiceEntries.filter(e => e.p.type !== 'film').map(e => weekdayShort(e.d));
+    const filmDays = practiceEntries.filter(e => e.p.type === 'film').map(e => weekdayShort(e.d));
+    if (practiceDays.length) sentences.push(`Practice is set for ${joinList(practiceDays)}${filmDays.length ? `, with film night on ${joinList(filmDays)}` : ''}.`);
+    else if (filmDays.length) sentences.push(`Film night is on ${joinList(filmDays)}.`);
+
+    // One full sentence per game, same voice as the Game Preview on each
+    // game's own Schedule page.
+    gameEntries.forEach(({ d, g }) => {
+      const verb = g.homeAway === 'Away' ? 'travel to face' : 'host';
+      const typeWord = g.gameType === 'Playoff' ? 'Playoff game' : (g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'game');
+      const timeStr = g.gameTime ? ` at ${to12h(g.gameTime)}` : '';
+      const locPart = g.location ? ` at ${g.location}` : '';
+      sentences.push(`On ${weekdayFull(d)}, the Bengals ${verb} ${g.opponent || 'TBD'} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord}${timeStr}${locPart}.`);
+    });
+
+    return sentences.join(' ');
   }
 
   function renderWeekAhead() {

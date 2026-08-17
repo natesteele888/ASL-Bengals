@@ -153,13 +153,23 @@
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'practiceRow';
+      const weatherId = `practiceRowWeather-${p.id}`;
       row.innerHTML = `
-        <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
-        <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
+        <div class="practiceRowTop">
+          <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
+          <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
+          <span class="practiceRowWeather" id="${weatherId}" style="display:none;"></span>
+        </div>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
         ${p.notes ? `<span class="practiceRowNotes">${escapeHtml(p.notes)}</span>` : ''}`;
       row.addEventListener('click', () => openDetail(p.id));
       listEl.appendChild(row);
+      // Nathan: "let's add the weather to the right side of the practice
+      // cards." Compact chip (icon + temp only, no place/precip text --
+      // list rows are tight on space) fired per row after it's in the DOM.
+      if (window.loadCompactWeatherInto) {
+        window.loadCompactWeatherInto(document.getElementById(weatherId), p.location, p.date, p.time);
+      }
     });
   }
 

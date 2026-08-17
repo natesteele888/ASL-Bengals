@@ -226,7 +226,77 @@
       seriesPart = ' This is the first meeting between these two teams this season.';
     }
 
-    return `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${seriesPart}`;
+    const base = `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${seriesPart}`;
+    const statsText = teamLeadersAndAveragesText(allGames);
+    return statsText ? `${base} ${statsText}` : base;
+  }
+
+  // Nathan: "Game previews should have team leaders and team stat averages
+  // that we have available." Reuses the exact same aggregation Coach
+  // Tools > Stats' leaderboard uses (window.computeGamePlayerStats, plus
+  // js/game-stats-editor.js's normalize/hasAnything helpers) rather than a
+  // second copy of that math -- this file just re-runs it locally since
+  // coachtools-stats.js keeps its own season aggregate private to its
+  // closure.
+  function teamSeasonAggregate(allGames) {
+    const CATS = [
+      { key: 'rushYds', label: 'rushing yards' }, { key: 'passYds', label: 'passing yards' },
+      { key: 'recYds', label: 'receiving yards' }, { key: 'koYds', label: 'kickoff yards' },
+    ];
+    const byNum = {};
+    const playedGames = [];
+    if (!window.computeGamePlayerStats || !window.normalizeGameStatSheet || !window.gameStatSheetHasAnything) {
+      return { byNum, playedGames, CATS };
+    }
+    (allGames || []).forEach(g => {
+      if (!g.statSheet) return;
+      const norm = window.normalizeGameStatSheet(g.statSheet);
+      if (!window.gameStatSheetHasAnything(norm)) return;
+      playedGames.push(g);
+      const perGame = window.computeGamePlayerStats(g.statSheet);
+      Object.values(perGame).forEach(rec => {
+        if (!byNum[rec.num]) byNum[rec.num] = { num: rec.num, name: rec.name, rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, int: 0, pbu: 0, sacks: 0 };
+        const agg = byNum[rec.num];
+        if (rec.name && !agg.name) agg.name = rec.name;
+        ['rushYds', 'passYds', 'recYds', 'koYds', 'tackles', 'int', 'pbu', 'sacks'].forEach(k => { agg[k] += rec[k] || 0; });
+      });
+    });
+    return { byNum, playedGames, CATS };
+  }
+  function formatNum(n) {
+    const v = Number(n) || 0;
+    return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  }
+  function teamLeadersAndAveragesText(allGames) {
+    const { byNum, playedGames, CATS } = teamSeasonAggregate(allGames);
+    const players = Object.values(byNum);
+    if (!players.length || !playedGames.length) return '';
+
+    // Lead with whichever offensive category the team has actually put up
+    // the most total yards in this season -- e.g. a run-heavy team gets a
+    // rushing leader/average called out, a pass-heavy team gets passing.
+    const offenseTotals = CATS.filter(c => c.key !== 'koYds').map(c => ({ ...c, total: players.reduce((s, p) => s + p[c.key], 0) }));
+    const topOffense = offenseTotals.sort((a, b) => b.total - a.total)[0];
+
+    const leaderLines = [];
+    if (topOffense && topOffense.total > 0) {
+      const leader = players.slice().sort((a, b) => b[topOffense.key] - a[topOffense.key])[0];
+      if (leader && leader[topOffense.key] > 0) {
+        leaderLines.push(`#${leader.num}${leader.name ? ' ' + escapeHtml(leader.name) : ''} leads the team in ${topOffense.label} (${formatNum(leader[topOffense.key])}).`);
+      }
+    }
+    const tacklesLeader = players.slice().sort((a, b) => b.tackles - a.tackles)[0];
+    if (tacklesLeader && tacklesLeader.tackles > 0) {
+      leaderLines.push(`#${tacklesLeader.num}${tacklesLeader.name ? ' ' + escapeHtml(tacklesLeader.name) : ''} leads the defense with ${formatNum(tacklesLeader.tackles)} tackles.`);
+    }
+
+    const avgParts = [];
+    if (topOffense && topOffense.total > 0) avgParts.push(`${formatNum(topOffense.total / playedGames.length)} ${topOffense.label}`);
+    const totalTackles = players.reduce((s, p) => s + p.tackles, 0);
+    if (totalTackles > 0) avgParts.push(`${formatNum(totalTackles / playedGames.length)} tackles`);
+    const avgLine = avgParts.length ? ` The Bengals are averaging ${avgParts.join(' and ')} per game this season.` : '';
+
+    return `${leaderLines.join(' ')}${avgLine}`.trim();
   }
 
   function renderGamePreview() {
@@ -460,7 +530,6 @@
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
-          <div class="lbSub" style="margin-top:8px;text-align:left;">Auto-generated from Schedule data</div>
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div class="lbSub" style="margin-bottom:6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
@@ -474,7 +543,8 @@
         <div class="lbSectionHeader" style="margin-top:16px;">🔎 Scouting Report</div>
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
-        <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>`;
+        <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
+        <div class="scheduleFinePrint">Game Preview is auto-generated from this game's Schedule info.</div>`;
       wireAddToCalendar();
       loadLinkedGamePlan();
       renderGamePreview();
@@ -488,7 +558,6 @@
       <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
         <div class="thisweekKeysTitle">📰 Game Preview</div>
         <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
-        <div class="lbSub" style="margin-top:8px;text-align:left;">Auto-generated from Schedule data -- updates once you save opponent/date/etc.</div>
       </div>
       <div id="schedWeatherWrap" style="display:none;"></div>
       <input type="text" id="schedOpponent" placeholder="Opponent" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:8px;">
@@ -523,7 +592,8 @@
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
-      <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>`;
+      <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>
+      <div class="scheduleFinePrint">Game Preview is auto-generated -- updates once you save.</div>`;
 
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedDate').value = current.date || '';
