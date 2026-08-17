@@ -155,6 +155,16 @@
     const name = rosterEntry ? rosterEntry.name : '';
     const position = rosterEntry ? rosterEntry.position : '';
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    // Nathan: "give the parent the option to update their kid's player
+    // card info" -- a parent who has linked this specific player as their
+    // child (session.childRosterIds, set via the My Child picker) can
+    // edit the same photo/height/weight/grade fields a coach can, but
+    // only for that one linked child, not the whole roster.
+    const rosterId = rosterEntry && rosterEntry.id;
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
+    const isLinkedParent = !!(window.isParentSession && session && rosterId &&
+      Array.isArray(session.childRosterIds) && session.childRosterIds.includes(rosterId));
+    const canEdit = approved || isLinkedParent;
     const p = profile || {};
 
     const totals = blankTotals();
@@ -194,7 +204,7 @@
       </div>`;
     body.appendChild(head);
 
-    if (approved) {
+    if (canEdit) {
       const editSlot = head.querySelector('#playerCardEditSlot');
       if (!editing) {
         const toggle = document.createElement('button');
