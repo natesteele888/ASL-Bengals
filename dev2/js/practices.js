@@ -59,6 +59,32 @@
   function typeInfo(type) {
     return TYPES.find(t => t.key === type) || TYPES[0];
   }
+  // Same fix as js/schedule.js -- see the comment there. Practice Time used
+  // to be free text too, which is why it could silently fail to parse and
+  // land as an all-day .ics event.
+  function to24h(str) {
+    if (!str) return '';
+    const s = str.trim().toLowerCase();
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+    if (!m) return '';
+    let h = Number(m[1]);
+    const min = m[2] ? Number(m[2]) : 0;
+    const ap = m[3];
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23 || min > 59) return '';
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+  function to12h(str) {
+    if (!str) return '';
+    const m = str.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return str;
+    let h = Number(m[1]);
+    const min = m[2];
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${min} ${ap}`;
+  }
 
   // ---- Cloud load/save ----
   function loadItems() {
@@ -114,7 +140,7 @@
       row.className = 'practiceRow';
       row.innerHTML = `
         <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
-        <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(p.time) : ''}</span>
+        <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(to12h(p.time)) : ''}</span>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
         ${p.notes ? `<span class="practiceRowNotes">${escapeHtml(p.notes)}</span>` : ''}`;
       row.addEventListener('click', () => openDetail(p.id));
@@ -158,7 +184,7 @@
       // ---- Read-only view ----
       body.innerHTML = `
         <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
-        <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(current.time) : ''}</div>
+        <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(to12h(current.time)) : ''}</div>
         <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<div style="text-align:center;"><a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a></div><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
@@ -180,7 +206,8 @@
       <div class="gameplanPickerGrid" id="practiceTypeGrid" style="margin-bottom:12px;"></div>
       ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button> &middot; <button type="button" class="lbLinkBtn" id="practiceDuplicateBtn">⧉ Duplicate</button></div>` : ''}
       <input type="date" id="practiceDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
-      <input type="text" id="practiceTime" placeholder="Time (e.g. 6:00 PM)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <div class="lbSub" style="margin:0 0 3px;">Time</div>
+      <input type="time" id="practiceTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:4px;">
         <input type="text" id="practiceLocation" placeholder="Address (e.g. Fuller Field, Clinton MA)" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <a id="practiceMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
@@ -198,7 +225,7 @@
       <textarea id="practiceNotes" placeholder="e.g. &quot;Bring cleats and water, meet at the fieldhouse&quot;" style="width:100%;min-height:70px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>`;
 
     document.getElementById('practiceDate').value = current.date || '';
-    document.getElementById('practiceTime').value = current.time || '';
+    document.getElementById('practiceTime').value = to24h(current.time);
     document.getElementById('practiceLocation').value = current.location || '';
     document.getElementById('practiceNotes').value = current.notes || '';
 

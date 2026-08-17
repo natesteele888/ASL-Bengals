@@ -193,6 +193,43 @@
     return d.innerHTML;
   }
 
+  // Nathan: "saving the schedule on my phone worked but it assigned all
+  // day instead of the times I selected. Since it's not a time field we
+  // did, maybe it isn't recognizing the time." Root cause: Arrive/Warm-up/
+  // Game Time used to be free-text inputs, and js/calendar-export.js's
+  // parseTime() only accepted a strict "8:30 AM" shape -- anything typed
+  // slightly differently (no colon, no space, etc.) on a phone keyboard
+  // silently failed to parse and the .ics event fell back to all-day.
+  // Fixed by switching these to real <input type="time"> pickers, which
+  // always hand back a clean 24hr "HH:MM" string -- no parsing ambiguity
+  // possible. to24h() below is only needed to migrate whatever an older
+  // free-text save left behind so it still populates the picker instead
+  // of showing blank; to12h() turns a clean "HH:MM" back into "8:30 AM"
+  // for read-only display everywhere the time gets shown as text.
+  function to24h(str) {
+    if (!str) return '';
+    const s = str.trim().toLowerCase();
+    const m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+    if (!m) return '';
+    let h = Number(m[1]);
+    const min = m[2] ? Number(m[2]) : 0;
+    const ap = m[3];
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23 || min > 59) return '';
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+  function to12h(str) {
+    if (!str) return '';
+    const m = str.trim().match(/^(\d{1,2}):(\d{2})$/); // strict 24hr, no am/pm -- already-formatted strings pass through untouched
+    if (!m) return str;
+    let h = Number(m[1]);
+    const min = m[2];
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${min} ${ap}`;
+  }
+
   // ---- Cloud load/save ----
   function loadGames() {
     const statusEl = document.getElementById('scheduleCloudStatus');
@@ -248,7 +285,7 @@
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-      const gameTime = g.gameTime || g.time || ''; // g.time is the pre-Arrive/Warmup/Game-split field
+      const gameTime = to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
@@ -311,13 +348,13 @@
     // this hero); kickoff time moves into the center with the date, same
     // spot the list card uses -- see the CSS comment on .scheduleRowCenter.
     const preGameTimesLine = [
-      current.arriveTime ? `Arrive ${escapeHtml(current.arriveTime)}` : '',
-      current.warmupTime ? `Warm-up ${escapeHtml(current.warmupTime)}` : '',
+      current.arriveTime ? `Arrive ${escapeHtml(to12h(current.arriveTime))}` : '',
+      current.warmupTime ? `Warm-up ${escapeHtml(to12h(current.warmupTime))}` : '',
     ].filter(Boolean).join(' • ');
     const timesLine = [
-      current.arriveTime ? `Arrive ${escapeHtml(current.arriveTime)}` : '',
-      current.warmupTime ? `Warm-up ${escapeHtml(current.warmupTime)}` : '',
-      current.gameTime ? `Kickoff ${escapeHtml(current.gameTime)}` : '',
+      current.arriveTime ? `Arrive ${escapeHtml(to12h(current.arriveTime))}` : '',
+      current.warmupTime ? `Warm-up ${escapeHtml(to12h(current.warmupTime))}` : '',
+      current.gameTime ? `Kickoff ${escapeHtml(to12h(current.gameTime))}` : '',
     ].filter(Boolean).join(' • ');
 
     const heroHtml = (() => {
@@ -337,7 +374,7 @@
             <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
             <span class="scheduleRowCenter">
               <span class="scheduleRowCenterDate">${fmtDate(current.date)}</span>
-              ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(current.gameTime)}</span>` : ''}
+              ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
               ${badgeHtml}
             </span>
             <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span>${themScore}</span>
@@ -377,9 +414,9 @@
       </div>
       <input type="date" id="schedDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <input type="text" id="schedArriveTime" placeholder="Arrive by (e.g. 8:30 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
-        <input type="text" id="schedWarmupTime" placeholder="Warm-up start (e.g. 9:00 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
-        <input type="text" id="schedGameTime" placeholder="Game time (e.g. 10:00 AM)" style="flex:1 1 150px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <div style="flex:1 1 120px;"><div class="lbSub" style="margin:0 0 3px;">Arrive by</div><input type="time" id="schedArriveTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+        <div style="flex:1 1 120px;"><div class="lbSub" style="margin:0 0 3px;">Warm-up</div><input type="time" id="schedWarmupTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+        <div style="flex:1 1 120px;"><div class="lbSub" style="margin:0 0 3px;">Game Time</div><input type="time" id="schedGameTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:4px;">
         <input type="text" id="schedLocation" placeholder="Address (e.g. 123 Field Rd, Leominster MA)" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
@@ -405,9 +442,9 @@
 
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedDate').value = current.date || '';
-    document.getElementById('schedArriveTime').value = current.arriveTime || '';
-    document.getElementById('schedWarmupTime').value = current.warmupTime || '';
-    document.getElementById('schedGameTime').value = current.gameTime || '';
+    document.getElementById('schedArriveTime').value = to24h(current.arriveTime);
+    document.getElementById('schedWarmupTime').value = to24h(current.warmupTime);
+    document.getElementById('schedGameTime').value = to24h(current.gameTime);
     document.getElementById('schedLocation').value = current.location || '';
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
@@ -488,7 +525,7 @@
         uid: current.id, date: current.date, time: current.gameTime || current.time || '', durationMinutes: 120,
         title: `ASL Bengals ${current.homeAway === 'Away' ? '@' : 'vs'} ${current.opponent || 'TBD'}${current.gameType && current.gameType !== 'Regular Season' ? ' (' + current.gameType + ')' : ''}`,
         location: current.location || '',
-        description: [current.arriveTime ? `Arrive by ${current.arriveTime}` : '', current.warmupTime ? `Warm-up ${current.warmupTime}` : ''].filter(Boolean).join(' • '),
+        description: [current.arriveTime ? `Arrive by ${to12h(current.arriveTime)}` : '', current.warmupTime ? `Warm-up ${to12h(current.warmupTime)}` : ''].filter(Boolean).join(' • '),
       }]);
       window.downloadICS(`ASL_Bengals_vs_${(current.opponent || 'game').replace(/[^a-z0-9]+/gi, '_')}.ics`, ics);
     });

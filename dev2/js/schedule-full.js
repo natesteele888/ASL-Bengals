@@ -25,6 +25,20 @@
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
+  // Same fix as js/schedule.js / js/practices.js -- Game/Practice Time are
+  // now native time pickers storing clean 24hr "HH:MM"; this just displays
+  // that nicely as "6:00 PM" (and passes any old free-text value through
+  // untouched, since it's presumably already human-readable).
+  function to12h(str) {
+    if (!str) return '';
+    const m = str.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return str;
+    let h = Number(m[1]);
+    const min = m[2];
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${min} ${ap}`;
+  }
 
   function mergedEntries(games, practices) {
     const gameEntries = games.map(g => ({
@@ -49,7 +63,7 @@
       uid: g.id, date: g.date, time: g.gameTime || g.time || '', durationMinutes: 120,
       title: `ASL Bengals ${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.gameType && g.gameType !== 'Regular Season' ? ' (' + g.gameType + ')' : ''}`,
       location: g.location || '',
-      description: [g.arriveTime ? `Arrive by ${g.arriveTime}` : '', g.warmupTime ? `Warm-up ${g.warmupTime}` : ''].filter(Boolean).join(' • '),
+      description: [g.arriveTime ? `Arrive by ${to12h(g.arriveTime)}` : '', g.warmupTime ? `Warm-up ${to12h(g.warmupTime)}` : ''].filter(Boolean).join(' • '),
     }));
     const practiceEvents = practices.filter(p => p.date).map(p => ({
       uid: p.id, date: p.date, time: p.time || '', durationMinutes: 105,
@@ -79,7 +93,7 @@
       const badgeClass = e.kind === 'game' ? 'game' : (e.title.indexOf('Film') !== -1 ? 'film' : 'practice');
       row.innerHTML = `
         <span class="practiceTypeBadge ${badgeClass}">${escapeHtml(e.sub)}</span>
-        <span class="practiceRowDateTime">${fmtDate(e.date)}${e.time ? ' • ' + escapeHtml(e.time) : ''} — ${escapeHtml(e.title)}</span>
+        <span class="practiceRowDateTime">${fmtDate(e.date)}${e.time ? ' • ' + escapeHtml(to12h(e.time)) : ''} — ${escapeHtml(e.title)}</span>
         ${e.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(e.location)}</span>` : ''}`;
       row.addEventListener('click', () => {
         if (e.kind === 'game' && window.openScheduleGame) window.openScheduleGame(e.id);

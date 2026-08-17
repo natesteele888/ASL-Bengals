@@ -18,13 +18,20 @@
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
-  // "6:00 PM" / "6:00pm" / "18:00" -> {h, m} in 24hr, or null if unparseable.
+  // "6:00 PM" / "6:00pm" / "6pm" / "6 PM" / "18:00" -> {h, m} in 24hr, or
+  // null if unparseable. Games/Practices now save times via native
+  // <input type="time"> (always a clean "HH:MM"), but this stays lenient
+  // as a safety net for any older free-text time saved before that fix --
+  // Nathan: "it assigned all day instead of the times I selected... maybe
+  // it isn't recognizing the time." The minutes and am/pm are both now
+  // optional (colon-less "6pm" or bare "6" no longer fail to parse), which
+  // is exactly the kind of shorthand a phone keyboard makes easy to type.
   function parseTime(str) {
     if (!str) return null;
     const s = str.trim().toLowerCase();
-    let m = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/);
+    let m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
     if (!m) return null;
-    let h = Number(m[1]), min = Number(m[2]);
+    let h = Number(m[1]), min = m[2] ? Number(m[2]) : 0;
     const ap = m[3];
     if (ap === 'pm' && h !== 12) h += 12;
     if (ap === 'am' && h === 12) h = 0;
