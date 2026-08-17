@@ -101,15 +101,23 @@
       row.type = 'button';
       row.className = 'practiceRow';
       const badgeClass = e.kind === 'game' ? 'game' : (e.title.indexOf('Film') !== -1 ? 'film' : 'practice');
+      const weatherId = `fullSchedWeather-${e.kind}-${e.id}`;
       row.innerHTML = `
         <span class="practiceTypeBadge ${badgeClass}">${escapeHtml(e.sub)}</span>
         <span class="practiceRowDateTime">${fmtDate(e.date)}${e.time ? ' • ' + escapeHtml(to12h(e.time)) : ''} — ${escapeHtml(e.title)}</span>
-        ${e.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(e.location)}</span>` : ''}`;
+        ${e.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(e.location)}</span>` : ''}
+        <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>`;
       row.addEventListener('click', () => {
         if (e.kind === 'game' && window.openScheduleGame) window.openScheduleGame(e.id);
         else if (e.kind === 'practice' && window.openPracticeDetail) window.openPracticeDetail(e.id);
       });
       wrap.appendChild(row);
+      // Nathan: "add that little weather icon... at the end of all cards
+      // on the full schedule cards." Same compact chip as Games/Practices
+      // list rows, fired after the row's in the DOM.
+      if (window.loadCompactWeatherInto) {
+        window.loadCompactWeatherInto(document.getElementById(weatherId), e.location, e.date, e.time);
+      }
     });
   }
 

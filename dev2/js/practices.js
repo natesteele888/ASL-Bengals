@@ -34,6 +34,13 @@
   let items = [];     // [{id, type, date, time, endTime, location, notes, updatedAt}]
   let current = null; // item open in the detail view, or null (list view)
   let loaded = false;
+  // Nathan: "when I am logged in as a coach, I cant see it how the players
+  // see it. Give me an edit button." Same fix as js/schedule.js -- see the
+  // comment there. Existing practices open read-only by default (even for
+  // an approved coach), with an Edit button to switch in; brand-new ones
+  // still open straight into the edit form since there's nothing to
+  // preview yet.
+  let editMode = false;
 
   function genId() {
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -182,6 +189,7 @@
     if (!current) {
       current = { id: genId(), type: 'practice', date: '', time: '', location: '', notes: '', updatedAt: null };
     }
+    editMode = !items.some(p => p.id === current.id); // brand-new -> straight to edit form; existing -> read-only first
     document.getElementById('practicesListWrap').style.display = 'none';
     document.getElementById('practicesDetail').style.display = '';
     renderDetail();
@@ -200,14 +208,17 @@
     const deleteBtn = document.getElementById('practicesDeleteBtn');
     if (!body || !current) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
-    editControls.style.display = approved ? '' : 'none';
+    const showEditForm = approved && editMode;
+    editControls.style.display = showEditForm ? '' : 'none';
     if (deleteBtn) deleteBtn.style.display = items.some(p => p.id === current.id) ? '' : 'none';
 
     const info = typeInfo(current.type);
 
-    if (!approved) {
-      // ---- Read-only view ----
+    if (!showEditForm) {
+      // ---- Read-only view (also what an approved coach sees by default
+      // now -- see the editMode comment up top) ----
       body.innerHTML = `
+        ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceEditToggleBtn">✏️ Edit</button></div>` : ''}
         <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
         <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(timeRangeLabel(current.time, current.endTime)) : ''}</div>
         <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
@@ -215,6 +226,8 @@
         <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<div style="text-align:center;"><a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a></div><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         ${current.notes ? `<div class="lbSectionHeader" style="margin-top:16px;">📝 Notes</div><div class="scheduleWriteup">${escapeHtml(current.notes).replace(/\n/g, '<br>')}</div>` : ''}`;
+      const editToggleBtn = document.getElementById('practiceEditToggleBtn');
+      if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
       wireAddToCalendar();
       renderWeather();
       return;
@@ -230,6 +243,7 @@
 
     // ---- Coach edit view ----
     body.innerHTML = `
+      ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practicePreviewToggleBtn">👁 Preview (Player View)</button></div>` : ''}
       <div class="gameplanPickerGrid" id="practiceTypeGrid" style="margin-bottom:12px;"></div>
       ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button> &middot; <button type="button" class="lbLinkBtn" id="practiceDuplicateBtn">⧉ Duplicate</button></div>` : ''}
       <input type="date" id="practiceDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
@@ -305,6 +319,14 @@
     document.getElementById('practiceLocation').addEventListener('input', refreshMapPreview);
     refreshMapPreview();
     if (!isNew) { wireAddToCalendar(); wireDuplicate(); }
+    const previewToggleBtn = document.getElementById('practicePreviewToggleBtn');
+    if (previewToggleBtn) {
+      previewToggleBtn.addEventListener('click', () => {
+        syncFormToCurrent(); // pulls in whatever's typed so far, even if unsaved
+        editMode = false;
+        renderDetail();
+      });
+    }
     renderWeather();
   }
 
@@ -368,13 +390,21 @@
     return out;
   }
 
-  function saveCurrent() {
+  // Reads the edit form's current field values into `current` without
+  // persisting -- shared by saveCurrent() and the "Preview (Player View)"
+  // button, same pattern as js/schedule.js's syncFormToCurrent().
+  function syncFormToCurrent() {
     if (!current) return;
     current.date = document.getElementById('practiceDate').value;
     current.time = document.getElementById('practiceTime').value.trim();
     current.endTime = document.getElementById('practiceEndTime').value.trim();
     current.location = document.getElementById('practiceLocation').value.trim();
     current.notes = document.getElementById('practiceNotes').value.trim();
+  }
+
+  function saveCurrent() {
+    if (!current) return;
+    syncFormToCurrent();
     if (!current.date) {
       const statusEl = document.getElementById('practicesDetailStatus');
       if (statusEl) statusEl.textContent = 'Give it a date first.';

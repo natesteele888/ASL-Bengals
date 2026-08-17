@@ -15,7 +15,7 @@
 // missing layout) even though the live site is fully up to date. Bumping
 // this forces a fresh install + activate, which deletes the old cache
 // (see the activate handler) and re-caches the current shell files.
-const CACHE_NAME = 'bengals-shell-20260817s';
+const CACHE_NAME = 'bengals-shell-20260817t';
 const SHELL_FILES = [
   './index.html',
   './css/styles.css',

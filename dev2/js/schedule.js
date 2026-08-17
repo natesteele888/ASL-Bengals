@@ -59,6 +59,15 @@
   let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
+  // Nathan: "when I am logged in as a coach, I cant see it how the players
+  // see it. Give me an edit button at the top that puts me in editable
+  // mode." A coach used to always land straight in the edit form with no
+  // way back to what players actually see -- now every detail page opens
+  // read-only by default (same as a player), even for an approved coach,
+  // with an "Edit" button to switch into the form. editMode always resets
+  // to false when a fresh detail is opened (openDetail below) so it's
+  // never "sticky" from a previous visit.
+  let editMode = false;
 
   function genId() {
     return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -429,6 +438,7 @@
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
+      const weatherId = `scheduleRowWeather-${g.id}`;
       row.innerHTML = `
         ${gameTypeTag}
         <span class="scheduleRowDate">${locLine}</span>
@@ -440,9 +450,17 @@
             ${badge}
           </span>
           <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
-        </span>`;
+        </span>
+        <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>`;
       row.addEventListener('click', () => openDetail(g.id));
       listEl.appendChild(row);
+      // Nathan: "add that little weather icon in the bottom of the center
+      // of the Game card." Same fired-after-append pattern as practice
+      // rows (js/practices.js) -- compact chip, hidden by default until
+      // (if) the forecast resolves.
+      if (window.loadCompactWeatherInto) {
+        window.loadCompactWeatherInto(document.getElementById(weatherId), g.location, g.date, g.gameTime || g.time || '');
+      }
     });
   }
 
@@ -462,6 +480,10 @@
     current.warmupTime = current.warmupTime || '';
     current.gameTime = current.gameTime || '';
     current.gameType = GAME_TYPES.includes(current.gameType) ? current.gameType : 'Regular Season'; // older saved games predate this field
+    // Brand-new, never-saved games have nothing to preview yet -- open
+    // those straight into the edit form; anything already on the
+    // schedule opens read-only first, same as a player would see it.
+    editMode = !games.some(g => g.id === current.id);
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
@@ -480,7 +502,8 @@
     const deleteBtn = document.getElementById('scheduleDeleteBtn');
     if (!body || !current) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
-    editControls.style.display = approved ? '' : 'none';
+    const showEditForm = approved && editMode;
+    editControls.style.display = showEditForm ? '' : 'none';
     if (deleteBtn) deleteBtn.style.display = games.some(g => g.id === current.id) ? '' : 'none';
 
     // Arrive/Warm-up sit on the hero's top line (context info, unique to
@@ -523,9 +546,11 @@
         </div>`;
     })();
 
-    if (!approved) {
-      // ---- Read-only view ----
+    if (!showEditForm) {
+      // ---- Read-only view (also what an approved coach sees by default
+      // now -- see the editMode comment up top) ----
       body.innerHTML = `
+        ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle">📰 Game Preview</div>
@@ -545,6 +570,8 @@
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
         <div class="scheduleFinePrint">Game Preview is auto-generated from this game's Schedule info.</div>`;
+      const editToggleBtn = document.getElementById('schedEditToggleBtn');
+      if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
       wireAddToCalendar();
       loadLinkedGamePlan();
       renderGamePreview();
@@ -554,6 +581,7 @@
 
     // ---- Coach edit view ----
     body.innerHTML = `
+      <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedPreviewToggleBtn">👁 Preview (Player View)</button></div>
       ${heroHtml}
       <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
         <div class="thisweekKeysTitle">📰 Game Preview</div>
@@ -660,6 +688,14 @@
       chip.addEventListener('click', () => { current.gameType = v; renderDetail(); });
       gtGrid.appendChild(chip);
     });
+    const previewToggleBtn = document.getElementById('schedPreviewToggleBtn');
+    if (previewToggleBtn) {
+      previewToggleBtn.addEventListener('click', () => {
+        syncFormToCurrent(); // pulls in whatever's typed so far, even if incomplete/unsaved
+        editMode = false;
+        renderDetail();
+      });
+    }
     renderGamePreview();
     renderWeather();
   }
@@ -725,9 +761,17 @@
     }
   };
 
-  function saveCurrent() {
-    if (!current) return;
-    current.opponent = document.getElementById('schedOpponent').value.trim();
+  // Reads the edit form's current field values into `current`, without
+  // persisting or closing -- shared by saveCurrent() (which also persists)
+  // and the "Preview (Player View)" button (which just wants to render
+  // whatever's been typed so far, unsaved, the way a player would see
+  // it). Returns false (and leaves current untouched otherwise) if the
+  // opponent field is blank, since that's the one required field.
+  function syncFormToCurrent() {
+    if (!current) return false;
+    const opponent = document.getElementById('schedOpponent').value.trim();
+    if (!opponent) return false;
+    current.opponent = opponent;
     current.date = document.getElementById('schedDate').value;
     current.arriveTime = document.getElementById('schedArriveTime').value.trim();
     current.warmupTime = document.getElementById('schedWarmupTime').value.trim();
@@ -739,7 +783,12 @@
     current.oppScore = oppScoreRaw === '' ? '' : Number(oppScoreRaw);
     current.writeup = document.getElementById('schedWriteup').value.trim();
     current.scouting = document.getElementById('schedScouting').value.trim();
-    if (!current.opponent) {
+    return true;
+  }
+
+  function saveCurrent() {
+    if (!current) return;
+    if (!syncFormToCurrent()) {
       const statusEl = document.getElementById('scheduleDetailStatus');
       if (statusEl) statusEl.textContent = 'Give the game an opponent first.';
       return;

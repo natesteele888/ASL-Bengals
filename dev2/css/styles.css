@@ -1414,6 +1414,13 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
    to the date/time text without competing with it. */
 .practiceRowWeather { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-left: auto; flex: 0 0 auto; }
 .practiceRowWeather .weatherIcon { font-size: 16px; }
+/* Nathan: "add that little weather icon in the bottom of the center of the
+   Game card as well as the end of all cards on the full schedule cards."
+   Centered (not right-aligned like .practiceRowWeather above) since these
+   cards' layout doesn't have a natural "right side" slot the way a
+   practice row's single date/time line does. */
+.scheduleRowWeatherCenter { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-top: 8px; width: 100%; }
+.scheduleRowWeatherCenter .weatherIcon { font-size: 15px; }
 /* Nathan: "we dont need to say this so big and bold... can be fine print
    at the bottom of the page." True fine print, not just a smaller .lbSub. */
 .scheduleFinePrint { font-size: 9.5px; color: var(--muted); text-align: center; margin-top: 18px; opacity: .7; }
