@@ -121,10 +121,14 @@ window.refreshCoachToolsVisibility = function(){
   if (myStatsBtn) myStatsBtn.style.display = isParent ? 'none' : '';
   const myPositionBtn = document.getElementById('myPositionBtn');
   if (myPositionBtn) myPositionBtn.style.display = isParent ? 'none' : '';
+  // Coaches are often parents of a player on the team too (Nathan: "give
+  // the coaches the option to choose their player as well") -- so My Child
+  // shows for coach sessions as well, alongside all their normal coach
+  // nav (unlike a parent, nothing else is hidden for a coach).
   const myChildBtn = document.getElementById('myChildBtn');
-  if (myChildBtn) myChildBtn.style.display = isParent ? '' : 'none';
+  if (myChildBtn) myChildBtn.style.display = (isParent || isCoach) ? '' : 'none';
   const parentChildBanner = document.getElementById('parentChildBanner');
-  if (parentChildBanner && !isParent) parentChildBanner.style.display = 'none';
+  if (parentChildBanner && !isParent && !isCoach) parentChildBanner.style.display = 'none';
 
   const activeBtn = topSectionsEl && topSectionsEl.querySelector('.modeBtn.active');
   const activeSection = activeBtn && activeBtn.dataset.section;
@@ -457,7 +461,12 @@ async function openAdminStats(){
       d.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
   }
   function playerRowHtml(p){
-    const tag = p.isCoach ? ' <span style="opacity:.6">(coach)</span>' : '';
+    // role is only stored on accounts created after the Player/Coach/Parent
+    // picker shipped -- fall back to isCoach for older records so nothing
+    // pre-existing loses its "(coach)" tag.
+    const roleTag = p.role === 'parent' ? ' <span style="opacity:.6">(parent)</span>'
+      : (p.role === 'coach' || p.isCoach) ? ' <span style="opacity:.6">(coach)</span>' : '';
+    const tag = roleTag;
     const best = p.pcqBestScore ? `🧠 ${p.pcqBestScore}/${p.pcqBestMaxScore}` : '—';
     // Reset button only shows once there's actually a score to clear --
     // e.g. wiping out a coach's own test run so it doesn't linger as a

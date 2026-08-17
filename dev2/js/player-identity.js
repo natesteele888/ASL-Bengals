@@ -87,12 +87,16 @@
   }
 
   async function createPlayer(name, pinHash, isCoach){
+    // role is stored explicitly (not just inferred) so anything reading
+    // this record later -- like the coach admin panel -- can reliably
+    // label a parent account instead of it looking like a plain player.
+    const role = window.userRole || (isCoach ? 'coach' : 'player');
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}.json`);
     const res = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        name: name, pinHash: pinHash, isCoach: !!isCoach,
+        name: name, pinHash: pinHash, isCoach: !!isCoach, role: role,
         createdAt: new Date().toISOString(), lastSeen: new Date().toISOString(),
       }),
     });
@@ -550,12 +554,33 @@
     openChildPicker(session, { isFirstAsk: true });
   }
 
+  // Coaches are often parents of a player on the team too (Nathan: "give
+  // the coaches the option to choose their player as well"). Unlike a
+  // parent session, this doesn't pop up automatically on first login for a
+  // coach -- they already get the position prompt, and can link a child
+  // whenever they want via the My Child button. This just keeps the
+  // quick-access banner in sync if they've already linked one on a
+  // previous visit, same as renderParentChildBanner does for parents.
+  async function syncChildBannerIfLinked(session){
+    if(!session) return;
+    let ids = session.childRosterIds;
+    if(!ids){
+      const record = await getPlayerRecord(session.playerId);
+      ids = record && record.childRosterIds;
+      if(ids && ids.length){ session.childRosterIds = ids; setSession(session); }
+    }
+    if(ids && ids.length) renderParentChildBanner(session, null, ids);
+  }
+
   // Player/coach get the position prompt, a parent gets the child picker
   // instead -- single dispatcher so gate() and attemptSignIn() below don't
-  // each need their own role branch.
+  // each need their own role branch. Coach additionally gets a silent
+  // banner sync (see syncChildBannerIfLinked above).
   function maybeShowRolePrompt(session, isFreshSignup){
     if(window.userRole === 'parent') return maybeShowChildPrompt(session, isFreshSignup);
-    return maybeShowPositionPrompt(session, isFreshSignup);
+    const result = maybeShowPositionPrompt(session, isFreshSignup);
+    if(window.userRole === 'coach') syncChildBannerIfLinked(session).catch(() => {});
+    return result;
   }
 
   let pendingReady = null;
