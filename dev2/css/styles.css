@@ -46,6 +46,16 @@ img{max-width:100%;height:auto}
   font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;text-transform:uppercase}
 .loginBtn:active{background:var(--bengal-orange-dark)}
 .loginError{color:#ff8a8a;font-size:12.5px;min-height:16px;text-align:center;margin:-6px 0 0}
+/* Nathan: "in first login, you should be able to choose Player, Coach or
+   Parent." Same dark-glass look as .loginInput/.toolbarBtn above (this
+   screen sits right on top of the same login background), just sized as
+   big tappable cards instead of a text field. */
+.roleBtnGrid{display:flex;gap:10px;width:100%}
+.roleBtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;
+  border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);
+  color:#fff;font-size:12.5px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
+.roleBtnIcon{font-size:26px}
+.roleBtn:active{background:rgba(255,106,19,.35);border-color:var(--bengal-orange)}
 .loginBuildVersion{position:absolute;left:0;right:0;bottom:14px;z-index:1;color:#ffffff;opacity:.35;font-size:10px;text-align:center;letter-spacing:.02em}
 @keyframes loginShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}
   40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}

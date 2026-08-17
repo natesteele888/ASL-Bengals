@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260817h">
+<link rel="stylesheet" href="css/styles.css?v=20260817i">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -69,6 +69,13 @@
         <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
+        <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
+             myStatsBtn/myPositionBtn by refreshCoachToolsVisibility() in
+             study-quiz.js (a parent has no quiz stats or a position of
+             their own to set). Opens the linked child's card directly if
+             there's only one, or the childPromptOverlay picker (in "change"
+             mode) if there's more than one or none linked yet. -->
+        <button id="myChildBtn" style="display:none;">👤 My Child</button>
         <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
              info per position. Keeping the button/overlay/study-guide.js in
              place so this is a one-line toggle to bring back once it has
@@ -101,6 +108,41 @@
     <div class="loginError" id="loginError"></div>
   </div>
   <div class="loginBuildVersion" id="loginBuildVersion"></div>
+</div>
+
+<!-- Nathan: "in first login, you should be able to choose Player, Coach or
+     Parent. For Coach profile, you will need to put in 'FrontSeat' as the
+     password... For coaches that are already in there and noted... they
+     will be granted Coach access without additional setup." Shown right
+     after the shared team code above (that part's unchanged -- still the
+     one wall keeping the app private to people who've been given the
+     code). Typing the OLD coach code directly at that first screen still
+     works too (auth.js) and skips this screen entirely, so nobody who
+     already knows it has to learn a new step. Picking Coach here reveals
+     a small password field checked against the exact same secret
+     ('FrontSeat') as that old coach code -- same protection, new door.
+     Player and Parent need nothing further here; player-identity.js's
+     name+PIN screen runs right after either one. -->
+<div class="loginScreen hide" id="roleScreen">
+  <div class="loginOverlay"></div>
+  <div class="loginGlow"></div>
+  <div class="loginContent">
+    <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
+    <h1 class="loginTitle"><span class="bengalsBig">Who are you?</span></h1>
+    <p style="color:#ccc;font-size:12px;text-align:center;max-width:280px;margin:0 auto 14px;">Pick one to continue.</p>
+    <div class="roleBtnGrid" id="roleBtnGrid">
+      <button class="roleBtn" type="button" data-role="player"><span class="roleBtnIcon">🏈</span><span>Player</span></button>
+      <button class="roleBtn" type="button" data-role="parent"><span class="roleBtnIcon">👪</span><span>Parent</span></button>
+      <button class="roleBtn" type="button" data-role="coach"><span class="roleBtnIcon">🔐</span><span>Coach</span></button>
+    </div>
+    <div id="roleCoachPasswordWrap" style="display:none;width:100%;">
+      <input class="loginInput" id="roleCoachPassword" type="password" placeholder="Coach password"
+        autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-top:14px;">
+      <button class="loginBtn" id="roleCoachSubmitBtn" style="margin-top:10px;">Continue</button>
+      <button class="navBtn secondary" id="roleCoachBackBtn" type="button" style="width:100%;margin-top:8px;">‹ Back</button>
+    </div>
+    <div class="loginError" id="roleError"></div>
+  </div>
 </div>
 
 <!-- Nathan: "the app update screen is far too little. The kids haven't
@@ -217,7 +259,7 @@
      both -- studying/Play Calls is exactly the thing both sides already
      share. -->
 <div class="topSections" id="topSections">
-  <button class="modeBtn active" data-section="play"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
+  <button class="modeBtn active" data-section="play" id="playSectionBtn"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
   <button class="modeBtn" data-section="thisweek" id="thisweekSectionBtn" style="display:none;"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
   <button class="modeBtn" data-section="schedule" id="scheduleSectionBtn" style="display:none;"><span class="modeIcon">📅</span><span class="modeLabel">Schedule</span></button>
   <!-- Coach-only top-level section (Drive Builder now, Coach Dashboard
@@ -227,6 +269,17 @@
        this on/off. -->
   <button class="modeBtn" data-section="coachtools" id="coachToolsSectionBtn" style="display:none;"><span class="modeIcon">🛠️</span><span class="modeLabel">Coach Tools</span></button>
 </div>
+
+<!-- Parent-only quick access to their linked child/children's player
+     card -- Nathan: "Just want them to log in, see how their child is
+     doing, see the schedule." Since Play/This Week/Coach Tools are all
+     hidden for a parent (see refreshCoachToolsVisibility in
+     study-quiz.js) and Schedule becomes their whole app, this is the one
+     always-visible way back to "how's my kid doing" without digging
+     through the name menu every time. Populated by
+     renderParentChildBanner() in player-identity.js (empty/hidden until
+     a child is actually linked). -->
+<div id="parentChildBanner" style="display:none;"></div>
 
 <div class="modeTabs" id="modeTabs">
   <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
@@ -930,6 +983,26 @@
   </div>
 </div>
 
+<!-- Nathan: "Just want them to log in, see how their child is doing, see
+     the schedule." A parent's whole app is Schedule (nav-gated in
+     study-quiz.js) plus their own child's player card -- this is the
+     one-time (skippable, reopenable from the name menu -- "My Child")
+     picker that links a parent's sign-in to a roster player, same
+     pattern as posPromptOverlay above. Built dynamically in
+     player-identity.js since the roster (unlike positions) isn't a fixed
+     list -- and supports picking more than one child for a family with
+     two players on the team. -->
+<div class="lbOverlay" id="childPromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3 id="childPromptTitle">👪 Which player is your child?</h3>
+    <div class="lbSub">Pick one (or more, if you've got more than one on the team) -- this just decides whose card shows up for you. You can change it anytime from your name menu. The schedule is the same for everyone.</div>
+    <input class="loginInput" id="childPromptSearch" type="text" placeholder="Search the roster…" autocomplete="off" style="margin:10px 0;width:100%;box-sizing:border-box;">
+    <div class="posPillGrid" id="childPillGrid" style="max-height:260px;overflow-y:auto;"></div>
+    <div class="lbEmpty" id="childPromptEmpty" style="display:none;">No players found.</div>
+    <button class="navBtn" id="childPromptDoneBtn" style="width:100%;margin-top:10px;">Done</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="historyOverlay">
   <div class="lbCard">
     <h3>📜 Your History</h3>
@@ -1032,7 +1105,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817u';
+  const BUILD_V = '20260817v';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

@@ -85,8 +85,18 @@ if (topSectionsEl) {
 // profile). If someone's viewing a tab that this determines they no longer
 // qualify for, it bounces them back to Play rather than leaving a gated
 // page open under a session that shouldn't see it.
+// Nathan: "I need a way for parents to utilize the app too... not sure
+// they need visibility to the stats or play calls and all. Just want
+// them to log in, see how their child is doing, see the schedule." A
+// parent (window.isParentSession, set at role-pick time in auth.js) gets
+// Schedule as their entire app -- Play (Study/Quiz/Play Calls/Play Quiz)
+// hides alongside This Week and Coach Tools, which were already
+// coach-only. Their one extra bit of visibility -- their own child's
+// player card -- lives in the always-on parentChildBanner above Schedule
+// (player-identity.js's renderParentChildBanner), not in this nav.
 window.refreshCoachToolsVisibility = function(){
   const isCoach = !!window.isCoachSession;
+  const isParent = !!window.isParentSession;
   const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
 
   const thisweekBtn = document.getElementById('thisweekSectionBtn');
@@ -99,14 +109,35 @@ window.refreshCoachToolsVisibility = function(){
   const coachToolsBtn = document.getElementById('coachToolsSectionBtn');
   if (coachToolsBtn) coachToolsBtn.style.display = approvedCoach ? '' : 'none';
 
+  const playBtn = document.getElementById('playSectionBtn');
+  if (playBtn) playBtn.style.display = isParent ? 'none' : '';
+
+  // Study/Quiz/Play Calls have nothing to do with a parent account -- swap
+  // the leaderboard and My Stats/My Position for a My Child shortcut
+  // instead (player-identity.js wires myChildBtn's click).
+  const leaderboardBtn = document.getElementById('openLeaderboardBtn');
+  if (leaderboardBtn) leaderboardBtn.style.display = isParent ? 'none' : '';
+  const myStatsBtn = document.getElementById('myStatsBtn');
+  if (myStatsBtn) myStatsBtn.style.display = isParent ? 'none' : '';
+  const myPositionBtn = document.getElementById('myPositionBtn');
+  if (myPositionBtn) myPositionBtn.style.display = isParent ? 'none' : '';
+  const myChildBtn = document.getElementById('myChildBtn');
+  if (myChildBtn) myChildBtn.style.display = isParent ? '' : 'none';
+  const parentChildBanner = document.getElementById('parentChildBanner');
+  if (parentChildBanner && !isParent) parentChildBanner.style.display = 'none';
+
   const activeBtn = topSectionsEl && topSectionsEl.querySelector('.modeBtn.active');
   const activeSection = activeBtn && activeBtn.dataset.section;
   const stillAllowed =
-    activeSection === 'play' ||
+    (activeSection === 'play' && !isParent) ||
     activeSection === 'schedule' ||
     (activeSection === 'thisweek' && isCoach) ||
     (activeSection === 'coachtools' && approvedCoach);
-  if (activeSection && !stillAllowed) {
+  if (isParent) {
+    // Schedule is the only thing a parent can ever land on -- send them
+    // there straight away instead of the Play tab everyone else defaults to.
+    setSection('schedule');
+  } else if (activeSection && !stillAllowed) {
     setSection('play');
   }
 };

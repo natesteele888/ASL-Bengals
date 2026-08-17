@@ -162,9 +162,29 @@ window.isApprovedCoachProfile = function(){
 
 (function(){
   var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
+  // Nathan: "For Coach profile, you will need to put in 'FrontSeat' as the
+  // password to create your profile." This IS that same secret -- it's
+  // literally sha256("FrontSeat"), already the coach code today, and also
+  // already the Play Calls Gate password (play-calls.js's PC_PASSWORD_HASH)
+  // -- one secret, three doors. Typing it directly at the very first
+  // screen below still works too (isCoach branch) and skips the new role
+  // picker entirely, so nobody who already has it memorized has to learn
+  // an extra step.
   var COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
   window.isCoachSession = false;
+  // Nathan: "I need a way for parents to utilize the app too... in first
+  // login, you should be able to choose Player, Coach or Parent." The team
+  // code above is still the one wall keeping the whole app private to
+  // people who've actually been given it (confirmed with Nathan -- kept,
+  // not removed); this just decides which of three experiences a
+  // successful code unlocks. window.userRole is the source of truth
+  // ('player' | 'coach' | 'parent'); window.isCoachSession/isParentSession
+  // are kept alongside it since so much of the rest of the app (roughly a
+  // dozen files) already reads isCoachSession directly.
+  window.isParentSession = false;
+  window.userRole = null;
   var STORAGE_KEY = 'bengalsPlaybookAuthed';
+  var ROLE_KEY = 'bengalsUserRole';
   var LOCKOUT_KEY = 'bengalsPlaybookLockout';
   var MAX_ATTEMPTS = 5;
   var LOCKOUT_MS = 30000;
@@ -177,6 +197,41 @@ window.isApprovedCoachProfile = function(){
   var attempts = 0;
   var lockTimer = null;
 
+  var roleScreenEl = document.getElementById('roleScreen');
+  var roleBtnGrid = document.getElementById('roleBtnGrid');
+  var roleCoachWrap = document.getElementById('roleCoachPasswordWrap');
+  var roleCoachInput = document.getElementById('roleCoachPassword');
+  var roleCoachSubmitBtn = document.getElementById('roleCoachSubmitBtn');
+  var roleCoachBackBtn = document.getElementById('roleCoachBackBtn');
+  var roleErrorEl = document.getElementById('roleError');
+
+  // Applies a chosen/restored role everywhere the rest of the app expects
+  // to find it, and persists it so a reload remembers it (same
+  // localStorage-flag spirit as STORAGE_KEY/bengalsCoachSession above).
+  function applyRole(role){
+    window.userRole = role;
+    window.isCoachSession = role === 'coach';
+    window.isParentSession = role === 'parent';
+    try { localStorage.setItem(ROLE_KEY, role); } catch(e) {}
+    if(role === 'coach'){
+      try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
+      var epBtn = document.getElementById('editPlaysTabBtn');
+      if (epBtn) epBtn.style.display = '';
+    } else {
+      try { localStorage.removeItem('bengalsCoachSession'); } catch(e) {}
+    }
+  }
+
+  function proceedPastRoleChoice(){
+    // player-identity.js now finishes loading later than before (it waits
+    // behind the database data fetch), so don't assume it's ready the
+    // instant this fires -- poll briefly.
+    (function waitForPlayerIdentity(){
+      if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
+      else setTimeout(waitForPlayerIdentity, 50);
+    })();
+  }
+
   try {
     // Only auto-skip the code screen if this device both (a) was
     // remembered as logged-in before, AND (b) already has a real gate
@@ -187,17 +242,17 @@ window.isApprovedCoachProfile = function(){
     // time, which establishes the real session going forward.
     if(localStorage.getItem(STORAGE_KEY) === '1' && window.hasGateSession && window.hasGateSession()){
       screenEl.classList.add('hide'); window.startBgMusic();
-      if(localStorage.getItem('bengalsCoachSession') === '1'){
-        window.isCoachSession = true;
+      var storedRole = localStorage.getItem(ROLE_KEY);
+      if(!storedRole){
+        // Migrating a device that logged in before Player/Coach/Parent
+        // existed -- infer from the old coach flag so nobody already
+        // using the app gets logged out or has to pick anything. Brand
+        // new devices going forward always pick a role explicitly below.
+        storedRole = localStorage.getItem('bengalsCoachSession') === '1' ? 'coach' : 'player';
       }
+      applyRole(storedRole);
       if(window.__resolveBengalsAuth) window.__resolveBengalsAuth();
-      // This runs the instant auth.js executes, before the later scripts
-      // (including player-identity.js) have necessarily finished loading --
-      // poll briefly rather than assume a fixed delay is always enough.
-      (function waitForPlayerIdentity(){
-        if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
-        else setTimeout(waitForPlayerIdentity, 50);
-      })();
+      proceedPastRoleChoice();
     }
   } catch(e) {}
 
@@ -236,6 +291,13 @@ window.isApprovedCoachProfile = function(){
     if(left > 0) setLocked(left);
   })();
 
+  function showRoleScreen(){
+    roleErrorEl.textContent = '';
+    roleCoachWrap.style.display = 'none';
+    roleBtnGrid.style.display = '';
+    roleScreenEl.classList.remove('hide');
+  }
+
   async function attemptLogin(){
     if(inputEl.disabled) return;
     if(!window.crypto || !window.crypto.subtle){
@@ -244,14 +306,14 @@ window.isApprovedCoachProfile = function(){
     }
     var hash = await sha256Hex(inputEl.value);
     if(hash === CODE_HASH || hash === COACH_CODE_HASH){
-      var isCoach = hash === COACH_CODE_HASH;
+      var typedCoachCode = hash === COACH_CODE_HASH;
       // Establish a real, non-anonymous Firebase session tied to this
       // code before doing anything else -- the database rules now
       // require this for the actual play/card data, so if this fails
       // (e.g. offline), treat it the same as a wrong code rather than
       // showing an app that will silently fail to load its data.
       try {
-        await window.signInWithGate(isCoach ? 'coach' : 'player', hash);
+        await window.signInWithGate(typedCoachCode ? 'coach' : 'player', hash);
       } catch(gateErr) {
         console.error('Gate sign-in failed:', gateErr);
         errorEl.textContent = "Couldn't verify that code right now -- check your connection and try again.";
@@ -259,13 +321,11 @@ window.isApprovedCoachProfile = function(){
         inputEl.focus();
         return;
       }
-      if(isCoach){
-        window.isCoachSession = true;
-        try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
-        var epBtn2 = document.getElementById('editPlaysTabBtn');
-        if (epBtn2) epBtn2.style.display = '';
-      }
       try { localStorage.setItem(STORAGE_KEY, '1'); } catch(e) {}
+      // Typing the coach code directly is the old muscle-memory path --
+      // it already proves who they are, so skip the role picker below
+      // entirely, exactly like before this feature existed.
+      if(typedCoachCode) applyRole('coach');
       if(window.__resolveBengalsAuth) window.__resolveBengalsAuth();
       try {
         var roar = document.getElementById('roarSound');
@@ -276,14 +336,11 @@ window.isApprovedCoachProfile = function(){
       window.startBgMusic();
       setTimeout(function(){
         screenEl.classList.add('hide');
-        // player-identity.js now finishes loading later than before (it
-        // waits behind the database data fetch), so don't assume it's
-        // ready the instant this fires -- poll briefly, same pattern as
-        // the "already logged in" fast path above.
-        (function waitForPlayerIdentity(){
-          if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
-          else setTimeout(waitForPlayerIdentity, 50);
-        })();
+        if(typedCoachCode){
+          proceedPastRoleChoice();
+        } else {
+          showRoleScreen();
+        }
       }, 1500);
     } else {
       attempts++;
@@ -303,8 +360,87 @@ window.isApprovedCoachProfile = function(){
   }
   btnEl.addEventListener('click', attemptLogin);
   inputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter') attemptLogin(); });
-if (window.isCoachSession) {
-    var epBtn = document.getElementById('editPlaysTabBtn');
-    if (epBtn) epBtn.style.display = '';
+
+  // ---- Role picker (Player / Coach / Parent) -----------------------------
+  var roleAttempts = 0;
+  var roleLockTimer = null;
+  var ROLE_LOCKOUT_KEY = 'bengalsRoleLockout';
+
+  function setRoleLocked(msRemaining){
+    roleCoachInput.disabled = true; roleCoachSubmitBtn.disabled = true;
+    var secs = Math.ceil(msRemaining/1000);
+    roleErrorEl.textContent = 'Too many attempts — try again in ' + secs + 's.';
+    clearTimeout(roleLockTimer);
+    roleLockTimer = setTimeout(function(){
+      var left = getRoleLockRemaining();
+      if(left > 0){ setRoleLocked(left); } else { clearRoleLock(); }
+    }, 1000);
   }
+  function clearRoleLock(){
+    roleCoachInput.disabled = false; roleCoachSubmitBtn.disabled = false;
+    roleErrorEl.textContent = '';
+    roleAttempts = 0;
+    try { localStorage.removeItem(ROLE_LOCKOUT_KEY); } catch(e) {}
+  }
+  function getRoleLockRemaining(){
+    try {
+      var until = parseInt(localStorage.getItem(ROLE_LOCKOUT_KEY) || '0', 10);
+      return Math.max(0, until - Date.now());
+    } catch(e) { return 0; }
+  }
+  (function checkExistingRoleLock(){
+    var left = getRoleLockRemaining();
+    if(left > 0) setRoleLocked(left);
+  })();
+
+  if(roleBtnGrid){
+    roleBtnGrid.querySelectorAll('.roleBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var role = btn.dataset.role;
+        if(role === 'coach'){
+          roleBtnGrid.style.display = 'none';
+          roleCoachWrap.style.display = '';
+          roleErrorEl.textContent = '';
+          setTimeout(function(){ roleCoachInput.focus(); }, 50);
+          return;
+        }
+        applyRole(role);
+        roleScreenEl.classList.add('hide');
+        proceedPastRoleChoice();
+      });
+    });
+  }
+  if(roleCoachBackBtn){
+    roleCoachBackBtn.addEventListener('click', function(){
+      roleCoachWrap.style.display = 'none';
+      roleBtnGrid.style.display = '';
+      roleErrorEl.textContent = '';
+    });
+  }
+  async function attemptCoachPassword(){
+    if(roleCoachInput.disabled) return;
+    if(!window.crypto || !window.crypto.subtle){
+      roleErrorEl.textContent = 'This browser can\'t verify the password securely — try a modern browser over https.';
+      return;
+    }
+    var hash = await sha256Hex(roleCoachInput.value);
+    if(hash === COACH_CODE_HASH){
+      applyRole('coach');
+      roleScreenEl.classList.add('hide');
+      proceedPastRoleChoice();
+    } else {
+      roleAttempts++;
+      roleCoachInput.value = '';
+      if(roleAttempts >= MAX_ATTEMPTS){
+        var until = Date.now() + LOCKOUT_MS;
+        try { localStorage.setItem(ROLE_LOCKOUT_KEY, String(until)); } catch(e) {}
+        setRoleLocked(LOCKOUT_MS);
+      } else {
+        roleErrorEl.textContent = 'Incorrect password — try again.';
+        roleCoachInput.focus();
+      }
+    }
+  }
+  if(roleCoachSubmitBtn) roleCoachSubmitBtn.addEventListener('click', attemptCoachPassword);
+  if(roleCoachInput) roleCoachInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') attemptCoachPassword(); });
 })();

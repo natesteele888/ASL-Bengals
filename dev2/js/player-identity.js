@@ -29,6 +29,10 @@
   // across reloads instead of nagging every session. Nathan: "skippable
   // and changeable later."
   const POS_SKIP_PREFIX = 'bengalsPosSkipped_';
+  // Same idea, for a parent's child-link picker (see childPromptOverlay
+  // wiring further down) -- kept as its own prefix since a device could
+  // in principle be used for both a player and a parent sign-in over time.
+  const CHILD_SKIP_PREFIX = 'bengalsChildSkipped_';
 
   // Nathan's mapping: "if they say QB, it is the same as the 1. RB is the 2
   // or 3, 4 in the wing, 5 and 6 are TE. and the line is each individual
@@ -223,6 +227,25 @@
     }
   }
 
+  // Nathan: "see how their child is doing" -- a parent session (see
+  // window.userRole, auth.js) links itself to one or more roster player
+  // ids instead of picking a position of their own. Same
+  // patch-and-update-local-cache shape as setPosition above.
+  async function setChildLinks(playerId, childRosterIds){
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`);
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ childRosterIds: childRosterIds }),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const session = getSession();
+    if(session && session.playerId === playerId){
+      session.childRosterIds = childRosterIds;
+      setSession(session);
+    }
+  }
+
   // Fetches the signed-in player's own record (name, best score so far,
   // etc.) -- used so a quiz can show "your best: X" before/after a run.
   async function getPlayerRecord(playerId){
@@ -381,6 +404,160 @@
     openPositionPicker(session, { isFirstAsk: true });
   }
 
+  // ---- Child picker (childPromptOverlay) -- Nathan: "Just want them to
+  // log in, see how their child is doing, see the schedule." A parent
+  // (window.userRole === 'parent', set at role-pick time in auth.js) gets
+  // this instead of the position prompt above -- same skippable,
+  // reopenable-from-the-menu shape, just built dynamically from the team
+  // roster (which player it is, unlike a position, isn't a fixed list)
+  // and supporting more than one selection for a family with two kids on
+  // the team. ----
+  const childPromptOverlay = document.getElementById('childPromptOverlay');
+  const childPillGrid = document.getElementById('childPillGrid');
+  const childPromptSearch = document.getElementById('childPromptSearch');
+  const childPromptDoneBtn = document.getElementById('childPromptDoneBtn');
+  const childPromptEmpty = document.getElementById('childPromptEmpty');
+  let childPickerSession = null;
+  let childPickerSelected = [];  // roster ids currently checked, this picker session
+  let childPickerRoster = [];    // cached roster list, this picker session
+  let childPickerIsFirstAsk = false;
+
+  function escapeHtmlLocal(s){
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+  function renderChildPills(filterText){
+    if(!childPillGrid) return;
+    const needle = (filterText || '').trim().toLowerCase();
+    const filtered = childPickerRoster.filter(p => !needle || (p.name || '').toLowerCase().indexOf(needle) !== -1);
+    childPillGrid.innerHTML = '';
+    filtered.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'posPill' + (childPickerSelected.indexOf(p.id) !== -1 ? ' active' : '');
+      btn.innerHTML = `${escapeHtmlLocal(p.name)}${p.num ? `<span class="posPillSub">#${escapeHtmlLocal(String(p.num))}</span>` : ''}`;
+      btn.addEventListener('click', () => {
+        const idx = childPickerSelected.indexOf(p.id);
+        if(idx !== -1) childPickerSelected.splice(idx, 1); else childPickerSelected.push(p.id);
+        renderChildPills(childPromptSearch ? childPromptSearch.value : '');
+      });
+      childPillGrid.appendChild(btn);
+    });
+    if(childPromptEmpty) childPromptEmpty.style.display = filtered.length ? 'none' : '';
+  }
+  async function fetchRosterForPicker(){
+    if(window.isTeamRosterLoaded && window.isTeamRosterLoaded()){
+      return window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    }
+    if(window.loadTeamRoster){
+      await window.loadTeamRoster();
+      return window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    }
+    return [];
+  }
+  async function openChildPicker(session, opts){
+    opts = opts || {};
+    if(!childPromptOverlay || !session) return;
+    childPickerSession = session;
+    childPickerIsFirstAsk = !!opts.isFirstAsk;
+    childPickerSelected = (session.childRosterIds || []).slice();
+    childPickerRoster = await fetchRosterForPicker();
+    if(childPromptSearch) childPromptSearch.value = '';
+    renderChildPills('');
+    childPromptOverlay.classList.add('show');
+  }
+  function closeChildPicker(){
+    if(childPromptOverlay) childPromptOverlay.classList.remove('show');
+    childPickerSession = null;
+  }
+  function markChildPromptDismissed(playerId){
+    try { localStorage.setItem(CHILD_SKIP_PREFIX + playerId, '1'); } catch(e){}
+  }
+  if(childPromptSearch){
+    childPromptSearch.addEventListener('input', () => renderChildPills(childPromptSearch.value));
+  }
+  if(childPromptDoneBtn){
+    childPromptDoneBtn.addEventListener('click', () => {
+      if(!childPickerSession) return;
+      const session = childPickerSession;
+      const ids = childPickerSelected.slice();
+      const roster = childPickerRoster;
+      const wasFirstAsk = childPickerIsFirstAsk;
+      markChildPromptDismissed(session.playerId);
+      closeChildPicker();
+      setChildLinks(session.playerId, ids).catch(err => console.error('Could not save linked child(ren):', err));
+      renderParentChildBanner(session, roster, ids);
+      // Nice touch on first link: jump straight to the child's card so a
+      // parent sees right away what this was for. Not on later edits from
+      // the menu -- that'd be surprising when they're just changing it.
+      if(wasFirstAsk && ids.length === 1 && window.showPlayerProfile){
+        const entry = roster.find(p => p.id === ids[0]);
+        if(entry) window.showPlayerProfile(entry.num);
+      }
+    });
+  }
+
+  // Nathan: "Just want them to log in, see how their child is doing, see
+  // the schedule." Since a parent's Play/This Week/Coach Tools are all
+  // hidden (refreshCoachToolsVisibility in study-quiz.js), Schedule is
+  // their whole app -- this keeps a one-tap way back to their child's
+  // card always visible instead of it only showing up once at sign-in.
+  // Re-rendered every time the link changes (Done above) so it never goes
+  // stale, and pass a pre-fetched roster in when the caller already has
+  // one handy rather than re-fetching.
+  async function renderParentChildBanner(session, roster, childRosterIds){
+    const wrap = document.getElementById('parentChildBanner');
+    if(!wrap) return;
+    const ids = childRosterIds || (session && session.childRosterIds) || [];
+    if(!ids.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    const list = roster || await fetchRosterForPicker();
+    const entries = ids.map(id => list.find(p => p.id === id)).filter(Boolean);
+    if(!entries.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    wrap.style.display = '';
+    wrap.innerHTML = `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 16px 0;">${
+      entries.map(p => `<button type="button" class="lbLinkBtn" data-num="${escapeHtmlLocal(String(p.num))}">👤 ${escapeHtmlLocal(p.name)}'s Card</button>`).join('')
+    }</div>`;
+    wrap.querySelectorAll('button[data-num]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if(window.showPlayerProfile) window.showPlayerProfile(btn.dataset.num);
+      });
+    });
+  }
+
+  // Decides whether to auto-show the child-linking prompt after a
+  // sign-in resolves -- parent's counterpart to maybeShowPositionPrompt
+  // above, and also responsible for keeping the quick-access banner
+  // (renderParentChildBanner) in sync on every return visit.
+  async function maybeShowChildPrompt(session, isFreshSignup){
+    if(!session) return;
+    if(session.childRosterIds && session.childRosterIds.length){
+      renderParentChildBanner(session, null, session.childRosterIds);
+      return;
+    }
+    if(!isFreshSignup && localStorage.getItem(CHILD_SKIP_PREFIX + session.playerId) === '1') return;
+    let childRosterIds = null;
+    if(!isFreshSignup){
+      const record = await getPlayerRecord(session.playerId);
+      childRosterIds = record && record.childRosterIds;
+    }
+    if(childRosterIds && childRosterIds.length){
+      session.childRosterIds = childRosterIds;
+      setSession(session);
+      renderParentChildBanner(session, null, childRosterIds);
+      return;
+    }
+    openChildPicker(session, { isFirstAsk: true });
+  }
+
+  // Player/coach get the position prompt, a parent gets the child picker
+  // instead -- single dispatcher so gate() and attemptSignIn() below don't
+  // each need their own role branch.
+  function maybeShowRolePrompt(session, isFreshSignup){
+    if(window.userRole === 'parent') return maybeShowChildPrompt(session, isFreshSignup);
+    return maybeShowPositionPrompt(session, isFreshSignup);
+  }
+
   let pendingReady = null;
 
   async function attemptSignIn(){
@@ -420,7 +597,7 @@
       if(pendingReady){ const cb = pendingReady; pendingReady = null; cb(); }
       // Fire-and-forget -- app usability never waits on this, per Nathan
       // ("skippable and changeable later").
-      maybeShowPositionPrompt(session, isFreshSignup).catch(() => {});
+      maybeShowRolePrompt(session, isFreshSignup).catch(() => {});
     } catch(e){
       errorEl.textContent = 'Could not reach the team server -- check your connection and try again.';
       errorEl.style.display = 'block';
@@ -484,6 +661,22 @@
       openPositionPicker(session, { isFirstAsk: false });
     });
   }
+  const myChildBtn = document.getElementById('myChildBtn');
+  if(myChildBtn){
+    myChildBtn.addEventListener('click', async () => {
+      menuDropdown.classList.remove('show');
+      let session = getSession();
+      if(!session) return;
+      if(!session.childRosterIds){
+        const record = await getPlayerRecord(session.playerId);
+        if(record && record.childRosterIds){
+          session.childRosterIds = record.childRosterIds;
+          setSession(session);
+        }
+      }
+      openChildPicker(session, { isFirstAsk: false });
+    });
+  }
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if(thisweekMenuBtn){
     thisweekMenuBtn.addEventListener('click', () => {
@@ -528,7 +721,7 @@
       onReady();
       // Fire-and-forget, same as the fresh-sign-in path above -- covers
       // every returning player whose account predates this feature.
-      maybeShowPositionPrompt(session, false).catch(() => {});
+      maybeShowRolePrompt(session, false).catch(() => {});
       return;
     }
     pendingReady = onReady;
@@ -538,6 +731,7 @@
   window.PlayerIdentity = {
     getSession, setSession, clearSession, fetchAllPlayers, gate, getPlayerRecord,
     recordQuizResult, resetQuizStats, setPosition, openPositionPicker,
+    setChildLinks, openChildPicker, renderParentChildBanner,
     POSITION_OPTIONS, POSITION_LABELS,
   };
 })();
