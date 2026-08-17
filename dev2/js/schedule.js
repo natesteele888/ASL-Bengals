@@ -177,6 +177,73 @@
     return 'T';
   }
 
+  // Nathan: "If teams have a record, it should be shown below the team
+  // name on the game cards." We only track results for our own games (an
+  // opponent's overall season record against everyone else isn't data
+  // this app has), so this is the Bengals' own W-L(-T) record, computed
+  // from every completed game -- shown the same on every card/hero rather
+  // than a snapshot of "record entering this specific game," which would
+  // need per-game history snapshots we don't keep.
+  function bengalsRecord(list) {
+    let w = 0, l = 0, t = 0;
+    (list || []).forEach(g => {
+      const r = resultFor(g);
+      if (r === 'W') w++; else if (r === 'L') l++; else if (r === 'T') t++;
+    });
+    if (w + l + t === 0) return '';
+    return t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
+  }
+
+  // Nathan: "Add in an AI write up preview of the game going on what you
+  // have." Same reasoning as This Week's Week Ahead write-up (see
+  // js/thisweek.js) -- this is a static site with no backend, so a real
+  // hosted LLM call would mean shipping an API key publicly. This composes
+  // a short preview from data the app actually has: the Bengals' record,
+  // the matchup/date/time/location, and head-to-head history against this
+  // same opponent (matched by normalizeOpponentKey so "Clinton" and
+  // "Clinton (Scrimmage)" count as the same team).
+  function buildGamePreviewText(game, allGames) {
+    if (!game || !game.opponent) return '';
+    const record = bengalsRecord(allGames);
+    const recordPart = record ? ` (${record})` : '';
+    const verb = game.homeAway === 'Away' ? 'travel to face' : 'host';
+    const dateStr = game.date ? fmtDate(game.date) : 'a date still to be determined';
+    const timeStr = game.gameTime ? ` at ${to12h(game.gameTime)}` : '';
+    const typeWord = game.gameType === 'Playoff' ? 'Playoff game'
+      : (game.gameType && game.gameType !== 'Regular Season' ? game.gameType : 'matchup');
+    const locPart = game.location ? ` at ${game.location}` : '';
+
+    const oppKey = normalizeOpponentKey(game.opponent);
+    const past = (allGames || []).filter(g => g.id !== game.id && normalizeOpponentKey(g.opponent) === oppKey && resultFor(g));
+    let seriesPart;
+    if (past.length) {
+      let w = 0, l = 0, t = 0;
+      past.forEach(g => { const r = resultFor(g); if (r === 'W') w++; else if (r === 'L') l++; else t++; });
+      if (w > l) seriesPart = ` The Bengals lead the series ${w}-${l}${t ? `-${t}` : ''} against ${game.opponent} this season.`;
+      else if (l > w) seriesPart = ` ${game.opponent} leads the series ${l}-${w}${t ? `-${t}` : ''} against the Bengals this season.`;
+      else seriesPart = ` The series against ${game.opponent} is tied ${w}-${w}${t ? `-${t}` : ''} this season.`;
+    } else {
+      seriesPart = ' This is the first meeting between these two teams this season.';
+    }
+
+    return `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${seriesPart}`;
+  }
+
+  function renderGamePreview() {
+    const wrap = document.getElementById('schedGamePreviewWrap');
+    const textEl = document.getElementById('schedGamePreviewText');
+    if (!wrap || !textEl || !current) return;
+    const text = buildGamePreviewText(current, games);
+    wrap.style.display = text ? '' : 'none';
+    textEl.textContent = text;
+  }
+
+  function renderWeather() {
+    const wrap = document.getElementById('schedWeatherWrap');
+    if (!wrap || !current || !window.loadWeatherInto) return;
+    window.loadWeatherInto(wrap, current.location, current.date, current.gameTime);
+  }
+
   function fmtDate(dateStr) {
     if (!dateStr) return 'Date TBD';
     // date input value is 'YYYY-MM-DD' -- parse as local, not UTC, so the
@@ -277,6 +344,8 @@
       listEl.appendChild(empty);
       return;
     }
+    const recordStr = bengalsRecord(games);
+    const recordHtml = recordStr ? `<span class="scheduleTeamRecord">${escapeHtml(recordStr)}</span>` : '';
     games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')).forEach(g => {
       const result = resultFor(g);
       const row = document.createElement('button');
@@ -294,7 +363,7 @@
         ${gameTypeTag}
         <span class="scheduleRowDate">${locLine}</span>
         <span class="scheduleRowMatchup">
-          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
+          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}${usScore}</span>
           <span class="scheduleRowCenter">
             <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
             ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
@@ -366,12 +435,14 @@
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
       const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${preGameTimesLine ? ' • ' + preGameTimesLine : ''}`;
       const gameTypeTag = current.gameType && current.gameType !== 'Regular Season' ? `<div style="text-align:center;margin-bottom:8px;"><span class="scheduleGameTypeTag">${escapeHtml(current.gameType)}</span></div>` : '';
+      const heroRecordStr = bengalsRecord(games);
+      const heroRecordHtml = heroRecordStr ? `<span class="scheduleTeamRecord">${escapeHtml(heroRecordStr)}</span>` : '';
       return `
         <div class="scheduleDetailHero">
           ${gameTypeTag}
           <div class="scheduleRowDate" style="text-align:center;margin-bottom:10px;">${topLine}</div>
           <div class="scheduleRowMatchup">
-            <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
+            <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${heroRecordHtml}${usScore}</span>
             <span class="scheduleRowCenter">
               <span class="scheduleRowCenterDate">${fmtDate(current.date)}</span>
               ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
@@ -386,6 +457,12 @@
       // ---- Read-only view ----
       body.innerHTML = `
         ${heroHtml}
+        <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
+          <div class="thisweekKeysTitle">📰 Game Preview</div>
+          <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
+          <div class="lbSub" style="margin-top:8px;text-align:left;">Auto-generated from Schedule data</div>
+        </div>
+        <div id="schedWeatherWrap" style="display:none;"></div>
         <div class="lbSub" style="margin-bottom:6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
@@ -400,12 +477,20 @@
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>`;
       wireAddToCalendar();
       loadLinkedGamePlan();
+      renderGamePreview();
+      renderWeather();
       return;
     }
 
     // ---- Coach edit view ----
     body.innerHTML = `
       ${heroHtml}
+      <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
+        <div class="thisweekKeysTitle">📰 Game Preview</div>
+        <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
+        <div class="lbSub" style="margin-top:8px;text-align:left;">Auto-generated from Schedule data -- updates once you save opponent/date/etc.</div>
+      </div>
+      <div id="schedWeatherWrap" style="display:none;"></div>
       <input type="text" id="schedOpponent" placeholder="Opponent" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
         <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Team Logo<input type="file" id="schedLogoInput" accept="image/*" style="display:none;"></label>
@@ -505,6 +590,8 @@
       chip.addEventListener('click', () => { current.gameType = v; renderDetail(); });
       gtGrid.appendChild(chip);
     });
+    renderGamePreview();
+    renderWeather();
   }
 
   // If This Week (js/thisweek.js) is currently pointed at this game, pull

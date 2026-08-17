@@ -31,7 +31,7 @@
   // to repeat or set practice for multiple days."
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  let items = [];     // [{id, type, date, time, location, notes, updatedAt}]
+  let items = [];     // [{id, type, date, time, endTime, location, notes, updatedAt}]
   let current = null; // item open in the detail view, or null (list view)
   let loaded = false;
 
@@ -58,6 +58,21 @@
   }
   function typeInfo(type) {
     return TYPES.find(t => t.key === type) || TYPES[0];
+  }
+  // Nathan: "need an end time for practice too." Both fields are the same
+  // native <input type="time"> "HH:MM" shape, so a plain string compare
+  // is enough to sanity-check end > start (no am/pm ambiguity possible).
+  function timeRangeLabel(start, end) {
+    if (!start) return '';
+    return end ? `${to12h(start)} - ${to12h(end)}` : to12h(start);
+  }
+  function minutesBetween(start, end) {
+    if (!start || !end) return null;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    if ([sh, sm, eh, em].some(isNaN)) return null;
+    const mins = (eh * 60 + em) - (sh * 60 + sm);
+    return mins > 0 ? mins : null;
   }
   // Same fix as js/schedule.js -- see the comment there. Practice Time used
   // to be free text too, which is why it could silently fail to parse and
@@ -140,7 +155,7 @@
       row.className = 'practiceRow';
       row.innerHTML = `
         <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
-        <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(to12h(p.time)) : ''}</span>
+        <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
         ${p.notes ? `<span class="practiceRowNotes">${escapeHtml(p.notes)}</span>` : ''}`;
       row.addEventListener('click', () => openDetail(p.id));
@@ -184,12 +199,14 @@
       // ---- Read-only view ----
       body.innerHTML = `
         <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
-        <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(to12h(current.time)) : ''}</div>
+        <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(timeRangeLabel(current.time, current.endTime)) : ''}</div>
         <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div id="practiceWeatherWrap" style="display:none;"></div>
         <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<div style="text-align:center;"><a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a></div><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         ${current.notes ? `<div class="lbSectionHeader" style="margin-top:16px;">📝 Notes</div><div class="scheduleWriteup">${escapeHtml(current.notes).replace(/\n/g, '<br>')}</div>` : ''}`;
       wireAddToCalendar();
+      renderWeather();
       return;
     }
 
@@ -206,13 +223,16 @@
       <div class="gameplanPickerGrid" id="practiceTypeGrid" style="margin-bottom:12px;"></div>
       ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button> &middot; <button type="button" class="lbLinkBtn" id="practiceDuplicateBtn">⧉ Duplicate</button></div>` : ''}
       <input type="date" id="practiceDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
-      <div class="lbSub" style="margin:0 0 3px;">Time</div>
-      <input type="time" id="practiceTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <div style="flex:1;"><div class="lbSub" style="margin:0 0 3px;">Start Time</div><input type="time" id="practiceTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+        <div style="flex:1;"><div class="lbSub" style="margin:0 0 3px;">End Time</div><input type="time" id="practiceEndTime" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:4px;">
         <input type="text" id="practiceLocation" placeholder="Address (e.g. Fuller Field, Clinton MA)" style="flex:1;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <a id="practiceMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
       </div>
       <div id="practiceMapPreviewWrap" style="margin-bottom:8px;"></div>
+      <div id="practiceWeatherWrap" style="display:none;"></div>
       ${isNew ? `
       <div class="lbSectionHeader" style="margin-top:6px;">🔁 Repeat (optional)</div>
       <div class="lbSub" style="margin:2px 0 8px;">Pick the day(s) of the week and an end date to add this on every matching date at once -- each one saves as its own entry, so you can still move or cancel a single day later.</div>
@@ -226,6 +246,7 @@
 
     document.getElementById('practiceDate').value = current.date || '';
     document.getElementById('practiceTime').value = to24h(current.time);
+    document.getElementById('practiceEndTime').value = to24h(current.endTime);
     document.getElementById('practiceLocation').value = current.location || '';
     document.getElementById('practiceNotes').value = current.notes || '';
 
@@ -274,6 +295,14 @@
     document.getElementById('practiceLocation').addEventListener('input', refreshMapPreview);
     refreshMapPreview();
     if (!isNew) { wireAddToCalendar(); wireDuplicate(); }
+    renderWeather();
+  }
+
+  // Nathan: "add in projected weather for the event when available."
+  function renderWeather() {
+    const wrap = document.getElementById('practiceWeatherWrap');
+    if (!wrap || !current || !window.loadWeatherInto) return;
+    window.loadWeatherInto(wrap, current.location, current.date, current.time);
   }
 
   // Nathan: "Did you give me the option to duplicate a practice?" -- clones
@@ -305,7 +334,7 @@
       if (!current.date) { alert('Add a date first.'); return; }
       if (!window.buildICS || !window.downloadICS) return;
       const ics = window.buildICS([{
-        uid: current.id, date: current.date, time: current.time || '', durationMinutes: 105,
+        uid: current.id, date: current.date, time: current.time || '', durationMinutes: minutesBetween(current.time, current.endTime) || 105,
         title: current.type === 'film' ? 'ASL Bengals Film Night' : 'ASL Bengals Practice',
         location: current.location || '',
         description: current.notes || '',
@@ -333,6 +362,7 @@
     if (!current) return;
     current.date = document.getElementById('practiceDate').value;
     current.time = document.getElementById('practiceTime').value.trim();
+    current.endTime = document.getElementById('practiceEndTime').value.trim();
     current.location = document.getElementById('practiceLocation').value.trim();
     current.notes = document.getElementById('practiceNotes').value.trim();
     if (!current.date) {
@@ -359,7 +389,7 @@
       }
       const now = new Date().toISOString();
       dates.forEach(date => {
-        items.push({ id: genId(), type: current.type, date, time: current.time, location: current.location, notes: current.notes, updatedAt: now });
+        items.push({ id: genId(), type: current.type, date, time: current.time, endTime: current.endTime, location: current.location, notes: current.notes, updatedAt: now });
       });
       persistItems(() => closeDetail());
       return;

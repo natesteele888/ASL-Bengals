@@ -270,8 +270,7 @@
         heading.appendChild(note);
       }
       const heading2 = document.createElement('div');
-      heading2.className = 'lbList';
-      heading2.style.marginBottom = '14px';
+      heading2.className = 'lbList playerCardStatBox';
       const table = document.createElement('table');
       table.className = 'playerCardStatTable';
       table.innerHTML = `
@@ -289,7 +288,7 @@
     body.appendChild(rgHeading);
 
     const rgWrap = document.createElement('div');
-    rgWrap.className = 'lbList';
+    rgWrap.className = 'lbList playerCardGamesBox';
 
     if (!recentGames.length) {
       const empty = document.createElement('div');

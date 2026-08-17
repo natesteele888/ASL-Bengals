@@ -39,6 +39,16 @@
     h = h % 12; if (h === 0) h = 12;
     return `${h}:${min} ${ap}`;
   }
+  // Nathan: "need an end time for practice too" -- prefer the real
+  // start/end gap for the bulk .ics export when both are set.
+  function minutesBetween(start, end) {
+    if (!start || !end) return null;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    if ([sh, sm, eh, em].some(isNaN)) return null;
+    const mins = (eh * 60 + em) - (sh * 60 + sm);
+    return mins > 0 ? mins : null;
+  }
 
   function mergedEntries(games, practices) {
     const gameEntries = games.map(g => ({
@@ -66,7 +76,7 @@
       description: [g.arriveTime ? `Arrive by ${to12h(g.arriveTime)}` : '', g.warmupTime ? `Warm-up ${to12h(g.warmupTime)}` : ''].filter(Boolean).join(' • '),
     }));
     const practiceEvents = practices.filter(p => p.date).map(p => ({
-      uid: p.id, date: p.date, time: p.time || '', durationMinutes: 105,
+      uid: p.id, date: p.date, time: p.time || '', durationMinutes: minutesBetween(p.time, p.endTime) || 105,
       title: p.type === 'film' ? 'ASL Bengals Film Night' : 'ASL Bengals Practice',
       location: p.location || '',
       description: p.notes || '',

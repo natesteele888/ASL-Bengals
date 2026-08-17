@@ -1381,6 +1381,18 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .scheduleTeamBadge img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .scheduleTeamSide { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; flex: 1 1 0; min-width: 0; max-width: 100%; text-align: center; }
 .scheduleTeamName { font-size: 11.5px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+/* Nathan: "If teams have a record, it should be shown below the team name
+   on the game cards." Bengals-only -- see the code comment on
+   bengalsRecord() in js/schedule.js for why the opponent side doesn't get
+   one. */
+.scheduleTeamRecord { font-size: 9.5px; font-weight: 700; color: #9aa4ae; margin-top: -1px; }
+/* Nathan: "add in projected weather for the event when available." See
+   js/weather.js -- hidden entirely (display:none) when no forecast is
+   available rather than showing an empty/error state. */
+.weatherBox { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.03); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+.weatherIcon { font-size: 28px; line-height: 1; flex: 0 0 auto; }
+.weatherText { font-size: 13px; color: var(--ink); line-height: 1.35; }
+[data-theme="dark"] .weatherBox { background: rgba(255,255,255,.04); }
 .scheduleTeamScore { font-size: 20px; font-weight: 900; color: #fff; min-width: 28px; text-align: center; }
 .scheduleTeamScore.tbd { font-size: 10px; font-weight: 700; color: #9aa4ae; }
 .scheduleRowCenter { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0 8px; min-width: 78px; }
@@ -1501,16 +1513,22 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .playerCardEditForm input[type="file"] { color: #cfd7de; font-size: 11px; }
 .playerCardEditRow { display: flex; gap: 8px; }
 .playerCardEditRow > div { flex: 1 1 0; min-width: 0; }
-.playerCardStatTable { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 4px; }
-.playerCardStatTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 6px 3px; text-align: center; }
-.playerCardStatTable td { border: 1px solid var(--line); padding: 6px 3px; text-align: center; font-weight: 700; }
+/* Nathan: "add more padding around the stats area on the player cards." A
+   bordered, padded box around each table (season/career/recent games)
+   instead of the table sitting flush against the rest of the card, plus
+   roomier cell padding inside the tables themselves. */
+.playerCardStatBox, .playerCardGamesBox { background: rgba(0,0,0,.025); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+[data-theme="dark"] .playerCardStatBox, [data-theme="dark"] .playerCardGamesBox { background: rgba(255,255,255,.03); }
+.playerCardStatTable { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.playerCardStatTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 9px 6px; text-align: center; }
+.playerCardStatTable td { border: 1px solid var(--line); padding: 10px 6px; text-align: center; font-weight: 700; }
 .playerCardStatTable td.playerCardDash { color: var(--muted); font-weight: 400; }
 .playerCardStatTable tbody tr:nth-child(even) { background: rgba(0,0,0,.03); }
 [data-theme="dark"] .playerCardStatTable td { border-color: var(--line); color: var(--ink); }
 [data-theme="dark"] .playerCardStatTable tbody tr:nth-child(even) { background: rgba(255,255,255,.04); }
 .playerCardGamesTable { width: 100%; border-collapse: collapse; font-size: 11px; }
-.playerCardGamesTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 5px 3px; text-align: center; }
-.playerCardGamesTable td { border: 1px solid var(--line); padding: 5px 3px; text-align: center; }
+.playerCardGamesTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 8px 6px; text-align: center; }
+.playerCardGamesTable td { border: 1px solid var(--line); padding: 8px 6px; text-align: center; }
 .playerCardGamesTable td.playerCardGameOpp { text-align: left; font-weight: 700; }
 .playerCardGamesTable td.playerCardDash { color: var(--muted); }
 [data-theme="dark"] .playerCardGamesTable td { border-color: var(--line); color: var(--ink); }
