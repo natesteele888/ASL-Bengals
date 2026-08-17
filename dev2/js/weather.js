@@ -17,17 +17,37 @@
 
   const cache = {}; // "City, ST|date|time" -> forecast object | null
 
-  // Best-effort "City, ST" extraction from a free-text address. Open-
+  // Best-effort "City, ST" candidate list from a free-text address. Open-
   // Meteo's free geocoder matches place names, not full street addresses,
   // and a practice field's forecast doesn't meaningfully differ block to
   // block anyway -- e.g. "570 MA-110, Clinton MA, 01510" -> "Clinton, MA".
-  function extractCityState(address) {
-    if (!address) return '';
-    const m = address.match(/([A-Za-z .'-]+?)[, ]+([A-Z]{2})(?:[, ]+\d{5})?\s*$/);
-    if (m) return `${m[1].trim()}, ${m[2]}`;
-    // Fallback: last comma-separated segment that isn't just a zip code.
-    const parts = address.split(',').map(s => s.trim()).filter(Boolean).filter(s => !/^\d+$/.test(s));
-    return parts.length ? parts[parts.length - 1] : address;
+  //
+  // Nathan: practice cards for "Taylor Field Shirley MA" (a field name
+  // butted right up against the town with no comma) were never showing
+  // weather. Root cause: with no comma to lean on, the old single-regex
+  // version swallowed the whole string ("Taylor Field Shirley, MA")
+  // instead of just the town, and Open-Meteo has no record of a place
+  // called "Taylor Field Shirley." Rather than one guess, this now builds
+  // several candidates -- the last comma-separated segment (handles
+  // "570 MA-110, Clinton MA, 01510"), then the last 1/2/3 words before the
+  // state code (handles "Taylor Field Shirley MA" -> tries "Shirley, MA"
+  // first) -- and fetchForecast tries them in order until one geocodes.
+  function buildCityCandidates(address) {
+    if (!address) return [];
+    let addr = address.trim().replace(/\s*,?\s*\d{5}(-\d{4})?\s*$/, ''); // strip a trailing zip, if any
+    const m = addr.match(/^(.*?)[\s,]+([A-Z]{2})\s*$/);
+    if (!m) return [];
+    const prefix = m[1].trim();
+    const state = m[2];
+    const commaParts = prefix.split(',').map(s => s.trim()).filter(Boolean);
+    const lastSeg = commaParts.length ? commaParts[commaParts.length - 1] : prefix;
+    const candidates = [];
+    if (commaParts.length > 1) candidates.push(`${lastSeg}, ${state}`);
+    const words = lastSeg.split(/\s+/).filter(Boolean);
+    for (let n = 1; n <= Math.min(3, words.length); n++) {
+      candidates.push(`${words.slice(-n).join(' ')}, ${state}`);
+    }
+    return [...new Set(candidates)]; // de-duped, shortest/most-likely-exact-city first
   }
 
   // WMO weather codes, as returned by Open-Meteo.
@@ -51,10 +71,21 @@
     return d.innerHTML;
   }
 
+  // Tries each city candidate's geocode in order (see buildCityCandidates
+  // above) and stops at the first one Open-Meteo actually recognizes.
+  function geocodeCandidate(name) {
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
+    return fetch(geoUrl).then(r => r.ok ? r.json() : null).then(geo => (geo && geo.results && geo.results[0]) || null).catch(() => null);
+  }
+  function geocodeAny(candidates, i) {
+    i = i || 0;
+    if (i >= candidates.length) return Promise.resolve(null);
+    return geocodeCandidate(candidates[i]).then(hit => hit || geocodeAny(candidates, i + 1));
+  }
+
   function fetchForecast(address, dateStr, timeStr) {
-    const cityState = extractCityState(address);
-    const cacheKey = `${cityState}|${dateStr}|${timeStr || ''}`;
-    if (!cityState || !dateStr) return Promise.resolve(null);
+    const cacheKey = `${address}|${dateStr}|${timeStr || ''}`;
+    if (!address || !dateStr) return Promise.resolve(null);
     if (Object.prototype.hasOwnProperty.call(cache, cacheKey)) return Promise.resolve(cache[cacheKey]);
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -64,9 +95,10 @@
     const daysOut = Math.round((eventDate - today) / 86400000);
     if (daysOut < 0 || daysOut > 15) { cache[cacheKey] = null; return Promise.resolve(null); }
 
-    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityState)}&count=1&language=en&format=json`;
-    return fetch(geoUrl).then(r => r.ok ? r.json() : null).then(geo => {
-      const hit = geo && geo.results && geo.results[0];
+    const candidates = buildCityCandidates(address);
+    if (!candidates.length) { cache[cacheKey] = null; return Promise.resolve(null); }
+
+    return geocodeAny(candidates).then(hit => {
       if (!hit) { cache[cacheKey] = null; return null; }
       const fUrl = `https://api.open-meteo.com/v1/forecast?latitude=${hit.latitude}&longitude=${hit.longitude}` +
         `&hourly=temperature_2m,precipitation_probability,weathercode` +
