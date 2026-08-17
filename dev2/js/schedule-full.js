@@ -57,6 +57,7 @@
       title: `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}`,
       sub: g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'Game',
       location: g.location || '',
+      infoUrl: g.infoUrl || '',
     }));
     const practiceEntries = practices.map(p => ({
       kind: 'practice', id: p.id, date: p.date || '',
@@ -106,6 +107,7 @@
         <span class="practiceTypeBadge ${badgeClass}">${escapeHtml(e.sub)}</span>
         <span class="practiceRowDateTime">${fmtDate(e.date)}${e.time ? ' • ' + escapeHtml(to12h(e.time)) : ''} — ${escapeHtml(e.title)}</span>
         ${e.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(e.location)}</span>` : ''}
+        ${e.infoUrl ? `<span title="More info available on this game">🔗</span>` : ''}
         <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>`;
       row.addEventListener('click', () => {
         if (e.kind === 'game' && window.openScheduleGame) window.openScheduleGame(e.id);

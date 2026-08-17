@@ -56,9 +56,19 @@
   // playoffs) get a visible tag.
   const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff'];
 
-  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt}]
+  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
+  // Nathan: "would be awesome if we could include an image of the field
+  // we are playing at - also include links for more info such as the
+  // jamboree." fieldPhoto is a downscaled data URL (same pattern as the
+  // opponent logo/player photo uploads elsewhere in this app), stored per
+  // game rather than per-opponent since a photo of "the field" is tied to
+  // the specific venue for that game, not the opponent's identity.
+  // pendingFieldPhoto holds an uploaded-but-not-yet-saved photo across the
+  // edit session -- module-level (not local to renderDetail's edit
+  // branch) so syncFormToCurrent()/saveCurrent() below can read it too.
+  let pendingFieldPhoto = null;
   // Nathan: "when I am logged in as a coach, I cant see it how the players
   // see it. Give me an edit button at the top that puts me in editable
   // mode." A coach used to always land straight in the edit form with no
@@ -163,6 +173,32 @@
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
           resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Same downscale-before-storing pattern as fileToBadgeDataUrl above and
+  // player-profile.js's player-photo upload -- 360px/JPEG q0.85 to match
+  // the latter, since this is a photographic image (a field/venue), not a
+  // small badge-style logo.
+  function fileToFieldPhotoDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const max = 360;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
         img.src = reader.result;
       };
@@ -436,7 +472,7 @@
       const gameTime = to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
-      const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
+      const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
       row.innerHTML = `
@@ -471,7 +507,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '' };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -480,6 +516,9 @@
     current.warmupTime = current.warmupTime || '';
     current.gameTime = current.gameTime || '';
     current.gameType = GAME_TYPES.includes(current.gameType) ? current.gameType : 'Regular Season'; // older saved games predate this field
+    current.fieldPhoto = current.fieldPhoto || null; // older saved games predate this field
+    current.infoUrl = current.infoUrl || '';
+    pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
     // schedule opens read-only first, same as a player would see it.
@@ -558,7 +597,11 @@
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div class="lbSub" style="margin-bottom:6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
-        <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button></div>
+        <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
+          ${current.infoUrl ? `<a href="${escapeHtml(current.infoUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🔗 More Info</a>` : ''}
+        </div>
+        ${current.fieldPhoto ? `<img src="${current.fieldPhoto}" alt="Field/venue photo" style="width:100%;border-radius:10px;margin-bottom:8px;display:block;">` : ''}
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
@@ -605,6 +648,12 @@
         <a id="schedMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
       </div>
       <div id="schedMapPreviewWrap" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
+        <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Field Photo<input type="file" id="schedFieldPhotoInput" accept="image/*" style="display:none;"></label>
+        <span id="schedFieldPhotoStatus" class="lbSub" style="margin:0;"></span>
+      </div>
+      <div id="schedFieldPhotoPreviewWrap" style="margin-bottom:8px;"></div>
+      <input type="text" id="schedInfoUrl" placeholder="More info link (e.g. https://hudsonyouthfootball.com/jamboree/)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div class="lbSub" style="margin:0 0 4px;">Game type:</div>
       <div class="gameplanPickerGrid" id="schedGameTypeGrid" style="margin-bottom:12px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
@@ -633,6 +682,16 @@
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
+    document.getElementById('schedInfoUrl').value = current.infoUrl || '';
+
+    function renderFieldPhotoPreview() {
+      const wrap = document.getElementById('schedFieldPhotoPreviewWrap');
+      if (!wrap) return;
+      wrap.innerHTML = pendingFieldPhoto
+        ? `<img src="${pendingFieldPhoto}" alt="Field/venue photo" style="width:100%;border-radius:10px;display:block;">`
+        : '';
+    }
+    renderFieldPhotoPreview();
 
     function refreshMapPreview() {
       const loc = document.getElementById('schedLocation').value.trim();
@@ -665,6 +724,26 @@
             renderDetail(); // repaint the hero with the new logo immediately
           }, msg => { logoStatus.textContent = `Upload failed: ${msg}`; });
         }).catch(err => { console.error('Logo processing failed:', err); logoStatus.textContent = 'Could not read that image.'; });
+      });
+    }
+
+    // Field photo -- unlike the opponent logo above, this is NOT saved
+    // immediately on choosing a file; it's held in pendingFieldPhoto and
+    // only actually written to Firebase when the whole game is Saved
+    // (syncFormToCurrent/saveCurrent below), same deferred pattern as
+    // every other field on this form.
+    const fieldPhotoInput = document.getElementById('schedFieldPhotoInput');
+    const fieldPhotoStatus = document.getElementById('schedFieldPhotoStatus');
+    if (fieldPhotoInput) {
+      fieldPhotoInput.addEventListener('change', () => {
+        const file = fieldPhotoInput.files && fieldPhotoInput.files[0];
+        if (!file) return;
+        fieldPhotoStatus.textContent = 'Processing photo…';
+        fileToFieldPhotoDataUrl(file).then(dataUrl => {
+          pendingFieldPhoto = dataUrl;
+          fieldPhotoStatus.textContent = 'Photo ready -- click Save.';
+          renderFieldPhotoPreview();
+        }).catch(err => { console.error('Field photo processing failed:', err); fieldPhotoStatus.textContent = 'Could not read that image.'; });
       });
     }
     wireAddToCalendar();
@@ -783,6 +862,8 @@
     current.oppScore = oppScoreRaw === '' ? '' : Number(oppScoreRaw);
     current.writeup = document.getElementById('schedWriteup').value.trim();
     current.scouting = document.getElementById('schedScouting').value.trim();
+    current.infoUrl = document.getElementById('schedInfoUrl').value.trim();
+    current.fieldPhoto = pendingFieldPhoto;
     return true;
   }
 
