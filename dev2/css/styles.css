@@ -1279,14 +1279,23 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   }
 
   @media (min-width: 640px) {
-    
-    
-    
-    
 #editPlaysMode .controls { padding: 10px 16px; }
 #editPlaysMode .standalone-btn { padding: 8px 16px; font-size: 14px; }
 #editPlaysMode .toggle-group:not(.toggle-tiny) { height: 34px; }
 #editPlaysMode .toggle-group:not(.toggle-tiny) .toggle-btn { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; }
+  }
+  /* BUG FIX (found via nesting-depth trace, not just brace-count, which
+     stayed "balanced" the whole time and hid this): this @media block's
+     closing brace used to be missing here and instead sat ~190 lines
+     down, after the dark-theme attempt-box overrides -- which meant every
+     rule in between (Play Calls Quiz panel, This Week keys box, all of
+     Coach Tools/Schedule's .gameplanChip pills, the whole Schedule/
+     Practices card system, stats tables, roster forms, turnovers, the
+     player card) only ever applied on screens >=640px wide. Fine on a
+     desktop browser window, completely absent on every phone -- which is
+     exactly the "looks right on desktop, broken on mobile, survives a
+     private-tab reload" bug Nathan reported. Everything below is now
+     correctly unscoped/global again. */
 
 /* Play Calls Quiz answer panel -- reuses the same .controls/.inline-control
    shape as Edit Plays' toggle row, but that CSS is scoped to #editPlaysMode,
@@ -1467,7 +1476,6 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] .attemptRow { border-color: var(--line); }
 [data-theme="dark"] .statsRosterChip { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .attemptAddInput, [data-theme="dark"] .statsRosterPicker, [data-theme="dark"] .statsRosterNumInput, [data-theme="dark"] .statsRosterNameInput, [data-theme="dark"] .turnoverInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
-  }
 
 /* ---- Player Card -- Nathan: "Let's expand the player profile to appear
    like a player card shown here [ESPN reference]. Copy the formatting as
