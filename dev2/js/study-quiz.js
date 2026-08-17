@@ -1015,6 +1015,113 @@ document.getElementById('myStatsCloseBtn').addEventListener('click', () => {
   document.getElementById('myStatsOverlay').classList.remove('show');
 });
 
+function escStatsHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// Nathan: "would be great for parents to be able to see how their player
+// is doing on the quizzes and maybe what play signals or play calls they
+// need help with." Reuses the My Stats overlay markup (only otherwise
+// opened by myStatsBtn, which is hidden for parents/only shows a coach's
+// own stats) rather than adding new HTML, but shows a different, deeper
+// picture than My Stats does -- specific misses, not just leaderboard
+// rank -- since a parent isn't the player comparing themselves to
+// teammates, they're trying to help their kid improve.
+//
+// Quiz results are tied to a *login* (dev2Players playerId), while a
+// parent links a *roster* entry (teamRoster id) as their child -- there's
+// no real foreign key between the two, so like the leaderboards elsewhere
+// in this file, this matches on name (best-effort, same heuristic already
+// used everywhere names are cross-referenced in this app). If the child
+// has never signed in with their own name + code, there's simply no quiz
+// data yet to show -- that's explained rather than showing an empty chart.
+window.showChildQuizProgress = async function(childName){
+  const overlay = document.getElementById('myStatsOverlay');
+  const body = document.getElementById('myStatsBody');
+  if(!overlay || !body) return;
+  overlay.classList.add('show');
+  body.innerHTML = '<div class="lbEmpty">Loading…</div>';
+
+  const allPlayers = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
+  const target = normName(childName);
+  const matches = Object.keys(allPlayers || {})
+    .map(id => Object.assign({ id }, allPlayers[id]))
+    .filter(p => !p.isCoach && normName(p.name) === target)
+    .sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
+  const rec = matches[0];
+
+  if(!rec){
+    body.innerHTML = `<div class="lbSub" style="margin-bottom:6px;">${escStatsHtml(childName)}'s quiz activity</div>` +
+      `<div class="lbEmpty">${escStatsHtml(childName)} hasn't signed in with their own name + code yet, so there's no quiz activity to show. Once they log in under that same name, their progress will show up here.</div>`;
+    return;
+  }
+
+  const [pcqRoundAttempts, signalAttempts] = await Promise.all([
+    cloudFetch('analytics/pcqRoundAttempts'),
+    cloudFetch('analytics/signalAttempts'),
+  ]);
+
+  // Weakest Play Calls Quiz play types -- same shape as weakestPlayFor()
+  // in the admin dashboard, just kept local here since that one's scoped
+  // inside openAdminStats().
+  const roundsForPlayer = {};
+  (pcqRoundAttempts || []).forEach(a => {
+    if(a.playerId !== rec.id) return;
+    const e = (roundsForPlayer[a.playKey] = roundsForPlayer[a.playKey] || { attempts: 0, misses: 0 });
+    e.attempts++;
+    if(!a.correct) e.misses++;
+  });
+  function playLabelLocal(key){
+    const pt = (window.DATA && DATA.playTypes || []).find(p => p.key === key);
+    return pt ? pt.label : key;
+  }
+  const weakPlays = Object.keys(roundsForPlayer)
+    .map(k => Object.assign({ key: k }, roundsForPlayer[k]))
+    .filter(c => c.attempts >= 2 && c.misses > 0)
+    .map(c => Object.assign(c, { missRate: c.misses / c.attempts }))
+    .sort((a, b) => b.missRate - a.missRate)
+    .slice(0, 3);
+
+  // Weakest hand signals (Study/Timed Quiz).
+  const bySig = {};
+  (signalAttempts || []).forEach(a => {
+    if(a.playerId !== rec.id) return;
+    const e = (bySig[a.signalId] = bySig[a.signalId] || { attempts: 0, misses: 0 });
+    e.attempts++;
+    if(!a.correct) e.misses++;
+  });
+  const weakSignals = Object.keys(bySig).map(id => {
+    const s = bySig[id];
+    const card = ALL_CARDS.find(c => c.id === Number(id));
+    return card ? Object.assign({ card }, s, { missRate: s.misses / s.attempts }) : null;
+  }).filter(r => r && r.attempts >= 2 && r.misses > 0)
+    .sort((a, b) => b.missRate - a.missRate)
+    .slice(0, 3);
+
+  const pcqLine = rec.pcqBestScore
+    ? `${rec.pcqBestScore}/${rec.pcqBestMaxScore || '?'} best${rec.pcqLastScore ? ` · last: ${rec.pcqLastScore}/${rec.pcqBestMaxScore || '?'}` : ''}`
+    : 'No Play Calls Quiz score yet';
+
+  const weakPlaysHtml = weakPlays.length
+    ? weakPlays.map(c => `<div class="lbRow"><div class="lbName">${escStatsHtml(playLabelLocal(c.key))}</div><div class="lbScore">${c.misses}/${c.attempts} missed</div></div>`).join('')
+    : '<div class="lbEmpty">Not enough Play Calls Quiz attempts yet to spot a pattern.</div>';
+
+  const weakSignalsHtml = weakSignals.length
+    ? weakSignals.map(r => `<div class="lbRow"><div class="lbName">${escStatsHtml(r.card.meaning)}</div><div class="lbScore">${r.misses}/${r.attempts} missed</div></div>`).join('')
+    : '<div class="lbEmpty">Not enough Study/Timed Quiz attempts yet to spot a pattern.</div>';
+
+  body.innerHTML = `
+    <div class="lbSub" style="margin-bottom:6px;">${escStatsHtml(rec.name)}'s quiz activity</div>
+    <div class="msStatList">${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, null, null, true)}</div>
+    <div class="statsGroupHeading" style="margin-top:14px;">🎯 Could use extra reps on -- Play Calls</div>
+    ${weakPlaysHtml}
+    <div class="statsGroupHeading" style="margin-top:14px;">✋ Could use extra reps on -- Signals</div>
+    ${weakSignalsHtml}
+    <div class="lbSub" style="margin-top:10px;">Based on quiz attempts logged since they signed in with their own name + code.</div>`;
+};
+
 const LB_TAB_LIST_IDS = { overall: 'overallLbList', timed: 'timedLbList', quiz: 'lbList', pcq: 'pcqLbList' };
 function showLbTab(tabKey){
   document.querySelectorAll('.lbTabBtn').forEach(b => b.classList.toggle('active', b.dataset.lbtab === tabKey));

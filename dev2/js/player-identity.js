@@ -519,12 +519,24 @@
     const entries = ids.map(id => list.find(p => p.id === id)).filter(Boolean);
     if(!entries.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     wrap.style.display = '';
+    // Nathan: "would be great for parents to be able to see how their
+    // player is doing on the quizzes and maybe what play signals or play
+    // calls they need help with." Second button per linked child opens a
+    // read-only progress view (window.showChildQuizProgress, study-quiz.js)
+    // -- keyed off the child's name, not jersey #, since a roster player
+    // can now exist without one yet.
     wrap.innerHTML = `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 16px 0;">${
-      entries.map(p => `<button type="button" class="lbLinkBtn" data-num="${escapeHtmlLocal(String(p.num))}">👤 ${escapeHtmlLocal(p.name)}'s Card</button>`).join('')
+      entries.map(p => `<button type="button" class="lbLinkBtn" data-num="${escapeHtmlLocal(String(p.num))}">👤 ${escapeHtmlLocal(p.name)}'s Card</button>` +
+        `<button type="button" class="lbLinkBtn" data-progress-name="${escapeHtmlLocal(p.name)}">📊 ${escapeHtmlLocal(p.name)}'s Progress</button>`).join('')
     }</div>`;
     wrap.querySelectorAll('button[data-num]').forEach(btn => {
       btn.addEventListener('click', () => {
         if(window.showPlayerProfile) window.showPlayerProfile(btn.dataset.num);
+      });
+    });
+    wrap.querySelectorAll('button[data-progress-name]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if(window.showChildQuizProgress) window.showChildQuizProgress(btn.dataset.progressName);
       });
     });
   }
