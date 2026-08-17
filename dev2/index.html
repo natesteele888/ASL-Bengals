@@ -1032,7 +1032,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817t';
+  const BUILD_V = '20260817u';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1064,8 +1064,23 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // static files, so nothing past this point can load for someone who
   // hasn't typed a correct code. Resolves immediately if this device
   // already has a saved session; otherwise waits for the login screen.
-  await loadScript(withV('js/auth.js'));
+  //
+  // ORDER BUG (found while investigating "reload kicks me back to the
+  // login screen"): auth.js's top-level IIFE checks
+  // `window.hasGateSession && window.hasGateSession()` the INSTANT it
+  // finishes loading, to decide whether to skip straight past the login
+  // screen for a remembered device. That function is only DEFINED in
+  // cloud-auth.js. With auth.js loaded first, that check always ran
+  // before window.hasGateSession existed -- so it was always undefined,
+  // the fast-path always failed, and every full page reload (closing and
+  // reopening the PWA, a service-worker update forcing a refresh, etc.)
+  // fell through to the visible "enter your code" screen even though the
+  // real session was still saved. cloud-auth.js has no dependency on
+  // auth.js at load time (only inside functions called later, well after
+  // both scripts are in), so simply loading it first fixes this with no
+  // other changes needed.
   await loadScript(withV('js/cloud-auth.js'));
+  await loadScript(withV('js/auth.js'));
   await window.__bengalsAuthReady;
 
   const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
