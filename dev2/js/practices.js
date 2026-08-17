@@ -178,7 +178,7 @@
     // ---- Coach edit view ----
     body.innerHTML = `
       <div class="gameplanPickerGrid" id="practiceTypeGrid" style="margin-bottom:12px;"></div>
-      ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>` : ''}
+      ${!isNew ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button> &middot; <button type="button" class="lbLinkBtn" id="practiceDuplicateBtn">⧉ Duplicate</button></div>` : ''}
       <input type="date" id="practiceDate" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <input type="text" id="practiceTime" placeholder="Time (e.g. 6:00 PM)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <div style="display:flex;gap:8px;margin-bottom:4px;">
@@ -246,7 +246,26 @@
     }
     document.getElementById('practiceLocation').addEventListener('input', refreshMapPreview);
     refreshMapPreview();
-    if (!isNew) wireAddToCalendar();
+    if (!isNew) { wireAddToCalendar(); wireDuplicate(); }
+  }
+
+  // Nathan: "Did you give me the option to duplicate a practice?" -- clones
+  // the currently-open saved practice (type/time/location/notes carried
+  // over, date cleared) into a brand-new unsaved entry, right in place.
+  // Reuses the exact same "isNew" branch (repeat picker, no delete/add-to-
+  // calendar/duplicate yet) that a fresh "+ Add Practice" already gets --
+  // duplicating just pre-fills it instead of starting blank.
+  function wireDuplicate() {
+    const btn = document.getElementById('practiceDuplicateBtn');
+    if (!btn || !current) return;
+    btn.addEventListener('click', () => {
+      current = { ...current, id: genId(), date: '', updatedAt: null };
+      delete current._repeatDays;
+      delete current._repeatUntil;
+      renderDetail();
+      const statusEl = document.getElementById('practicesDetailStatus');
+      if (statusEl) statusEl.textContent = 'Duplicated -- pick a new date (and repeat days, if you want) and Save.';
+    });
   }
 
   // Nathan: "give me the option of saving all the events to your device or
