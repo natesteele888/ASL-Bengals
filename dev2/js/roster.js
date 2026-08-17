@@ -12,8 +12,34 @@
   const ROSTER_URL = `${FIREBASE_DB_URL}/teamRoster.json`;
   const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'ATH'];
 
-  let roster = []; // [{id, num, name, position}]
+  let roster = []; // [{id, num, name, position, loginPlayerId?}]
   let loaded = false;
+
+  // Nathan: "Quiz info isnt tied to kid profiles that have already logged
+  // in... As the admin, I need the ability to link those kids to the
+  // profiles that already exist." Quiz results are tagged with a
+  // dev2Players login id, not a roster id -- there's no real link between
+  // "Desmond Steele #76 on the roster" and "the 'Desmond' who signed in
+  // with a name+PIN" unless a coach explicitly connects them (name
+  // matching alone is what showChildQuizProgress falls back to when this
+  // isn't set, but that's a guess, not a fact). loginPlayerId, once set
+  // here, is the real link -- study-quiz.js's showChildQuizProgress and
+  // player-identity.js's renderParentChildBanner both prefer it over the
+  // name-matching fallback.
+  let loginPlayers = [];
+  let loginPlayersLoaded = false;
+  function loadLoginPlayers() {
+    if (loginPlayersLoaded) return Promise.resolve(loginPlayers);
+    if (!window.PlayerIdentity || !window.PlayerIdentity.fetchAllPlayers) return Promise.resolve([]);
+    return window.PlayerIdentity.fetchAllPlayers().then(all => {
+      loginPlayers = Object.keys(all || {})
+        .map(id => Object.assign({ id }, all[id]))
+        .filter(p => !p.isCoach && p.role !== 'parent' && p.role !== 'coach')
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      loginPlayersLoaded = true;
+      return loginPlayers;
+    }).catch(() => { loginPlayers = []; loginPlayersLoaded = true; return loginPlayers; });
+  }
 
   function genId() {
     return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -81,7 +107,7 @@
     } else {
       const table = document.createElement('table');
       table.className = 'statsTable statsTableEdit';
-      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>Position</th><th></th>${approved ? '<th></th>' : ''}</tr></thead>`;
+      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>Position</th>${approved ? '<th title="Which name+PIN login is this player -- links their quiz stats and parent progress view to this roster entry">Login</th>' : ''}<th></th>${approved ? '<th></th>' : ''}</tr></thead>`;
       const tbody = document.createElement('tbody');
 
       // Persist one field edit on an existing roster entry, then re-render
@@ -126,13 +152,35 @@
           POSITIONS.forEach(pos => { const o = document.createElement('option'); o.value = pos; o.textContent = pos; if (pos === p.position) o.selected = true; posSelectEdit.appendChild(o); });
           posSelectEdit.addEventListener('change', () => updatePlayer(p, 'position', posSelectEdit.value));
           posTd.appendChild(posSelectEdit);
+
+          const loginTd = document.createElement('td');
+          const loginSelect = document.createElement('select');
+          loginSelect.style.cssText = 'padding:6px;border:2px solid #ccc;border-radius:6px;font-size:12px;box-sizing:border-box;max-width:120px;';
+          const notLinkedOpt = document.createElement('option'); notLinkedOpt.value = ''; notLinkedOpt.textContent = 'Not linked';
+          loginSelect.appendChild(notLinkedOpt);
+          loginPlayers.forEach(lp => {
+            const o = document.createElement('option');
+            o.value = lp.id; o.textContent = lp.name;
+            if (lp.id === p.loginPlayerId) o.selected = true;
+            loginSelect.appendChild(o);
+          });
+          // A login that was set before but no longer shows up in the
+          // current dev2Players list (renamed, deleted) -- keep it visible
+          // instead of silently reverting to "Not linked".
+          if (p.loginPlayerId && !loginPlayers.some(lp => lp.id === p.loginPlayerId)) {
+            const staleOpt = document.createElement('option');
+            staleOpt.value = p.loginPlayerId; staleOpt.textContent = '(missing login)'; staleOpt.selected = true;
+            loginSelect.appendChild(staleOpt);
+          }
+          loginSelect.addEventListener('change', () => updatePlayer(p, 'loginPlayerId', loginSelect.value || null));
+          loginTd.appendChild(loginSelect);
+          tr.appendChild(numTd); tr.appendChild(nameTd); tr.appendChild(posTd); tr.appendChild(loginTd);
         } else {
           numTd.textContent = p.num || '—';
           nameTd.textContent = p.name;
           posTd.textContent = p.position || '—';
+          tr.appendChild(numTd); tr.appendChild(nameTd); tr.appendChild(posTd);
         }
-
-        tr.appendChild(numTd); tr.appendChild(nameTd); tr.appendChild(posTd);
 
         const viewTd = document.createElement('td');
         if (p.num) {
@@ -220,8 +268,10 @@
 
   window.initTeamRoster = function (wrap) {
     if (!wrap) return;
-    if (loaded) { renderManager(wrap); return; }
+    const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    const loginsPromise = approved ? loadLoginPlayers() : Promise.resolve([]);
+    if (loaded) { loginsPromise.then(() => renderManager(wrap)); return; }
     wrap.innerHTML = '<div class="lbSub" style="text-align:center;">Loading roster…</div>';
-    loadRoster().then(() => renderManager(wrap));
+    Promise.all([loadRoster(), loginsPromise]).then(() => renderManager(wrap));
   };
 })();

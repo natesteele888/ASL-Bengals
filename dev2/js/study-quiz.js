@@ -1037,7 +1037,7 @@ function escStatsHtml(s){
 // used everywhere names are cross-referenced in this app). If the child
 // has never signed in with their own name + code, there's simply no quiz
 // data yet to show -- that's explained rather than showing an empty chart.
-window.showChildQuizProgress = async function(childName){
+window.showChildQuizProgress = async function(childName, explicitPlayerId){
   const overlay = document.getElementById('myStatsOverlay');
   const body = document.getElementById('myStatsBody');
   if(!overlay || !body) return;
@@ -1045,16 +1045,31 @@ window.showChildQuizProgress = async function(childName){
   body.innerHTML = '<div class="lbEmpty">Loading…</div>';
 
   const allPlayers = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
-  const target = normName(childName);
-  const matches = Object.keys(allPlayers || {})
-    .map(id => Object.assign({ id }, allPlayers[id]))
-    .filter(p => !p.isCoach && normName(p.name) === target)
-    .sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
-  const rec = matches[0];
+
+  // Nathan: "As the admin, I need the ability to link those kids to the
+  // profiles that already exist." explicitPlayerId comes from
+  // roster.js's loginPlayerId (set in Coach Tools > Roster) -- a real
+  // link, not a guess. Only fall back to matching by name (the old
+  // heuristic, same one leaderboards already use) when nothing's been
+  // explicitly linked yet.
+  let rec = null;
+  if(explicitPlayerId && allPlayers && allPlayers[explicitPlayerId]){
+    rec = Object.assign({ id: explicitPlayerId }, allPlayers[explicitPlayerId]);
+  } else {
+    const target = normName(childName);
+    const matches = Object.keys(allPlayers || {})
+      .map(id => Object.assign({ id }, allPlayers[id]))
+      .filter(p => !p.isCoach && normName(p.name) === target)
+      .sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
+    rec = matches[0];
+  }
 
   if(!rec){
+    const linkHint = window.isApprovedCoachProfile && window.isApprovedCoachProfile()
+      ? ' If they log in under a different name than their roster name, link their login to this roster entry in Coach Tools > Roster.'
+      : '';
     body.innerHTML = `<div class="lbSub" style="margin-bottom:6px;">${escStatsHtml(childName)}'s quiz activity</div>` +
-      `<div class="lbEmpty">${escStatsHtml(childName)} hasn't signed in with their own name + code yet, so there's no quiz activity to show. Once they log in under that same name, their progress will show up here.</div>`;
+      `<div class="lbEmpty">${escStatsHtml(childName)} hasn't signed in with their own name + code yet, so there's no quiz activity to show. Once they log in, their progress will show up here.${linkHint}</div>`;
     return;
   }
 

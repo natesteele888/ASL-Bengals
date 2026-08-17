@@ -527,16 +527,20 @@
     // can now exist without one yet.
     wrap.innerHTML = `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 16px 0;">${
       entries.map(p => `<button type="button" class="lbLinkBtn" data-num="${escapeHtmlLocal(String(p.num))}">👤 ${escapeHtmlLocal(p.name)}'s Card</button>` +
-        `<button type="button" class="lbLinkBtn" data-progress-name="${escapeHtmlLocal(p.name)}">📊 ${escapeHtmlLocal(p.name)}'s Progress</button>`).join('')
+        `<button type="button" class="lbLinkBtn" data-progress-name="${escapeHtmlLocal(p.name)}" data-progress-id="${escapeHtmlLocal(p.loginPlayerId || '')}">📊 ${escapeHtmlLocal(p.name)}'s Progress</button>`).join('')
     }</div>`;
     wrap.querySelectorAll('button[data-num]').forEach(btn => {
       btn.addEventListener('click', () => {
         if(window.showPlayerProfile) window.showPlayerProfile(btn.dataset.num);
       });
     });
+    // p.loginPlayerId (set by a coach in Coach Tools > Roster) is the real
+    // link between this roster entry and the dev2Players login whose quiz
+    // results should show -- passed through when set so showChildQuizProgress
+    // doesn't have to fall back to guessing by name.
     wrap.querySelectorAll('button[data-progress-name]').forEach(btn => {
       btn.addEventListener('click', () => {
-        if(window.showChildQuizProgress) window.showChildQuizProgress(btn.dataset.progressName);
+        if(window.showChildQuizProgress) window.showChildQuizProgress(btn.dataset.progressName, btn.dataset.progressId || null);
       });
     });
   }
