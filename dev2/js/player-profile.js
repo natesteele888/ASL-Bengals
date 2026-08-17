@@ -156,10 +156,14 @@
     const position = rosterEntry ? rosterEntry.position : '';
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     // Nathan: "give the parent the option to update their kid's player
-    // card info" -- a parent who has linked this specific player as their
-    // child (session.childRosterIds, set via the My Child picker) can
-    // edit the same photo/height/weight/grade fields a coach can, but
-    // only for that one linked child, not the whole roster.
+    // card info" / "Each parent who claims their player, should be able
+    // to add a picture or update their #" -- a parent who has linked this
+    // specific player as their child (session.childRosterIds, set via the
+    // My Child picker) can edit the same photo/#/height/weight/grade
+    // fields a coach can, but only for that one linked child, not the
+    // whole roster. Coach Nate (or any approved coach) already gets
+    // canEdit=true here for every player's card via `approved` alone --
+    // no separate admin flag needed.
     const rosterId = rosterEntry && rosterEntry.id;
     const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
     const isLinkedParent = !!(window.isParentSession && session && rosterId &&
@@ -210,7 +214,7 @@
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'playerCardEditToggle';
-        toggle.textContent = 'Edit photo / height / weight / grade';
+        toggle.textContent = 'Edit photo / # / height / weight / grade';
         toggle.addEventListener('click', () => { editing = true; render(num, rosterEntry, games, profile); });
         editSlot.appendChild(toggle);
       } else {
@@ -222,10 +226,13 @@
             <input type="file" accept="image/*" id="playerCardPhotoInput">
           </div>
           <div class="playerCardEditRow">
+            <div><label>Jersey #</label><input type="text" id="playerCardNumInput" placeholder="e.g. 76" value="${escapeHtml(num || '')}"></div>
+            <div><label>Grade</label><input type="text" id="playerCardGradeInput" placeholder="e.g. 6th Grade" value="${escapeHtml(p.grade || '')}"></div>
+          </div>
+          <div class="playerCardEditRow">
             <div><label>Height</label><input type="text" id="playerCardHeightInput" placeholder="e.g. 5'4&quot;" value="${escapeHtml(p.height || '')}"></div>
             <div><label>Weight</label><input type="text" id="playerCardWeightInput" placeholder="e.g. 98 lbs" value="${escapeHtml(p.weight || '')}"></div>
           </div>
-          <div><label>Grade</label><input type="text" id="playerCardGradeInput" placeholder="e.g. 6th Grade" value="${escapeHtml(p.grade || '')}"></div>
           <div style="display:flex;gap:8px;margin-top:2px;">
             <button type="button" class="navBtn" id="playerCardSaveBtn" style="flex:1;padding:8px;">Save</button>
             <button type="button" class="navBtn secondary" id="playerCardCancelBtn" style="flex:1;padding:8px;">Cancel</button>
@@ -249,6 +256,12 @@
           editing = false;
           render(num, rosterEntry, games, profile);
         });
+        // Nathan: "Each parent who claims their player, should be able to
+        // add a picture or update their #." Jersey # lives on the roster
+        // entry (roster.js), not the photo/HT/WT/grade profile record --
+        // saved separately via window.updateRosterPlayerNum, then the
+        // whole card is re-fetched under the (possibly new) # so stats,
+        // the photo placeholder, and everything else stay in sync.
         form.querySelector('#playerCardSaveBtn').addEventListener('click', () => {
           const newProfile = {
             photo: pendingPhoto || null,
@@ -258,10 +271,20 @@
           };
           const rosterId = rosterEntry && rosterEntry.id;
           if (!rosterId) { statusEl.textContent = 'Could not save -- player has no roster id.'; return; }
+          const newNum = form.querySelector('#playerCardNumInput').value.trim();
+          const numChanged = newNum && newNum !== String(num || '');
           statusEl.textContent = 'Saving…';
           saveProfile(rosterId, newProfile, () => {
-            editing = false;
-            render(num, rosterEntry, games, newProfile);
+            if (!numChanged) {
+              editing = false;
+              render(num, rosterEntry, games, newProfile);
+              return;
+            }
+            if (!window.updateRosterPlayerNum) { editing = false; render(num, rosterEntry, games, newProfile); return; }
+            window.updateRosterPlayerNum(rosterId, newNum, () => {
+              editing = false;
+              if (window.showPlayerProfile) window.showPlayerProfile(newNum);
+            }, msg => { statusEl.textContent = `Photo/height/weight/grade saved, but # failed: ${msg}`; });
           }, msg => { statusEl.textContent = `Save failed: ${msg}`; });
         });
       }

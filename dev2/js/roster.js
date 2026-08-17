@@ -93,6 +93,22 @@
   window.isTeamRosterLoaded = function () { return loaded; };
   window.loadTeamRoster = loadRoster;
 
+  // Nathan: "Each parent who claims their player, should be able to add a
+  // picture or update their #." A parent edits from the player card
+  // (player-profile.js), not the coach-only Roster manager above -- this
+  // is the narrow write path that lets that card's Save button update
+  // just the jersey # on this one roster entry, without needing the full
+  // coach Roster UI or an approved-coach gate. Mutates the same in-memory
+  // roster array the rest of this module uses, so getTeamRosterCached()
+  // reflects it immediately (before the network PUT even resolves), then
+  // persists like every other roster edit.
+  window.updateRosterPlayerNum = function (rosterId, newNum, afterOk, afterFail) {
+    const entry = roster.find(x => x.id === rosterId);
+    if (!entry) { if (afterFail) afterFail('Player not found on roster'); return; }
+    entry.num = newNum;
+    persistRoster(afterOk, afterFail);
+  };
+
   // ---- Manager UI ----
   function renderManager(wrap) {
     if (!wrap) return;
