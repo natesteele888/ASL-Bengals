@@ -23,6 +23,7 @@
 
   const THISWEEK_URL = `${FIREBASE_DB_URL}/thisWeek.json`;
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
+  const PRACTICES_URL = `${FIREBASE_DB_URL}/practices.json`;
   const MAX_PLAYS = 15;
   const MIN_RECOMMENDED = 5;
   const NUM_KEYS = 3;
@@ -42,6 +43,7 @@
   let pendingSelection = []; // coach's in-progress play selection: [{key, direction}]
   let pendingGameId = '';
   let upcomingGames = []; // light read-only copy of schedule.json for the game picker
+  let upcomingPractices = []; // light read-only copy of practices.json for the Week Ahead write-up
   let loaded = false;
 
   function loadUpcomingGames() {
@@ -51,8 +53,76 @@
       })
       .catch(err => console.error('Could not load schedule for This Week game picker:', err));
   }
+  // Own light copy rather than depending on js/practices.js's cache -- This
+  // Week can render before the Schedule > Practices tab has ever been
+  // opened, same reasoning as loadUpcomingGames() above.
+  function loadUpcomingPractices() {
+    return window.firebaseAuthed(PRACTICES_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => {
+        upcomingPractices = Array.isArray(data) ? data.filter(p => p && p.id) : [];
+      })
+      .catch(err => console.error('Could not load practices for This Week look-ahead:', err));
+  }
   function gameLabel(g) {
     return `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.date ? ' — ' + g.date : ''}`;
+  }
+
+  // Nathan: "can we incorporate an AI generated look ahead for the team?
+  // Would be nice to be a little write up of the week ahead." Composed
+  // straight from Schedule's own games/practices in the next 7 days --
+  // see the index.html comment above #thisweekAheadBox for why this is a
+  // template instead of a live LLM call on a static, key-less site.
+  function buildWeekAheadText(games, practices) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setDate(end.getDate() + 6);
+    const toDateOnly = (dateStr) => {
+      const parts = (dateStr || '').split('-').map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    };
+    const inWindow = (d) => d && d >= today && d <= end;
+    const weekdayShort = (d) => d.toLocaleDateString(undefined, { weekday: 'short' });
+
+    const entries = [];
+    (games || []).forEach(g => {
+      const d = toDateOnly(g.date);
+      if (!inWindow(d)) return;
+      const tag = g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'Game';
+      entries.push({ d, kind: 'game', text: `${tag} ${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}` });
+    });
+    (practices || []).forEach(p => {
+      const d = toDateOnly(p.date);
+      if (!inWindow(d)) return;
+      entries.push({ d, kind: p.type === 'film' ? 'film' : 'practice', text: p.type === 'film' ? 'Film Night' : 'Practice' });
+    });
+    entries.sort((a, b) => a.d - b.d);
+
+    if (!entries.length) return 'Nothing on the Schedule for the next 7 days yet -- once games or practices are added, they’ll show up here.';
+
+    const clauses = entries.map(e => `${weekdayShort(e.d)} ${e.text}`);
+    let joined;
+    if (clauses.length === 1) joined = clauses[0];
+    else if (clauses.length === 2) joined = clauses.join(' and ');
+    else joined = clauses.slice(0, -1).join(', ') + ', and ' + clauses[clauses.length - 1];
+
+    const gameCount = entries.filter(e => e.kind === 'game').length;
+    const practiceCount = entries.length - gameCount;
+    const parts = [];
+    if (practiceCount) parts.push(`${practiceCount} practice${practiceCount !== 1 ? 's' : ''}`);
+    if (gameCount) parts.push(`${gameCount} game${gameCount !== 1 ? 's' : ''}`);
+    const tail = parts.length ? ` ${parts.join(' and ')} on the schedule -- be ready.` : '';
+
+    return `This week: ${joined}.${tail}`;
+  }
+
+  function renderWeekAhead() {
+    const box = document.getElementById('thisweekAheadBox');
+    const textEl = document.getElementById('thisweekAheadText');
+    if (!box || !textEl) return;
+    box.style.display = '';
+    textEl.textContent = buildWeekAheadText(upcomingGames, upcomingPractices);
   }
 
   function numberedRows() {
@@ -93,11 +163,12 @@
         pendingSelection = saved.plays.slice();
         pendingGameId = saved.gameId || '';
         if (statusEl) statusEl.textContent = '';
-        return loadUpcomingGames();
+        return Promise.all([loadUpcomingGames(), loadUpcomingPractices()]);
       })
       .then(() => {
         renderReadOnly();
         renderEditor();
+        renderWeekAhead();
       })
       .catch(err => {
         console.error('Could not load This Week:', err);
@@ -287,6 +358,7 @@
     } else {
       renderReadOnly();
       renderEditor();
+      renderWeekAhead();
     }
   };
 })();
