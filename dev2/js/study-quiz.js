@@ -917,11 +917,25 @@ function timedIsBetter(a, b){
   return a.mistakes < b.mistakes;
 }
 
+// Nathan: "if someone gets 100% or other % on the quiz multiple times, show
+// x2 or however many times they get it." The leaderboard itself only ever
+// shows one row per person (their best run), so the repeat count comes
+// from a separate source: analytics/standardResults logs EVERY completed
+// run automatically (score/total/name, no manual "save" step needed --
+// see currentPlayerTag/logQuizStart-style writes elsewhere in this file),
+// so it's a true count of how many times that exact score was hit, not
+// just how many times they bothered to resave to the public board.
+function countTimesAchieved(history, name, matches){
+  const key = normName(name);
+  return history.filter(r => normName(r.name) === key && matches(r)).length;
+}
 async function fetchQuizLeaderboardData(){
-  const cloudList = await cloudFetch('leaderboard');
+  const [cloudList, historyRaw] = await Promise.all([cloudFetch('leaderboard'), cloudFetch('analytics/standardResults')]);
   const offline = cloudList === null;
   const raw = (offline ? getLeaderboard() : cloudList).slice();
   const deduped = dedupeBestByName(raw, quizIsBetter);
+  const history = historyRaw || [];
+  deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.total === e.total); });
   deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
   return { list: deduped.slice(0, LEADERBOARD_MAX), offline: offline };
 }
@@ -939,11 +953,13 @@ async function fetchTimedLeaderboardData(){
 // from PlayerIdentity instead of duplicating the data.
 async function fetchPCQLeaderboardData(){
   if(!window.PlayerIdentity) return { list: [], offline: true };
-  const players = await window.PlayerIdentity.fetchAllPlayers();
+  const [players, historyRaw] = await Promise.all([window.PlayerIdentity.fetchAllPlayers(), cloudFetch('analytics/pcqResults')]);
   const raw = Object.values(players)
     .filter(p => p.pcqBestScore)
     .map(p => ({ name: p.name, score: p.pcqBestScore, maxScore: p.pcqBestMaxScore }));
   const deduped = dedupeBestByName(raw, (a, b) => a.score > b.score);
+  const history = historyRaw || [];
+  deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.maxScore === e.maxScore); });
   deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score);
   return { list: deduped.slice(0, LEADERBOARD_MAX), offline: false };
 }
@@ -955,7 +971,7 @@ async function renderLeaderboard(highlightEntry){
   if(list.length === 0){
     lbList.innerHTML = '<div class="lbEmpty">No scores yet — finish a quiz to be the first!</div>';
   } else {
-    lbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${e.score}/${e.total}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`)).join('');
+    lbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${e.score}/${e.total}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`)).join('');
   }
   if(offline){
     lbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing scores saved on this device only — could not reach the team server.</div>';
@@ -979,7 +995,7 @@ async function renderPCQLeaderboard(){
   pcqLbList.innerHTML = '<div class="lbEmpty">Loading team scores…</div>';
   const { list } = await fetchPCQLeaderboardData();
   pcqLbList.innerHTML = list.length
-    ? list.map((e,i)=> lbRowHtml(e, i, null, `${e.score}/${e.maxScore}`)).join('')
+    ? list.map((e,i)=> lbRowHtml(e, i, null, `${e.score}/${e.maxScore}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}`)).join('')
     : '<div class="lbEmpty">No Play Calls Quiz scores yet — finish a run to be the first!</div>';
 }
 

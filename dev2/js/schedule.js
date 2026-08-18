@@ -253,7 +253,17 @@
     const recordPart = record ? ` (${record})` : '';
     const verb = game.homeAway === 'Away' ? 'travel to face' : 'host';
     const dateStr = game.date ? fmtDate(game.date) : 'a date still to be determined';
-    const timeStr = game.gameTime ? ` at ${to12h(game.gameTime)}` : '';
+    // Nathan: "there is a lot of info about arriving for 12pm and warm up
+    // at 1pm and game at 230pm -- that should all be mentioned in the game
+    // preview." Previously this only surfaced kickoff time; now it lists
+    // whichever of arrive/warm-up/kickoff are actually filled in for this
+    // game (older games that only ever had a single Time field just fall
+    // back to kickoff-only, same as before).
+    const timeParts = [];
+    if (game.arriveTime) timeParts.push(`arrive ${to12h(game.arriveTime)}`);
+    if (game.warmupTime) timeParts.push(`warm-up ${to12h(game.warmupTime)}`);
+    if (game.gameTime) timeParts.push(`kickoff ${to12h(game.gameTime)}`);
+    const timeStr = timeParts.length ? ` (${timeParts.join(', ')})` : '';
     const typeWord = game.gameType === 'Playoff' ? 'Playoff game'
       : (game.gameType && game.gameType !== 'Regular Season' ? game.gameType : 'matchup');
     const locPart = game.location ? ` at ${game.location}` : '';
@@ -271,7 +281,22 @@
       seriesPart = ' This is the first meeting between these two teams this season.';
     }
 
-    const base = `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${seriesPart}`;
+    // Nathan: "add some context -- this is the opening jamboree of the
+    // season, it will be a good test to see how we fair against another
+    // opponent." Data-driven rather than hardcoded to one specific game:
+    // fires for any Jamboree that happens to be the earliest-dated game on
+    // the whole schedule, so it stays correct automatically if next
+    // season's opener is scheduled the same way.
+    let openerPart = '';
+    if (game.gameType === 'Jamboree' && game.date) {
+      const dated = (allGames || []).filter(g => g.date);
+      const earliest = dated.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (earliest && earliest.id === game.id) {
+        openerPart = ' This is the Bengals\' season-opening Jamboree -- a good early test to see how the team stacks up against another opponent.';
+      }
+    }
+
+    const base = `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${openerPart}${seriesPart}`;
     const statsText = teamLeadersAndAveragesText(allGames);
     return statsText ? `${base} ${statsText}` : base;
   }
