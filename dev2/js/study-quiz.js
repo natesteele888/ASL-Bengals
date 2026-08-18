@@ -92,8 +92,8 @@ if (topSectionsEl) {
 // Schedule as their entire app -- Play (Study/Quiz/Play Calls/Play Quiz)
 // hides alongside This Week and Coach Tools, which were already
 // coach-only. Their one extra bit of visibility -- their own child's
-// player card -- lives in the always-on parentChildBanner above Schedule
-// (player-identity.js's renderParentChildBanner), not in this nav.
+// player card -- lives in the toolbar's child pill (#childPillsWrap, see
+// player-identity.js's renderChildToolbarPills), not in this nav.
 window.refreshCoachToolsVisibility = function(){
   const isCoach = !!window.isCoachSession;
   const isParent = !!window.isParentSession;
@@ -155,10 +155,8 @@ window.refreshCoachToolsVisibility = function(){
   // nav (unlike a parent, nothing else is hidden for a coach).
   const myChildBtn = document.getElementById('myChildBtn');
   if (myChildBtn) myChildBtn.style.display = (isParent || isCoach) ? '' : 'none';
-  const parentChildBanner = document.getElementById('parentChildBanner');
-  if (parentChildBanner && !isParent && !isCoach) parentChildBanner.style.display = 'none';
   // Nathan: "there should be a 2nd pill next to your own pill for the
-  // player" -- same coach/parent-only gating as parentChildBanner above.
+  // player" -- coach/parent-only, same audience as myChildBtn above.
   // Cleared (not just hidden) on Switch Profile into a plain player session
   // so a previous coach/parent's child pill(s) on this device can't linger.
   const childPillsWrap = document.getElementById('childPillsWrap');

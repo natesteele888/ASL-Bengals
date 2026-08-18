@@ -400,8 +400,21 @@
   // updateBadge()'s applyNum, read by myCardBtn's click handler below so it
   // doesn't have to redo the same roster lookup.
   let myCardRosterMatch = null;
+  // Nathan: "if it's a coach profile the icon should be a whistle and the
+  // player should be the football." Unicode has no actual whistle
+  // character (confirmed -- no codepoint anywhere in the emoji ranges is
+  // named WHISTLE/REFEREE; apps that show a "whistle" emoji, like Slack's
+  // :whistle:, are using a custom non-Unicode image), so this uses postal
+  // horn as the closest real emoji to a coach's whistle. A parent viewing
+  // their OWN pill also gets the football, same as a player -- this is
+  // about coach-vs-everyone-else, not role in general (a parent isn't a
+  // coach, and their linked child's pill is always a football regardless,
+  // since a child is never a coach -- see renderChildToolbarPills).
+  function badgeIconFor(){ return window.isCoachSession ? '📯' : '🏈'; }
   function updateBadge(name){
     if(badgeNameEl) badgeNameEl.textContent = name;
+    const iconEl = document.getElementById('playerIdBadgeIcon');
+    if(iconEl) iconEl.textContent = badgeIconFor();
     const numEl = document.getElementById('playerIdBadgeNum');
     const myCardBtn = document.getElementById('myCardBtn');
     myCardRosterMatch = null;
@@ -647,47 +660,23 @@
   }
 
   // Nathan: "Just want them to log in, see how their child is doing, see
-  // the schedule." Since a parent's Play/This Week/Coach Tools are all
-  // hidden (refreshCoachToolsVisibility in study-quiz.js), Schedule is
-  // their whole app -- this keeps a one-tap way back to their child's
-  // card always visible instead of it only showing up once at sign-in.
-  // Re-rendered every time the link changes (Done above) so it never goes
-  // stale, and pass a pre-fetched roster in when the caller already has
-  // one handy rather than re-fetching.
+  // the schedule." Originally rendered a standalone "Name's Card / Name's
+  // Progress" text-link banner between the icon rows above Schedule; once
+  // the toolbar's child pill (renderChildToolbarPills, added right above)
+  // covered the exact same Card/Progress access, Nathan asked to drop the
+  // banner as redundant clutter: "by having that there, remove the links
+  // between the two rows of icons." This now just resolves the linked
+  // roster entries and hands them to renderChildToolbarPills -- kept as its
+  // own function (rather than inlined at every call site) since it's still
+  // the single funnel every sign-in/link-change path below calls through,
+  // and pass a pre-fetched roster in when the caller already has one handy
+  // rather than re-fetching.
   async function renderParentChildBanner(session, roster, childRosterIds){
-    const wrap = document.getElementById('parentChildBanner');
-    if(!wrap) return;
     const ids = childRosterIds || (session && session.childRosterIds) || [];
-    if(!ids.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; renderChildToolbarPills([]); return; }
+    if(!ids.length){ renderChildToolbarPills([]); return; }
     const list = roster || await fetchRosterForPicker();
     const entries = ids.map(id => list.find(p => p.id === id)).filter(Boolean);
-    if(!entries.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; renderChildToolbarPills([]); return; }
     renderChildToolbarPills(entries);
-    wrap.style.display = '';
-    // Nathan: "would be great for parents to be able to see how their
-    // player is doing on the quizzes and maybe what play signals or play
-    // calls they need help with." Second button per linked child opens a
-    // read-only progress view (window.showChildQuizProgress, study-quiz.js)
-    // -- keyed off the child's name, not jersey #, since a roster player
-    // can now exist without one yet.
-    wrap.innerHTML = `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 16px 0;">${
-      entries.map(p => `<button type="button" class="lbLinkBtn" data-num="${escapeHtmlLocal(String(p.num))}">👤 ${escapeHtmlLocal(p.name)}'s Card</button>` +
-        `<button type="button" class="lbLinkBtn" data-progress-name="${escapeHtmlLocal(p.name)}" data-progress-id="${escapeHtmlLocal(p.loginPlayerId || '')}">📊 ${escapeHtmlLocal(p.name)}'s Progress</button>`).join('')
-    }</div>`;
-    wrap.querySelectorAll('button[data-num]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if(window.showPlayerProfile) window.showPlayerProfile(btn.dataset.num);
-      });
-    });
-    // p.loginPlayerId (set by a coach in Coach Tools > Roster) is the real
-    // link between this roster entry and the dev2Players login whose quiz
-    // results should show -- passed through when set so showChildQuizProgress
-    // doesn't have to fall back to guessing by name.
-    wrap.querySelectorAll('button[data-progress-name]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if(window.showChildQuizProgress) window.showChildQuizProgress(btn.dataset.progressName, btn.dataset.progressId || null);
-      });
-    });
   }
 
   // Decides whether to auto-show the child-linking prompt after a

@@ -92,7 +92,7 @@
        doesn't carry a jersey # of its own). -->
   <div class="pillRow" id="pillRow">
     <div class="playerMenuWrap" id="playerMenuWrap">
-      <button class="playerMenuBtn" id="playerMenuBtn">🏈 <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
+      <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeIcon">🏈</span> <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
         <div class="playerMenuDropdown" id="playerMenuDropdown">
           <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
           <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
@@ -277,8 +277,10 @@
   <div class="headerRow">
     <img id="headerLogo" src="assets/images/header-logo.png" alt="Bengals logo">
     <div>
-      <h1>ASL Bengals</h1>
-      <p>Signal Study Guide</p>
+      <!-- Nathan: "Change the title in the corner from ASL Bengals Signal
+           Study Guide to 11U ASL Bengals Team Dashboard" -->
+      <h1>11U ASL Bengals</h1>
+      <p>Team Dashboard</p>
     </div>
   </div>
 </header>
@@ -315,16 +317,12 @@
   <button class="modeBtn" data-section="coachtools" id="coachToolsSectionBtn" style="display:none;"><span class="modeIcon">🛠️</span><span class="modeLabel">Coach Tools</span></button>
 </div>
 
-<!-- Parent-only quick access to their linked child/children's player
-     card -- Nathan: "Just want them to log in, see how their child is
-     doing, see the schedule." Since Play/This Week/Coach Tools are all
-     hidden for a parent (see refreshCoachToolsVisibility in
-     study-quiz.js) and Schedule becomes their whole app, this is the one
-     always-visible way back to "how's my kid doing" without digging
-     through the name menu every time. Populated by
-     renderParentChildBanner() in player-identity.js (empty/hidden until
-     a child is actually linked). -->
-<div id="parentChildBanner" style="display:none;"></div>
+<!-- Nathan: "by having that [the child pill] there, remove the links
+     between the two rows of icons" -- the old #parentChildBanner ("Name's
+     Card"/"Name's Progress" text links, shown here between the top-level
+     mode tabs and the Play sub-tabs) is gone; the toolbar's child pill
+     (index.html's #childPillsWrap, up in #topToolbar) covers the same
+     Card/Progress access now. -->
 
 <div class="modeTabs" id="modeTabs">
   <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
@@ -1207,7 +1205,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817aw';
+  const BUILD_V = '20260817ax';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
