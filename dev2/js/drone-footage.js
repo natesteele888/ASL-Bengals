@@ -59,7 +59,11 @@
 (function () {
   const DRONE_VIDEOS_URL = `${FIREBASE_DB_URL}/droneVideos`;
 
-  const openClipIds = new Set();   // accordion items currently expanded (by clip id)
+  // Nathan: "only one video should be expanded at a time." Single id, not
+  // a set -- opening one always closes whatever else was open, matching
+  // how the Play Calls accordion (the shared .accordion-item CSS this
+  // reuses) already behaves.
+  let openClipId = null;
   const loadedVideos = new Map();  // clipId -> base64 data URL, fetched lazily and cached for this session
   const loadingClipIds = new Set(); // clipId currently mid-fetch, so re-renders don't double-request
 
@@ -214,8 +218,8 @@
         const item = header.closest('.accordion-item');
         const id = item && item.dataset.clipId;
         if (id) {
-          if (openClipIds.has(id)) { openClipIds.delete(id); renderDroneFootageSection(practice); }
-          else { openClipIds.add(id); renderDroneFootageSection(practice); ensureVideoLoaded(practice, id); }
+          if (openClipId === id) { openClipId = null; renderDroneFootageSection(practice); }
+          else { openClipId = id; renderDroneFootageSection(practice); ensureVideoLoaded(practice, id); }
         }
         return;
       }
@@ -253,7 +257,7 @@
         if (!confirm(`Delete "${clips[idx].title || 'this clip'}"? This can't be undone.`)) return;
         deleteVideoBlob(clips[idx].id);
         clips.splice(idx, 1);
-        openClipIds.delete(clipId);
+        if (openClipId === clipId) openClipId = null;
         loadedVideos.delete(clipId);
         saveClips(practice, clips, () => renderDroneFootageSection(practice));
       } else if (action === 'post-comment') {
@@ -272,7 +276,7 @@
   }
 
   function clipHtml(clip, approved) {
-    const open = openClipIds.has(clip.id);
+    const open = openClipId === clip.id;
     const comments = Array.isArray(clip.comments) ? clip.comments : [];
     const commentsHtml = comments.length
       ? comments.map(c => `
@@ -322,7 +326,7 @@
               <button type="button" class="lbLinkBtn" data-action="move-down" data-clip-id="${clip.id}">⬇ Move Down</button>
               <button type="button" class="lbLinkBtn" data-action="delete-clip" data-clip-id="${clip.id}">🗑 Delete</button>
             </div>` : ''}
-          <div style="max-width:360px;margin:0 auto;">${videoHtml}</div>
+          ${videoHtml}
           <div class="speed-toggle" style="margin:8px auto;">
             <button type="button" class="droneSpeedBtn active" data-speed="1">1x</button>
             <button type="button" class="droneSpeedBtn" data-speed="0.5">½x</button>
