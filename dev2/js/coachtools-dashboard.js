@@ -303,13 +303,20 @@
     // Nathan: "say who is spending the most cumulative time on it" --
     // credit for effort/engagement, separate from who's scoring well.
     const mostTime = playerActivityRows.filter(p => p.totalSessionMs > 0).sort((a, b) => b.totalSessionMs - a.totalSessionMs).slice(0, 5);
+    // Nathan: "split the dashboard to show most time logged and most
+    // visits separately" -- same underlying rows, but ranked by raw
+    // sign-in count instead of cumulative duration, so a kid who checks in
+    // often for short bursts shows up here even if a few marathon sessions
+    // from someone else would otherwise bury them on the time-based list.
+    const mostVisits = playerActivityRows.filter(p => p.sessionsCount > 0).sort((a, b) => b.sessionsCount - a.sessionsCount).slice(0, 5);
 
     function highlightRowHtml(p, kind) {
-      const icon = kind === 'excelling' ? '🌟' : kind === 'time' ? '⏳' : '🧭';
+      const icon = kind === 'excelling' ? '🌟' : kind === 'time' ? '⏳' : kind === 'visits' ? '🚪' : '🧭';
       const weak = kind === 'attention' ? weakestPlayFor(p.id) : null;
       let tip, right;
       if (kind === 'excelling') { tip = `Averaging ${p.avgPct}% across ${p.attempts} quiz attempts.`; right = `${p.avgPct}%`; }
       else if (kind === 'time') { tip = `${p.sessionsCount} visit${p.sessionsCount === 1 ? '' : 's'} logged.`; right = fmtDuration(p.totalSessionMs); }
+      else if (kind === 'visits') { tip = `${fmtDuration(p.totalSessionMs)} total across those visits.`; right = `${p.sessionsCount} visit${p.sessionsCount === 1 ? '' : 's'}`; }
       else { tip = weak ? `Missing "${weak}" calls most -- worth a few extra reps there.` : `Averaging ${p.avgPct}% across ${p.attempts} quiz attempts -- keep at it!`; right = `${p.avgPct}%`; }
       return `<div class="lbRow"><div class="lbRank">${icon}</div>
         <div class="lbNameTip"><div class="lbNameTipTitle">${escapeHtml(p.name)}</div><div class="lbTip">${tip}</div></div>
@@ -321,6 +328,7 @@
     const excellingHtml = excelling.length ? excelling.map(p => highlightRowHtml(p, 'excelling')).join('') : '<div class="lbEmpty">Not enough quiz data yet (needs at least 2 scored Standard/Timed/Play Calls Quiz attempts per player).</div>';
     const needsAttentionHtml = needsAttention.length ? needsAttention.map(p => highlightRowHtml(p, 'attention')).join('') : '<div class="lbEmpty">Not enough quiz data yet (needs at least 2 scored Standard/Timed/Play Calls Quiz attempts per player).</div>';
     const mostTimeHtml = mostTime.length ? mostTime.map(p => highlightRowHtml(p, 'time')).join('') : '<div class="lbEmpty">No session time logged yet.</div>';
+    const mostVisitsHtml = mostVisits.length ? mostVisits.map(p => highlightRowHtml(p, 'visits')).join('') : '<div class="lbEmpty">No visits logged yet.</div>';
 
     const activitySorted = playerActivityRows.slice().sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
     function activityRowHtml(p) {
@@ -444,6 +452,8 @@
         <div class="lbList">${excellingHtml}</div>
         <div class="lbSectionHeader">⏳ Most Time Logged</div>
         <div class="lbList">${mostTimeHtml}</div>
+        <div class="lbSectionHeader">🚪 Most Visits</div>
+        <div class="lbList">${mostVisitsHtml}</div>
         <div class="lbSectionHeader">🧭 Needs Attention</div>
         <div class="lbList">${needsAttentionHtml}</div>
         <div class="lbSectionHeader">😴 Not Using It</div>
