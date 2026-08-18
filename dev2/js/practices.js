@@ -31,7 +31,11 @@
   // to repeat or set practice for multiple days."
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  let items = [];     // [{id, type, date, time, endTime, location, notes, updatedAt}]
+  let items = [];     // [{id, type, date, time, endTime, location, notes, updatedAt, droneClips}]
+  // droneClips: [{id, title, storagePath, url, durationSec, order,
+  //   uploadedBy, uploadedAt, comments: [{id, author, text, at}]}] -- see
+  // js/drone-footage.js, which owns everything about rendering/editing
+  // this field. Optional/undefined on any practice with no drone footage.
   let current = null; // item open in the detail view, or null (list view)
   let loaded = false;
   // Nathan: "when I am logged in as a coach, I cant see it how the players
@@ -124,7 +128,7 @@
       });
   }
 
-  function persistItems(afterOk) {
+  function persistItems(afterOk, afterFail) {
     const statusEl = document.getElementById('practicesDetailStatus') || document.getElementById('practicesCloudStatus');
     window.firebaseAuthed(PRACTICES_URL).then(url => fetch(url, {
       method: 'PUT',
@@ -132,10 +136,14 @@
       body: JSON.stringify(items),
     })).then(r => {
       if (r.ok) { if (afterOk) afterOk(); }
-      else if (statusEl) statusEl.textContent = `Save failed (HTTP ${r.status}).`;
+      else {
+        if (statusEl) statusEl.textContent = `Save failed (HTTP ${r.status}).`;
+        if (afterFail) afterFail(`HTTP ${r.status}`);
+      }
     }).catch(err => {
       console.error('Practice save failed:', err);
       if (statusEl) statusEl.textContent = `Save failed: ${err.message}`;
+      if (afterFail) afterFail(err.message);
     });
   }
 
@@ -230,6 +238,7 @@
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
       wireAddToCalendar();
       renderWeather();
+      if (window.renderDroneFootageSection) window.renderDroneFootageSection(current);
       return;
     }
 
@@ -328,6 +337,11 @@
       });
     }
     renderWeather();
+    // Nathan: "Drone footage section at the bottom... visible to players
+    // and coaches when they click on the practice." Shown in both the
+    // read-only and coach-edit views (above), so it's still there while a
+    // coach is mid-edit of the date/notes/etc, not just after Save.
+    if (window.renderDroneFootageSection) window.renderDroneFootageSection(current);
   }
 
   // Nathan: "add in projected weather for the event when available."
@@ -475,6 +489,22 @@
   // Used by Full Schedule (js/schedule-full.js) to merge practices in with
   // games without needing the Practices tab to have been opened first.
   window.getPracticesCached = () => items;
+  // Nathan: "ability to leave a comment... reorder them" -- drone-footage.js
+  // needs to persist droneClips (upload/title/order/comment edits) without
+  // going through the coach-only edit form's Save button, since a player
+  // or parent adding a comment isn't an approved coach. Narrow write path,
+  // same shape as roster.js's updateRosterPlayerNum: find the practice by
+  // id in this module's own `items` array, set just its droneClips, and
+  // persist through the same whole-array PUT everything else here uses.
+  // Also keeps `current` in sync if this is the practice currently open,
+  // so a re-render doesn't show stale clip data.
+  window.saveDroneClips = function (practiceId, droneClips, afterOk, afterFail) {
+    const item = items.find(p => p.id === practiceId);
+    if (!item) { if (afterFail) afterFail('Practice not found'); return; }
+    item.droneClips = droneClips;
+    if (current && current.id === practiceId) current.droneClips = droneClips;
+    persistItems(afterOk, afterFail);
+  };
   window.ensurePracticesLoaded = function () {
     if (loaded) return Promise.resolve(items);
     loaded = true;
