@@ -39,6 +39,20 @@
         console.error('Service worker registration failed:', e);
       });
     });
+    // Drone footage notification tapped while a tab was ALREADY open --
+    // sw.js's notificationclick focuses that tab and postMessages the
+    // target practice id here (the ?practice= query-param path in
+    // player-identity.js's gate() only covers a freshly-opened tab, which
+    // can't receive a postMessage before it exists). Registered
+    // unconditionally, not gated on login -- by the time a real message
+    // arrives the app is already running and window.openPracticeDetail is
+    // loaded, since that only happens from an interaction with an
+    // already-open instance of this same page.
+    navigator.serviceWorker.addEventListener('message', function(e){
+      if (e.data && e.data.type === 'openPractice' && window.openPracticeDetail) {
+        window.openPracticeDetail(e.data.id);
+      }
+    });
   }
 </script>
 </head>
@@ -1121,7 +1135,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817ah';
+  const BUILD_V = '20260817ai';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

@@ -752,6 +752,22 @@
     const onReady = function(){
       if (typeof window.refreshCoachToolsVisibility === 'function') window.refreshCoachToolsVisibility();
       if (typeof window.refreshWhatsNewBadge === 'function') window.refreshWhatsNewBadge();
+      // Nathan: drone footage "push" notifications (see js/drone-footage.js)
+      // -- same trigger point as the What's New badge/notify check above,
+      // now that a session is actually known.
+      if (typeof window.maybeNotifyNewDroneClips === 'function') window.maybeNotifyNewDroneClips();
+      // A drone-footage notification tapped while the app was closed opens
+      // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
+      // JS in a not-yet-loaded page) -- jump straight to that practice now
+      // that scripts are loaded and the session/nav is ready, then drop
+      // the param so a refresh doesn't reopen it.
+      try {
+        const practiceId = new URLSearchParams(location.search).get('practice');
+        if (practiceId && window.openPracticeDetail) {
+          window.openPracticeDetail(practiceId);
+          history.replaceState(null, '', location.pathname + location.hash);
+        }
+      } catch (e) { /* URLSearchParams/history unavailable -- ignore, deep link just won't auto-open */ }
       rawOnReady();
     };
     const session = getSession();

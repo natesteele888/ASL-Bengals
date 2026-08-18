@@ -73,17 +73,24 @@
     maybeNotifyNewPlays(entries);
   };
 
-  function showLocalNotification(title, body) {
+  // Shared by anything in this app that wants a real OS notification fired
+  // on app-open (see also js/drone-footage.js's drone-clip notifications,
+  // which reuses this exact function rather than duplicating the service
+  // worker boilerplate). `data` is passed straight through to
+  // showNotification -- sw.js's notificationclick handler reads it back
+  // to decide where tapping the notification should take you.
+  window.showLocalNotification = function (title, body, data) {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.ready.then(reg => {
       reg.showNotification(title, {
         body,
         icon: 'assets/images/icon-192.png',
         badge: 'assets/images/icon-192.png',
-        tag: 'aslBengalsWhatsNew', // collapses into one if several land close together instead of stacking
+        tag: data && data.tag ? data.tag : 'aslBengalsWhatsNew', // collapses into one if several land close together instead of stacking
+        data: data || {},
       });
     }).catch(() => { /* no active service worker yet -- silently skip, badge/feed still work */ });
-  }
+  };
 
   // Fires once per newly-added play (or one combined notification for
   // several at once), only the first app-open after each was added -- see
@@ -103,7 +110,7 @@
     const body = fresh.length === 1
       ? (fresh[0].label || fresh[0].key || 'A new play') + (fresh[0].addedBy ? ` — added by ${fresh[0].addedBy}` : '')
       : fresh.slice(0, 3).map(e => e.label || e.key || 'play').join(', ') + (fresh.length > 3 ? ', and more' : '');
-    showLocalNotification(title, body);
+    window.showLocalNotification(title, body, { tag: 'aslBengalsWhatsNew' });
     setLastNotified(fresh[fresh.length - 1].addedAt);
   }
 
@@ -177,6 +184,10 @@
         // right now, same reasoning as the since-fallback in
         // maybeNotifyNewPlays above.
         setLastNotified(new Date().toISOString());
+        // Same "don't blast existing history" reasoning applies to drone
+        // footage notifications, which share this exact opt-in toggle --
+        // see js/drone-footage.js.
+        if (window.resetDroneNotifyBaseline) window.resetDroneNotifyBaseline();
       });
     });
   }

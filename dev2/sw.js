@@ -15,7 +15,7 @@
 // missing layout) even though the live site is fully up to date. Bumping
 // this forces a fresh install + activate, which deletes the old cache
 // (see the activate handler) and re-caches the current shell files.
-const CACHE_NAME = 'bengals-shell-20260817ah';
+const CACHE_NAME = 'bengals-shell-20260817ai';
 const SHELL_FILES = [
   './index.html',
   './css/styles.css',
@@ -48,20 +48,36 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Nathan: "NEW PLAY ADDED" notifications (see js/whats-new.js's
-// showLocalNotification -- fired via reg.showNotification when the app
-// is opened and finds something new, since real background push needs a
-// paid plan this project isn't on). Without this handler, tapping the
-// notification banner itself does nothing on most browsers -- this
-// focuses an already-open tab if there is one, or opens a new one.
+// Nathan: "NEW PLAY ADDED" notifications, and later "same thing for push
+// notification... when drone footage has been uploaded with a link to
+// the practice" (see js/whats-new.js's showLocalNotification -- fired via
+// reg.showNotification when the app is opened and finds something new,
+// since real background push needs a paid plan this project isn't on).
+// Without this handler, tapping the notification banner itself does
+// nothing on most browsers.
+//
+// A drone-footage notification carries data.practiceId. If there's
+// already an open tab, this focuses it and postMessages the id so the
+// page can jump straight to that practice (index.html listens for this
+// message and calls window.openPracticeDetail). If there's no open tab,
+// clients.openWindow() can't run arbitrary JS in the new page before it
+// loads, so the id is appended as a ?practice= query param instead --
+// player-identity.js's gate() checks for that on boot, once a session is
+// confirmed, and opens the same practice that way.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const data = event.notification.data || {};
+  const targetUrl = data.practiceId ? `./index.html?practice=${encodeURIComponent(data.practiceId)}` : './index.html';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          client.focus();
+          if (data.practiceId) client.postMessage({ type: 'openPractice', id: data.practiceId });
+          return;
+        }
       }
-      if (self.clients.openWindow) return self.clients.openWindow('./index.html');
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
     })
   );
 });

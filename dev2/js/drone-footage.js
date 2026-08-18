@@ -300,13 +300,17 @@
       videoHtml = `<div class="lbEmpty">Tap to load video.</div>`;
     }
 
+    // Nathan: "video tabs need to be smaller." Inline overrides only --
+    // deliberately not touching the shared .accordion-header/.accordion-body
+    // CSS classes, since Play Calls uses those same classes and shouldn't
+    // shrink along with these.
     return `
       <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}">
-        <button type="button" class="accordion-header">
+        <button type="button" class="accordion-header" style="padding:9px 12px;font-size:13px;font-style:normal;font-weight:700;">
           <span>🎥 ${escapeHtml(clip.title || 'Drone Clip')}${clip.durationSec ? ` <span class="lbSub" style="font-weight:400;">(${fmtDuration(clip.durationSec)})</span>` : ''}</span>
           <span class="accordion-chevron">▾</span>
         </button>
-        <div class="accordion-body">
+        <div class="accordion-body" style="padding:8px;">
           ${approved ? `
             <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
               <input type="text" class="droneTitleInput" placeholder="Title" value="${escapeHtml(clip.title || '')}" style="flex:2 1 140px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
@@ -318,17 +322,17 @@
               <button type="button" class="lbLinkBtn" data-action="move-down" data-clip-id="${clip.id}">⬇ Move Down</button>
               <button type="button" class="lbLinkBtn" data-action="delete-clip" data-clip-id="${clip.id}">🗑 Delete</button>
             </div>` : ''}
-          ${videoHtml}
+          <div style="max-width:360px;margin:0 auto;">${videoHtml}</div>
           <div class="speed-toggle" style="margin:8px auto;">
             <button type="button" class="droneSpeedBtn active" data-speed="1">1x</button>
             <button type="button" class="droneSpeedBtn" data-speed="0.5">½x</button>
           </div>
-          <div class="lbSub" style="text-align:center;margin-bottom:8px;">${clip.uploadedBy ? `Uploaded by ${escapeHtml(clip.uploadedBy)}` : ''}${clip.uploadedAt ? ` · ${escapeHtml(fmtWhen(clip.uploadedAt))}` : ''}</div>
-          <div class="lbSectionHeader" style="font-size:13px;margin-top:4px;">💬 Comments</div>
-          <div class="droneComments">${commentsHtml}</div>
+          <div class="lbSub" style="text-align:center;margin-bottom:8px;font-size:11px;">${clip.uploadedBy ? `Uploaded by ${escapeHtml(clip.uploadedBy)}` : ''}${clip.uploadedAt ? ` · ${escapeHtml(fmtWhen(clip.uploadedAt))}` : ''}</div>
+          <div class="lbSectionHeader" style="font-size:12px;margin-top:4px;">💬 Comments</div>
+          <div class="droneComments" style="font-size:13px;">${commentsHtml}</div>
           <div style="display:flex;gap:6px;margin-top:8px;">
-            <input type="text" class="droneCommentInput" placeholder="Add a comment…" style="flex:1;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
-            <button type="button" class="navBtn" data-action="post-comment" data-clip-id="${clip.id}" style="padding:8px 12px;flex:0 0 auto;">Post</button>
+            <input type="text" class="droneCommentInput" placeholder="Add a comment…" style="flex:1;padding:7px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+            <button type="button" class="navBtn" data-action="post-comment" data-clip-id="${clip.id}" style="padding:7px 12px;flex:0 0 auto;font-size:13px;">Post</button>
           </div>
         </div>
       </div>`;
@@ -371,4 +375,61 @@
   }
 
   window.renderDroneFootageSection = renderDroneFootageSection;
+
+  // Nathan: "same thing for push notification in the app when drone
+  // footage has been uploaded with a link to the practice." Same
+  // open-app-fires-a-real-notification pattern as js/whats-new.js's new
+  // play alerts (reuses its window.showLocalNotification and the same
+  // Notification-permission opt-in -- no separate toggle needed), just
+  // sourced from every practice's droneClips instead of whatsNew.json.
+  const DRONE_LAST_NOTIFIED_KEY = 'aslBengalsDroneLastNotified';
+  function getDroneLastNotified() {
+    try { return localStorage.getItem(DRONE_LAST_NOTIFIED_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setDroneLastNotified(iso) {
+    try { localStorage.setItem(DRONE_LAST_NOTIFIED_KEY, iso); } catch (e) { /* harmless -- may re-notify next open */ }
+  }
+  // Called by the opt-in button (js/whats-new.js) so turning notifications
+  // on doesn't immediately blast every clip already uploaded before today.
+  window.resetDroneNotifyBaseline = function () {
+    setDroneLastNotified(new Date().toISOString());
+  };
+
+  // Called once a name/session is known (player-identity.js's gate(),
+  // same hook point as whats-new.js's refreshWhatsNewBadge). Loads every
+  // practice (not just the one currently open, if any -- a coach could
+  // upload footage to a practice nobody's viewing) and checks all their
+  // droneClips at once.
+  window.maybeNotifyNewDroneClips = function () {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!window.ensurePracticesLoaded) return;
+    window.ensurePracticesLoaded().then(practices => {
+      const since = getDroneLastNotified();
+      const fresh = [];
+      (practices || []).forEach(p => {
+        (Array.isArray(p.droneClips) ? p.droneClips : []).forEach(c => {
+          if (c.uploadedAt && (!since || c.uploadedAt > since)) fresh.push(Object.assign({ practiceId: p.id, practiceDate: p.date }, c));
+        });
+      });
+      if (!fresh.length) {
+        // Nothing to notify about, but still needs a baseline the first
+        // time this ever runs (device that opted in before any drone
+        // footage existed) so it doesn't fire for the team's whole
+        // history the first time a clip finally does get uploaded.
+        if (!since) setDroneLastNotified(new Date().toISOString());
+        return;
+      }
+      fresh.sort((a, b) => (a.uploadedAt || '').localeCompare(b.uploadedAt || ''));
+      const title = fresh.length === 1 ? '🚁 New Drone Footage' : `🚁 ${fresh.length} New Drone Clips`;
+      const body = fresh.length === 1
+        ? (fresh[0].title || 'A new clip') + (fresh[0].uploadedBy ? ` — added by ${fresh[0].uploadedBy}` : '')
+        : fresh.slice(0, 3).map(c => c.title || 'clip').join(', ') + (fresh.length > 3 ? ', and more' : '');
+      // Links to whichever practice the newest clip belongs to -- if
+      // several practices got footage at once, that's still the most
+      // useful single destination to land on.
+      const newest = fresh[fresh.length - 1];
+      window.showLocalNotification(title, body, { tag: 'aslBengalsDroneFootage', practiceId: newest.practiceId });
+      setDroneLastNotified(newest.uploadedAt);
+    }).catch(err => console.error('Drone footage notification check failed:', err));
+  };
 })();
