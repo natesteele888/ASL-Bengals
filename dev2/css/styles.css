@@ -1617,6 +1617,59 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .scheduleDetailHero .scheduleRowCenterTime { font-size: 11.5px; }
 [data-theme="dark"] .scheduleWriteup { background: var(--card); border-color: var(--line); }
 
+/* ---- Head-to-Head -- Nathan, from the Apple Sports "Team Stats" screenshot:
+   "It has a bar under the stat with a color representing each team's stats
+   as a portion of the total." Us always orange (brand color, matches every
+   other "our side" accent in the app); them uses the same per-opponent
+   hashColor() every opponent badge/initials fallback already uses, so the
+   bar color always matches that team's badge elsewhere on the page. ---- */
+.h2hBox { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 4px; margin-bottom: 4px; }
+.h2hStat { margin-bottom: 14px; }
+.h2hStatRow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.h2hVal { font-size: 19px; font-weight: 900; color: var(--ink); min-width: 32px; }
+.h2hVal.us { text-align: left; color: var(--bengal-orange); }
+.h2hVal.them { text-align: right; }
+.h2hStatLabel { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); text-align: center; flex: 1; }
+.h2hBar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.h2hBarUs { background: var(--bengal-orange); }
+
+/* ---- Season Leaders -- Nathan: "showing their profile image with name
+   under it, even placeholders before stats are there." Same colored-
+   initials-circle fallback used for opponent badges when there's no real
+   photo on file yet. ---- */
+.leaderGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 10px; margin-bottom: 4px; }
+.leaderCard { display: flex; flex-direction: column; align-items: center; text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px 8px; }
+.leaderCat { font-size: 8.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; color: var(--bengal-orange-dark); margin-bottom: 6px; line-height: 1.2; min-height: 20px; }
+.leaderPhoto { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: #2c333b; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; color: #fff; flex: 0 0 auto; }
+.leaderPhoto.placeholder { background: var(--paper); border: 2px dashed var(--line); color: var(--muted); }
+.leaderPhoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.leaderName { font-size: 10px; font-weight: 800; color: var(--ink); margin-top: 6px; line-height: 1.2; }
+.leaderStat { font-size: 12.5px; font-weight: 900; color: var(--bengal-orange); margin-top: 1px; }
+
+/* ---- Injury Report -- Nathan: "Injury Report section that coaches can add
+   in guys to it with a write-in for status (Probable, Questionable, Out)." ---- */
+.injuryEditRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.injuryEditSelect { flex: 1 1 130px; padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryEditStatus { padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryEditNote { flex: 1 1 110px; padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryList { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; }
+.injuryRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.injuryRow:last-child { border-bottom: none; }
+.injuryRowName { font-size: 13px; font-weight: 800; color: var(--ink); flex: 1 1 auto; }
+.injuryRowNote { font-size: 11px; color: var(--muted); width: 100%; }
+.injuryStatus { font-size: 9.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; padding: 3px 9px; border-radius: 10px; color: #fff; flex: 0 0 auto; }
+.injuryStatus.probable { background: #2e7d32; }
+.injuryStatus.questionable { background: #c98a12; }
+.injuryStatus.out { background: #c0342a; }
+
+/* ---- Last 5 Games / Vs This Opponent -- Nathan: "two tab section showin
+   LAST 5 GAMES. Show date opponent and result with score." Reuses the same
+   .scheduleRow card the main Schedule list uses, just with the compact
+   single date line up top instead of the full home/away+location line, and
+   tighter margins since a few of these stack inside one page. ---- */
+.last5List .scheduleRow.last5Row { margin-bottom: 8px; padding: 10px 14px; }
+.last5List .scheduleRow.last5Row:last-child { margin-bottom: 0; }
+
 /* ---- Practices / Film Nights -- Nathan: "I also wants to add in
    practices to the app to... They need date, time and location with map
    function. Once season starts, there will be a film night instead of

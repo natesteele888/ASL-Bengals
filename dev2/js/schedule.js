@@ -48,6 +48,20 @@
 
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
   const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
+  // Own light read-only copy of js/player-profile.js's private photo store
+  // (roster id -> {photo,...}), same "duplicate a small local copy instead
+  // of exposing a new global" convention this file already uses for
+  // opponent logos -- just enough to put a real headshot on a Season
+  // Leaders card instead of always falling back to initials.
+  const PLAYER_PROFILES_URL = `${FIREBASE_DB_URL}/playerProfiles.json`;
+  let playerProfiles = {}; // roster id -> {photo, height, weight, grade}
+  let playerProfilesLoaded = false;
+  function loadPlayerProfilesLocal() {
+    if (playerProfilesLoaded) return Promise.resolve(playerProfiles);
+    return window.firebaseAuthed(PLAYER_PROFILES_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => { playerProfiles = (data && typeof data === 'object') ? data : {}; playerProfilesLoaded = true; return playerProfiles; })
+      .catch(err => { console.error('Could not load player photos for Season Leaders:', err); playerProfiles = {}; playerProfilesLoaded = true; return playerProfiles; });
+  }
 
   // Nathan: "I also need to tag the game as something - for instance the
   // Clinton game is a scrimmage and the Marlborough game is the jamboree."
@@ -369,6 +383,154 @@
     return `${leaderLines.join(' ')}${avgLine}`.trim();
   }
 
+  // ---- Head-to-Head (Nathan, from the Apple Sports "Team Stats" screenshot:
+  // "It has a bar under the stat with a color representing each team's
+  // stats as a portion of the total.") We only have our own stats in detail
+  // (game-stats-editor.js's statSheet) -- Total Yards is computed straight
+  // from that; the opponent side and Turnovers come from the light manual
+  // entry added to the coach edit form above (schedOppYards/schedOurTurnovers/
+  // schedOppTurnovers), same "fill it in after the game" spirit as the
+  // score itself. Only shows once the game is actually final -- a live
+  // in-game version isn't possible without someone on the sideline entering
+  // it play by play, which Nathan ruled out. ----
+  function ourTotalYardsFor(game) {
+    if (!game || !game.statSheet || !window.computeGamePlayerStats) return 0;
+    const perPlayer = window.computeGamePlayerStats(game.statSheet);
+    return Object.values(perPlayer).reduce((s, r) => s + (r.rushYds || 0) + (r.passYds || 0), 0);
+  }
+  function h2hBarHtml(label, us, them, oppName) {
+    const total = us + them;
+    const usPct = total > 0 ? Math.round((us / total) * 100) : 50;
+    const themPct = 100 - usPct;
+    return `
+      <div class="h2hStat">
+        <div class="h2hStatRow">
+          <span class="h2hVal us">${formatNum(us)}</span>
+          <span class="h2hStatLabel">${escapeHtml(label)}</span>
+          <span class="h2hVal them">${formatNum(them)}</span>
+        </div>
+        <div class="h2hBar">
+          <span class="h2hBarUs" style="width:${usPct}%;"></span>
+          <span class="h2hBarThem" style="width:${themPct}%;background:${hashColor(oppName)};"></span>
+        </div>
+      </div>`;
+  }
+  function renderHeadToHead() {
+    const wrap = document.getElementById('schedH2HWrap');
+    if (!wrap || !current) return;
+    if (!resultFor(current)) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    const ourYards = ourTotalYardsFor(current);
+    const oppYards = Number(current.oppYards) || 0;
+    const ourTOs = current.ourTurnovers === '' || current.ourTurnovers == null ? null : Number(current.ourTurnovers);
+    const oppTOs = current.oppTurnovers === '' || current.oppTurnovers == null ? null : Number(current.oppTurnovers);
+    const bars = [];
+    if (ourYards > 0 || oppYards > 0) bars.push(h2hBarHtml('Total Yards', ourYards, oppYards, current.opponent));
+    if (ourTOs != null || oppTOs != null) bars.push(h2hBarHtml('Turnovers', ourTOs || 0, oppTOs || 0, current.opponent));
+    if (!bars.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    wrap.style.display = '';
+    wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>`;
+  }
+
+  // ---- Season Leaders -- Nathan: "Passing Yards, Rushing Yards, Receiving
+  // Yards, Sacks, Tackles... showing their profile image with name under
+  // it, even placeholders before stats are there." Reuses the same season
+  // aggregation as the Game Preview write-up above (teamSeasonAggregate),
+  // plus a local read-only copy of player-profile.js's photo store (see
+  // loadPlayerProfilesLocal near the top of this file) so a real headshot
+  // shows when one's on file, falling back to the same colored-initials
+  // look used everywhere else in this app that doesn't have a photo yet. ----
+  const LEADER_CATS = [
+    { key: 'passYds', label: 'Passing Yards' },
+    { key: 'rushYds', label: 'Rushing Yards' },
+    { key: 'recYds', label: 'Receiving Yards' },
+    { key: 'sacks', label: 'Sacks' },
+    { key: 'tackles', label: 'Tackles' },
+  ];
+  function leaderCardHtml(cat, rec, roster) {
+    if (!rec) {
+      return `
+        <div class="leaderCard">
+          <div class="leaderCat">${escapeHtml(cat.label)}</div>
+          <span class="leaderPhoto placeholder">?</span>
+          <div class="leaderName lbEmpty" style="padding:0;">No stats yet</div>
+        </div>`;
+    }
+    const rosterEntry = roster.find(r => String(r.num) === String(rec.num));
+    const photo = rosterEntry ? (playerProfiles[rosterEntry.id] || {}).photo : null;
+    const photoHtml = photo
+      ? `<span class="leaderPhoto"><img src="${photo}" alt="${escapeHtml(rec.name || '')}"></span>`
+      : `<span class="leaderPhoto" style="background:${hashColor(rec.name || String(rec.num))};">${escapeHtml(initials(rec.name || String(rec.num)))}</span>`;
+    return `
+      <div class="leaderCard">
+        <div class="leaderCat">${escapeHtml(cat.label)}</div>
+        ${photoHtml}
+        <div class="leaderName">#${escapeHtml(String(rec.num))} ${escapeHtml(rec.name || '')}</div>
+        <div class="leaderStat">${formatNum(rec[cat.key])}</div>
+      </div>`;
+  }
+  function renderSeasonLeaders() {
+    const wrap = document.getElementById('schedLeadersWrap');
+    if (!wrap) return;
+    const { byNum } = teamSeasonAggregate(games);
+    const players = Object.values(byNum);
+    loadPlayerProfilesLocal().then(() => {
+      const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+      const cards = LEADER_CATS.map(cat => {
+        const top = players.filter(p => p[cat.key] > 0).sort((a, b) => b[cat.key] - a[cat.key])[0];
+        return leaderCardHtml(cat, top || null, roster);
+      }).join('');
+      wrap.innerHTML = `<div class="lbSectionHeader">🏆 Season Leaders</div><div class="leaderGrid">${cards}</div>`;
+    });
+  }
+
+  // ---- Last 5 Games / Vs This Opponent -- Nathan: "two tab section showin
+  // LAST 5 GAMES. Show date opponent and result with score." Reuses the
+  // exact same .scheduleRow card the main list already uses (compact date
+  // on top instead of the full home/away+location line) so these read as
+  // the same component, not a new one-off. The second tab reuses the same
+  // past-meetings filter buildGamePreviewText already computes for the
+  // series-record sentence, just rendered as real rows instead of a line
+  // of text. ----
+  function compactGameRowHtml(g) {
+    const result = resultFor(g);
+    const badge = result
+      ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
+      : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+    const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
+    const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+    return `
+      <button type="button" class="scheduleRow last5Row" data-game-id="${escapeHtml(g.id)}">
+        <span class="scheduleRowDate">${fmtDate(g.date)}</span>
+        <span class="scheduleRowMatchup">
+          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
+          <span class="scheduleRowCenter">${badge}</span>
+          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
+        </span>
+      </button>`;
+  }
+  function renderLast5Panel(tab) {
+    const wrap = document.getElementById('schedLast5Wrap');
+    if (!wrap || !current) return;
+    const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const oppKey = normalizeOpponentKey(current.opponent);
+    const vsOpp = played.filter(g => normalizeOpponentKey(g.opponent) === oppKey);
+    const list = tab === 'vsopp' ? vsOpp : played.slice(0, 5);
+    const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
+    wrap.innerHTML = `
+      <div class="lbSectionHeader">📊 Recent Form</div>
+      <div class="gameplanPickerGrid" style="margin-bottom:10px;">
+        <button type="button" class="gameplanChip${tab === 'last5' ? ' active' : ''}" data-last5tab="last5">Last 5 Games</button>
+        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${current.opponent ? 'Vs ' + escapeHtml(current.opponent) : 'Vs This Opponent'}</button>
+      </div>
+      <div class="last5List">${rowsHtml}</div>`;
+    wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
+      btn.addEventListener('click', () => renderLast5Panel(btn.dataset.last5tab));
+    });
+    wrap.querySelectorAll('.last5Row').forEach(row => {
+      row.addEventListener('click', () => openDetail(row.dataset.gameId));
+    });
+  }
+
   function renderGamePreview() {
     const wrap = document.getElementById('schedGamePreviewWrap');
     const textEl = document.getElementById('schedGamePreviewText');
@@ -382,6 +544,84 @@
     const wrap = document.getElementById('schedWeatherWrap');
     if (!wrap || !current || !window.loadWeatherInto) return;
     window.loadWeatherInto(wrap, current.location, current.date, current.gameTime);
+  }
+
+  const INJURY_STATUSES = ['Probable', 'Questionable', 'Out'];
+  // Coach edit list -- picks a real roster player per row (not free text)
+  // so the read-only side can show their real jersey number, same pattern
+  // as Coach Tools' stat entry picking from the roster rather than retyping
+  // names. Mutates current.injuryReport in place and re-renders just this
+  // block, same add/remove-row pattern as game-stats-editor.js's Turnovers.
+  function renderInjuryEditor() {
+    const wrap = document.getElementById('schedInjuryWrap');
+    if (!wrap || !current) return;
+    if (window.loadTeamRoster && !window.isTeamRosterLoaded()) { window.loadTeamRoster().then(renderInjuryEditor); return; }
+    const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    const rows = current.injuryReport;
+    wrap.innerHTML = '';
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'No one listed -- add a player below if needed.';
+      wrap.appendChild(empty);
+    }
+    rows.forEach((entry, i) => {
+      if (!entry.status) entry.status = 'Questionable';
+      const row = document.createElement('div');
+      row.className = 'injuryEditRow';
+      const sel = document.createElement('select');
+      sel.className = 'injuryEditSelect';
+      const blankOpt = document.createElement('option'); blankOpt.value = ''; blankOpt.textContent = 'Pick a player…';
+      sel.appendChild(blankOpt);
+      roster.slice().sort((a, b) => (Number(a.num) || 0) - (Number(b.num) || 0)).forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id; o.textContent = `#${p.num || '--'} ${p.name}`;
+        if (entry.rosterId === p.id) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => {
+        const p = roster.find(r => r.id === sel.value);
+        entry.rosterId = sel.value || null;
+        entry.num = p ? p.num : '';
+        entry.name = p ? p.name : '';
+      });
+      row.appendChild(sel);
+      const statusSel = document.createElement('select');
+      statusSel.className = 'injuryEditStatus';
+      INJURY_STATUSES.forEach(s => {
+        const o = document.createElement('option'); o.value = s; o.textContent = s;
+        if (entry.status === s) o.selected = true;
+        statusSel.appendChild(o);
+      });
+      statusSel.addEventListener('change', () => { entry.status = statusSel.value; });
+      row.appendChild(statusSel);
+      const noteInput = document.createElement('input');
+      noteInput.type = 'text'; noteInput.placeholder = 'Note (optional)'; noteInput.className = 'injuryEditNote';
+      noteInput.value = entry.note || '';
+      noteInput.addEventListener('input', () => { entry.note = noteInput.value; });
+      row.appendChild(noteInput);
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'statsRmBtnSmall'; rm.textContent = '✕';
+      rm.addEventListener('click', () => { rows.splice(i, 1); renderInjuryEditor(); });
+      row.appendChild(rm);
+      wrap.appendChild(row);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'lbLinkBtn'; addBtn.style.marginTop = '4px';
+    addBtn.textContent = '+ Add Player';
+    addBtn.addEventListener('click', () => { rows.push({ rosterId: null, num: '', name: '', status: 'Questionable', note: '' }); renderInjuryEditor(); });
+    wrap.appendChild(addBtn);
+  }
+
+  function injuryReportReadOnlyHtml(game) {
+    const rows = Array.isArray(game.injuryReport) ? game.injuryReport.filter(e => e.name) : [];
+    if (!rows.length) return '<span class="lbEmpty" style="padding:0;">No injuries reported.</span>';
+    return `<div class="injuryList">${rows.map(e => `
+      <div class="injuryRow">
+        <span class="injuryRowName">#${escapeHtml(String(e.num || '--'))} ${escapeHtml(e.name)}</span>
+        <span class="injuryStatus ${(e.status || 'Questionable').toLowerCase()}">${escapeHtml(e.status || 'Questionable')}</span>
+        ${e.note ? `<span class="injuryRowNote">${escapeHtml(e.note)}</span>` : ''}
+      </div>`).join('')}</div>`;
   }
 
   function fmtDate(dateStr) {
@@ -532,7 +772,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '' };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', injuryReport: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -543,6 +783,21 @@
     current.gameType = GAME_TYPES.includes(current.gameType) ? current.gameType : 'Regular Season'; // older saved games predate this field
     current.fieldPhoto = current.fieldPhoto || null; // older saved games predate this field
     current.infoUrl = current.infoUrl || '';
+    // Nathan: "Once we add in all the stats from the game including a box
+    // score and figures, we want to have the ESPN style graphs with a stat
+    // call out in the center and a bar showing a representation of the
+    // numbers." We already track every Bengals stat in detail via statSheet,
+    // but nothing about the OPPONENT -- these three light manual numbers
+    // (entered after the game, same as Final Score already is, not live-
+    // tracked) are just enough to drive a real us-vs-them bar for Total
+    // Yards and Turnovers instead of only ever showing our own side.
+    current.oppYards = current.oppYards === undefined ? '' : current.oppYards;
+    current.ourTurnovers = current.ourTurnovers === undefined ? '' : current.ourTurnovers;
+    current.oppTurnovers = current.oppTurnovers === undefined ? '' : current.oppTurnovers;
+    // Nathan: "Injury Report section that coaches can add in guys to it
+    // with a write-in for status." Lives on the game itself (like Scouting
+    // Report) since it's inherently about who's available for THIS game.
+    current.injuryReport = Array.isArray(current.injuryReport) ? current.injuryReport : [];
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
@@ -621,7 +876,14 @@
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
-        <div class="lbSub" style="margin-bottom:6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedLeadersWrap" style="margin-top:16px;"></div>
+        <div style="margin-top:16px;">
+          <div class="lbSectionHeader">🩹 Injury Report</div>
+          ${injuryReportReadOnlyHtml(current)}
+        </div>
+        <div id="schedLast5Wrap" style="margin-top:16px;"></div>
+        <div class="lbSub" style="margin:16px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
           ${current.infoUrl ? `<a href="${escapeHtml(current.infoUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🔗 More Info</a>` : ''}
@@ -644,6 +906,9 @@
       loadLinkedGamePlan();
       renderGamePreview();
       renderWeather();
+      renderHeadToHead();
+      renderSeasonLeaders();
+      renderLast5Panel('last5');
       return;
     }
 
@@ -682,13 +947,31 @@
       <div class="lbSub" style="margin:0 0 4px;">Game type:</div>
       <div class="gameplanPickerGrid" id="schedGameTypeGrid" style="margin-bottom:12px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <span class="lbSub" style="margin:0;">Final score:</span>
         <input type="number" id="schedOurScore" placeholder="Us" style="width:64px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span>-</span>
         <input type="number" id="schedOppScore" placeholder="Them" style="width:64px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span class="lbSub" style="margin:0;">(leave blank until played)</span>
       </div>
+      <!-- Nathan: "we want to have the ESPN style graphs with a stat call
+           out in the center and a bar showing a representation of the
+           numbers." We already track our own stats in detail (Coach Tools
+           > Stats); these three are just enough opponent-side numbers,
+           filled in after the game like the score above, to draw a real
+           us-vs-them bar instead of only ever showing our own side. -->
+      <div class="lbSub" style="margin:0 0 4px;">Opponent box score (leave blank until played):</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <span class="lbSub" style="margin:0;">Their total yards:</span>
+        <input type="number" id="schedOppYards" placeholder="Yds" style="width:70px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <span class="lbSub" style="margin:0 0 0 6px;">Turnovers -- us:</span>
+        <input type="number" id="schedOurTurnovers" placeholder="Us" style="width:56px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <span class="lbSub" style="margin:0;">them:</span>
+        <input type="number" id="schedOppTurnovers" placeholder="Them" style="width:56px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+      </div>
+      <div class="lbSectionHeader" style="margin-top:6px;">🩹 Injury Report</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Who's banged up entering this game -- visible to the whole team.</div>
+      <div id="schedInjuryWrap" style="margin-bottom:8px;"></div>
       <div class="lbSectionHeader" style="margin-top:6px;">🔎 Scouting Report</div>
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
@@ -705,6 +988,10 @@
     document.getElementById('schedLocation').value = current.location || '';
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
+    document.getElementById('schedOppYards').value = current.oppYards === null || current.oppYards === undefined ? '' : current.oppYards;
+    document.getElementById('schedOurTurnovers').value = current.ourTurnovers === null || current.ourTurnovers === undefined ? '' : current.ourTurnovers;
+    document.getElementById('schedOppTurnovers').value = current.oppTurnovers === null || current.oppTurnovers === undefined ? '' : current.oppTurnovers;
+    renderInjuryEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
     document.getElementById('schedInfoUrl').value = current.infoUrl || '';
@@ -903,6 +1190,12 @@
     const oppScoreRaw = document.getElementById('schedOppScore').value.trim();
     current.ourScore = ourScoreRaw === '' ? '' : Number(ourScoreRaw);
     current.oppScore = oppScoreRaw === '' ? '' : Number(oppScoreRaw);
+    const oppYardsRaw = document.getElementById('schedOppYards').value.trim();
+    const ourTOsRaw = document.getElementById('schedOurTurnovers').value.trim();
+    const oppTOsRaw = document.getElementById('schedOppTurnovers').value.trim();
+    current.oppYards = oppYardsRaw === '' ? '' : Number(oppYardsRaw);
+    current.ourTurnovers = ourTOsRaw === '' ? '' : Number(ourTOsRaw);
+    current.oppTurnovers = oppTOsRaw === '' ? '' : Number(oppTOsRaw);
     current.writeup = document.getElementById('schedWriteup').value.trim();
     current.scouting = document.getElementById('schedScouting').value.trim();
     current.infoUrl = document.getElementById('schedInfoUrl').value.trim();
