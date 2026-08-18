@@ -10,7 +10,13 @@
   const TABS = [
     { key: 'resources', label: '🖨️ Resources', panel: 'coachResourcesPanel', init: () => window.initCoachToolsPrint && window.initCoachToolsPrint() },
     { key: 'stats', label: '📊 Stats', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
-    { key: 'roster', label: '👥 Roster', panel: 'coachRosterPanel', init: () => window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap')) },
+    // Nathan: "add a coaching staff section to go with the roster so we can
+    // link log ins to coaches" -- js/coaching-staff.js, rendered right below
+    // Team Roster in the same panel (see coachingStaffWrap in index.html).
+    { key: 'roster', label: '👥 Roster', panel: 'coachRosterPanel', init: () => {
+      window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap'));
+      window.initCoachingStaff && window.initCoachingStaff(document.getElementById('coachingStaffWrap'));
+    } },
     { key: 'drivescripts', label: '🧢 Drive Scripts', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
     // Nathan: "make it so any drone videos added are in a Film Vault tab in
     // Coaches Tools - they should be categorized by alphabetical order since
