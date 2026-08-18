@@ -169,10 +169,25 @@
       row.type = 'button';
       row.className = 'practiceRow';
       const weatherId = `practiceRowWeather-${p.id}`;
+      // Nathan: "if drone footage is available - it should show a drone
+      // icon on the practice bar to indicate it's available. If you
+      // haven't clicked to see it, it should have a corner callout." Same
+      // approved-or-team-toggle-on gate js/drone-footage.js's own section
+      // uses, so this never advertises footage a given viewer wouldn't
+      // actually be allowed to open. The dot clears itself the moment this
+      // practice's detail view has actually rendered the section (see
+      // renderDroneFootageSectionNow) -- not just from being in this list.
+      const droneAllowed = window.practiceHasDroneFootage && window.practiceHasDroneFootage(p) &&
+        (approved || !window.isDroneFootageVisibleCached || window.isDroneFootageVisibleCached());
+      const droneUnseen = droneAllowed && window.practiceHasUnseenDroneFootage && window.practiceHasUnseenDroneFootage(p);
+      const droneBadgeHtml = droneAllowed
+        ? `<span class="practiceDroneBadge" title="Drone footage available">🚁${droneUnseen ? '<span class="whatsNewDot"></span>' : ''}</span>`
+        : '';
       row.innerHTML = `
         <div class="practiceRowTop">
           <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
           <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
+          ${droneBadgeHtml}
           <span class="practiceRowWeather" id="${weatherId}" style="display:none;"></span>
         </div>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}

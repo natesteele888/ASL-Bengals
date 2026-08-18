@@ -385,6 +385,55 @@
   window.getDroneFootageVisibility = function () {
     return loadDroneVisibilitySetting();
   };
+  // Best-effort SYNCHRONOUS read of the same toggle, for the practice list
+  // row indicator below -- that renders synchronously (practices.js's
+  // renderList()) and can't wait on a fetch just to decide whether to draw
+  // an icon. Defaults true (same default as the section itself) until the
+  // real value lands, then stays current from here on.
+  window.isDroneFootageVisibleCached = function () {
+    return droneVisibleSetting;
+  };
+
+  // ---- Practice-list "drone footage available" indicator -- Nathan: "if
+  // drone footage is available - it should show a drone icon on the
+  // practice bar to indicate it's available. If you haven't clicked to see
+  // it, it should have a corner callout." Per-device "seen" tracking,
+  // keyed by practice id -> the latest clip uploadedAt this device has
+  // actually had the drone footage section rendered for (see
+  // renderDroneFootageSectionNow below, which is what marks it seen). A
+  // practice with no stored entry, or with clips newer than what's stored,
+  // still counts as unseen -- so uploading a fresh clip to an
+  // already-viewed practice makes the callout reappear.
+  const DRONE_SEEN_KEY = 'aslBengalsDroneSeenByPractice';
+  function getDroneSeenMap() {
+    try { return JSON.parse(localStorage.getItem(DRONE_SEEN_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function setDroneSeenMap(map) {
+    try { localStorage.setItem(DRONE_SEEN_KEY, JSON.stringify(map)); } catch (e) { /* harmless -- may re-show the dot next time */ }
+  }
+  function latestClipUploadedAt(practice) {
+    const clips = Array.isArray(practice && practice.droneClips) ? practice.droneClips : [];
+    return clips.reduce((max, c) => (c.uploadedAt && c.uploadedAt > max) ? c.uploadedAt : max, '');
+  }
+  function markDroneFootageSeenForPractice(practice) {
+    if (!practice || !practice.id) return;
+    const latest = latestClipUploadedAt(practice);
+    if (!latest) return; // nothing uploaded yet -- nothing to mark seen
+    const map = getDroneSeenMap();
+    if (map[practice.id] === latest) return; // no-op, skip a redundant write
+    map[practice.id] = latest;
+    setDroneSeenMap(map);
+  }
+  window.practiceHasDroneFootage = function (practice) {
+    return Array.isArray(practice && practice.droneClips) && practice.droneClips.length > 0;
+  };
+  window.practiceHasUnseenDroneFootage = function (practice) {
+    if (!window.practiceHasDroneFootage(practice)) return false;
+    const latest = latestClipUploadedAt(practice);
+    if (!latest) return true; // no timestamp to compare against -- err toward showing the callout
+    const seen = getDroneSeenMap()[practice.id];
+    return !seen || latest > seen;
+  };
 
   // Entry point -- practices.js calls this at the end of renderDetail(),
   // both the read-only and coach-edit branches, passing the whole practice
@@ -403,6 +452,12 @@
     const wrap = document.getElementById('practiceDroneFootageWrap');
     if (!wrap) return;
     if (!approved && !visible) { wrap.innerHTML = ''; return; }
+    // Nathan: "if you haven't clicked to see it, it should have a corner
+    // callout" -- this is the one place that's actually true: the section
+    // just made it onto the screen for this user, past the visibility
+    // gate above, so whatever's currently on the practice counts as seen
+    // from here on (no-ops if there's nothing uploaded yet).
+    markDroneFootageSeenForPractice(practice);
     const clips = sortedClips(practice);
 
     wrap.innerHTML = `

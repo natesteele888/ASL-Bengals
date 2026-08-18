@@ -1562,6 +1562,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .practiceRowDateTime { font-size: 14px; font-weight: 800; color: #fff; }
 .practiceRowLoc { font-size: 11.5px; color: #9aa4ae; }
 .practiceRowNotes { font-size: 11.5px; color: #cfd7de; }
+/* Nathan: "if drone footage is available - it should show a drone icon on
+   the practice bar to indicate it's available. If you haven't clicked to
+   see it, it should have a corner callout." The dot reuses .whatsNewDot's
+   exact look (same small orange corner dot already used for the What's
+   New pill elsewhere) rather than inventing a new indicator style --
+   js/drone-footage.js decides per-practice whether the icon/dot show at
+   all (visibility toggle + per-device "seen" tracking). */
+.practiceDroneBadge { position: relative; font-size: 14px; line-height: 1; flex: 0 0 auto; }
 
 /* ---- Game stats table ---- */
 .statsTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
