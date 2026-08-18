@@ -1434,11 +1434,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .weekAheadStats { display: flex; gap: 10px; margin-bottom: 4px; }
 .weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 80px; }
 /* Nathan: "also keep a short write up in there with a little
-   motivation." One short auto-generated hype sentence (see
-   js/thisweek.js's weekAheadHypeLine) between the stat callouts and the
-   game/practice cards -- distinct treatment (italic, orange, centered)
-   so it reads as a quick pep-talk line, not another data label. */
-.weekAheadHype { font-size: 13.5px; font-weight: 800; font-style: italic; color: var(--bengal-orange-dark); text-align: center; margin: 10px 0 4px; line-height: 1.4; }
+   motivation." then: "hype line is weak - move it to the top and have
+   it be worth having there." Now the first thing in the box (ahead of
+   the stat callouts, see js/thisweek.js's weekAheadInfographicHtml),
+   with a real banner treatment -- same orange gradient family as
+   .lbHeroHeader's leaderboard hero card -- instead of a small italic
+   caption easy to skim past. weekAheadHypeLine names actual opponents
+   and rotates its closing line week to week, not just a generic label. */
+.weekAheadHype { font-size: 14.5px; font-weight: 800; color: #fff; text-align: center;
+  line-height: 1.4; margin: 0 0 12px; padding: 12px 14px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--bengal-orange) 0%, #b8540a 100%);
+  box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 /* Nathan: "Game and Practices cards on Week Ahead should be side by
    side." 2 columns on anything wide enough to hold them (the
    .scheduleRow/.practiceRow cards inside still read fine narrower than
