@@ -439,6 +439,18 @@
       <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
   </div>
+
+  <!-- ---- Updates: post a note straight to the team's What's New feed ---- -->
+  <div id="coachUpdatesPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📣 Updates</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Post a note straight to What's New -- everyone (players and parents included) will see it there, same as a new play getting added.</div>
+    <div style="max-width:520px;margin:0 auto;">
+      <textarea id="coachUpdateNoteInput" placeholder="e.g. Houston Route updated -- outside receiver runs a Post instead of a Fly" rows="2" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+      <button class="navBtn" id="coachUpdateAddBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Post to What's New</button>
+      <div id="coachUpdateStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+      <div id="coachUpdateList" style="margin-top:18px;"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Nathan: "there was a schedule button that shows an interactive schedule
@@ -1175,7 +1187,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817as';
+  const BUILD_V = '20260817at';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1240,7 +1252,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

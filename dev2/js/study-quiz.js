@@ -1154,10 +1154,25 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
     return;
   }
 
-  const [pcqRoundAttempts, signalAttempts] = await Promise.all([
+  // Nathan: "for kid's progress it should show what they are ranked per
+  // points." Same rank lookup showMyStats does for the signed-in player's
+  // own name, just run against the child's roster/login name instead --
+  // reuses fetchTimedLeaderboardData/fetchPCQLeaderboardData/
+  // fetchQuizLeaderboardData/computeOverallStandings so the numbers can
+  // never drift from what the actual leaderboards show. Quiz Scores is
+  // deliberately NOT point-scored (see computeOverallStandings/
+  // pointsForRank) -- most engaged players clear 31/31, so ranking it
+  // wouldn't mean anything and it's excluded from Overall Points on
+  // purpose, not by oversight.
+  const [pcqRoundAttempts, signalAttempts, timedData, pcqData, quizData, overallList] = await Promise.all([
     cloudFetch('analytics/pcqRoundAttempts'),
     cloudFetch('analytics/signalAttempts'),
+    fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
   ]);
+  const childPcq = findEntryAndRank(pcqData.list, rec.name);
+  const childTimed = findEntryAndRank(timedData.list, rec.name);
+  const childQuiz = findEntryAndRank(quizData.list, rec.name);
+  const childOverall = findEntryAndRank(overallList, rec.name);
 
   // Weakest Play Calls Quiz play types -- same shape as weakestPlayFor()
   // in the admin dashboard, just kept local here since that one's scoped
@@ -1210,7 +1225,13 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
 
   body.innerHTML = `
     <div class="lbSub" style="margin-bottom:6px;">${escStatsHtml(rec.name)}'s quiz activity</div>
-    <div class="msStatList">${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, null, null, true)}</div>
+    <div class="msStatList">
+      ${myStatRowHtml('🏆', 'Overall Points', childOverall.entry ? `${childOverall.entry.points} pts` : '0 pts', childOverall.rank, overallList.length, true)}
+      ${myStatRowHtml('⏱️', 'Timed Quiz', childTimed.entry ? formatClock(childTimed.entry.timeMs) : 'No time saved yet', childTimed.rank, timedData.list.length)}
+      ${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, childPcq.rank, pcqData.list.length)}
+      ${myStatRowHtml('📝', 'Quiz Scores', childQuiz.entry ? `${childQuiz.entry.score}/${childQuiz.entry.total}${childQuiz.entry.bestStreak ? ` 🔥${childQuiz.entry.bestStreak}` : ''}` : 'No score yet', childQuiz.rank, quizData.list.length)}
+    </div>
+    <div class="lbSub" style="margin-top:4px;">Overall Points comes from Timed Quiz and Play Calls Quiz ranks only -- Quiz Scores isn't point-scored, since most players clear 31/31 and ranking it wouldn't mean much.</div>
     <div class="statsGroupHeading" style="margin-top:14px;">🎯 Could use extra reps on -- Play Calls</div>
     ${weakPlaysHtml}
     <div class="statsGroupHeading" style="margin-top:14px;">✋ Could use extra reps on -- Signals</div>

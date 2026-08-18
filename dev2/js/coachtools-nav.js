@@ -12,6 +12,11 @@
     { key: 'stats', label: '📊 Stats', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
     { key: 'roster', label: '👥 Roster', panel: 'coachRosterPanel', init: () => window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap')) },
     { key: 'drivescripts', label: '🧢 Drive Scripts', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
+    // Nathan: "make sure that the notes that were added to the What's New
+    // can be added at any time by a coach in the Coach Tools block" -- the
+    // Houston route note was a one-off migration script; this tab is the
+    // real, repeatable version of that.
+    { key: 'updates', label: '📣 Updates', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates() },
   ];
 
   let activeTab = 'resources';
