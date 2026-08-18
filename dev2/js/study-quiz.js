@@ -857,7 +857,7 @@ function getLeaderboard(){
 function saveLeaderboardLocal(entry){
   const list = getLeaderboard();
   list.push(entry);
-  list.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  list.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
   try { localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list.slice(0, LEADERBOARD_MAX))); } catch(e) {}
 }
 function getTimedLeaderboard(){
@@ -866,7 +866,7 @@ function getTimedLeaderboard(){
 function saveTimedLeaderboardLocal(entry){
   const list = getTimedLeaderboard();
   list.push(entry);
-  list.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
+  list.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
   try { localStorage.setItem(TIMED_LEADERBOARD_KEY, JSON.stringify(list.slice(0, TIMED_LEADERBOARD_MAX))); } catch(e) {}
 }
 
@@ -885,6 +885,20 @@ function lbRowHtml(entry, i, highlightEntry, scoreHtml){
 // client-side at render time (not by deleting anything from Firebase),
 // so nothing's lost if two different people ever did share a name.
 function normName(n){ return (n||'').trim().toLowerCase(); }
+// Nathan: "coaches can do the quizzes, don't let them have the top spots --
+// put coaching scores at the bottom of the list." Leaderboard entries are
+// just a freely-typed name (no real identity link on the Quiz/Timed
+// boards), so this matches against the same COACH_PROFILE_NAMES allowlist
+// auth.js already uses for isApprovedCoachProfile -- if someone typed a
+// known coach name to save their score, they're a coach for ranking
+// purposes. Used as the primary sort key everywhere leaderboards are
+// ordered, so coach entries always sink below every player regardless of
+// score, and only sort against each other by the normal score-based rule.
+function isCoachEntryName(name){
+  const n = normName(name);
+  return !!(n && window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf(n) !== -1);
+}
+function coachSortWeight(entry){ return isCoachEntryName(entry.name) ? 1 : 0; }
 function dedupeBestByName(list, isBetter){
   const byName = {};
   list.forEach(entry => {
@@ -908,7 +922,7 @@ async function fetchQuizLeaderboardData(){
   const offline = cloudList === null;
   const raw = (offline ? getLeaderboard() : cloudList).slice();
   const deduped = dedupeBestByName(raw, quizIsBetter);
-  deduped.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
   return { list: deduped.slice(0, LEADERBOARD_MAX), offline: offline };
 }
 async function fetchTimedLeaderboardData(){
@@ -916,7 +930,7 @@ async function fetchTimedLeaderboardData(){
   const offline = cloudList === null;
   const raw = (offline ? getTimedLeaderboard() : cloudList).slice();
   const deduped = dedupeBestByName(raw, timedIsBetter);
-  deduped.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
+  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
   return { list: deduped.slice(0, TIMED_LEADERBOARD_MAX), offline: offline };
 }
 // Play Calls Quiz doesn't need its own manual "save to leaderboard" step or
@@ -930,7 +944,7 @@ async function fetchPCQLeaderboardData(){
     .filter(p => p.pcqBestScore)
     .map(p => ({ name: p.name, score: p.pcqBestScore, maxScore: p.pcqBestMaxScore }));
   const deduped = dedupeBestByName(raw, (a, b) => a.score > b.score);
-  deduped.sort((a,b)=> b.score - a.score);
+  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score);
   return { list: deduped.slice(0, LEADERBOARD_MAX), offline: false };
 }
 
@@ -991,7 +1005,7 @@ async function computeOverallStandings(){
       combined[key].points += ptsMap[key].points;
     });
   });
-  return Object.values(combined).sort((a,b)=> b.points - a.points);
+  return Object.values(combined).sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.points - a.points);
 }
 async function renderOverallLeaderboard(){
   const overallLbList = document.getElementById('overallLbList');
