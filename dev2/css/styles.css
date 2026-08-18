@@ -125,8 +125,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 /* A couple px taller than before (10px -> 13px vertical padding) so the
    toolbar's button row + tiny DEV2 tag underneath it both fit comfortably
    within the header instead of crowding its bottom edge. */
-.headerRow{display:flex;align-items:center;gap:12px;padding:13px 14px;flex-wrap:wrap}
-.headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
+.headerRow{display:flex;align-items:center;gap:8px;padding:13px 14px;flex-wrap:wrap}
+/* Nathan: "swap the white icon out with the Tiger head with the white
+   outline used on the game page." header-logo.png is already the tiger
+   head art (it has real alpha transparency, verified via Pillow -- there
+   was never a white background baked into the file), but this rule was
+   wrapping it in a solid white rounded square, which is what actually
+   read as "a white icon" at 34px. Dropping background/padding here to
+   match .scheduleTeamBadge.hasLogo's treatment on the schedule page
+   (transparent, no backdrop) lets the tiger's own black/white outline
+   show directly, and reclaims the padding as extra width for the pills. */
+.headerRow img{width:34px;height:34px;object-fit:contain;background:transparent}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 /* Nathan: "on Mobile the name pills are too big and collide with the
@@ -141,8 +150,8 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    stay on one line on a typical phone, with room left over to size the
    title UP rather than down. */
 @media (max-width: 600px) {
-  .headerRow{gap:8px;padding:11px 12px}
-  .headerRow img{width:30px;height:30px}
+  .headerRow{gap:6px;padding:11px 12px}
+  .headerRow img{width:28px;height:28px}
   .headerRow h1{font-size:20px}
   .headerRow p{font-size:9.5px}
   .topToolbar{gap:3px}

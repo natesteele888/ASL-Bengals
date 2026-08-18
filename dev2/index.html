@@ -248,8 +248,10 @@
     <img id="headerLogo" src="assets/images/header-logo.png" alt="Bengals logo">
     <div>
       <!-- Nathan: "Change the title in the corner from ASL Bengals Signal
-           Study Guide to 11U ASL Bengals Team Dashboard" -->
-      <h1>11U ASL Bengals</h1>
+           Study Guide to 11U ASL Bengals Team Dashboard" -- later: "remove
+           11U from the headline" so the pill(s) fit next to it on mobile
+           without wrapping/growing the header. -->
+      <h1>ASL Bengals</h1>
       <p>Team Dashboard</p>
     </div>
     <div class="topToolbar" id="topToolbar" style="display:none">
@@ -1272,7 +1274,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817bd';
+  const BUILD_V = '20260817be';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
