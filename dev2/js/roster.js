@@ -174,7 +174,17 @@
           loginSelect.style.cssText = 'padding:6px;border:2px solid #ccc;border-radius:6px;font-size:12px;box-sizing:border-box;max-width:120px;';
           const notLinkedOpt = document.createElement('option'); notLinkedOpt.value = ''; notLinkedOpt.textContent = 'Not linked';
           loginSelect.appendChild(notLinkedOpt);
+          // Nathan: "when a player is added to the roster and a Login is
+          // assigned to them, remove that login from the list. You should
+          // only be able to assign each login to one player only." --
+          // exclude logins already claimed by any OTHER roster row from
+          // this row's dropdown (this row's own current login still shows,
+          // so its existing assignment doesn't disappear on re-render).
+          const loginsUsedElsewhere = new Set(
+            roster.filter(x => x.id !== p.id && x.loginPlayerId).map(x => x.loginPlayerId)
+          );
           loginPlayers.forEach(lp => {
+            if (loginsUsedElsewhere.has(lp.id)) return;
             const o = document.createElement('option');
             o.value = lp.id; o.textContent = lp.name;
             if (lp.id === p.loginPlayerId) o.selected = true;

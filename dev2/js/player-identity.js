@@ -107,17 +107,24 @@
       .map(id => Object.assign({id: id}, all[id]));
   }
 
-  async function createPlayer(name, pinHash, isCoach){
-    // role is stored explicitly (not just inferred) so anything reading
-    // this record later -- like the coach admin panel -- can reliably
-    // label a parent account instead of it looking like a plain player.
-    const role = window.userRole || (isCoach ? 'coach' : 'player');
+  // Nathan: "the switch profile feature... I click and hold the user and
+  // it gives me an option to add another profile but its broken." Root
+  // cause: this used to default to `window.userRole` (the CURRENT
+  // device's role, set once at the very first role-picker screen and
+  // persisted for the whole device) regardless of who was actually being
+  // created -- so a coach's own phone would silently create their kid's
+  // brand-new "Add Another Profile" signup AS a coach too (isCoach:true,
+  // role:'coach'), handing them Coach Tools access. `role` is now always
+  // an explicit argument from the caller instead of re-derived in here,
+  // so each call site decides deliberately instead of inheriting
+  // whatever the device happened to be set up as.
+  async function createPlayer(name, pinHash, role){
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}.json`);
     const res = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        name: name, pinHash: pinHash, isCoach: !!isCoach, role: role,
+        name: name, pinHash: pinHash, isCoach: role === 'coach', role: role,
         createdAt: new Date().toISOString(), lastSeen: new Date().toISOString(),
       }),
     });
@@ -749,12 +756,15 @@
   // on failure; err.isNameTaken distinguishes "wrong PIN for that name"
   // (show the message as-is) from a network/other failure (generic
   // message at the call site).
-  async function resolveSessionFor(name, pin){
+  // `role` only matters for a brand-new name (see createPlayer above) --
+  // verifying an existing name+PIN below doesn't touch it, that account
+  // already has whatever role it was created with.
+  async function resolveSessionFor(name, pin, role){
     const pinHash = await window.sha256Hex(pin);
     const matches = await findByName(name);
     if(matches.length === 0){
       // Brand new player (or coach) -- create the profile with this name+code.
-      const playerId = await createPlayer(name, pinHash, window.isCoachSession);
+      const playerId = await createPlayer(name, pinHash, role);
       return { session: { playerId: playerId, name: name }, isFreshSignup: true };
     }
     const match = matches.find(m => m.pinHash === pinHash);
@@ -807,7 +817,11 @@
     btnEl.disabled = true;
     btnEl.textContent = 'Checking…';
     try {
-      const result = await resolveSessionFor(name, pin);
+      // Main sign-in gate: same device-level role the role-picker screen
+      // (auth.js) already established for this whole device -- unlike the
+      // Switch Profile "Add Another" flow below, there's no separate
+      // per-profile role choice here, this IS that choice already made.
+      const result = await resolveSessionFor(name, pin, window.userRole || (window.isCoachSession ? 'coach' : 'player'));
       completeSignIn(result.session, result.isFreshSignup);
     } catch(e){
       errorEl.textContent = e.isNameTaken ? e.message : 'Could not reach the team server -- check your connection and try again.';
@@ -898,7 +912,18 @@
     switchConfirmBtn.disabled = true;
     switchConfirmBtn.textContent = 'Checking…';
     try {
-      const result = await resolveSessionFor(name, pin);
+      // Nathan: "Add new they pick username and pin" -- no role choice in
+      // this mini form (unlike the full first-time sign-in gate above),
+      // so a brand-new name typed here always creates a plain player
+      // profile, regardless of whether the CURRENT device/session happens
+      // to be a coach's -- this used to silently inherit the device's
+      // role (see createPlayer's comment), which is exactly what made
+      // "Add Another Profile" look broken when used from a coach's phone
+      // to add their kid. Verifying an EXISTING name+PIN (switchLockedName
+      // set, or a name that already matches one in Firebase) ignores this
+      // entirely either way -- that account keeps whatever role it
+      // already has.
+      const result = await resolveSessionFor(name, pin, 'player');
       closeSwitchProfileOverlay();
       completeSignIn(result.session, result.isFreshSignup);
       // completeSignIn covers the session/badge/local state, but a lot of
