@@ -542,4 +542,244 @@
       setDroneLastNotified(newest.uploadedAt);
     }).catch(err => console.error('Drone footage notification check failed:', err));
   };
+
+  // ---------------------------------------------------------------------------
+  // Film Vault -- Nathan: "make it so any drone videos added are in a Film
+  // Vault tab in Coaches Tools - they should be categorized by alphabetical
+  // order since they are written by play" (clip titles default to the
+  // uploaded file's name, and coaches name those files after the play the
+  // clip shows -- e.g. "Boston Right", "Houston Motion" -- so alphabetical
+  // browsing here reads like a play index) + "have that be searchable to
+  // narrow the list" -- a plain text filter over the title, live as you type.
+  //
+  // This is a second, read-oriented view over the exact same droneClips
+  // data renderDroneFootageSection above already renders per-practice --
+  // that view (open a practice, scroll to Drone Footage) stays exactly as
+  // it was for "I'm looking at this practice, what got shot" use. Film
+  // Vault flattens every practice's clips into one alphabetized, searchable
+  // list for the opposite direction -- "I know the play name, which clip is
+  // that." Shares this file's video cache (loadedVideos/loadingClipIds) and
+  // save/delete plumbing (saveVideoBlob/deleteVideoBlob/window.saveDroneClips
+  // via saveClips) rather than duplicating any of it; only sort/search/
+  // render and action-wiring are Vault-specific, since those need to know
+  // which practice a given clip actually belongs to. Coach Tools > Film
+  // Vault (js/coachtools-nav.js) is what calls window.initFilmVault below.
+  // ---------------------------------------------------------------------------
+  let vaultOpenClipId = null;
+  let vaultPairs = []; // current filtered+sorted [{clip, practice}] on screen -- lets action handlers find the right practice by clip id
+  let vaultPracticesCache = null;
+
+  function vaultAllPairs(practices) {
+    const out = [];
+    (practices || []).forEach(practice => {
+      sortedClips(practice).forEach(clip => out.push({ clip, practice }));
+    });
+    return out;
+  }
+
+  function vaultFilterAndSort(pairs, term) {
+    const q = (term || '').trim().toLowerCase();
+    const filtered = q ? pairs.filter(({ clip }) => (clip.title || '').toLowerCase().includes(q)) : pairs.slice();
+    filtered.sort((a, b) => (a.clip.title || '').localeCompare(b.clip.title || '', undefined, { sensitivity: 'base' }));
+    return filtered;
+  }
+
+  function fmtVaultPracticeLabel(practice) {
+    if (!practice) return 'Practice';
+    if (!practice.date) return 'Practice';
+    const d = new Date(practice.date + 'T00:00:00');
+    if (isNaN(d)) return 'Practice';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  // Same lazy-load-on-open behavior as ensureVideoLoaded above, just
+  // re-rendering the Vault list instead of one practice's section.
+  function ensureVaultVideoLoaded(clipId) {
+    if (loadedVideos.has(clipId) || loadingClipIds.has(clipId)) return;
+    loadingClipIds.add(clipId);
+    loadVideoBlob(clipId, dataUrl => {
+      loadingClipIds.delete(clipId);
+      loadedVideos.set(clipId, dataUrl);
+      renderFilmVaultList();
+    }, msg => {
+      loadingClipIds.delete(clipId);
+      loadedVideos.set(clipId, null);
+      console.error('Film Vault video load failed:', msg);
+      renderFilmVaultList();
+    });
+  }
+
+  // Same accordion-item markup/fields as clipHtml above, minus Move Up/Down
+  // (alphabetical order here is derived from the title, not something to
+  // reorder) and with a practice-date line added since a Vault row can come
+  // from any practice, not just the one the coach currently has open.
+  function filmVaultClipHtml(pair, approved) {
+    const clip = pair.clip;
+    const open = vaultOpenClipId === clip.id;
+    const comments = Array.isArray(clip.comments) ? clip.comments : [];
+    const commentsHtml = comments.length
+      ? comments.map(c => `
+          <div style="padding:6px 0;border-top:1px solid rgba(128,128,128,.25);">
+            <span style="font-weight:700;">${escapeHtml(c.author || 'Someone')}</span>
+            <span class="lbSub" style="margin-left:6px;">${escapeHtml(fmtWhen(c.at))}</span>
+            <div style="margin-top:2px;">${escapeHtml(c.text)}</div>
+          </div>`).join('')
+      : '<div class="lbSub" style="padding:4px 0;">No comments yet.</div>';
+
+    let videoHtml;
+    if (loadedVideos.has(clip.id)) {
+      const dataUrl = loadedVideos.get(clip.id);
+      videoHtml = dataUrl
+        ? `<video src="${dataUrl}" controls playsinline style="width:100%;border-radius:8px;background:#000;display:block;"></video>`
+        : `<div class="lbEmpty">Couldn't load this clip's video.</div>`;
+    } else if (open) {
+      videoHtml = `<div class="lbEmpty">Loading video…</div>`;
+    } else {
+      videoHtml = `<div class="lbEmpty">Tap to load video.</div>`;
+    }
+
+    return `
+      <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}">
+        <button type="button" class="accordion-header" style="padding:9px 12px;font-size:13px;font-style:normal;font-weight:700;">
+          <span>🎥 ${escapeHtml(clip.title || 'Drone Clip')}${clip.durationSec ? ` <span class="lbSub" style="font-weight:400;">(${fmtDuration(clip.durationSec)})</span>` : ''}</span>
+          <span class="accordion-chevron">▾</span>
+        </button>
+        <div class="accordion-body" style="padding:8px;">
+          <div class="lbSub" style="text-align:center;margin-bottom:8px;">📅 ${escapeHtml(fmtVaultPracticeLabel(pair.practice))}</div>
+          ${approved ? `
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+              <input type="text" class="droneTitleInput" placeholder="Title" value="${escapeHtml(clip.title || '')}" style="flex:2 1 140px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+              <input type="text" class="droneDurationInput" placeholder="M:SS" value="${clip.durationSec ? fmtDuration(clip.durationSec) : ''}" style="flex:1 1 70px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+              <button type="button" class="navBtn" data-action="save-title" data-clip-id="${clip.id}" style="padding:8px 12px;flex:0 0 auto;">Save</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:10px;justify-content:center;flex-wrap:wrap;">
+              <button type="button" class="lbLinkBtn" data-action="delete-clip" data-clip-id="${clip.id}">🗑 Delete</button>
+            </div>` : ''}
+          ${videoHtml}
+          <div class="speed-toggle" style="margin:8px auto;">
+            <button type="button" class="droneSpeedBtn active" data-speed="1">1x</button>
+            <button type="button" class="droneSpeedBtn" data-speed="0.5">½x</button>
+          </div>
+          <div class="lbSub" style="text-align:center;margin-bottom:8px;font-size:11px;">${clip.uploadedBy ? `Uploaded by ${escapeHtml(clip.uploadedBy)}` : ''}${clip.uploadedAt ? ` · ${escapeHtml(fmtWhen(clip.uploadedAt))}` : ''}</div>
+          <div class="lbSectionHeader" style="font-size:12px;margin-top:4px;">💬 Comments</div>
+          <div class="droneComments" style="font-size:13px;">${commentsHtml}</div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <input type="text" class="droneCommentInput" placeholder="Add a comment…" style="flex:1;padding:7px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+            <button type="button" class="navBtn" data-action="post-comment" data-clip-id="${clip.id}" style="padding:7px 12px;flex:0 0 auto;font-size:13px;">Post</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Delegated the same way wireActions above is, but looks the clip's
+  // practice up from vaultPairs (built fresh on every render) instead of
+  // assuming a single practice, since Vault rows span every practice at
+  // once. Re-renders the whole Vault list (not one practice's section) on
+  // every mutation.
+  function wireFilmVaultActions(listEl) {
+    listEl.addEventListener('click', (e) => {
+      const header = e.target.closest('.accordion-header');
+      if (header) {
+        const item = header.closest('.accordion-item');
+        const id = item && item.dataset.clipId;
+        if (id) {
+          if (vaultOpenClipId === id) { vaultOpenClipId = null; renderFilmVaultList(); }
+          else { vaultOpenClipId = id; renderFilmVaultList(); ensureVaultVideoLoaded(id); }
+        }
+        return;
+      }
+      const speedBtn = e.target.closest('.droneSpeedBtn');
+      if (speedBtn) {
+        const body = speedBtn.closest('.accordion-body');
+        const video = body && body.querySelector('video');
+        if (video) video.playbackRate = Number(speedBtn.dataset.speed);
+        body.querySelectorAll('.droneSpeedBtn').forEach(b => b.classList.toggle('active', b === speedBtn));
+        return;
+      }
+      const actionBtn = e.target.closest('[data-action]');
+      if (!actionBtn) return;
+      const clipId = actionBtn.dataset.clipId;
+      const action = actionBtn.dataset.action;
+      const pair = vaultPairs.find(p => p.clip.id === clipId);
+      if (!pair) return;
+      const practice = pair.practice;
+      const clips = sortedClips(practice);
+      const idx = clips.findIndex(c => c.id === clipId);
+      if (idx === -1) return;
+
+      if (action === 'save-title') {
+        const body = actionBtn.closest('.accordion-body');
+        const titleInput = body.querySelector('.droneTitleInput');
+        const durInput = body.querySelector('.droneDurationInput');
+        clips[idx].title = titleInput.value.trim() || 'Drone Clip';
+        const parsed = parseDuration(durInput.value);
+        if (parsed !== null) clips[idx].durationSec = parsed;
+        saveClips(practice, clips, () => renderFilmVaultList());
+      } else if (action === 'delete-clip') {
+        if (!confirm(`Delete "${clips[idx].title || 'this clip'}"? This can't be undone.`)) return;
+        deleteVideoBlob(clips[idx].id);
+        clips.splice(idx, 1);
+        if (vaultOpenClipId === clipId) vaultOpenClipId = null;
+        loadedVideos.delete(clipId);
+        saveClips(practice, clips, () => renderFilmVaultList());
+      } else if (action === 'post-comment') {
+        const body = actionBtn.closest('.accordion-body');
+        const input = body.querySelector('.droneCommentInput');
+        const text = input.value.trim();
+        if (!text) return;
+        const target = clips.find(c => c.id === clipId);
+        if (!target) return;
+        if (!Array.isArray(target.comments)) target.comments = [];
+        target.comments.push({ id: genClipId(), author: currentUserName(), text, at: new Date().toISOString() });
+        input.value = '';
+        saveClips(practice, clips, () => renderFilmVaultList());
+      }
+    });
+  }
+
+  function renderFilmVaultList() {
+    const listEl = document.getElementById('filmVaultList');
+    const countEl = document.getElementById('filmVaultCount');
+    if (!listEl) return;
+    const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    const searchInput = document.getElementById('filmVaultSearch');
+    const term = searchInput ? searchInput.value : '';
+    const all = vaultAllPairs(vaultPracticesCache || []);
+    vaultPairs = vaultFilterAndSort(all, term);
+
+    if (countEl) countEl.textContent = all.length ? `${vaultPairs.length} of ${all.length} clip${all.length !== 1 ? 's' : ''}` : '';
+
+    if (!all.length) {
+      listEl.innerHTML = '<div class="lbEmpty">No drone footage uploaded yet -- clips uploaded from a practice\'s Drone Footage section will show up here automatically, alphabetized by title.</div>';
+      return;
+    }
+    if (!vaultPairs.length) {
+      listEl.innerHTML = `<div class="lbEmpty">No clips match "${escapeHtml(term)}".</div>`;
+      return;
+    }
+    listEl.innerHTML = `<div class="play-grid">${vaultPairs.map(p => filmVaultClipHtml(p, approved)).join('')}</div>`;
+  }
+
+  // Entry point -- js/coachtools-nav.js calls this every time the Film
+  // Vault tab is selected (see initCoachToolsNav's TABS list). Re-fetching
+  // is cheap: window.ensurePracticesLoaded() (js/practices.js) only hits
+  // the network the first time anything asks for practices this session.
+  window.initFilmVault = function () {
+    const searchInput = document.getElementById('filmVaultSearch');
+    if (searchInput && !searchInput.dataset.wired) {
+      searchInput.dataset.wired = '1';
+      searchInput.addEventListener('input', () => renderFilmVaultList());
+    }
+    const listEl = document.getElementById('filmVaultList');
+    if (listEl && !listEl.dataset.wired) {
+      listEl.dataset.wired = '1';
+      wireFilmVaultActions(listEl);
+    }
+    if (!window.ensurePracticesLoaded) return;
+    if (listEl && !vaultPracticesCache) listEl.innerHTML = '<div class="lbEmpty">Loading…</div>';
+    window.ensurePracticesLoaded().then(practices => {
+      vaultPracticesCache = practices;
+      renderFilmVaultList();
+    });
+  };
 })();

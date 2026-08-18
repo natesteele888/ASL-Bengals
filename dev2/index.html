@@ -547,6 +547,25 @@
       </div>
     </div>
   </div>
+
+  <!-- ---- Film Vault: every drone clip from every practice, alphabetized by
+       play name (clip titles are named after the play they show), with a
+       live search box to narrow the list -- Nathan: "make it so any drone
+       videos added are in a Film Vault tab in Coaches Tools - they should be
+       categorized by alphabetical order since they are written by play" +
+       "have that be searchable to narrow the list." The actual data still
+       lives on each practice's droneClips (js/drone-footage.js) -- this tab
+       is a flattened, alphabetized, searchable view over all of them at
+       once. See js/drone-footage.js's Film Vault section. ---- -->
+  <div id="coachFilmVaultPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🎬 Film Vault</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every drone clip from every practice, alphabetized by play name -- search to narrow it down.</div>
+    <div style="max-width:600px;margin:0 auto;">
+      <input type="text" id="filmVaultSearch" placeholder="🔍 Search by play name…" autocomplete="off" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:6px;">
+      <div class="lbSub" id="filmVaultCount" style="text-align:center;margin-bottom:10px;"></div>
+      <div id="filmVaultList"><div class="lbEmpty">Loading…</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- Nathan: "there was a schedule button that shows an interactive schedule
@@ -1283,7 +1302,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260818a';
+  const BUILD_V = '20260818b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

@@ -12,6 +12,12 @@
     { key: 'stats', label: '📊 Stats', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
     { key: 'roster', label: '👥 Roster', panel: 'coachRosterPanel', init: () => window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap')) },
     { key: 'drivescripts', label: '🧢 Drive Scripts', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
+    // Nathan: "make it so any drone videos added are in a Film Vault tab in
+    // Coaches Tools - they should be categorized by alphabetical order since
+    // they are written by play" + "have that be searchable to narrow the
+    // list." See js/drone-footage.js's Film Vault section for the render/
+    // search/sort logic -- this just gives it a tab like everything else here.
+    { key: 'filmvault', label: '🎬 Film Vault', panel: 'coachFilmVaultPanel', init: () => window.initFilmVault && window.initFilmVault() },
     // Nathan: "make sure that the notes that were added to the What's New
     // can be added at any time by a coach in the Coach Tools block" -- the
     // Houston route note was a one-off migration script; this tab is the
