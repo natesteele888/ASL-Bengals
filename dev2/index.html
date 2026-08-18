@@ -66,6 +66,16 @@
       <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
       <div class="playerMenuDropdown" id="playerMenuDropdown">
         <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
+        <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
+             with the app fully closed) needs a paid Firebase plan, which
+             Nathan opted out of -- see js/whats-new.js for the free
+             alternative this wires up instead: a real OS notification
+             fired the moment the app is opened and it finds a play added
+             since the last one it already notified about, reusing this
+             same What's New data. Label/behavior toggled by
+             refreshNotifyBtn() in js/whats-new.js based on
+             Notification.permission. -->
+        <button id="notifyOptInBtn" style="display:none;">🔔 Enable Notifications</button>
         <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
@@ -1111,7 +1121,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817ag';
+  const BUILD_V = '20260817ah';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

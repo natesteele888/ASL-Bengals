@@ -15,12 +15,29 @@
 
   const WHATS_NEW_URL = `${FIREBASE_DB_URL}/whatsNew.json`;
   const LAST_SEEN_KEY = 'aslBengalsWhatsNewLastSeen';
+  // Nathan: "how about push notifications... NEW PLAY ADDED." Real
+  // background push (works with the app fully closed) needs a Cloud
+  // Functions trigger, which needs the Blaze plan -- Nathan opted out of
+  // that upgrade. This is the free alternative: fire a real OS
+  // notification the moment the app is opened and it notices something
+  // new, reusing this exact same data. Deliberately a SEPARATE timestamp
+  // from LAST_SEEN_KEY above -- "seen" only advances when someone
+  // actually opens the What's New panel, but a notification should only
+  // ever fire once per new play, the first time the app opens after it
+  // was added, regardless of whether they open the panel or not.
+  const LAST_NOTIFIED_KEY = 'aslBengalsWhatsNewLastNotified';
 
   function getLastSeen() {
     try { return localStorage.getItem(LAST_SEEN_KEY) || ''; } catch (e) { return ''; }
   }
   function setLastSeen(iso) {
     try { localStorage.setItem(LAST_SEEN_KEY, iso); } catch (e) { /* unavailable -- badge just won't persist */ }
+  }
+  function getLastNotified() {
+    try { return localStorage.getItem(LAST_NOTIFIED_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setLastNotified(iso) {
+    try { localStorage.setItem(LAST_NOTIFIED_KEY, iso); } catch (e) { /* unavailable -- may re-notify on a future open, harmless */ }
   }
 
   function fmtWhen(iso) {
@@ -53,7 +70,61 @@
     const unread = entries.filter(e => e.addedAt && e.addedAt > lastSeen).length;
     if (dot) dot.style.display = unread ? '' : 'none';
     if (countEl) { countEl.textContent = unread ? String(unread) : ''; countEl.style.display = unread ? '' : 'none'; }
+    maybeNotifyNewPlays(entries);
   };
+
+  function showLocalNotification(title, body) {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon: 'assets/images/icon-192.png',
+        badge: 'assets/images/icon-192.png',
+        tag: 'aslBengalsWhatsNew', // collapses into one if several land close together instead of stacking
+      });
+    }).catch(() => { /* no active service worker yet -- silently skip, badge/feed still work */ });
+  }
+
+  // Fires once per newly-added play (or one combined notification for
+  // several at once), only the first app-open after each was added -- see
+  // LAST_NOTIFIED_KEY above for why this can't just reuse "last seen."
+  // No-ops entirely unless the person already opted in via
+  // #notifyOptInBtn below (Notification.permission === 'granted').
+  function maybeNotifyNewPlays(entries) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    // First time this ever runs on a device that's already been using the
+    // app (and has plays it's already seen), start from "last seen" so it
+    // doesn't blast a notification for the team's entire play history the
+    // moment someone opts in.
+    const since = getLastNotified() || getLastSeen();
+    const fresh = entries.filter(e => e.addedAt && e.addedAt > since).sort((a, b) => (a.addedAt || '').localeCompare(b.addedAt || ''));
+    if (!fresh.length) return;
+    const title = fresh.length === 1 ? '🏈 New Play Added' : `🏈 ${fresh.length} New Plays Added`;
+    const body = fresh.length === 1
+      ? (fresh[0].label || fresh[0].key || 'A new play') + (fresh[0].addedBy ? ` — added by ${fresh[0].addedBy}` : '')
+      : fresh.slice(0, 3).map(e => e.label || e.key || 'play').join(', ') + (fresh.length > 3 ? ', and more' : '');
+    showLocalNotification(title, body);
+    setLastNotified(fresh[fresh.length - 1].addedAt);
+  }
+
+  function refreshNotifyBtn() {
+    const btn = document.getElementById('notifyOptInBtn');
+    if (!btn || !('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      btn.style.display = '';
+      btn.textContent = '🔔 Notifications On';
+      btn.disabled = true;
+    } else if (Notification.permission === 'denied') {
+      btn.style.display = '';
+      btn.textContent = '🔕 Notifications Blocked';
+      btn.disabled = true;
+    } else {
+      btn.style.display = '';
+      btn.textContent = '🔔 Enable Notifications';
+      btn.disabled = false;
+    }
+  }
+  window.refreshNotifyBtn = refreshNotifyBtn;
 
   window.showWhatsNew = async function () {
     const overlay = document.getElementById('whatsNewOverlay');
@@ -94,4 +165,19 @@
   if (closeBtn) closeBtn.addEventListener('click', () => {
     document.getElementById('whatsNewOverlay').classList.remove('show');
   });
+
+  const notifyBtn = document.getElementById('notifyOptInBtn');
+  if (notifyBtn && 'Notification' in window) {
+    refreshNotifyBtn();
+    notifyBtn.addEventListener('click', () => {
+      Notification.requestPermission().then(() => {
+        refreshNotifyBtn();
+        // Opting in shouldn't immediately fire a notification for
+        // whatever's already unread -- start the "notified" clock from
+        // right now, same reasoning as the since-fallback in
+        // maybeNotifyNewPlays above.
+        setLastNotified(new Date().toISOString());
+      });
+    });
+  }
 })();

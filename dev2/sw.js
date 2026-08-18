@@ -15,7 +15,7 @@
 // missing layout) even though the live site is fully up to date. Bumping
 // this forces a fresh install + activate, which deletes the old cache
 // (see the activate handler) and re-caches the current shell files.
-const CACHE_NAME = 'bengals-shell-20260817ag';
+const CACHE_NAME = 'bengals-shell-20260817ah';
 const SHELL_FILES = [
   './index.html',
   './css/styles.css',
@@ -45,5 +45,23 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
+// Nathan: "NEW PLAY ADDED" notifications (see js/whats-new.js's
+// showLocalNotification -- fired via reg.showNotification when the app
+// is opened and finds something new, since real background push needs a
+// paid plan this project isn't on). Without this handler, tapping the
+// notification banner itself does nothing on most browsers -- this
+// focuses an already-open tab if there is one, or opens a new one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('./index.html');
+    })
   );
 });
