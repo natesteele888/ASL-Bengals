@@ -1421,6 +1421,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 
 /* ---- This Week (3 Keys + featured plays) ---- */
 .thisweekKeysBox { max-width: 600px; margin: 14px auto; background: var(--card); border: 2px solid var(--bengal-orange); border-radius: 12px; padding: 14px 18px; }
+/* Nathan: "I dont like that the week ahead is just a little text blurb.
+   Would love a more infographic style look with callouts for number of
+   games and practices - logos for games can be brought in just make it a
+   place to visit." Reuses .adminStatCard's existing big-number look
+   (Coach Dashboard's Team Snapshot) for the callouts, and .scheduleRow/
+   .practiceRow (already styled dark scoreboard cards, opponent logos
+   included) for the actual clickable games/practices below it -- see
+   js/thisweek.js's weekAheadInfographicHtml. This is the one new rule
+   needed on top of those existing components, just laying the stat cards
+   out in a row instead of the 2-column grid .adminStatGrid uses elsewhere. */
+.weekAheadStats { display: flex; gap: 10px; margin-bottom: 4px; }
+.weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 80px; }
 .thisweekKeysTitle { font-weight: 900; font-size: 14px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
 .thisweekKeysList { margin: 0; padding-left: 22px; }
 .thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }

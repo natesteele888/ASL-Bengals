@@ -27,6 +27,16 @@
   const THISWEEK_URL = `${FIREBASE_DB_URL}/thisWeek.json`;
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
   const PRACTICES_URL = `${FIREBASE_DB_URL}/practices.json`;
+  // Nathan: "logos for games can be brought in" -- own light copy of the
+  // same opponentLogos.json js/schedule.js reads, rather than reaching
+  // into that file's closure (it's not exposed on window, and its own
+  // load only kicks off once the Schedule tab has actually been opened --
+  // This Week can render before that ever happens). Same
+  // own-read-only-copy pattern already used here for upcomingGames/
+  // upcomingPractices below.
+  const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
+  const BUNDLED_LOGOS = { clinton: 'assets/images/opponents/clinton.png' };
+  let opponentLogos = {};
   const MAX_PLAYS = 15;
   const MIN_RECOMMENDED = 5;
   const NUM_KEYS = 3;
@@ -77,8 +87,50 @@
       })
       .catch(err => console.error('Could not load practices for This Week look-ahead:', err));
   }
+  function loadOpponentLogosForWeekAhead() {
+    return window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => { opponentLogos = (data && typeof data === 'object') ? data : {}; })
+      .catch(err => { console.error('Could not load opponent logos for This Week look-ahead:', err); opponentLogos = {}; });
+  }
   function gameLabel(g) {
     return `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.date ? ' — ' + g.date : ''}`;
+  }
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+  // Same team-badge logic as js/schedule.js's normalizeOpponentKey/
+  // hashColor/initials/opponentBadgeHtml/bengalsBadgeHtml -- duplicated
+  // locally rather than depending on that file's closure, same reasoning
+  // as opponentLogos above.
+  function normalizeOpponentKey(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    const firstWord = cleaned.split(/\s+/).filter(Boolean)[0] || '';
+    return firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  function hashColor(str) {
+    let hash = 0;
+    for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 55%, 38%)`;
+  }
+  function initials(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    const words = cleaned.split(/\s+/).filter(w => /[a-zA-Z]/.test(w));
+    if (!words.length) return '?';
+    const letter = w => (w.match(/[a-zA-Z]/) || ['?'])[0];
+    if (words.length === 1) return words[0].replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '?';
+    return (letter(words[0]) + letter(words[1])).toUpperCase();
+  }
+  function bengalsBadgeHtml() {
+    return `<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
+  }
+  function opponentBadgeHtml(name) {
+    const key = normalizeOpponentKey(name);
+    const logo = opponentLogos[key] || BUNDLED_LOGOS[key] || null;
+    if (logo) return `<span class="scheduleTeamBadge hasLogo"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
+    return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
   }
 
   function resultFor(g) {
@@ -110,21 +162,20 @@
     h = h % 12; if (h === 0) h = 12;
     return `${h}:${min} ${ap}`;
   }
-  function joinList(items) {
-    if (items.length === 1) return items[0];
-    if (items.length === 2) return items.join(' and ');
-    return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1];
-  }
-
   // Nathan: "can we incorporate an AI generated look ahead for the team?"
-  // then, after seeing a first pass: "week ahead write up is a little
-  // weak, need more to it, written more like the game preview." Rewritten
-  // to give each game its own full sentence (matchup, type, time,
-  // location) the same way js/schedule.js's buildGamePreviewText does,
-  // instead of a bare "Wed Scrimmage @ Clinton" list. Still fully
-  // template-composed from Schedule's own data -- see the index.html
-  // comment above #thisweekAheadBox for why (static, key-less site).
-  function buildWeekAheadText(games, practices) {
+  // then: "week ahead write up is a little weak, need more to it, written
+  // more like the game preview." Then: "I dont like that the week ahead
+  // is just a little text blurb. Would love a more infographic style look
+  // with callouts for number of games and practices - logos for games can
+  // be brought in just make it a place to visit." buildWeekAheadData below
+  // is the same Mon-Sun window/game/practice-gathering logic the old
+  // sentence-writer used, just returning structured data instead of
+  // prose; weekAheadInfographicHtml (further down) turns that into real
+  // clickable cards -- reusing js/schedule.js's .scheduleRow game-card
+  // look (with real opponent logos) and js/practices.js's .practiceRow
+  // look, rather than inventing new components, so this actually matches
+  // the rest of the app instead of introducing a third visual style.
+  function buildWeekAheadData(games, practices) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     // Nathan: "Football typically has Sunday as part of the prior weekdays
@@ -149,8 +200,6 @@
       return new Date(parts[0], parts[1] - 1, parts[2]);
     };
     const inWindow = (d) => d && d >= start && d <= end;
-    const weekdayShort = (d) => d.toLocaleDateString(undefined, { weekday: 'short' });
-    const weekdayFull = (d) => d.toLocaleDateString(undefined, { weekday: 'long' });
 
     const gameEntries = [];
     const practiceEntries = [];
@@ -167,42 +216,96 @@
     gameEntries.sort((a, b) => a.d - b.d);
     practiceEntries.sort((a, b) => a.d - b.d);
 
-    if (!gameEntries.length && !practiceEntries.length) {
-      return 'Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they’ll show up here.';
-    }
-
-    const record = bengalsRecord(games);
-    const recordPart = record ? ` (${record})` : '';
     const practiceCount = practiceEntries.filter(e => e.p.type !== 'film').length;
     const filmCount = practiceEntries.length - practiceCount;
 
-    const sentences = [];
+    return {
+      hasAny: !!(gameEntries.length || practiceEntries.length),
+      record: bengalsRecord(games),
+      gameEntries,
+      practiceEntries,
+      practiceCount,
+      filmCount,
+    };
+  }
 
-    // Opening line -- what's on tap this week, at a glance.
-    const openParts = [];
-    if (gameEntries.length) openParts.push(`${gameEntries.length} game${gameEntries.length !== 1 ? 's' : ''}`);
-    if (practiceCount) openParts.push(`${practiceCount} practice${practiceCount !== 1 ? 's' : ''}`);
-    if (filmCount) openParts.push(`${filmCount} film night${filmCount !== 1 ? 's' : ''}`);
-    sentences.push(`The Bengals${recordPart} have ${openParts.length ? joinList(openParts) : 'nothing new'} on tap this week.`);
+  function weekAheadStatCardHtml(num, label) {
+    return `<div class="adminStatCard"><div class="num">${num}</div><div class="lbl">${escapeHtml(label)}</div></div>`;
+  }
+  // Fuller than the plain weekday-only label used for the practice/film
+  // grouping in the old prose version -- these cards each stand alone, so
+  // "Wed" alone isn't enough context once it's out of a sentence.
+  function weekAheadCardDate(d) {
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  // Same markup/classes as js/schedule.js's Games list row (.scheduleRow,
+  // .scheduleTeamSide, .scheduleTeamBadge, etc.) so this looks and behaves
+  // like a real Schedule card, real opponent logo included -- clicking it
+  // jumps straight to that game's own detail page via
+  // window.openScheduleGame (wired up in weekAheadInfographicHtml below).
+  function weekAheadGameCardHtml(d, g, record) {
+    const result = resultFor(g);
+    const recordHtml = record ? `<span class="scheduleTeamRecord">${escapeHtml(record)}</span>` : '';
+    const badge = result
+      ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
+      : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+    const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
+    const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+    const gameTime = to12h(g.gameTime || g.time || '');
+    const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
+    const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
+    return `
+      <button type="button" class="scheduleRow" data-open-game="${escapeHtml(g.id)}">
+        ${gameTypeTag}
+        <span class="scheduleRowDate">${locLine}</span>
+        <span class="scheduleRowMatchup">
+          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}${usScore}</span>
+          <span class="scheduleRowCenter">
+            <span class="scheduleRowCenterDate">${weekAheadCardDate(d)}</span>
+            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
+            ${badge}
+          </span>
+          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
+        </span>
+      </button>`;
+  }
+  // Same markup/classes as js/practices.js's list row (.practiceRow,
+  // .practiceRowTop, .practiceTypeBadge) -- clicking jumps to that
+  // practice's own detail page via window.openPracticeDetail.
+  function weekAheadPracticeCardHtml(d, p) {
+    const isFilm = p.type === 'film';
+    const timeStr = p.time ? (p.endTime ? `${to12h(p.time)} - ${to12h(p.endTime)}` : to12h(p.time)) : '';
+    return `
+      <button type="button" class="practiceRow" data-open-practice="${escapeHtml(p.id)}" style="margin-bottom:8px;">
+        <div class="practiceRowTop">
+          <span class="practiceTypeBadge ${isFilm ? 'film' : 'practice'}">${isFilm ? '🎬 Film Night' : '🏃 Practice'}</span>
+          <span class="practiceRowDateTime">${weekAheadCardDate(d)}${timeStr ? ' • ' + escapeHtml(timeStr) : ''}</span>
+        </div>
+        ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
+      </button>`;
+  }
 
-    // Practice/film-night days, grouped into one line rather than a
-    // sentence per day.
-    const practiceDays = practiceEntries.filter(e => e.p.type !== 'film').map(e => weekdayShort(e.d));
-    const filmDays = practiceEntries.filter(e => e.p.type === 'film').map(e => weekdayShort(e.d));
-    if (practiceDays.length) sentences.push(`Practice is set for ${joinList(practiceDays)}${filmDays.length ? `, with film night on ${joinList(filmDays)}` : ''}.`);
-    else if (filmDays.length) sentences.push(`Film night is on ${joinList(filmDays)}.`);
+  // Nathan: "callouts for number of games and practices... just make it a
+  // place to visit." Stat cards up top (reusing the same .adminStatCard
+  // look Coach Dashboard's Team Snapshot uses), then real clickable
+  // Schedule/Practice cards below instead of a paragraph of prose.
+  function weekAheadInfographicHtml(data) {
+    if (!data.hasAny) {
+      return '<div class="lbEmpty">Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they\'ll show up here.</div>';
+    }
+    const statCards = [];
+    if (data.gameEntries.length) statCards.push(weekAheadStatCardHtml(data.gameEntries.length, data.gameEntries.length === 1 ? 'Game' : 'Games'));
+    if (data.practiceCount) statCards.push(weekAheadStatCardHtml(data.practiceCount, data.practiceCount === 1 ? 'Practice' : 'Practices'));
+    if (data.filmCount) statCards.push(weekAheadStatCardHtml(data.filmCount, data.filmCount === 1 ? 'Film Night' : 'Film Nights'));
 
-    // One full sentence per game, same voice as the Game Preview on each
-    // game's own Schedule page.
-    gameEntries.forEach(({ d, g }) => {
-      const verb = g.homeAway === 'Away' ? 'travel to face' : 'host';
-      const typeWord = g.gameType === 'Playoff' ? 'Playoff game' : (g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'game');
-      const timeStr = g.gameTime ? ` at ${to12h(g.gameTime)}` : '';
-      const locPart = g.location ? ` at ${g.location}` : '';
-      sentences.push(`On ${weekdayFull(d)}, the Bengals ${verb} ${g.opponent || 'TBD'} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord}${timeStr}${locPart}.`);
-    });
+    const gamesHtml = data.gameEntries.map(({ d, g }) => weekAheadGameCardHtml(d, g, data.record)).join('');
+    const practicesHtml = data.practiceEntries.map(({ d, p }) => weekAheadPracticeCardHtml(d, p)).join('');
 
-    return sentences.join(' ');
+    return `
+      <div class="weekAheadStats">${statCards.join('')}</div>
+      ${gamesHtml ? `<div class="lbSectionHeader">🏈 Games this week</div>${gamesHtml}` : ''}
+      ${practicesHtml ? `<div class="lbSectionHeader">🏃 Practice &amp; film</div>${practicesHtml}` : ''}
+    `;
   }
 
   function renderWeekAhead() {
@@ -210,7 +313,24 @@
     const textEl = document.getElementById('thisweekAheadText');
     if (!box || !textEl) return;
     box.style.display = '';
-    textEl.textContent = buildWeekAheadText(upcomingGames, upcomingPractices);
+    textEl.innerHTML = weekAheadInfographicHtml(buildWeekAheadData(upcomingGames, upcomingPractices));
+    // Nathan: "just make it a place to visit" -- each card jumps straight
+    // to that game's/practice's own Schedule detail page. Plain
+    // addEventListener per button (innerHTML was just rebuilt above, so
+    // nothing from a previous render is still attached) rather than
+    // inline onclick, consistent with how every other list in this app
+    // wires up its rows.
+    textEl.querySelectorAll('[data-open-game]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (window.openScheduleGame) window.openScheduleGame(btn.dataset.openGame);
+      });
+    });
+    textEl.querySelectorAll('[data-open-practice]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (typeof window.setSection === 'function') window.setSection('schedule');
+        if (window.openPracticeDetail) window.openPracticeDetail(btn.dataset.openPractice);
+      });
+    });
   }
 
   function numberedRows() {
@@ -278,7 +398,7 @@
         pendingGameId = saved.gameId || '';
         pendingCoachKeys = saved.coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
         if (statusEl) statusEl.textContent = '';
-        return Promise.all([loadUpcomingGames(), loadUpcomingPractices()]);
+        return Promise.all([loadUpcomingGames(), loadUpcomingPractices(), loadOpponentLogosForWeekAhead()]);
       })
       .then(() => {
         renderReadOnly();

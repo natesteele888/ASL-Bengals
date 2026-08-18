@@ -390,15 +390,22 @@
   <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
   <!-- Nathan: "For 'This Week' can we incorporate an AI generated look
        ahead for the team?... Would be nice to be a little write up of the
-       week ahead." Composed client-side from Schedule's actual games +
-       practices in the next 7 days (js/thisweek.js's buildWeekAheadText) --
-       no backend/API key needed (this is a static site; a real hosted LLM
-       call would have to expose a key publicly), and it's always accurate
-       since it's built straight from the same data the Schedule tab shows. -->
+       week ahead." then, later: "I dont like that the week ahead is just
+       a little text blurb. Would love a more infographic style look with
+       callouts for number of games and practices - logos for games can be
+       brought in just make it a place to visit." Composed client-side
+       from Schedule's actual games + practices in the current Mon-Sun
+       window (js/thisweek.js's buildWeekAheadData/weekAheadInfographicHtml)
+       -- no backend/API key needed (this is a static site; a real hosted
+       LLM call would have to expose a key publicly), and it's always
+       accurate since it's built straight from the same data the Schedule
+       tab shows. Real clickable game/practice cards now, not prose --
+       tapping one jumps straight to that game's/practice's own Schedule
+       detail page. -->
   <div id="thisweekAheadBox" class="thisweekKeysBox" style="display:none;">
     <div class="thisweekKeysTitle">📅 Week Ahead</div>
-    <div id="thisweekAheadText" style="font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.45;"></div>
-    <div class="lbSub" style="margin-top:8px;text-align:left;">Auto-generated from this week's Schedule</div>
+    <div id="thisweekAheadText"></div>
+    <div class="lbSub" style="margin-top:8px;text-align:center;">Auto-generated from this week's Schedule -- tap a card to open it</div>
   </div>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
@@ -1274,7 +1281,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817bf';
+  const BUILD_V = '20260817c0';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
