@@ -177,6 +177,11 @@
       // actually be allowed to open. The dot clears itself the moment this
       // practice's detail view has actually rendered the section (see
       // renderDroneFootageSectionNow) -- not just from being in this list.
+      // Nathan (later): "drone icon on the practice card should be in the
+      // same spot as the weather - once the practice is done, the weather
+      // goes away anyway so it can take it's place" -- moved into the
+      // same right-aligned .practiceRowRight slot as the weather chip
+      // instead of its own spot earlier in the row.
       const droneAllowed = window.practiceHasDroneFootage && window.practiceHasDroneFootage(p) &&
         (approved || !window.isDroneFootageVisibleCached || window.isDroneFootageVisibleCached());
       const droneUnseen = droneAllowed && window.practiceHasUnseenDroneFootage && window.practiceHasUnseenDroneFootage(p);
@@ -187,8 +192,10 @@
         <div class="practiceRowTop">
           <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
           <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
-          ${droneBadgeHtml}
-          <span class="practiceRowWeather" id="${weatherId}" style="display:none;"></span>
+          <span class="practiceRowRight">
+            ${droneBadgeHtml}
+            <span class="practiceRowWeather" id="${weatherId}" style="display:none;"></span>
+          </span>
         </div>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
         ${p.notes ? `<span class="practiceRowNotes">${escapeHtml(p.notes)}</span>` : ''}`;

@@ -1536,8 +1536,16 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 [data-theme="dark"] .weatherBox { background: rgba(255,255,255,.04); }
 /* Compact weather chip for the right side of a practice list row -- see
    .practiceRow (flex row) in js/practices.js. Small enough to sit next
-   to the date/time text without competing with it. */
-.practiceRowWeather { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-left: auto; flex: 0 0 auto; }
+   to the date/time text without competing with it. Nathan: "drone icon
+   on the practice card should be in the same spot as the weather - once
+   the practice is done, the weather goes away anyway so it can take
+   it's place" -- weather.js hides #practiceRowWeather-{id} entirely for
+   any past date (see fetchForecast's daysOut<0 check), so the two are
+   naturally almost never both showing at once; .practiceRowRight just
+   groups them into the one right-aligned slot instead of the drone
+   badge getting its own separate spot earlier in the row. */
+.practiceRowRight { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.practiceRowWeather { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; flex: 0 0 auto; }
 .practiceRowWeather .weatherIcon { font-size: 16px; }
 /* Nathan: "add that little weather icon in the bottom of the center of the
    Game card as well as the end of all cards on the full schedule cards."
