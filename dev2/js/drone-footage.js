@@ -8,45 +8,48 @@
 // list. It can appear as the Drone footage section at the bottom of an
 // accordion of all the videos to click and view. Give slow 1/2 speed
 // playback option on it. ability to leave a comment with your username and
-// time stamped." Confirmed: real Firebase Storage (clips are iPhone-shot,
-// ~4-6MB/10-20sec each), uploaded straight from the app, multiple at once.
+// time stamped." Clips are iPhone-shot, ~4-6MB/10-20sec each, uploaded
+// straight from the app, multiple at once.
 //
-// Every other "upload" in this app (player photos, opponent logos, field
-// photos) downscales to a tiny base64 string and embeds it directly in
-// Firebase Realtime Database JSON -- fine at photo scale, catastrophic at
-// video scale (RTDB has no true blob storage; every save re-sends the whole
-// node). This is the first feature to use Firebase STORAGE instead, via its
-// plain JSON REST API (no SDK), same "stay consistent with this no-build
-// static site" approach cloud-auth.js already takes for Auth/RTDB, reusing
-// its window.getFirebaseIdToken() for the Storage Authorization header.
+// Firebase Storage would've been the natural fit for real video files, but
+// Nathan declined the Blaze (pay-as-you-go) plan upgrade Storage now
+// requires -- so this uses the same "downscale/encode client-side, embed as
+// base64 in Realtime Database JSON" trick every other upload in this app
+// already uses (player photos, opponent logos, field photos), just at
+// video scale instead of tiny-image scale, on the existing free Spark plan.
 //
-// IMPORTANT one-time setup this feature needs and this file can't do for
-// you: Firebase Storage has to be enabled for this project in the Firebase
-// Console (Build > Storage > Get Started), and STORAGE_BUCKET below has to
-// match the bucket name shown at the top of that page (this is a
-// best-guess default, not confirmed). Suggested Storage security rules,
-// mirroring how RTDB trusts any signed-in gate session rather than
-// enforcing per-role checks server-side (see cloud-auth.js's header
-// comment) --
-//   rules_version = '2';
-//   service firebase.storage {
-//     match /b/{bucket}/o {
-//       match /droneFootage/{practiceId}/{fileName} {
-//         allow read: if true;              // <video> tags can't send an
-//                                            // Authorization header, so
-//                                            // playback needs an
-//                                            // unauthenticated GET; actual
-//                                            // discovery still requires
-//                                            // being signed into the app
-//                                            // to read practices.json in
-//                                            // the first place.
-//         allow write: if request.auth != null;
-//       }
-//     }
-//   }
+// IMPORTANT tradeoffs, on purpose, given that choice:
+//   - No real video streaming/seeking -- the whole clip has to download
+//     before <video> can play or scrub, unlike a real CDN-backed host.
+//   - Spark's free tier caps at 1GB stored / 10GB downloaded per month.
+//     A clip only costs its ~4-8MB (base64 inflates ~33% over the raw
+//     file) once in storage, but EVERY time someone opens/plays it, that's
+//     another ~4-8MB against the monthly download allowance -- a
+//     well-watched clip could add up faster than you'd expect.
+//   - To keep this from being worse than it has to be, video bytes are
+//     NOT embedded in the practice record itself (practices.json is a
+//     whole-array PUT on every single save -- see practices.js -- so
+//     embedding video there would mean every unrelated edit, even to a
+//     different practice entirely, re-sends every clip's video data).
+//     Instead each clip's video lives at its own dedicated RTDB path,
+//     droneVideos/{clipId}, written/read/deleted with a PUT/GET/DELETE
+//     scoped to just that one leaf -- practices.json only ever holds
+//     small text metadata (title, duration, order, uploadedBy, comments),
+//     regardless of how many clips exist. Video data is also only fetched
+//     lazily, the first time a clip's accordion item is opened (cached in
+//     memory after that), not for every clip up front.
 //
-// Video metadata (title, duration, storage path, download URL, display
-// order, who/when uploaded, comments) is NOT stored in Storage -- it lives
+// ONE-TIME SETUP THIS STILL NEEDS in the Firebase Console (Realtime
+// Database > Rules) that this file can't do for you: your existing rules
+// almost certainly allowlist specific top-level paths (schedule,
+// practices, roster, etc.) rather than a catch-all, so this brand-new
+// droneVideos path needs its own entry added, matching whatever rule
+// already covers "practices" -- something like:
+//   "droneVideos": { ".read": "auth != null", ".write": "auth != null" }
+// If you're not sure what your current rules look like, open the Rules
+// tab and paste them into chat -- I'll tell you exactly what to add.
+//
+// Video metadata (title, duration, order, uploadedBy/At, comments) lives
 // on the practice record itself (practice.droneClips, see practices.js),
 // saved through window.saveDroneClips(), a narrow write path practices.js
 // exposes so a player leaving a comment doesn't need the full coach-only
@@ -54,11 +57,11 @@
 // jersey-# edits).
 // ---------------------------------------------------------------------------
 (function () {
-  const STORAGE_BUCKET = 'aslbengals.appspot.com'; // confirm against Firebase Console > Storage
-  const STORAGE_BASE = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o`;
+  const DRONE_VIDEOS_URL = `${FIREBASE_DB_URL}/droneVideos`;
 
-  const openClipIds = new Set(); // accordion items currently expanded (by clip id)
-  let lastPractice = null;       // the practice object last rendered, so button handlers below can find it
+  const openClipIds = new Set();   // accordion items currently expanded (by clip id)
+  const loadedVideos = new Map();  // clipId -> base64 data URL, fetched lazily and cached for this session
+  const loadingClipIds = new Set(); // clipId currently mid-fetch, so re-renders don't double-request
 
   function escapeHtml(s) {
     const d = document.createElement('div');
@@ -97,31 +100,34 @@
       d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
-  // ---- Firebase Storage REST helpers (plain fetch, no SDK -- see header) ----
-  function storageUpload(path, file, onOk, onFail) {
-    window.getFirebaseIdToken().then(token => {
-      const url = `${STORAGE_BASE}?uploadType=media&name=${encodeURIComponent(path)}`;
-      return fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type || 'video/mp4' },
-        body: file,
-      });
-    }).then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(e => Promise.reject(new Error((e.error && e.error.message) || `HTTP ${r.status}`))))
-      .then(data => {
-        // Firebase Storage auto-assigns a firebaseStorageDownloadTokens
-        // value on upload -- a URL carrying it works for playback
-        // regardless of the read rule, same mechanism getDownloadURL()
-        // uses in the full SDK.
-        const token = (data.downloadTokens || '').split(',')[0];
-        const dlUrl = `${STORAGE_BASE}/${encodeURIComponent(path)}?alt=media${token ? `&token=${token}` : ''}`;
-        onOk(dlUrl);
-      })
+  // ---- Video blob storage: dedicated RTDB path, one PUT/GET/DELETE per
+  // clip (never bundled into practices.json's whole-array PUT -- see
+  // header comment) ----
+  function fileToVideoDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
+  function saveVideoBlob(clipId, dataUrl, onOk, onFail) {
+    window.firebaseAuthed(`${DRONE_VIDEOS_URL}/${clipId}.json`).then(url => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dataUrl),
+    })).then(r => { if (r.ok) onOk(); else onFail(`HTTP ${r.status}`); })
       .catch(err => onFail(err.message || String(err)));
   }
-  function storageDelete(path) {
-    window.getFirebaseIdToken().then(token =>
-      fetch(`${STORAGE_BASE}/${encodeURIComponent(path)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
-    ).catch(err => console.error('Drone clip file delete failed:', err));
+  function loadVideoBlob(clipId, onOk, onFail) {
+    window.firebaseAuthed(`${DRONE_VIDEOS_URL}/${clipId}.json`).then(url => fetch(url))
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(dataUrl => { if (dataUrl) onOk(dataUrl); else onFail('Video not found -- it may not have finished uploading.'); })
+      .catch(err => onFail(err.message || String(err)));
+  }
+  function deleteVideoBlob(clipId) {
+    window.firebaseAuthed(`${DRONE_VIDEOS_URL}/${clipId}.json`).then(url => fetch(url, { method: 'DELETE' }))
+      .catch(err => console.error('Drone clip video delete failed:', err));
   }
   // Browsers can read a video's duration straight out of the container
   // header without a real upload/transcode -- used to auto-fill "run time"
@@ -158,30 +164,46 @@
       const file = files[i];
       readDuration(file).then(durationSec => {
         const clipId = genClipId();
-        const safeName = (file.name || 'clip.mp4').replace(/[^a-zA-Z0-9_.-]/g, '_');
-        const path = `droneFootage/${practice.id}/${clipId}-${safeName}`;
-        storageUpload(path, file, (url) => {
-          const clips = sortedClips(practice);
-          const maxOrder = clips.reduce((m, c) => Math.max(m, c.order || 0), -1);
-          clips.push({
-            id: clipId,
-            title: (file.name || 'Drone Clip').replace(/\.[^.]+$/, '') || 'Drone Clip',
-            storagePath: path,
-            url,
-            durationSec,
-            order: maxOrder + 1,
-            uploadedBy: currentUserName(),
-            uploadedAt: new Date().toISOString(),
-            comments: [],
-          });
-          saveClips(practice, clips, () => {
-            renderDroneFootageSection(practice);
-            next(i + 1);
-          }, msg => { statusEl.textContent = `Clip ${i + 1} save failed: ${msg}`; next(i + 1); });
-        }, msg => { statusEl.textContent = `Clip ${i + 1} upload failed: ${msg}`; next(i + 1); });
+        fileToVideoDataUrl(file).then(dataUrl => {
+          saveVideoBlob(clipId, dataUrl, () => {
+            const clips = sortedClips(practice);
+            const maxOrder = clips.reduce((m, c) => Math.max(m, c.order || 0), -1);
+            clips.push({
+              id: clipId,
+              title: (file.name || 'Drone Clip').replace(/\.[^.]+$/, '') || 'Drone Clip',
+              durationSec,
+              order: maxOrder + 1,
+              uploadedBy: currentUserName(),
+              uploadedAt: new Date().toISOString(),
+              comments: [],
+            });
+            saveClips(practice, clips, () => {
+              renderDroneFootageSection(practice);
+              next(i + 1);
+            }, msg => { statusEl.textContent = `Clip ${i + 1} save failed: ${msg}`; next(i + 1); });
+          }, msg => { statusEl.textContent = `Clip ${i + 1} upload failed: ${msg}`; next(i + 1); });
+        }).catch(() => { statusEl.textContent = `Clip ${i + 1}: could not read that file.`; next(i + 1); });
       });
     };
     next(0);
+  }
+
+  // Kicks off (or reuses an in-flight/cached) fetch of one clip's video
+  // data, re-rendering once it lands. Called when a clip's accordion item
+  // is opened -- not up front for every clip on the practice.
+  function ensureVideoLoaded(practice, clipId) {
+    if (loadedVideos.has(clipId) || loadingClipIds.has(clipId)) return;
+    loadingClipIds.add(clipId);
+    loadVideoBlob(clipId, dataUrl => {
+      loadingClipIds.delete(clipId);
+      loadedVideos.set(clipId, dataUrl);
+      renderDroneFootageSection(practice);
+    }, msg => {
+      loadingClipIds.delete(clipId);
+      loadedVideos.set(clipId, null); // remember the failure so it doesn't retry-loop on every render
+      console.error('Drone clip video load failed:', msg);
+      renderDroneFootageSection(practice);
+    });
   }
 
   // ---- Clip actions (event-delegated from the list container) ----
@@ -192,8 +214,8 @@
         const item = header.closest('.accordion-item');
         const id = item && item.dataset.clipId;
         if (id) {
-          if (openClipIds.has(id)) openClipIds.delete(id); else openClipIds.add(id);
-          renderDroneFootageSection(practice);
+          if (openClipIds.has(id)) { openClipIds.delete(id); renderDroneFootageSection(practice); }
+          else { openClipIds.add(id); renderDroneFootageSection(practice); ensureVideoLoaded(practice, id); }
         }
         return;
       }
@@ -229,9 +251,10 @@
         saveClips(practice, clips, () => renderDroneFootageSection(practice));
       } else if (action === 'delete-clip') {
         if (!confirm(`Delete "${clips[idx].title || 'this clip'}"? This can't be undone.`)) return;
-        storageDelete(clips[idx].storagePath);
+        deleteVideoBlob(clips[idx].id);
         clips.splice(idx, 1);
         openClipIds.delete(clipId);
+        loadedVideos.delete(clipId);
         saveClips(practice, clips, () => renderDroneFootageSection(practice));
       } else if (action === 'post-comment') {
         const body = actionBtn.closest('.accordion-body');
@@ -260,6 +283,23 @@
           </div>`).join('')
       : '<div class="lbSub" style="padding:4px 0;">No comments yet.</div>';
 
+    // Video area: only actually fetched (and rendered as a real <video>)
+    // once this item has been opened -- see ensureVideoLoaded. Before
+    // that (or while mid-fetch) it's just a lightweight placeholder so
+    // opening a practice with several clips doesn't pull every video's
+    // multi-MB payload at once.
+    let videoHtml;
+    if (loadedVideos.has(clip.id)) {
+      const dataUrl = loadedVideos.get(clip.id);
+      videoHtml = dataUrl
+        ? `<video src="${dataUrl}" controls playsinline style="width:100%;border-radius:8px;background:#000;display:block;"></video>`
+        : `<div class="lbEmpty">Couldn't load this clip's video.</div>`;
+    } else if (open) {
+      videoHtml = `<div class="lbEmpty">Loading video…</div>`;
+    } else {
+      videoHtml = `<div class="lbEmpty">Tap to load video.</div>`;
+    }
+
     return `
       <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}">
         <button type="button" class="accordion-header">
@@ -278,7 +318,7 @@
               <button type="button" class="lbLinkBtn" data-action="move-down" data-clip-id="${clip.id}">⬇ Move Down</button>
               <button type="button" class="lbLinkBtn" data-action="delete-clip" data-clip-id="${clip.id}">🗑 Delete</button>
             </div>` : ''}
-          <video src="${clip.url}" controls preload="metadata" playsinline style="width:100%;border-radius:8px;background:#000;display:block;"></video>
+          ${videoHtml}
           <div class="speed-toggle" style="margin:8px auto;">
             <button type="button" class="droneSpeedBtn active" data-speed="1">1x</button>
             <button type="button" class="droneSpeedBtn" data-speed="0.5">½x</button>
@@ -303,7 +343,6 @@
     const wrap = document.getElementById('practiceDroneFootageWrap');
     if (!wrap) return;
     if (!practice || !practice.id) { wrap.innerHTML = ''; return; }
-    lastPractice = practice;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     const clips = sortedClips(practice);
 
