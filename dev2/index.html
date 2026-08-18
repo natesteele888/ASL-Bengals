@@ -1157,10 +1157,12 @@
     <h3>🔀 Switch Profile</h3>
     <div class="lbSub">Press and hold your name badge anytime to come back here.</div>
     <div id="switchProfileListWrap">
+      <div class="lbSub" id="switchProfileListLabel" style="margin:-4px 0 8px;">Tap a name below to sign in, or add a profile that isn't listed yet.</div>
       <div id="switchProfileList" style="margin:10px 0;"></div>
-      <button type="button" class="navBtn" id="switchProfileAddBtn" style="width:100%;">+ Add Another Profile</button>
+      <button type="button" class="navBtn" id="switchProfileAddBtn" style="width:100%;">+ Sign In / Add a Profile</button>
     </div>
     <div id="switchProfileFormWrap" style="display:none;">
+      <div class="lbSub" id="switchProfileFormLabel" style="margin:-4px 0 8px;"></div>
       <input class="loginInput" type="text" id="switchProfileNameInput" placeholder="Name" autocomplete="off" style="width:100%;box-sizing:border-box;margin:10px 0 8px;">
       <input class="loginInput" type="text" inputmode="numeric" maxlength="4" id="switchProfilePinInput" placeholder="4-digit code" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:8px;letter-spacing:6px;text-align:center;">
       <div class="lbSub" id="switchProfileError" style="display:none;color:#c0392b;"></div>
@@ -1281,7 +1283,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817c4';
+  const BUILD_V = '20260817c5';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

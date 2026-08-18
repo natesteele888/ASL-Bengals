@@ -42,6 +42,19 @@ img{max-width:100%;height:auto}
   outline:none;box-sizing:border-box}
 .loginInput::placeholder{color:rgba(255,255,255,.4)}
 .loginInput:focus{border-color:var(--bengal-orange)}
+/* Nathan: "add another profile doesn't work... blank box and doesn't show
+   a change when you click to type a name." Root cause: .loginInput's
+   white-on-near-transparent-white look was designed for the dark login
+   gate background it was born on, but it's reused as-is inside .lbCard
+   popups (Switch Profile's name/PIN fields, the child-search box) which
+   have a plain #fff card background -- so the text (and almost the whole
+   field) was rendering white-on-white the entire time, not actually
+   broken/uneditable, just invisible. Overriding it back to dark-on-light
+   whenever a .loginInput lands inside a .lbCard fixes every current and
+   future reuse of this field style in a light popup at once. */
+.lbCard .loginInput{background:#f5f5f7;border-color:#ccc;color:#1a1a1a}
+.lbCard .loginInput::placeholder{color:#999}
+.lbCard .loginInput:focus{border-color:var(--bengal-orange);background:#fff}
 .loginBtn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--bengal-orange);color:#fff;
   font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;text-transform:uppercase}
 .loginBtn:active{background:var(--bengal-orange-dark)}
@@ -469,6 +482,8 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 [data-theme="dark"] .reviewMissedBtn{background:var(--card);color:var(--ink);border-color:var(--line)}
 [data-theme="dark"] .reviewMissedBtn:active{background:#2c2c2c}
 [data-theme="dark"] .lbCard{background:var(--card);color:var(--ink)}
+[data-theme="dark"] .lbCard .loginInput{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .lbCard .loginInput::placeholder{color:var(--muted)}
 [data-theme="dark"] .lbTabBtn.active{background:#333;color:var(--ink)}
 [data-theme="dark"] .adminDashBtn{background:var(--paper);border-color:var(--line);color:var(--ink)}
 [data-theme="dark"] .adminDashCount{background:#333}

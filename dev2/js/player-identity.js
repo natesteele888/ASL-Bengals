@@ -867,6 +867,7 @@
   const switchConfirmBtn = document.getElementById('switchProfileConfirmBtn');
   const switchBackBtn = document.getElementById('switchProfileBackBtn');
   const switchCloseBtn = document.getElementById('switchProfileCloseBtn');
+  const switchFormLabel = document.getElementById('switchProfileFormLabel');
   let switchLockedName = null; // set when verifying a known profile; null when adding a fresh one
 
   function renderSwitchList(){
@@ -888,6 +889,16 @@
     switchPinInput.value = '';
     switchNameInput.value = nameToVerify || '';
     switchNameInput.disabled = !!nameToVerify;
+    // Nathan: "I don't see the option to log in to existing profile and
+    // option to create another profile." This form does both at once
+    // (resolveSessionFor either verifies or creates depending on whether
+    // the name already exists on the team) -- this label makes that
+    // explicit instead of leaving the user to guess which one is happening.
+    if(switchFormLabel){
+      switchFormLabel.textContent = nameToVerify
+        ? `Enter the 4-digit code for ${nameToVerify}.`
+        : 'Type an existing team name to sign in, or a new name to create a profile -- then set a 4-digit code.';
+    }
     setTimeout(() => (nameToVerify ? switchPinInput : switchNameInput).focus(), 50);
   }
   function closeSwitchForm(){
