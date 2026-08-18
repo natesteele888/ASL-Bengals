@@ -1,20 +1,29 @@
 // ---------------------------------------------------------------------------
 // What's New -- Nathan: "within the whats new, it would be good to show new
 // plays added to the playbook," later expanded to "what's new should
-// include plays and new features added." Two sources feed this one list:
+// include plays and new features added," then refined once more: "too busy
+// -- say New App Version Released with all separate push notes combined,
+// but only high level... coaches should see coach specific ones that
+// players and parents don't see." Two sources feed this one list:
 //   1. Plays -- the whatsNew.json log that edit-plays.js writes to whenever
 //      a coach actually saves a brand-new play (see pendingNewPlays/
 //      flushPendingNewPlaysToWhatsNew there).
-//   2. App features -- there's no in-app "ship a feature" action (features
+//   2. App releases -- there's no in-app "ship a feature" action (features
 //      land via code updates, not something a coach clicks through), so
-//      APP_UPDATES below is a hand-maintained changelog: add one entry here
-//      each time a new team-facing capability ships. Keep it to things
-//      players/parents would actually notice -- skip pure admin/security
-//      hardening.
-// Both are merged, sorted together by addedAt, and rendered as one feed --
-// opened from the profile dropdown, visible to everyone, players included
-// (unlike This Week/Schedule/Coach Tools, this one's meant as a discovery
-// feed for the whole team).
+//      APP_RELEASES below is a hand-maintained changelog: ONE entry per
+//      shipped version/day, with all that release's notes bundled inside
+//      as short bullets rather than one feed row per feature. Add a new
+//      release entry (or append a note to today's, if still the same day)
+//      each time BUILD_V bumps. Each note has an `audience`: 'all' (every
+//      viewer) or 'coach' (only shown when window.isCoachSession is true --
+//      the same broad flag used elsewhere in this app for visibility, not
+//      the stricter isApprovedCoachProfile used for edit permissions).
+//      Keep notes high-level -- one short line each, no need for every
+//      commit-level detail.
+// Both sources are merged, sorted together by addedAt, and rendered as one
+// feed -- opened from the profile dropdown, visible to everyone, players
+// included (unlike This Week/Schedule/Coach Tools, this one's meant as a
+// discovery feed for the whole team).
 //
 // A small unread badge (dot on the profile pill + count in the dropdown
 // button) tracks a per-device "last seen" timestamp in localStorage, same
@@ -24,23 +33,37 @@
 
   const WHATS_NEW_URL = `${FIREBASE_DB_URL}/whatsNew.json`;
 
-  // Hand-maintained changelog of shipped app features (see header comment).
-  // addedAt just needs to sort correctly relative to each other and to real
-  // play entries -- exact time-of-day isn't important, only the date/order.
-  const APP_UPDATES = [
-    { id: 'feat-field-photos', type: 'feature', addedAt: '2026-08-17T12:00:00.000Z',
-      label: 'Game listings now show a field photo and a "More Info" link', },
-    { id: 'feat-jersey-num', type: 'feature', addedAt: '2026-08-17T12:10:00.000Z',
-      label: 'Parents can now update their player\'s jersey # right on the player card', },
-    { id: 'feat-thisweek-players', type: 'feature', addedAt: '2026-08-17T12:20:00.000Z',
-      label: 'This Week is now visible to players too, not just coaches/parents', },
-    { id: 'feat-drone-footage', type: 'feature', addedAt: '2026-08-17T12:30:00.000Z',
-      label: 'Drone Footage: practices now have an uploadable video section with comments and ½x slow-motion playback', },
-    { id: 'feat-notifications', type: 'feature', addedAt: '2026-08-17T12:40:00.000Z',
-      label: 'Optional notifications for new plays and new drone footage -- enable them from this menu', },
-    { id: 'feat-switch-profile', type: 'feature', addedAt: '2026-08-17T12:50:00.000Z',
-      label: 'Press and hold your name badge to switch between profiles -- handy for families with more than one player', },
+  // Hand-maintained release changelog (see header comment). addedAt just
+  // needs to sort correctly relative to other releases and to real play
+  // entries -- exact time-of-day isn't important, only the date/order.
+  const APP_RELEASES = [
+    { id: 'release-20260817', type: 'release', version: '20260817ap', addedAt: '2026-08-17T13:00:00.000Z',
+      notes: [
+        { text: 'Game listings show a field photo and a "More Info" link', audience: 'all' },
+        { text: 'Parents can update their player\'s jersey # on the player card', audience: 'all' },
+        { text: 'This Week is now visible to players', audience: 'all' },
+        { text: 'New Drone Footage section on practices -- upload clips, comment, and slow-motion playback', audience: 'all' },
+        { text: 'Optional notifications for new plays and new drone footage', audience: 'all' },
+        { text: 'Press and hold your name badge to switch between profiles', audience: 'all' },
+        { text: 'Drone footage visibility toggle added to the admin panel', audience: 'coach' },
+        { text: 'Quiz leaderboards now rank coach scores below player scores', audience: 'coach' },
+      ] },
   ];
+
+  function isCoachViewer() { return !!window.isCoachSession; }
+
+  // Turns an APP_RELEASES entry into a feed item for this viewer: notes are
+  // filtered to their audience, and joined into one short combined line
+  // (the row itself expands to the full bullet list -- see clipHtml-style
+  // render below). Returns null if nothing in this release applies to this
+  // viewer (shouldn't happen today, but keeps this safe for future releases
+  // that are ever coach-only).
+  function releaseForViewer(release) {
+    const notes = release.notes.filter(n => n.audience !== 'coach' || isCoachViewer());
+    if (!notes.length) return null;
+    return Object.assign({}, release, { notes });
+  }
+
   const LAST_SEEN_KEY = 'aslBengalsWhatsNewLastSeen';
   // Nathan: "how about push notifications... NEW PLAY ADDED." Real
   // background push (works with the app fully closed) needs a Cloud
@@ -83,7 +106,8 @@
     return window.firebaseAuthed(WHATS_NEW_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
       .then(data => {
         const plays = (Array.isArray(data) ? data.filter(e => e && e.id) : []).map(e => (e.type ? e : Object.assign({ type: 'play' }, e)));
-        return plays.concat(APP_UPDATES);
+        const releases = APP_RELEASES.map(releaseForViewer).filter(Boolean);
+        return plays.concat(releases);
       })
       .catch(err => { console.error('Could not load What\'s New:', err); return null; });
   }
@@ -136,17 +160,18 @@
     const since = getLastNotified() || getLastSeen();
     const fresh = entries.filter(e => e.addedAt && e.addedAt > since).sort((a, b) => (a.addedAt || '').localeCompare(b.addedAt || ''));
     if (!fresh.length) return;
-    const plays = fresh.filter(e => e.type !== 'feature');
-    const features = fresh.filter(e => e.type === 'feature');
+    const plays = fresh.filter(e => e.type !== 'release');
+    const releases = fresh.filter(e => e.type === 'release');
     let title, body;
-    if (plays.length && features.length) {
+    if (plays.length && releases.length) {
       title = `🆕 ${fresh.length} New Updates`;
-      body = 'New plays and new app features -- check What\'s New';
-    } else if (features.length) {
-      title = features.length === 1 ? '✨ New Feature' : `✨ ${features.length} New Features`;
-      body = features.length === 1
-        ? (features[0].label || 'A new app feature')
-        : features.slice(0, 3).map(e => e.label || 'feature').join(', ') + (features.length > 3 ? ', and more' : '');
+      body = 'New plays and a new app version -- check What\'s New';
+    } else if (releases.length) {
+      title = '🆕 New App Version Released';
+      const allNotes = releases.reduce((acc, r) => acc.concat(r.notes || []), []);
+      body = allNotes.length
+        ? allNotes.slice(0, 3).map(n => n.text).join(', ') + (allNotes.length > 3 ? ', and more' : '')
+        : 'Check What\'s New for details';
     } else {
       title = plays.length === 1 ? '🏈 New Play Added' : `🏈 ${plays.length} New Plays Added`;
       body = plays.length === 1
@@ -190,13 +215,18 @@
     const sorted = entries.slice().sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
     body.innerHTML = sorted.length
       ? sorted.map(e => {
-          const isFeature = e.type === 'feature';
-          const icon = isFeature ? '✨' : '🏈';
-          const label = e.label || e.key || (isFeature ? 'App update' : 'New play');
-          const sub = isFeature ? '' : (e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : '');
+          if (e.type === 'release') {
+            const bullets = (e.notes || []).map(n => `<div class="lbTip">• ${escapeHtml(n.text)}</div>`).join('');
+            return `<div class="lbRow">
+          <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(e.addedAt)}</div>
+          <div class="lbNameTip"><div class="lbNameTipTitle">🆕 New App Version Released</div>${bullets}</div>
+        </div>`;
+          }
+          const label = e.label || e.key || 'New play';
+          const sub = e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : '';
           return `<div class="lbRow">
           <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(e.addedAt)}</div>
-          <div class="lbNameTip"><div class="lbNameTipTitle">${icon} ${escapeHtml(label)}</div>${sub}</div>
+          <div class="lbNameTip"><div class="lbNameTipTitle">🏈 ${escapeHtml(label)}</div>${sub}</div>
         </div>`;
         }).join('')
       : '<div class="lbEmpty">Nothing new yet -- check back later!</div>';

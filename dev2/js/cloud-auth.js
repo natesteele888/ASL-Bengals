@@ -235,4 +235,54 @@
     if(!res.ok) throw new Error('Seed write failed: HTTP ' + res.status);
     console.log('ASL Bengals: play/card data mirrored into the database.');
   };
+
+  // ---- One-time cleanup of two bad leaderboard entries -- Nathan:
+  // "Desmond 3 was an early typo and score can be removed. Wyatt80 can
+  // also be removed as Wyatt 80 is the correct one with a faster time."
+  // Same self-healing-migration idea as __seedBengalsPlayData above --
+  // guarded by a flag written to the database (not localStorage) so it
+  // truly only runs once no matter which device/session happens to open
+  // the app first, then never touches these paths again. Checks both the
+  // Quiz Score and Timed Quiz boards for each bad name (rather than
+  // assuming which board each typo landed on) since an exact-name match
+  // against a specific known-bad string is safe either way -- "wyatt 80"
+  // (with the space -- the correct, faster entry) is a different string
+  // and is never touched.
+  const CLEANUP_FLAG_PATH = 'cleanup/leaderboardFix1';
+  const BAD_LEADERBOARD_NAMES = ['desmond 3', 'wyatt80'];
+  window.__cleanupBadLeaderboardEntries = async function(){
+    if(!window.hasGateSession || !window.hasGateSession()) return;
+    try {
+      const checkUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${CLEANUP_FLAG_PATH}.json`);
+      const checkRes = await fetch(checkUrl);
+      if(checkRes.ok){
+        const already = await checkRes.json();
+        if(already) return; // already cleaned up by some earlier session
+      }
+      let removed = 0;
+      for(const boardPath of ['leaderboard', 'timedLeaderboard']){
+        const listUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${boardPath}.json`);
+        const listRes = await fetch(listUrl);
+        if(!listRes.ok) continue;
+        const data = await listRes.json();
+        if(!data) continue;
+        for(const key of Object.keys(data)){
+          const entry = data[key];
+          const name = entry && entry.name ? entry.name.trim().toLowerCase() : '';
+          if(BAD_LEADERBOARD_NAMES.indexOf(name) !== -1){
+            const delUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${boardPath}/${key}.json`);
+            const delRes = await fetch(delUrl, { method: 'DELETE' });
+            if(delRes.ok) removed++;
+          }
+        }
+      }
+      const flagUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${CLEANUP_FLAG_PATH}.json`);
+      await fetch(flagUrl, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(new Date().toISOString()),
+      });
+      console.log(`ASL Bengals: leaderboard cleanup removed ${removed} bad entr${removed === 1 ? 'y' : 'ies'}.`);
+    } catch(e){ console.error('Leaderboard cleanup failed:', e); }
+  };
 })();
