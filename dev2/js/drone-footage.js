@@ -342,6 +342,49 @@
       </div>`;
   }
 
+  // Nathan: "give me a toggle on the admin 5 click coaching gate to have a
+  // toggle to show or hide drone footage from parents and players
+  // accounts." A team-wide setting, not per-device -- lives in RTDB like
+  // everything else, read here and written from the admin panel (see
+  // window.setDroneFootageVisibility below, wired in study-quiz.js's
+  // openAdminStats()). Missing/never-set defaults to visible (true) so
+  // existing behavior doesn't change until a coach actually flips it off.
+  let droneVisibleSetting = true;
+  let droneVisibilityLoadPromise = null;
+  function loadDroneVisibilitySetting() {
+    if (droneVisibilityLoadPromise) return droneVisibilityLoadPromise;
+    droneVisibilityLoadPromise = window.firebaseAuthed(`${FIREBASE_DB_URL}/settings/droneFootageVisible.json`)
+      .then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(val => { droneVisibleSetting = val !== false; return droneVisibleSetting; })
+      .catch(() => { droneVisibleSetting = true; return true; });
+    return droneVisibilityLoadPromise;
+  }
+  loadDroneVisibilitySetting(); // kick off immediately at load so the first practice render doesn't have to wait on it from a cold cache
+
+  // Coaches (approved) always get the write UI regardless of this toggle
+  // -- it only hides the section from everyone else, so a coach can still
+  // manage clips while the team-facing view is temporarily off (e.g.
+  // mid-upload, or footage that's still being reviewed).
+  window.setDroneFootageVisibility = function (visible, afterOk, afterFail) {
+    window.firebaseAuthed(`${FIREBASE_DB_URL}/settings/droneFootageVisible.json`).then(url => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(!!visible),
+    })).then(r => {
+      if (r.ok) {
+        droneVisibleSetting = !!visible;
+        droneVisibilityLoadPromise = Promise.resolve(droneVisibleSetting);
+        if (afterOk) afterOk();
+      } else if (afterFail) afterFail(`HTTP ${r.status}`);
+    }).catch(err => { if (afterFail) afterFail(err.message || String(err)); });
+  };
+  // For the admin panel to show the current state without a redundant
+  // fetch -- resolves once loadDroneVisibilitySetting's initial call
+  // (kicked off above) has landed.
+  window.getDroneFootageVisibility = function () {
+    return loadDroneVisibilitySetting();
+  };
+
   // Entry point -- practices.js calls this at the end of renderDetail(),
   // both the read-only and coach-edit branches, passing the whole practice
   // record (current). #practiceDroneFootageWrap lives outside
@@ -352,6 +395,13 @@
     if (!wrap) return;
     if (!practice || !practice.id) { wrap.innerHTML = ''; return; }
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    loadDroneVisibilitySetting().then(visible => renderDroneFootageSectionNow(practice, approved, visible));
+  }
+
+  function renderDroneFootageSectionNow(practice, approved, visible) {
+    const wrap = document.getElementById('practiceDroneFootageWrap');
+    if (!wrap) return;
+    if (!approved && !visible) { wrap.innerHTML = ''; return; }
     const clips = sortedClips(practice);
 
     wrap.innerHTML = `

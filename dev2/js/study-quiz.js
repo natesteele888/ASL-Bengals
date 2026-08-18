@@ -120,6 +120,13 @@ window.refreshCoachToolsVisibility = function(){
   const coachToolsBtn = document.getElementById('coachToolsSectionBtn');
   if (coachToolsBtn) coachToolsBtn.style.display = approvedCoach ? '' : 'none';
 
+  // Nathan: "make sure kids can't edit the plays or rename them." Same
+  // approvedCoach check as everything else here -- see the comment in
+  // auth.js's applyRole() and openEditPlaysGated() above for why this
+  // moved off the broader isCoachSession check.
+  const editPlaysBtn = document.getElementById('editPlaysTabBtn');
+  if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
+
   const playBtn = document.getElementById('playSectionBtn');
   if (playBtn) playBtn.style.display = isParent ? 'none' : '';
 
@@ -160,7 +167,15 @@ window.refreshCoachToolsVisibility = function(){
 let editPlaysUnlocked = false;
 let editPlaysInitialized = false;
 function openEditPlaysGated(){
-  if (editPlaysUnlocked || window.isCoachSession) {
+  // Nathan: "make sure kids can't edit the plays or rename them." This
+  // used to bypass straight past the password gate for anyone with
+  // isCoachSession -- true for ANYONE who typed the shared team "coach"
+  // code, not just the 5 named coaches (window.isApprovedCoachProfile()),
+  // unlike every other coach-only feature in this app (Roster, Schedule,
+  // Practices, Drone Footage, Coach Tools all already use the stricter
+  // named check). Tightened to match.
+  const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+  if (editPlaysUnlocked || approvedCoach) {
     editPlaysUnlocked = true;
     proceedIntoEditPlays();
     return;
@@ -433,11 +448,36 @@ document.getElementById('adminPinInput').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter') tryAdminPin();
 });
 
+// Nathan: "give me a toggle on the admin 5 click coaching gate to have a
+// toggle to show or hide drone footage from parents and players
+// accounts." See js/drone-footage.js's window.getDroneFootageVisibility/
+// setDroneFootageVisibility -- this just drives that toggle's button.
+function refreshDroneVisibilityToggle(){
+  const btn = document.getElementById('droneVisibilityToggleBtn');
+  if (!btn || !window.getDroneFootageVisibility) return;
+  btn.textContent = '…';
+  btn.disabled = true;
+  window.getDroneFootageVisibility().then(visible => {
+    btn.textContent = visible ? '✅ Visible' : '🚫 Hidden';
+    btn.disabled = false;
+    btn.onclick = () => {
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      window.setDroneFootageVisibility(!visible, refreshDroneVisibilityToggle, msg => {
+        btn.disabled = false;
+        btn.textContent = 'Save failed';
+        console.error('Drone visibility toggle failed:', msg);
+      });
+    };
+  });
+}
+
 async function openAdminStats(){
   const overlay = document.getElementById('adminOverlay');
   const body = document.getElementById('adminStatsBody');
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading…</div>';
+  refreshDroneVisibilityToggle();
 
   const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts] = await Promise.all([
     cloudFetch('analytics/timedStarts'),

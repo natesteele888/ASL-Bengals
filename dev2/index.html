@@ -1065,6 +1065,16 @@
     <h3>🔐 Coach Stats</h3>
     <div class="lbSub">Team-wide usage — not visible to players</div>
     <div class="lbSub" style="opacity:.6;margin-top:-6px">Build <span id="adminBuildVersion">—</span></div>
+    <!-- Nathan: "give me a toggle on the admin 5 click coaching gate to
+         have a toggle to show or hide drone footage from parents and
+         players accounts." Outside #adminStatsBody on purpose -- that div
+         gets fully rebuilt every time this panel opens (see
+         openAdminStats() in study-quiz.js), which would wipe a toggle's
+         wiring/state along with it. -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0;padding:10px;border:2px solid #ccc;border-radius:8px;">
+      <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
+      <button type="button" class="navBtn" id="droneVisibilityToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
+    </div>
     <div id="adminStatsBody"><div class="lbEmpty">Loading…</div></div>
     <button class="navBtn" id="adminPdfDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📄 Save Playbook Reference PDF</button>
     <button class="navBtn" id="adminCallSheetDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📋 Save Call Sheet PDF</button>
@@ -1135,7 +1145,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817aj';
+  const BUILD_V = '20260817ak';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

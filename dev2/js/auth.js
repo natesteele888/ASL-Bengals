@@ -215,8 +215,11 @@ window.isApprovedCoachProfile = function(){
     try { localStorage.setItem(ROLE_KEY, role); } catch(e) {}
     if(role === 'coach'){
       try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
-      var epBtn = document.getElementById('editPlaysTabBtn');
-      if (epBtn) epBtn.style.display = '';
+      // editPlaysTabBtn's real visibility is decided in
+      // refreshCoachToolsVisibility() (study-quiz.js), once the signed-in
+      // person's actual name is known -- gated on isApprovedCoachProfile()
+      // (the 5 named coaches), not just "picked the coach role," so it's
+      // deliberately NOT shown here yet.
     } else {
       try { localStorage.removeItem('bengalsCoachSession'); } catch(e) {}
     }
