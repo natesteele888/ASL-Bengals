@@ -28,13 +28,26 @@
   // name-matching fallback.
   let loginPlayers = [];
   let loginPlayersLoaded = false;
+  // Nathan: "all the coaches profiles (Aaron, Coach Joe, Coach Nate, Coach
+  // Shane, Coachmatt) are all sitting in the Roster section waiting to
+  // assign to a player." Root cause: isCoach/role only got stamped onto a
+  // dev2Players record starting when the Player/Coach/Parent role picker was
+  // added (see createPlayer above) -- these five logins predate that and
+  // have neither field set, so they slipped through this filter as if they
+  // were plain players. Falling back to the same COACH_PROFILE_NAMES
+  // allowlist auth.js already uses for elevated access (window.js/auth.js)
+  // catches exactly those legacy accounts without needing a one-time data
+  // migration on the live database.
+  function isKnownCoachName(name) {
+    return !!(window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf((name || '').trim().toLowerCase()) !== -1);
+  }
   function loadLoginPlayers() {
     if (loginPlayersLoaded) return Promise.resolve(loginPlayers);
     if (!window.PlayerIdentity || !window.PlayerIdentity.fetchAllPlayers) return Promise.resolve([]);
     return window.PlayerIdentity.fetchAllPlayers().then(all => {
       loginPlayers = Object.keys(all || {})
         .map(id => Object.assign({ id }, all[id]))
-        .filter(p => !p.isCoach && p.role !== 'parent' && p.role !== 'coach')
+        .filter(p => !p.isCoach && p.role !== 'parent' && p.role !== 'coach' && !isKnownCoachName(p.name))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       loginPlayersLoaded = true;
       return loginPlayers;

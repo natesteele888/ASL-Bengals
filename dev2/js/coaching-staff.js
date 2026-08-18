@@ -31,15 +31,28 @@
   // Same idea as roster.js's loginPlayers, just filtered to the opposite
   // side of the same dev2Players list -- logins that actually signed in as
   // a coach, so this dropdown only ever offers real coach logins to link to.
+  //
+  // Nathan: "all the coaches profiles (Aaron, Coach Joe, Coach Nate, Coach
+  // Shane, Coachmatt) are all sitting in the Roster section waiting to
+  // assign to a player. Profiles to assign to coaches doesnt show." Those
+  // five logins predate the Player/Coach/Parent role picker (see
+  // player-identity.js's createPlayer), so isCoach/role were never stamped
+  // onto their dev2Players records -- p.isCoach/p.role === 'coach' alone
+  // misses them entirely. Falling back to the same COACH_PROFILE_NAMES
+  // allowlist auth.js already uses for elevated access catches exactly
+  // those legacy accounts without a one-time migration on the live data.
   let coachLogins = [];
   let coachLoginsLoaded = false;
+  function isCoachLoginName(name) {
+    return !!(window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf((name || '').trim().toLowerCase()) !== -1);
+  }
   function loadCoachLogins() {
     if (coachLoginsLoaded) return Promise.resolve(coachLogins);
     if (!window.PlayerIdentity || !window.PlayerIdentity.fetchAllPlayers) return Promise.resolve([]);
     return window.PlayerIdentity.fetchAllPlayers().then(all => {
       coachLogins = Object.keys(all || {})
         .map(id => Object.assign({ id }, all[id]))
-        .filter(p => p.isCoach || p.role === 'coach')
+        .filter(p => p.isCoach || p.role === 'coach' || isCoachLoginName(p.name))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       coachLoginsLoaded = true;
       return coachLogins;
