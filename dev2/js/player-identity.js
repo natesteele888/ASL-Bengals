@@ -70,6 +70,27 @@
     try { localStorage.removeItem(SESSION_KEY); } catch(e){}
   }
 
+  // Nathan: "some people have two kids in the house on the team that may
+  // need a way to swap between 2 users." A local, per-DEVICE list of
+  // every profile that's ever signed in here -- separate from
+  // dev2Players (the real, team-wide record of every player, in
+  // Firebase). This is just "who's used this phone/tablet before,"
+  // deliberately NOT storing a PIN -- switching to one of these still
+  // re-verifies the PIN against Firebase every time (see resolveSessionFor
+  // below), same as the very first sign-in. Capped at 8 -- plenty for a
+  // family device, avoids unbounded growth if a device gets handed around.
+  const KNOWN_PROFILES_KEY = 'bengalsKnownProfiles'; // [{playerId, name}]
+  function getKnownProfiles(){
+    try { const list = JSON.parse(localStorage.getItem(KNOWN_PROFILES_KEY) || '[]'); return Array.isArray(list) ? list : []; }
+    catch(e){ return []; }
+  }
+  function rememberKnownProfile(session){
+    if(!session || !session.playerId) return;
+    const list = getKnownProfiles().filter(p => p.playerId !== session.playerId);
+    list.unshift({ playerId: session.playerId, name: session.name });
+    try { localStorage.setItem(KNOWN_PROFILES_KEY, JSON.stringify(list.slice(0, 8))); } catch(e){}
+  }
+
   async function fetchAllPlayers(){
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}.json`);
     const res = await fetch(url);
@@ -601,6 +622,45 @@
 
   let pendingReady = null;
 
+  // Pure name+PIN -> session resolution, no DOM in here -- pulled out of
+  // attemptSignIn so the Switch Profile overlay (below) can reuse the
+  // exact same create-or-verify logic instead of duplicating it. Throws
+  // on failure; err.isNameTaken distinguishes "wrong PIN for that name"
+  // (show the message as-is) from a network/other failure (generic
+  // message at the call site).
+  async function resolveSessionFor(name, pin){
+    const pinHash = await window.sha256Hex(pin);
+    const matches = await findByName(name);
+    if(matches.length === 0){
+      // Brand new player (or coach) -- create the profile with this name+code.
+      const playerId = await createPlayer(name, pinHash, window.isCoachSession);
+      return { session: { playerId: playerId, name: name }, isFreshSignup: true };
+    }
+    const match = matches.find(m => m.pinHash === pinHash);
+    if(!match){
+      const err = new Error('That name is already taken with a different code. Double check your code, or use a slightly different name (e.g. add your last initial).');
+      err.isNameTaken = true;
+      throw err;
+    }
+    touchLastSeen(match.id);
+    return { session: { playerId: match.id, name: match.name }, isFreshSignup: false };
+  }
+
+  // Shared tail end of both the mandatory sign-in gate and the Switch
+  // Profile overlay -- everything that has to happen once a session is
+  // actually decided.
+  function completeSignIn(session, isFreshSignup){
+    setSession(session);
+    rememberKnownProfile(session);
+    updateBadge(session.name);
+    hideOverlay();
+    startSessionTracking(session.playerId, session.name);
+    if(pendingReady){ const cb = pendingReady; pendingReady = null; cb(); }
+    // Fire-and-forget -- app usability never waits on this, per Nathan
+    // ("skippable and changeable later").
+    maybeShowRolePrompt(session, isFreshSignup).catch(() => {});
+  }
+
   async function attemptSignIn(){
     const name = nameInput.value.trim();
     const pin = pinInput.value.trim();
@@ -610,39 +670,12 @@
     btnEl.disabled = true;
     btnEl.textContent = 'Checking…';
     try {
-      const pinHash = await window.sha256Hex(pin);
-      const matches = await findByName(name);
-      let session, isFreshSignup;
-      if(matches.length === 0){
-        // Brand new player (or coach) -- create the profile with this name+code.
-        const playerId = await createPlayer(name, pinHash, window.isCoachSession);
-        session = { playerId: playerId, name: name };
-        isFreshSignup = true;
-      } else {
-        const match = matches.find(m => m.pinHash === pinHash);
-        if(!match){
-          errorEl.textContent = 'That name is already taken with a different code. Double check your code, or use a slightly different name (e.g. add your last initial).';
-          errorEl.style.display = 'block';
-          btnEl.disabled = false;
-          btnEl.textContent = 'Continue';
-          return;
-        }
-        session = { playerId: match.id, name: match.name };
-        isFreshSignup = false;
-        touchLastSeen(match.id);
-      }
-      setSession(session);
-      updateBadge(session.name);
-      hideOverlay();
-      startSessionTracking(session.playerId, session.name);
-      if(pendingReady){ const cb = pendingReady; pendingReady = null; cb(); }
-      // Fire-and-forget -- app usability never waits on this, per Nathan
-      // ("skippable and changeable later").
-      maybeShowRolePrompt(session, isFreshSignup).catch(() => {});
+      const result = await resolveSessionFor(name, pin);
+      completeSignIn(result.session, result.isFreshSignup);
     } catch(e){
-      errorEl.textContent = 'Could not reach the team server -- check your connection and try again.';
+      errorEl.textContent = e.isNameTaken ? e.message : 'Could not reach the team server -- check your connection and try again.';
       errorEl.style.display = 'block';
-      console.error('Player sign-in failed:', e);
+      if(!e.isNameTaken) console.error('Player sign-in failed:', e);
     } finally {
       btnEl.disabled = false;
       btnEl.textContent = 'Continue';
@@ -660,16 +693,129 @@
     });
   }
 
+  // ---- Switch Profile overlay -- Nathan: "some people have two kids in
+  // the house on the team that may need a way to swap between 2 users...
+  // click and hold the name plate. It gives you the option to switch
+  // users. It will show you other user names that have logged in or add
+  // another... they will need to put in the pin number to load the other
+  // profile." Two states in the same overlay: a list of this device's
+  // known profiles (openSwitchForm(name) pre-fills+locks the name, so
+  // it's just a PIN check), or "+ Add Another Profile" (name editable,
+  // blank) -- both funnel into the same resolveSessionFor() the mandatory
+  // sign-in screen uses, so a name that already exists elsewhere on the
+  // team still just needs its real PIN, and a genuinely new name creates
+  // a fresh profile exactly like it always has. ----
+  const switchOverlay = document.getElementById('switchProfileOverlay');
+  const switchListWrap = document.getElementById('switchProfileListWrap');
+  const switchListEl = document.getElementById('switchProfileList');
+  const switchAddBtn = document.getElementById('switchProfileAddBtn');
+  const switchFormWrap = document.getElementById('switchProfileFormWrap');
+  const switchNameInput = document.getElementById('switchProfileNameInput');
+  const switchPinInput = document.getElementById('switchProfilePinInput');
+  const switchErrorEl = document.getElementById('switchProfileError');
+  const switchConfirmBtn = document.getElementById('switchProfileConfirmBtn');
+  const switchBackBtn = document.getElementById('switchProfileBackBtn');
+  const switchCloseBtn = document.getElementById('switchProfileCloseBtn');
+  let switchLockedName = null; // set when verifying a known profile; null when adding a fresh one
+
+  function renderSwitchList(){
+    if(!switchListEl) return;
+    const current = getSession();
+    const others = getKnownProfiles().filter(p => !current || p.playerId !== current.playerId);
+    switchListEl.innerHTML = others.length
+      ? others.map(p => `<button type="button" class="lbLinkBtn switchProfileRow" data-name="${escapeHtmlLocal(p.name)}" style="display:block;width:100%;text-align:left;margin-bottom:6px;">👤 ${escapeHtmlLocal(p.name)}</button>`).join('')
+      : '<div class="lbEmpty">No other profiles on this device yet.</div>';
+    switchListEl.querySelectorAll('.switchProfileRow').forEach(row => {
+      row.addEventListener('click', () => openSwitchForm(row.dataset.name));
+    });
+  }
+  function openSwitchForm(nameToVerify){
+    switchLockedName = nameToVerify || null;
+    switchListWrap.style.display = 'none';
+    switchFormWrap.style.display = '';
+    switchErrorEl.style.display = 'none';
+    switchPinInput.value = '';
+    switchNameInput.value = nameToVerify || '';
+    switchNameInput.disabled = !!nameToVerify;
+    setTimeout(() => (nameToVerify ? switchPinInput : switchNameInput).focus(), 50);
+  }
+  function closeSwitchForm(){
+    switchFormWrap.style.display = 'none';
+    switchListWrap.style.display = '';
+  }
+  function openSwitchProfileOverlay(){
+    if(!switchOverlay) return;
+    closeSwitchForm();
+    renderSwitchList();
+    switchOverlay.classList.add('show');
+  }
+  function closeSwitchProfileOverlay(){
+    if(switchOverlay) switchOverlay.classList.remove('show');
+  }
+  async function attemptSwitchConfirm(){
+    const name = (switchLockedName || switchNameInput.value.trim());
+    const pin = switchPinInput.value.trim();
+    switchErrorEl.style.display = 'none';
+    if(!name){ switchErrorEl.textContent = 'Type a name first.'; switchErrorEl.style.display = 'block'; return; }
+    if(!/^\d{4}$/.test(pin)){ switchErrorEl.textContent = 'Code needs to be 4 digits.'; switchErrorEl.style.display = 'block'; return; }
+    switchConfirmBtn.disabled = true;
+    switchConfirmBtn.textContent = 'Checking…';
+    try {
+      const result = await resolveSessionFor(name, pin);
+      closeSwitchProfileOverlay();
+      completeSignIn(result.session, result.isFreshSignup);
+      // completeSignIn covers the session/badge/local state, but a lot of
+      // the rest of the app (nav visibility, cached roster/schedule data,
+      // position/child prompts already dismissed this page load, etc.)
+      // assumes one session per page load -- reload for a fully clean
+      // re-init under the new profile, same as the existing Sign Out
+      // button already does.
+      window.location.reload();
+    } catch(e){
+      switchErrorEl.textContent = e.isNameTaken ? e.message : (e.message || 'Could not reach the team server -- check your connection and try again.');
+      switchErrorEl.style.display = 'block';
+      if(!e.isNameTaken) console.error('Profile switch failed:', e);
+    } finally {
+      switchConfirmBtn.disabled = false;
+      switchConfirmBtn.textContent = 'Continue';
+    }
+  }
+  if(switchAddBtn) switchAddBtn.addEventListener('click', () => openSwitchForm(null));
+  if(switchBackBtn) switchBackBtn.addEventListener('click', closeSwitchForm);
+  if(switchConfirmBtn) switchConfirmBtn.addEventListener('click', attemptSwitchConfirm);
+  if(switchPinInput) switchPinInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') attemptSwitchConfirm(); });
+  if(switchCloseBtn) switchCloseBtn.addEventListener('click', closeSwitchProfileOverlay);
+
   // ---- Top-right player menu: name pill opens a small dropdown
   // (My Stats / My Position / Sign Out) instead of the old always-visible
-  // text bar. ----
+  // text bar. Press-and-hold (not a plain tap) opens Switch Profile
+  // instead -- first long-press gesture in this codebase, built from a
+  // plain pointerdown/timer/pointerup rather than any existing pattern.
+  // ----
   const menuBtn = document.getElementById('playerMenuBtn');
   const menuDropdown = document.getElementById('playerMenuDropdown');
   const myStatsBtn = document.getElementById('myStatsBtn');
   const myPositionBtn = document.getElementById('myPositionBtn');
   if(menuBtn && menuDropdown){
+    const LONG_PRESS_MS = 550;
+    let longPressTimer = null;
+    let longPressFired = false;
+    menuBtn.title = 'Tap for menu, press and hold to switch profiles';
+    menuBtn.addEventListener('pointerdown', () => {
+      longPressFired = false;
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        longPressFired = true;
+        if(navigator.vibrate) navigator.vibrate(15); // small haptic cue where supported; harmless no-op elsewhere
+        openSwitchProfileOverlay();
+      }, LONG_PRESS_MS);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
+      menuBtn.addEventListener(evt, () => clearTimeout(longPressTimer));
+    });
     menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if(longPressFired){ longPressFired = false; return; } // long-press already opened Switch Profile -- don't also toggle the dropdown
       menuDropdown.classList.toggle('show');
     });
     document.addEventListener('click', () => menuDropdown.classList.remove('show'));
@@ -774,6 +920,7 @@
     if(session && session.name){
       updateBadge(session.name);
       touchLastSeen(session.playerId);
+      rememberKnownProfile(session);
       startSessionTracking(session.playerId, session.name);
       onReady();
       // Fire-and-forget, same as the fresh-sign-in path above -- covers
@@ -789,6 +936,7 @@
     getSession, setSession, clearSession, fetchAllPlayers, gate, getPlayerRecord,
     recordQuizResult, resetQuizStats, setPosition, openPositionPicker,
     setChildLinks, openChildPicker, renderParentChildBanner,
+    getKnownProfiles, openSwitchProfileOverlay,
     POSITION_OPTIONS, POSITION_LABELS,
   };
 })();
