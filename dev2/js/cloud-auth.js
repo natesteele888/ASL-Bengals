@@ -285,4 +285,34 @@
       console.log(`ASL Bengals: leaderboard cleanup removed ${removed} bad entr${removed === 1 ? 'y' : 'ies'}.`);
     } catch(e){ console.error('Leaderboard cleanup failed:', e); }
   };
+
+  // ---- One-time What's New note for a route edit -- Nathan: "please
+  // mention that the Houston route was updated -- outside receiver runs a
+  // Post instead of a Fly, inside receiver's hitch turns to the outside."
+  // whatsNew.json is normally only appended to automatically when a coach
+  // saves a brand-new play (see edit-plays.js's flushPendingNewPlaysToWhatsNew)
+  // -- this was an edit to an existing play's routes, not a new play, so it
+  // needed a manual entry instead. Idempotent via checking the entry's own
+  // fixed id, same read-modify-write PUT pattern edit-plays.js already uses
+  // for this same path.
+  const WHATS_NEW_URL = `${FIREBASE_DB_URL}/whatsNew.json`;
+  const HOUSTON_NOTE_ID = 'houston-route-update-20260817';
+  window.__addHoustonRouteWhatsNewNote = async function(){
+    if(!window.hasGateSession || !window.hasGateSession()) return;
+    try {
+      const url = await window.firebaseAuthed(WHATS_NEW_URL);
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const list = Array.isArray(existing) ? existing : [];
+      if(list.some(e => e && e.id === HOUSTON_NOTE_ID)) return; // already added
+      list.push({
+        id: HOUSTON_NOTE_ID,
+        label: 'Houston Route updated – outside receiver now runs a Post (was a Fly); inside receiver’s hitch turns to the outside',
+        addedAt: new Date().toISOString(),
+        addedBy: 'Coach Nate',
+      });
+      await fetch(url, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(list) });
+      console.log('ASL Bengals: added Houston route note to What\'s New.');
+    } catch(e){ console.error('Could not add Houston route What\'s New note:', e); }
+  };
 })();
