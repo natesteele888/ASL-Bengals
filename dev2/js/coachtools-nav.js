@@ -17,6 +17,7 @@
     // Houston route note was a one-off migration script; this tab is the
     // real, repeatable version of that.
     { key: 'updates', label: '📣 Updates', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates() },
+    { key: 'dashboard', label: '📊 Dashboard', panel: 'coachDashboardPanel', init: () => window.initCoachToolsDashboard && window.initCoachToolsDashboard() },
   ];
 
   let activeTab = 'resources';
@@ -53,5 +54,17 @@
     // first, so it's ready by the time Stats needs it.
     if (window.loadTeamRoster && !window.isTeamRosterLoaded()) window.loadTeamRoster();
     setActiveTab(activeTab);
+  };
+
+  // Deep-link straight into a specific Coach Tools tab -- used by the
+  // header logo's 5-tap shortcut (see study-quiz.js) to jump right to
+  // Dashboard instead of just landing on the Coach Tools section's default
+  // tab. Switching the top-level section (window.setSection, defined in
+  // study-quiz.js) re-runs initCoachToolsNav(), which reads activeTab back
+  // out -- setting it here first is what makes that land on the right tab.
+  window.openCoachToolsTab = function (key) {
+    activeTab = key;
+    if (window.setSection) window.setSection('coachtools');
+    else setActiveTab(key);
   };
 })();

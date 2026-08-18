@@ -345,10 +345,11 @@
   // Nathan: "give me a toggle on the admin 5 click coaching gate to have a
   // toggle to show or hide drone footage from parents and players
   // accounts." A team-wide setting, not per-device -- lives in RTDB like
-  // everything else, read here and written from the admin panel (see
-  // window.setDroneFootageVisibility below, wired in study-quiz.js's
-  // openAdminStats()). Missing/never-set defaults to visible (true) so
-  // existing behavior doesn't change until a coach actually flips it off.
+  // everything else, read here and written from Coach Tools > Dashboard
+  // (see window.setDroneFootageVisibility below, wired in
+  // js/coachtools-dashboard.js). Missing/never-set defaults to visible
+  // (true) so existing behavior doesn't change until a coach actually
+  // flips it off.
   let droneVisibleSetting = true;
   let droneVisibilityLoadPromise = null;
   function loadDroneVisibilitySetting() {

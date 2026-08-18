@@ -451,6 +451,27 @@
       <div id="coachUpdateList" style="margin-top:18px;"></div>
     </div>
   </div>
+
+  <!-- ---- Dashboard: team-wide usage + coaching insights -- Nathan: "I
+       think we could move everything from the 5 button tap coach stats to
+       a dashboard in Coach Tools." Replaces the old hidden 5-tap-logo + PIN
+       overlay (js/coachtools-dashboard.js); the 5-tap gesture still works
+       as a quick jump straight here (see study-quiz.js), but the PIN gate
+       is gone -- Coach Tools itself is already hidden from everyone but an
+       approved coach, so a second gate on top of it was redundant. ---- -->
+  <div id="coachDashboardPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📊 Dashboard</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 4px;text-align:center;">Team-wide usage and coaching insights -- not visible to players or parents.</div>
+    <div class="lbSub" style="opacity:.6;text-align:center;margin-bottom:10px;">Build <span id="coachDashBuildVersion">—</span></div>
+    <!-- Outside #coachDashboardBody on purpose -- that div gets fully
+         rebuilt every time this tab opens (see initCoachToolsDashboard()),
+         which would wipe this toggle's wiring/state along with it. -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 14px;padding:10px;border:2px solid #ccc;border-radius:8px;max-width:520px;">
+      <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
+      <button type="button" class="navBtn" id="coachDashDroneToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
+    </div>
+    <div id="coachDashboardBody" style="max-width:700px;margin:0 auto;"><div class="lbEmpty">Loading…</div></div>
+  </div>
 </div>
 
 <!-- Nathan: "there was a schedule button that shows an interactive schedule
@@ -1089,41 +1110,6 @@
   </div>
 </div>
 
-<div class="lbOverlay" id="adminPinOverlay">
-  <div class="lbCard">
-    <h3>🔐 Coach Access</h3>
-    <div class="lbSub">Enter the 4-digit code</div>
-    <input id="adminPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-      autocomplete="off" style="width:100%;box-sizing:border-box;padding:14px;border-radius:10px;
-      border:1px solid var(--line);font-size:22px;text-align:center;letter-spacing:.5em;margin-bottom:10px">
-    <div class="lbEmpty" id="adminPinError" style="display:none;color:#b03030">Incorrect code</div>
-    <button class="navBtn" id="adminPinSubmitBtn" style="width:100%;margin-bottom:8px">Enter</button>
-    <button class="navBtn secondary lbCloseBtn" id="adminPinCancelBtn">Cancel</button>
-  </div>
-</div>
-
-<div class="lbOverlay" id="adminOverlay">
-  <div class="lbCard">
-    <h3>🔐 Coach Stats</h3>
-    <div class="lbSub">Team-wide usage — not visible to players</div>
-    <div class="lbSub" style="opacity:.6;margin-top:-6px">Build <span id="adminBuildVersion">—</span></div>
-    <!-- Nathan: "give me a toggle on the admin 5 click coaching gate to
-         have a toggle to show or hide drone footage from parents and
-         players accounts." Outside #adminStatsBody on purpose -- that div
-         gets fully rebuilt every time this panel opens (see
-         openAdminStats() in study-quiz.js), which would wipe a toggle's
-         wiring/state along with it. -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0;padding:10px;border:2px solid #ccc;border-radius:8px;">
-      <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
-      <button type="button" class="navBtn" id="droneVisibilityToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
-    </div>
-    <div id="adminStatsBody"><div class="lbEmpty">Loading…</div></div>
-    <button class="navBtn" id="adminPdfDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📄 Save Playbook Reference PDF</button>
-    <button class="navBtn" id="adminCallSheetDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:8px">📋 Save Call Sheet PDF</button>
-    <button class="navBtn secondary lbCloseBtn" id="adminCloseBtn">Close</button>
-  </div>
-</div>
-
 <div class="lbOverlay" id="tipsOverlay">
   <div class="lbCard">
     <h3>👋 Welcome!</h3>
@@ -1187,20 +1173,19 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817at';
+  const BUILD_V = '20260817au';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
-  // accepted the update" -- exposed globally and written into the admin
-  // panel immediately (no need to wait on anything else loading) so a
-  // coach can confirm their device actually picked up the latest push
-  // instead of guessing from a stale cache.
+  // accepted the update" -- exposed globally so a coach can confirm their
+  // device actually picked up the latest push instead of guessing from a
+  // stale cache. Coach Tools > Dashboard reads window.BUILD_V directly
+  // (see coachtools-dashboard.js) since the old #adminBuildVersion element
+  // it used to write into moved along with everything else in that panel.
   window.BUILD_V = BUILD_V;
-  const buildVEl = document.getElementById('adminBuildVersion');
-  if (buildVEl) buildVEl.textContent = BUILD_V;
   // Nathan: also wants it visible on the login screen itself, faint and
   // small, so he can check it before logging in -- 2 screens earlier than
-  // the Coach Stats panel.
+  // Coach Tools.
   const loginBuildVEl = document.getElementById('loginBuildVersion');
   if (loginBuildVEl) loginBuildVEl.textContent = `Build ${BUILD_V}`;
 
@@ -1252,7 +1237,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
