@@ -61,7 +61,20 @@ img{max-width:100%;height:auto}
   40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .loginContent.shake{animation:loginShake .4s}
 
-header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
+/* z-index:300 -- must stay ABOVE .topSections (280) and .modeTabs (270)
+   below. Reason: header creates its own stacking context (position:sticky +
+   z-index), and the player-menu dropdown lives nested inside it with its
+   own much higher z-index:1200 -- but a descendant's z-index is only ever
+   compared *within* its own ancestor's stacking context, never against
+   siblings of that ancestor. With header pinned at the same 280 as
+   .topSections, DOM order (topSections comes after header) made
+   .topSections win the tie and paint over the open dropdown, even though
+   1200 > 280 on paper. Bumping header itself above both sticky bars lets
+   everything nested inside it (including that dropdown) render on top of
+   them too, with zero effect on normal scroll layout since header,
+   .topSections and .modeTabs tile vertically and never overlap outside of
+   an open dropdown overflowing past header's own box. */
+header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
 /* Nathan: "toolbar is not staying with the toolbar, and stays over
    everything, I don't want that" -- this used to be position:fixed,
    pinned to the viewport's top-right corner regardless of scroll position.
