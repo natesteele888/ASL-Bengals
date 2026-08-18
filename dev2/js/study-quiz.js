@@ -157,6 +157,12 @@ window.refreshCoachToolsVisibility = function(){
   if (myChildBtn) myChildBtn.style.display = (isParent || isCoach) ? '' : 'none';
   const parentChildBanner = document.getElementById('parentChildBanner');
   if (parentChildBanner && !isParent && !isCoach) parentChildBanner.style.display = 'none';
+  // Nathan: "there should be a 2nd pill next to your own pill for the
+  // player" -- same coach/parent-only gating as parentChildBanner above.
+  // Cleared (not just hidden) on Switch Profile into a plain player session
+  // so a previous coach/parent's child pill(s) on this device can't linger.
+  const childPillsWrap = document.getElementById('childPillsWrap');
+  if (childPillsWrap && !isParent && !isCoach) childPillsWrap.innerHTML = '';
 
   const activeBtn = topSectionsEl && topSectionsEl.querySelector('.modeBtn.active');
   const activeSection = activeBtn && activeBtn.dataset.section;

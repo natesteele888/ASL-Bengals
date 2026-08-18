@@ -90,44 +90,54 @@
        a bare name -- see player-identity.js's updateBadge() for how the #
        gets filled in (best-effort roster name match, since a session
        doesn't carry a jersey # of its own). -->
-  <div class="playerMenuWrap" id="playerMenuWrap">
-    <button class="playerMenuBtn" id="playerMenuBtn">🏈 <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
-      <div class="playerMenuDropdown" id="playerMenuDropdown">
-        <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
-        <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
-             with the app fully closed) needs a paid Firebase plan, which
-             Nathan opted out of -- see js/whats-new.js for the free
-             alternative this wires up instead: a real OS notification
-             fired the moment the app is opened and it finds a play added
-             since the last one it already notified about, reusing this
-             same What's New data. Label/behavior toggled by
-             refreshNotifyBtn() in js/whats-new.js based on
-             Notification.permission. -->
-        <button id="notifyOptInBtn" style="display:none;">🔔 Enable Notifications</button>
-        <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
-        <!-- Nathan: "By clicking it up a menu dropdown with card and
-             progress" -- My Card opens the same ESPN-style player card
-             view roster/stats pages use (window.showPlayerProfile), looked
-             up by the same best-effort roster name match as the jersey #
-             badge above; hidden if there's no roster match to open. -->
-        <button id="myCardBtn" style="display:none;">🃏 My Card</button>
-        <button id="myStatsBtn">📊 My Stats</button>
-        <button id="myPositionBtn">🏈 My Position</button>
-        <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
-             myStatsBtn/myPositionBtn by refreshCoachToolsVisibility() in
-             study-quiz.js (a parent has no quiz stats or a position of
-             their own to set). Opens the linked child's card directly if
-             there's only one, or the childPromptOverlay picker (in "change"
-             mode) if there's more than one or none linked yet. -->
-        <button id="myChildBtn" style="display:none;">👤 My Child</button>
-        <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
-             info per position. Keeping the button/overlay/study-guide.js in
-             place so this is a one-line toggle to bring back once it has
-             more substance (see js/study-guide.js for the "Lite vs Full"
-             scoping notes). -->
-        <button id="studyGuideBtn" style="display:none">📖 Study Guide</button>
-        <button id="playerIdSwitchBtn">🚪 Sign Out</button>
-      </div>
+  <div class="pillRow" id="pillRow">
+    <div class="playerMenuWrap" id="playerMenuWrap">
+      <button class="playerMenuBtn" id="playerMenuBtn">🏈 <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
+        <div class="playerMenuDropdown" id="playerMenuDropdown">
+          <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
+          <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
+               with the app fully closed) needs a paid Firebase plan, which
+               Nathan opted out of -- see js/whats-new.js for the free
+               alternative this wires up instead: a real OS notification
+               fired the moment the app is opened and it finds a play added
+               since the last one it already notified about, reusing this
+               same What's New data. Label/behavior toggled by
+               refreshNotifyBtn() in js/whats-new.js based on
+               Notification.permission. -->
+          <button id="notifyOptInBtn" style="display:none;">🔔 Enable Notifications</button>
+          <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
+          <!-- Nathan: "By clicking it up a menu dropdown with card and
+               progress" -- My Card opens the same ESPN-style player card
+               view roster/stats pages use (window.showPlayerProfile), looked
+               up by the same best-effort roster name match as the jersey #
+               badge above; hidden if there's no roster match to open. -->
+          <button id="myCardBtn" style="display:none;">🃏 My Card</button>
+          <button id="myStatsBtn">📊 My Stats</button>
+          <button id="myPositionBtn">🏈 My Position</button>
+          <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
+               myStatsBtn/myPositionBtn by refreshCoachToolsVisibility() in
+               study-quiz.js (a parent has no quiz stats or a position of
+               their own to set). Opens the linked child's card directly if
+               there's only one, or the childPromptOverlay picker (in "change"
+               mode) if there's more than one or none linked yet. -->
+          <button id="myChildBtn" style="display:none;">👤 My Child</button>
+          <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
+               info per position. Keeping the button/overlay/study-guide.js in
+               place so this is a one-line toggle to bring back once it has
+               more substance (see js/study-guide.js for the "Lite vs Full"
+               scoping notes). -->
+          <button id="studyGuideBtn" style="display:none">📖 Study Guide</button>
+          <button id="playerIdSwitchBtn">🚪 Sign Out</button>
+        </div>
+    </div>
+    <!-- Nathan: "If you are a Coach or Parent and you have a Child (Player)
+         linked to your account - there should be a 2nd pill next to your
+         own pill for the player... which would have a menu for his card and
+         his progress." One pill per linked child (usually just one), built
+         by player-identity.js's renderChildToolbarPills() -- same trigger
+         points as the existing parentChildBanner below Schedule, so it
+         always mirrors whatever's actually linked. -->
+    <div id="childPillsWrap"></div>
   </div>
 </div>
 
@@ -1197,7 +1207,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817av';
+  const BUILD_V = '20260817aw';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

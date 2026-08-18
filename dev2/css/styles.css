@@ -70,11 +70,19 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .toolbarBtn:active{background:rgba(17,17,17,.85)}
+/* Nathan: "there should be a 2nd pill next to your own pill for the
+   player" -- playerMenuWrap and childPillsWrap's own child-pill wraps now
+   sit side by side in this row instead of playerMenuWrap being the whole
+   row by itself, wrapping onto a second line on narrow screens rather than
+   overflowing. */
+.pillRow{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .playerMenuWrap{position:relative}
+.childPillWrap{position:relative}
 /* Nathan: "have the player pill button with a football icon and their name
    and # if added" -- moved below the icon row (old dev2Tag/"V3" spot,
    which is gone now), so it no longer has to squeeze between the toolbar
-   icons and can run wider before truncating. */
+   icons and can run wider before truncating. Child pills (below) reuse
+   this same look. */
 .playerMenuBtn{position:relative;height:22px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer;
   backdrop-filter:blur(3px);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

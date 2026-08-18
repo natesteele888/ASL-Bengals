@@ -598,6 +598,54 @@
     });
   }
 
+  // Nathan: "If you are a Coach or Parent and you have a Child (Player)
+  // linked to your account - there should be a 2nd pill next to your own
+  // pill for the player... which would have a menu for his card and his
+  // progress." One pill per linked child, same visual style as the main
+  // playerMenuBtn pill (reuses its CSS class directly rather than
+  // duplicating the look), living in #childPillsWrap right next to it.
+  // Always called from renderParentChildBanner below with the same
+  // already-fetched roster entries, so it can never drift out of sync with
+  // the existing below-Schedule banner.
+  function renderChildToolbarPills(entries){
+    const wrap = document.getElementById('childPillsWrap');
+    if(!wrap) return;
+    if(!entries || !entries.length){ wrap.innerHTML = ''; return; }
+    wrap.innerHTML = entries.map(p => `
+      <div class="childPillWrap" data-num="${escapeHtmlLocal(String(p.num || ''))}" data-name="${escapeHtmlLocal(p.name)}" data-login-id="${escapeHtmlLocal(p.loginPlayerId || '')}">
+        <button type="button" class="playerMenuBtn">🏈 ${escapeHtmlLocal(p.name)}${p.num ? `<span class="playerIdBadgeNum">#${escapeHtmlLocal(String(p.num))}</span>` : ''}</button>
+        <div class="playerMenuDropdown">
+          <button type="button" data-action="card">🃏 Card</button>
+          <button type="button" data-action="progress">📊 Progress</button>
+        </div>
+      </div>`).join('');
+    wrap.querySelectorAll('.childPillWrap').forEach(pillWrap => {
+      const btn = pillWrap.querySelector('.playerMenuBtn');
+      const dropdown = pillWrap.querySelector('.playerMenuDropdown');
+      if(!btn || !dropdown) return;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Close every other open pill dropdown (the main one included) so
+        // only one is ever open at a time, same as a normal menu bar.
+        document.querySelectorAll('.playerMenuDropdown.show').forEach(d => { if(d !== dropdown) d.classList.remove('show'); });
+        dropdown.classList.toggle('show');
+      });
+      const cardBtn = dropdown.querySelector('[data-action="card"]');
+      if(cardBtn) cardBtn.addEventListener('click', () => {
+        dropdown.classList.remove('show');
+        if(window.showPlayerProfile) window.showPlayerProfile(pillWrap.dataset.num);
+      });
+      const progressBtn = dropdown.querySelector('[data-action="progress"]');
+      if(progressBtn) progressBtn.addEventListener('click', () => {
+        dropdown.classList.remove('show');
+        // loginPlayerId (set by a coach in Coach Tools > Roster) is the
+        // real link to the dev2Players login whose quiz results should
+        // show -- same as the below-Schedule banner's Progress button.
+        if(window.showChildQuizProgress) window.showChildQuizProgress(pillWrap.dataset.name, pillWrap.dataset.loginId || null);
+      });
+    });
+  }
+
   // Nathan: "Just want them to log in, see how their child is doing, see
   // the schedule." Since a parent's Play/This Week/Coach Tools are all
   // hidden (refreshCoachToolsVisibility in study-quiz.js), Schedule is
@@ -610,10 +658,11 @@
     const wrap = document.getElementById('parentChildBanner');
     if(!wrap) return;
     const ids = childRosterIds || (session && session.childRosterIds) || [];
-    if(!ids.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    if(!ids.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; renderChildToolbarPills([]); return; }
     const list = roster || await fetchRosterForPicker();
     const entries = ids.map(id => list.find(p => p.id === id)).filter(Boolean);
-    if(!entries.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    if(!entries.length){ wrap.style.display = 'none'; wrap.innerHTML = ''; renderChildToolbarPills([]); return; }
+    renderChildToolbarPills(entries);
     wrap.style.display = '';
     // Nathan: "would be great for parents to be able to see how their
     // player is doing on the quizzes and maybe what play signals or play
@@ -907,9 +956,16 @@
     menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if(longPressFired){ longPressFired = false; return; } // long-press already opened Switch Profile -- don't also toggle the dropdown
+      // Close any open child pill dropdown first so only one pill's menu is
+      // ever open at once (renderChildToolbarPills mirrors this for its
+      // own pills).
+      document.querySelectorAll('#childPillsWrap .playerMenuDropdown.show').forEach(d => d.classList.remove('show'));
       menuDropdown.classList.toggle('show');
     });
-    document.addEventListener('click', () => menuDropdown.classList.remove('show'));
+    document.addEventListener('click', () => {
+      menuDropdown.classList.remove('show');
+      document.querySelectorAll('#childPillsWrap .playerMenuDropdown.show').forEach(d => d.classList.remove('show'));
+    });
   }
   const myCardBtn = document.getElementById('myCardBtn');
   if(myCardBtn){
