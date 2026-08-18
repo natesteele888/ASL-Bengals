@@ -62,9 +62,21 @@ img{max-width:100%;height:auto}
 .loginContent.shake{animation:loginShake .4s}
 
 header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
-/* Column layout so the tiny DEV2 tag can sit under the toolbar buttons
-   instead of needing its own full-width bar across the top of the page. */
-.topToolbar{position:fixed;top:8px;right:8px;z-index:1100;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+/* Nathan: "toolbar is not staying with the toolbar, and stays over
+   everything, I don't want that" -- this used to be position:fixed,
+   pinned to the viewport's top-right corner regardless of scroll position.
+   That was fine back when it was one small pill, but once it grew to an
+   icon row + player pill row (+ an optional child-pill row), the taller
+   fixed box started visibly covering page content (photos, cards) as
+   people scrolled past it. Now a normal flex child of .headerRow instead
+   -- it's part of the header's own box, so it scrolls and sticks together
+   with the header (header is position:sticky) rather than floating
+   independently over whatever's beneath it. See the --header-h/--subnav-h
+   custom properties below (set by index.html's syncStickyOffsets(), via a
+   ResizeObserver on header/#topSections) for how the two sticky bars below
+   the header stay correctly positioned now that header's height isn't a
+   fixed constant anymore. */
+.topToolbar{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto}
 .toolbarRow{display:flex;gap:6px}
 .toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
@@ -100,7 +112,7 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 /* A couple px taller than before (10px -> 13px vertical padding) so the
    toolbar's button row + tiny DEV2 tag underneath it both fit comfortably
    within the header instead of crowding its bottom edge. */
-.headerRow{display:flex;align-items:center;gap:12px;padding:13px 14px}
+.headerRow{display:flex;align-items:center;gap:12px;padding:13px 14px;flex-wrap:wrap}
 .headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
@@ -109,10 +121,10 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
    existing sub-tab bar -- both sticky, so #modeTabs' top offset is pushed
    down by this bar's own height (~50px) to stack cleanly instead of
    overlapping while scrolling. */
-.topSections{position:sticky;top:63px;z-index:280;display:flex;background:var(--bengal-black);border-bottom:2px solid var(--bengal-orange)}
+.topSections{position:sticky;top:var(--header-h, 63px);z-index:280;display:flex;background:var(--bengal-black);border-bottom:2px solid var(--bengal-orange)}
 .topSections .modeBtn{color:rgba(255,255,255,.55)}
 .topSections .modeBtn.active{color:#fff;border-bottom-color:var(--bengal-orange)}
-.modeTabs{position:sticky;top:113px;z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
+.modeTabs{position:sticky;top:var(--subnav-h, 113px);z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
   background:none;cursor:pointer}
@@ -205,8 +217,8 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .lbOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:none;
   align-items:center;justify-content:center;padding:20px}
 .lbOverlay.show{display:flex}
-/* Sits above loginScreen (1000) / topToolbar (1100) so it's visible the
-   instant the page loads, before anyone has logged in. */
+/* Sits above loginScreen (1000) and the header/toolbar (280) so it's
+   visible the instant the page loads, before anyone has logged in. */
 .welcomeOverlay{z-index:1600}
 /* Static (non-interactive) toggle-look pills for the welcome crash-course
    mockups -- deliberately not the real .toggle-group component so this
