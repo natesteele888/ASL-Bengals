@@ -150,7 +150,7 @@
     body.innerHTML = sorted.length
       ? sorted.map(e => `<div class="lbRow">
           <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(e.addedAt)}</div>
-          <div class="lbNameTip"><div class="lbNameTipTitle">🏈 ${escapeHtml(e.label || e.key || 'New play')}</div>${e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''}</div>
+          <div class="lbNameTip"><div class="lbNameTipTitle wnTitle">🏈 ${escapeHtml(e.label || e.key || 'New play')}</div>${e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''}</div>
         </div>`).join('')
       : '<div class="lbEmpty">No new plays added yet -- check back later!</div>';
 
