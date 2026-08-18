@@ -192,6 +192,34 @@
         <p class="pcTutorialText">Head to the <strong>Play Quiz</strong> tab to test yourself. It plays a hand signal (twice), then you set the toggles to match what you saw and submit. Ten rounds, easiest to hardest, and it saves your best score on the leaderboard.</p>
       </div>
 
+      <!-- Nathan: "update tool tips to show the latest - go over the
+           schedule and this week features" -- Schedule and This Week both
+           shipped well after this walkthrough was first written, so
+           neither one had ever been introduced here. auth.js's SEEN_KEY
+           was bumped to a new version alongside adding these two steps so
+           this pops back up once for everyone who already dismissed the
+           old 4-step version, not just brand-new logins. -->
+      <div class="pcTutorialStep" data-step="4">
+        <div class="pcTutorialHeader">🗓️ Schedule</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPillRow">
+            <span class="mockPill active">Games</span><span class="mockPill">Practices</span><span class="mockPill">Full Schedule</span>
+          </div>
+          <div class="mockAccordionHeader">vs. Clinton <span class="mockChevron">▾</span></div>
+          <div class="mockTapHint">👆 Tap a game for times, weather, and the season record</div>
+        </div>
+        <p class="pcTutorialText">The <strong>Schedule</strong> tab covers every game and practice, plus a combined <strong>Full Schedule</strong> view. Tap any game for arrival/warmup/kickoff times, weather, field directions, and an auto-written preview — or add it straight to your phone's calendar.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="5">
+        <div class="pcTutorialHeader">🎯 This Week</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockAccordionHeader">Coach Nate's 3 Keys <span class="mockChevron">▾</span></div>
+          <div class="mockTapHint">1️⃣ Play fast &nbsp; 2️⃣ Protect the ball &nbsp; 3️⃣ Finish every block</div>
+        </div>
+        <p class="pcTutorialText">Check <strong>This Week</strong> for the week-ahead write-up and each coach's own <strong>3 Keys</strong> heading into the next game. You'll get a notification any time a coach updates theirs, so it's worth a look after every practice.</p>
+      </div>
+
     </div>
     <div class="pcTutorialDots" id="welcomeTutorialDots"></div>
     <div class="pcTutorialNav">
@@ -1244,7 +1272,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817bc';
+  const BUILD_V = '20260817bd';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

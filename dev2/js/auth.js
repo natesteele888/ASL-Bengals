@@ -12,7 +12,14 @@
    shipped. Purely informational: dismissing just sets a flag.
    ============================================================ */
 (function(){
-  var SEEN_KEY = 'bengalsWhatsNewSeen';
+  // Nathan: "update tool tips to show the latest - go over the schedule
+  // and this week features" -- 2 new steps added covering Schedule and
+  // This Week (index.html's welcomeTutorialSteps). Bumped to _v2 so this
+  // walkthrough shows one more time for everyone who already dismissed
+  // the original 4-step version and would otherwise never see the new
+  // steps at all -- same "seen" flag/localStorage mechanism, just a fresh
+  // key so it doesn't read as already-dismissed.
+  var SEEN_KEY = 'bengalsWhatsNewSeen_v2';
   var overlay = document.getElementById('welcomeOverlay');
   var stepsEl = document.getElementById('welcomeTutorialSteps');
   var dotsEl = document.getElementById('welcomeTutorialDots');
