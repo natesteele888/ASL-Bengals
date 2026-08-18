@@ -41,31 +41,8 @@
     } catch (e) { return null; }
   }
 
-  // Nathan: "give me a toggle on the admin 5 click coaching gate to have a
-  // toggle to show or hide drone footage from parents and players
-  // accounts." See js/drone-footage.js's window.getDroneFootageVisibility/
-  // setDroneFootageVisibility -- this just drives that toggle's button.
-  // Lives outside #coachDashboardBody (see index.html) so it isn't wiped
-  // every time this tab re-renders.
-  function refreshDroneVisibilityToggle() {
-    const btn = document.getElementById('coachDashDroneToggleBtn');
-    if (!btn || !window.getDroneFootageVisibility) return;
-    btn.textContent = '…';
-    btn.disabled = true;
-    window.getDroneFootageVisibility().then(visible => {
-      btn.textContent = visible ? '✅ Visible' : '🚫 Hidden';
-      btn.disabled = false;
-      btn.onclick = () => {
-        btn.disabled = true;
-        btn.textContent = 'Saving…';
-        window.setDroneFootageVisibility(!visible, refreshDroneVisibilityToggle, msg => {
-          btn.disabled = false;
-          btn.textContent = 'Save failed';
-          console.error('Drone visibility toggle failed:', msg);
-        });
-      };
-    });
-  }
+  // Nathan: "Drone footage visible toggle should come out of Dashboard and
+  // have a new pill called settings..." -- moved to js/coachtools-settings.js.
 
   function fmtWhen(iso) {
     if (!iso) return '—';
@@ -88,16 +65,29 @@
     const pt = (window.DATA && window.DATA.playTypes || []).find(p => p.key === key);
     return pt ? pt.label : key;
   }
+  // Nathan: "we don't need to call out that Coach Shane and the other
+  // coaches are logging time or what not on the dashboard." Filtering on
+  // just p.isCoach/p.role missed accounts that were never explicitly
+  // flagged that way (e.g. a coach who signed in before the role picker
+  // existed, or picked "Player" by mistake) -- matching the name itself
+  // against auth.js's COACH_PROFILE_NAMES allowlist (same trick already
+  // used for the quiz leaderboards' coach-sort fix) catches those too.
+  function isCoachName(name) {
+    const n = norm(name);
+    return !!(n && window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf(n) !== -1);
+  }
+  function isCoachRecord(p) {
+    return !!(p.isCoach || p.role === 'coach' || isCoachName(p.name));
+  }
 
   window.initCoachToolsDashboard = async function () {
     const body = document.getElementById('coachDashboardBody');
     if (!body) return;
     body.innerHTML = '<div class="lbEmpty">Loading…</div>';
-    refreshDroneVisibilityToggle();
     const buildEl = document.getElementById('coachDashBuildVersion');
     if (buildEl && window.BUILD_V) buildEl.textContent = window.BUILD_V;
 
-    const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts] = await Promise.all([
+    const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts, quizLbEntries] = await Promise.all([
       cloudFetch('analytics/timedStarts'),
       cloudFetch('analytics/standardStarts'),
       cloudFetch('analytics/standardResults'),
@@ -107,6 +97,7 @@
       cloudFetch('analytics/sessions'),
       cloudFetch('analytics/pcqResults'),
       cloudFetch('analytics/pcqRoundAttempts'),
+      cloudFetch('leaderboard'),
     ]);
     const players = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
     const roster = (window.isTeamRosterLoaded && window.isTeamRosterLoaded())
@@ -221,7 +212,7 @@
     const pcqResultsSafe = pcqResults || [];
     const nowMs = Date.now();
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    const nonCoachPlayers = playerRows.filter(p => !p.isCoach);
+    const nonCoachPlayers = playerRows.filter(p => !isCoachRecord(p));
 
     const activePlayers7d = nonCoachPlayers.filter(p => p.lastSeen && (nowMs - new Date(p.lastSeen).getTime()) <= SEVEN_DAYS_MS).length;
     const sessions7dCount = sessionsSafe.filter(s => s.startedAt && (nowMs - new Date(s.startedAt).getTime()) <= SEVEN_DAYS_MS).length;
@@ -277,7 +268,10 @@
     const MIN_ATTEMPTS_FOR_HIGHLIGHT = 2;
     const eligibleForHighlights = playerActivityRows.filter(p => p.attempts >= MIN_ATTEMPTS_FOR_HIGHLIGHT && p.avgPct !== null);
     const excelling = [...eligibleForHighlights].sort((a, b) => b.avgPct - a.avgPct).slice(0, 3);
-    const needsAttention = [...eligibleForHighlights].sort((a, b) => a.avgPct - b.avgPct).slice(0, 3);
+    // Nathan: "Add more of the Needs More Attention call outs" -- widened
+    // from top 3 to top 6 so this is actually useful for a full-size roster
+    // instead of only ever surfacing the very worst three.
+    const needsAttention = [...eligibleForHighlights].sort((a, b) => a.avgPct - b.avgPct).slice(0, 6);
     // Nathan: "say who is spending the most cumulative time on it" --
     // credit for effort/engagement, separate from who's scoring well.
     const mostTime = playerActivityRows.filter(p => p.totalSessionMs > 0).sort((a, b) => b.totalSessionMs - a.totalSessionMs).slice(0, 3);
@@ -324,7 +318,7 @@
     const playersByName = {};
     Object.keys(players).forEach(id => {
       const p = players[id];
-      if (p.isCoach) return;
+      if (isCoachRecord(p)) return;
       const key = norm(p.name);
       if (key && !playersByName[key]) playersByName[key] = Object.assign({ id }, p);
     });
@@ -333,13 +327,20 @@
       const byName = playersByName[norm(rp.name)];
       return byName || null;
     }
-    const rosterCrossRef = (roster || []).map(rp => {
+    const rosterCrossRef = (roster || []).filter(rp => !isCoachName(rp.name)).map(rp => {
       const linked = linkedAccountFor(rp);
       const hasActivity = linked ? (sessionsSafe.some(s => s.playerId === linked.id) || pcqResultsSafe.some(r => r.playerId === linked.id)) : false;
       return Object.assign({}, rp, { linked, hasActivity });
     });
     const noAccount = rosterCrossRef.filter(rp => !rp.linked);
     const hasAccount = rosterCrossRef.filter(rp => rp.linked);
+    // Nathan: "Show the overall usage rate but don't include coaches." %
+    // of the (coach-excluded) roster that's both linked to an account AND
+    // has real recorded activity -- a linked-but-never-opened account
+    // shouldn't count as "using it."
+    const usageRatePct = rosterCrossRef.length
+      ? Math.round(rosterCrossRef.filter(rp => rp.linked && rp.hasActivity).length / rosterCrossRef.length * 100)
+      : null;
     function accountRowHtml(rp, missing) {
       const numTag = rp.num ? `#${escapeHtml(String(rp.num))} ` : '';
       const right = missing
@@ -356,6 +357,30 @@
     const notUsingItHtml = notUsingIt.length
       ? notUsingIt.map(rp => `<div class="lbRow"><div class="lbName">${escapeHtml(rp.name)}</div><div class="lbScore" style="font-size:11px;opacity:.75;">${rp.linked ? 'No activity yet' : 'No account set up'}</div></div>`).join('')
       : '<div class="lbEmpty">Everyone on the roster is using the app. 🎉</div>';
+
+    // ---- On Leaderboard, Not Registered -- Nathan: "there are also some
+    // kids who are on the leaderboard who have used the app but haven't
+    // signed in recently and registered on the new version." Quiz Scores/
+    // Timed Quiz leaderboard entries are just a freely-typed name (see
+    // study-quiz.js) with no real account link, so a name can be sitting
+    // on a board from before the dev2Players login system existed (or from
+    // someone who never re-signed-in since) with no matching current
+    // account at all -- different problem from "no activity yet" above,
+    // since these kids clearly HAVE used the app, just not the current
+    // named-login version of it.
+    const registeredNames = new Set(playerRows.map(p => norm(p.name)));
+    const legacyNames = new Map();
+    [...(quizLbEntries || []), ...(timedLbEntries || [])].forEach(e => {
+      const key = norm(e && e.name);
+      if (key && !legacyNames.has(key)) legacyNames.set(key, e.name);
+    });
+    const staleLeaderboardNames = [...legacyNames.entries()]
+      .filter(([key, name]) => !registeredNames.has(key) && !isCoachName(name))
+      .map(([, name]) => name)
+      .sort((a, b) => a.localeCompare(b));
+    const staleLeaderboardHtml = staleLeaderboardNames.length
+      ? staleLeaderboardNames.map(name => `<div class="lbRow"><div class="lbName">${escapeHtml(name)}</div><div class="lbScore" style="font-size:11px;opacity:.75;">On a leaderboard, no current account</div></div>`).join('')
+      : '<div class="lbEmpty">No stale leaderboard names found.</div>';
 
     // ---- Shell ----
     body.innerHTML = `
@@ -378,6 +403,7 @@
       <div class="adminPanel" data-panel="activity" style="display:none;">
         <div class="lbSectionHeader">📈 Team Snapshot</div>
         <div class="adminStatGrid">
+          ${statCard(usageRatePct !== null ? usageRatePct + '%' : '—', 'Usage Rate')}
           ${statCard(activePlayers7d, 'Active Players (7d)')}
           ${statCard(sessions7dCount, 'Visits (7d)')}
           ${statCard(fmtDuration(totalTeamMs), 'Total Team Time')}
@@ -391,9 +417,11 @@
         <div class="lbList">${needsAttentionHtml}</div>
         <div class="lbSectionHeader">😴 Not Using It</div>
         <div class="lbList">${notUsingItHtml}</div>
+        <div class="lbSectionHeader">🕰️ On Leaderboard, Not Registered</div>
+        <div class="lbList">${staleLeaderboardHtml}</div>
         <div class="lbSectionHeader">🕓 Every Player</div>
         <div class="lbList" style="max-height:340px;overflow-y:auto;">${activityListHtml}</div>
-        <div class="lbSub" style="margin:8px 0 12px;">Tap a player to see their recent Play Calls Quiz history. Highlights need at least 2 scored attempts per player. Visits/session length only cover time since that tracking shipped -- nothing before that was tracked.</div>
+        <div class="lbSub" style="margin:8px 0 12px;">Tap a player to see their recent Play Calls Quiz history. Highlights need at least 2 scored attempts per player. Visits/session length only cover time since that tracking shipped -- nothing before that was tracked. "On Leaderboard, Not Registered" names have a Quiz Scores or Timed Quiz entry but no matching current account -- ask them to sign in again with a name + PIN on this version.</div>
       </div>
       <div class="adminPanel" data-panel="accounts" style="display:none;">
         <div class="lbSectionHeader">🚫 No Account Set Up (${noAccount.length})</div>

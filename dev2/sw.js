@@ -15,7 +15,7 @@
 // missing layout) even though the live site is fully up to date. Bumping
 // this forces a fresh install + activate, which deletes the old cache
 // (see the activate handler) and re-caches the current shell files.
-const CACHE_NAME = 'bengals-shell-20260817au';
+const CACHE_NAME = 'bengals-shell-20260817av';
 const SHELL_FILES = [
   './index.html',
   './css/styles.css',
@@ -64,16 +64,24 @@ self.addEventListener('fetch', (event) => {
 // loads, so the id is appended as a ?practice= query param instead --
 // player-identity.js's gate() checks for that on boot, once a session is
 // confirmed, and opens the same practice that way.
+// This Week's "Keys are up" notification (js/thisweek.js's saveThisWeek)
+// carries data.thisWeek instead of a practiceId -- same open-tab-vs-cold-
+// start split as the practiceId case just below (postMessage if a tab's
+// already open, ?thisweek=1 query param if a fresh one has to be opened;
+// player-identity.js's gate() reads that param back).
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const targetUrl = data.practiceId ? `./index.html?practice=${encodeURIComponent(data.practiceId)}` : './index.html';
+  const targetUrl = data.practiceId
+    ? `./index.html?practice=${encodeURIComponent(data.practiceId)}`
+    : (data.thisWeek ? './index.html?thisweek=1' : './index.html');
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
           client.focus();
           if (data.practiceId) client.postMessage({ type: 'openPractice', id: data.practiceId });
+          else if (data.thisWeek) client.postMessage({ type: 'openThisWeek' });
           return;
         }
       }

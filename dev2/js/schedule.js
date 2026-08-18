@@ -630,7 +630,7 @@
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
-          <ol id="schedGamePlanKeys" class="thisweekKeysList"></ol>
+          <div id="schedGamePlanKeys"></div>
           <div class="gameplanCardsGrid" id="schedGamePlanCards"></div>
         </div>
         <div class="lbSectionHeader" style="margin-top:16px;">🔎 Scouting Report</div>
@@ -835,12 +835,30 @@
     window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data || data.gameId !== current.id) { wrap.style.display = 'none'; return; }
-        const keys = (Array.isArray(data.keys) ? data.keys : []).map(k => (k || '').trim()).filter(Boolean);
+        // Nathan: "add in Coaches Names with 3 areas to show their 3
+        // KEYS" -- thisWeek.json's keys moved from one flat array to
+        // per-coach coachKeys (see js/thisweek.js); mirror that same
+        // per-coach grouping here instead of just the old flat list.
+        const coachKeys = (Array.isArray(data.coachKeys) ? data.coachKeys : [])
+          .map(c => ({ name: (c && c.name || '').trim() || 'Coach', keys: (c && Array.isArray(c.keys) ? c.keys : []).map(k => (k || '').trim()).filter(Boolean) }))
+          .filter(c => c.keys.length);
         const plays = Array.isArray(data.plays) ? data.plays : [];
-        if (!keys.length && !plays.length) { wrap.style.display = 'none'; return; }
+        if (!coachKeys.length && !plays.length) { wrap.style.display = 'none'; return; }
         wrap.style.display = '';
         const keysList = document.getElementById('schedGamePlanKeys');
-        if (keysList) { keysList.innerHTML = ''; keys.forEach(k => { const li = document.createElement('li'); li.textContent = k; keysList.appendChild(li); }); }
+        if (keysList) {
+          keysList.innerHTML = '';
+          coachKeys.forEach(c => {
+            const heading = document.createElement('div');
+            heading.className = 'thisweekCoachName';
+            heading.textContent = c.name;
+            keysList.appendChild(heading);
+            const ol = document.createElement('ol');
+            ol.className = 'thisweekKeysList';
+            c.keys.forEach(k => { const li = document.createElement('li'); li.textContent = k; ol.appendChild(li); });
+            keysList.appendChild(ol);
+          });
+        }
         if (window.renderFeaturedPlayCards) window.renderFeaturedPlayCards(document.getElementById('schedGamePlanCards'), plays);
       })
       .catch(err => console.error('Could not load linked This Week game plan:', err));

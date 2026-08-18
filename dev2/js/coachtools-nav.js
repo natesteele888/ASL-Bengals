@@ -18,6 +18,10 @@
     // real, repeatable version of that.
     { key: 'updates', label: '📣 Updates', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates() },
     { key: 'dashboard', label: '📊 Dashboard', panel: 'coachDashboardPanel', init: () => window.initCoachToolsDashboard && window.initCoachToolsDashboard() },
+    // Nathan: "Drone footage visible toggle should come out of Dashboard
+    // and have a new pill called settings with that and other toggles to
+    // turn on and off visibility to groups."
+    { key: 'settings', label: '⚙️ Settings', panel: 'coachSettingsPanel', init: () => window.initCoachToolsSettings && window.initCoachToolsSettings() },
   ];
 
   let activeTab = 'resources';

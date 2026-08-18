@@ -70,13 +70,15 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .toolbarBtn:active{background:rgba(17,17,17,.85)}
-.dev2Tag{font-size:8px;font-weight:800;letter-spacing:.05em;color:rgba(255,255,255,.6);
-  background:rgba(17,17,17,.5);border:1px solid rgba(255,255,255,.2);border-radius:4px;
-  padding:1px 5px;backdrop-filter:blur(3px)}
 .playerMenuWrap{position:relative}
-.playerMenuBtn{position:relative;height:20px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
-  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:700;cursor:pointer;
-  backdrop-filter:blur(3px);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Nathan: "have the player pill button with a football icon and their name
+   and # if added" -- moved below the icon row (old dev2Tag/"V3" spot,
+   which is gone now), so it no longer has to squeeze between the toolbar
+   icons and can run wider before truncating. */
+.playerMenuBtn{position:relative;height:22px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
+  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer;
+  backdrop-filter:blur(3px);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playerIdBadgeNum{opacity:.75;font-weight:800;margin-left:2px}
 .whatsNewDot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bengal-orange);border:1.5px solid #fff;}
 .playerMenuBtn:active{background:rgba(17,17,17,.85)}
 .playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
@@ -1360,6 +1362,15 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 .thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
 .thisweekKeyInput { display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 2px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
 .thisweekKeyInput:focus { border-color: var(--bengal-orange); outline: none; }
+.thisweekCoachBlock { margin-bottom: 16px; }
+.thisweekCoachBlock:last-child { margin-bottom: 8px; }
+.thisweekCoachName { font-weight: 800; font-size: 13px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .02em; margin: 10px 0 4px; }
+.thisweekCoachName:first-child { margin-top: 0; }
+.thisweekCoachEditRow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.thisweekCoachNameInput { flex: 1; padding: 9px 10px; border: 2px solid #ccc; border-radius: 8px; font-size: 13.5px; font-weight: 800; box-sizing: border-box; font-family: inherit; }
+.thisweekCoachNameInput:focus { border-color: var(--bengal-orange); outline: none; }
+.thisweekCoachRemoveBtn { flex: none; border: none; background: transparent; color: #e0201a; font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 4px; }
+.thisweekCoachEditCard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 2px; margin-bottom: 12px; background: var(--paper); }
 .gameplanCardsGrid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 960px; margin: 0 auto; padding: 0 10px; }
 .gameplanCard { width: 220px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 .gameplanCardLabel { font-size: 10.5px; font-weight: 800; text-align: center; padding: 6px 4px; text-transform: uppercase; letter-spacing: .02em; }
@@ -1371,6 +1382,8 @@ header{position:sticky;top:0;z-index:280;background:var(--bengal-black);border-b
 [data-theme="dark"] .thisweekKeysList li { color: var(--ink); }
 [data-theme="dark"] .gameplanCard { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .thisweekKeyInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .thisweekCoachNameInput { background: var(--card); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .thisweekCoachEditCard { background: var(--card); }
 [data-theme="dark"] .gameplanChip { background: var(--paper); }
 
 /* ---- Drive Builder ---- */

@@ -129,14 +129,49 @@
   // Fire-and-forget -- so a session-resume or a fresh sign-in never blocks
   // on this, but the admin view still has a real "who's actually using it"
   // signal to show, not just "who signed up once."
-  function touchLastSeen(playerId){
-    window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`)
-      .then(url => fetch(url, {
+  //
+  // Nathan (later): "send out push notifications to congratulate kids
+  // for... logging in for 3 straight days... need more gamification."
+  // Folded the streak computation into this same read-then-write instead of
+  // a separate call -- it has to run BEFORE lastSeen gets overwritten with
+  // today's timestamp, since the streak math compares today's date against
+  // whatever lastSeen still says. Consecutive CALENDAR days (toDateString(),
+  // not a rolling 24h window) -- logging in Monday evening then Tuesday
+  // morning still counts as two different days, the more intuitive
+  // definition for a kid checking the math. Only notifies once per real
+  // milestone, the day it's actually reached (not on every same-day
+  // reopen), and never for a coach session -- this is a kid-facing nudge to
+  // keep coming back, not something coaches need.
+  const STREAK_MILESTONES = [3, 5, 7, 14, 21, 30, 60, 100];
+  function dateOnlyStr(d){ return d.toDateString(); }
+  async function touchLastSeen(playerId, name){
+    try {
+      const prev = await getPlayerRecord(playerId);
+      const today = new Date();
+      const todayStr = dateOnlyStr(today);
+      const prevSeenStr = prev && prev.lastSeen ? dateOnlyStr(new Date(prev.lastSeen)) : null;
+      const alreadyLoggedToday = prevSeenStr === todayStr;
+      let streak = (prev && prev.loginStreak) || 0;
+      if(!alreadyLoggedToday){
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        streak = (prevSeenStr === dateOnlyStr(yesterday)) ? streak + 1 : 1;
+      }
+      const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`);
+      await fetch(url, {
         method: 'PATCH',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ lastSeen: new Date().toISOString() }),
-      }))
-      .catch(() => {}); // best-effort; not being able to log a timestamp shouldn't block anyone
+        body: JSON.stringify({ lastSeen: today.toISOString(), loginStreak: streak }),
+      });
+      if(!alreadyLoggedToday && STREAK_MILESTONES.indexOf(streak) !== -1 && !window.isCoachSession &&
+        'Notification' in window && Notification.permission === 'granted' && window.showLocalNotification){
+        window.showLocalNotification(
+          `🔥 ${streak}-Day Streak!`,
+          `${name}, you've opened the app ${streak} days in a row -- keep it going!`,
+          { tag: 'aslBengalsStreak' }
+        );
+      }
+    } catch(e){ /* best-effort; not being able to log a timestamp shouldn't block anyone */ }
   }
 
   // ---- Session-duration tracking (Nathan: "show me metrics of how often
@@ -322,6 +357,15 @@
           }),
         }))
         .catch(() => {});
+      // Nathan: "send out push notifications to congratulate kids for...
+      // getting ranked." notifyIfRanked/fetchPCQLeaderboardData are bare
+      // globals from study-quiz.js (loaded before this file, same sharing
+      // pattern as everything else cross-referenced between these two
+      // files) -- only worth checking when this run actually moved the
+      // needle (a new best).
+      if(isNewBest && typeof fetchPCQLeaderboardData === 'function' && typeof notifyIfRanked === 'function'){
+        fetchPCQLeaderboardData().then(data => notifyIfRanked(session.name, 'Play Calls Quiz', data)).catch(() => {});
+      }
       return { isNewBest: isNewBest, bestScore: isNewBest ? score : prevBest, bestMaxScore: isNewBest ? maxScore : (existing && existing.pcqBestMaxScore) || maxScore };
     } catch(e){ return null; } // best-effort; a failed save shouldn't block the done screen
   }
@@ -346,8 +390,39 @@
   function hideOverlay(){
     screenEl.classList.add('hide');
   }
+  // Nathan: "have the player pill button with a football icon and their
+  // name and # if added." The session itself doesn't carry a jersey # (only
+  // name/position/etc.), so this does the same best-effort roster-name
+  // match every other cross-reference in this app already relies on
+  // (teamRoster.json's `num`, matched case-insensitively by name) --
+  // loading the roster first if it hasn't been fetched yet this session.
+  // Matched roster entry for whoever's currently signed in -- set inside
+  // updateBadge()'s applyNum, read by myCardBtn's click handler below so it
+  // doesn't have to redo the same roster lookup.
+  let myCardRosterMatch = null;
   function updateBadge(name){
     if(badgeNameEl) badgeNameEl.textContent = name;
+    const numEl = document.getElementById('playerIdBadgeNum');
+    const myCardBtn = document.getElementById('myCardBtn');
+    myCardRosterMatch = null;
+    if(numEl) numEl.textContent = '';
+    if(myCardBtn) myCardBtn.style.display = 'none'; // re-shown below only if there's a roster match to open
+    const applyNum = () => {
+      const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+      const target = (name || '').trim().toLowerCase();
+      const match = roster.find(p => (p.name || '').trim().toLowerCase() === target);
+      if(numEl) numEl.textContent = (match && match.num !== undefined && match.num !== null && match.num !== '') ? `#${match.num}` : '';
+      myCardRosterMatch = match || null;
+      // This is the one place that ever shows myCardBtn -- study-quiz.js's
+      // refreshCoachToolsVisibility() only ever hides it (for a parent
+      // session), never shows it, specifically so it can't stomp on the
+      // "only show once a roster match is confirmed" decision made here,
+      // regardless of which of the two runs first.
+      const isParent = !!window.isParentSession;
+      if(myCardBtn && match && !isParent) myCardBtn.style.display = '';
+    };
+    if(window.isTeamRosterLoaded && window.isTeamRosterLoaded()) applyNum();
+    else if(window.loadTeamRoster) window.loadTeamRoster().then(applyNum).catch(() => {});
   }
 
   // ---- Position picker (posPromptOverlay) -- skippable, reopenable
@@ -642,7 +717,7 @@
       err.isNameTaken = true;
       throw err;
     }
-    touchLastSeen(match.id);
+    touchLastSeen(match.id, match.name);
     return { session: { playerId: match.id, name: match.name }, isFreshSignup: false };
   }
 
@@ -659,6 +734,22 @@
     // Fire-and-forget -- app usability never waits on this, per Nathan
     // ("skippable and changeable later").
     maybeShowRolePrompt(session, isFreshSignup).catch(() => {});
+    // Nathan: "send out push notifications to congratulate kids for
+    // signing up... need more gamification." Only actually fires if
+    // Notification permission was already granted on this device (e.g. a
+    // sibling signing up on a device a parent already opted in on) -- a
+    // brand-new device's very first sign-in hasn't hit the "Enable
+    // Notifications" prompt yet, so there's nothing to congratulate with
+    // yet, same limitation every other local-notification feature in this
+    // app already has (no real background push on the free Firebase plan).
+    if(isFreshSignup && !window.isCoachSession && 'Notification' in window &&
+      Notification.permission === 'granted' && window.showLocalNotification){
+      window.showLocalNotification(
+        '🎉 Welcome to the team!',
+        `${session.name}, your account's all set -- explore the Play Calls and Study Guide to start learning the playbook.`,
+        { tag: 'aslBengalsWelcome' }
+      );
+    }
   }
 
   async function attemptSignIn(){
@@ -820,6 +911,15 @@
     });
     document.addEventListener('click', () => menuDropdown.classList.remove('show'));
   }
+  const myCardBtn = document.getElementById('myCardBtn');
+  if(myCardBtn){
+    myCardBtn.addEventListener('click', () => {
+      menuDropdown.classList.remove('show');
+      // myCardRosterMatch is set by updateBadge()'s roster lookup above --
+      // the button's only ever visible when a match was actually found.
+      if(myCardRosterMatch && window.showPlayerProfile) window.showPlayerProfile(myCardRosterMatch.num);
+    });
+  }
   if(myStatsBtn){
     myStatsBtn.addEventListener('click', () => {
       menuDropdown.classList.remove('show');
@@ -914,12 +1014,23 @@
           history.replaceState(null, '', location.pathname + location.hash);
         }
       } catch (e) { /* URLSearchParams/history unavailable -- ignore, deep link just won't auto-open */ }
+      // Same cold-start pattern as the drone-footage ?practice= deep link
+      // above, for This Week's "Keys are up" notification (js/thisweek.js's
+      // saveThisWeek) -- sw.js appends ?thisweek=1 when there's no already-
+      // open tab to postMessage instead.
+      try {
+        const wantsThisWeek = new URLSearchParams(location.search).get('thisweek');
+        if (wantsThisWeek && typeof setSection === 'function') {
+          setSection('thisweek');
+          history.replaceState(null, '', location.pathname + location.hash);
+        }
+      } catch (e) { /* ignore -- deep link just won't auto-open */ }
       rawOnReady();
     };
     const session = getSession();
     if(session && session.name){
       updateBadge(session.name);
-      touchLastSeen(session.playerId);
+      touchLastSeen(session.playerId, session.name);
       rememberKnownProfile(session);
       startSessionTracking(session.playerId, session.name);
       onReady();

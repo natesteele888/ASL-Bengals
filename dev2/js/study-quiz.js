@@ -139,6 +139,16 @@ window.refreshCoachToolsVisibility = function(){
   if (myStatsBtn) myStatsBtn.style.display = isParent ? 'none' : '';
   const myPositionBtn = document.getElementById('myPositionBtn');
   if (myPositionBtn) myPositionBtn.style.display = isParent ? 'none' : '';
+  // Nathan: "By clicking it up a menu dropdown with card and progress" --
+  // My Card, same audience as My Stats (a parent already has My Child for
+  // that). Only enforced one-directionally here (never force-shown) --
+  // player-identity.js's updateBadge() is the one that decides whether to
+  // actually show it (only once a roster match is confirmed), and can run
+  // either before or after this depending on whether the roster was
+  // already cached; unconditionally setting '' here would re-show it for
+  // every non-parent regardless of match and stomp on that decision.
+  const myCardBtn = document.getElementById('myCardBtn');
+  if (myCardBtn && isParent) myCardBtn.style.display = 'none';
   // Coaches are often parents of a player on the team too (Nathan: "give
   // the coaches the option to choose their player as well") -- so My Child
   // shows for coach sessions as well, alongside all their normal coach
@@ -472,6 +482,21 @@ function isCoachEntryName(name){
   return !!(n && window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf(n) !== -1);
 }
 function coachSortWeight(entry){ return isCoachEntryName(entry.name) ? 1 : 0; }
+// Nathan (follow-up to the sink-to-bottom request above): "coaches
+// shouldn't be awarded points with the kids -- they can be completely
+// separate." Sorting coaches to the bottom of one shared list still let a
+// coach occupy a real ranked slot (and, on the Overall board, still earn
+// rank-based points) whenever the team + coach count together was small
+// enough to land inside the top 20. This splits a sorted/deduped list into
+// two fully independent groups instead -- players ranked only against
+// players, coaches ranked only against other coaches, starting back at #1
+// in their own section, never sharing a rank or a points pool.
+function splitByCoach(sortedList){
+  const players = [];
+  const coaches = [];
+  sortedList.forEach(e => (isCoachEntryName(e.name) ? coaches : players).push(e));
+  return { players, coaches };
+}
 function dedupeBestByName(list, isBetter){
   const byName = {};
   list.forEach(entry => {
@@ -509,23 +534,25 @@ async function fetchQuizLeaderboardData(){
   const deduped = dedupeBestByName(raw, quizIsBetter);
   const history = historyRaw || [];
   deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.total === e.total); });
-  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
-  return { list: deduped.slice(0, LEADERBOARD_MAX), offline: offline };
+  deduped.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  const { players, coaches } = splitByCoach(deduped);
+  return { list: players.slice(0, LEADERBOARD_MAX), players: players.slice(0, LEADERBOARD_MAX), coaches: coaches.slice(0, LEADERBOARD_MAX), offline: offline };
 }
 async function fetchTimedLeaderboardData(){
   const cloudList = await cloudFetch('timedLeaderboard');
   const offline = cloudList === null;
   const raw = (offline ? getTimedLeaderboard() : cloudList).slice();
   const deduped = dedupeBestByName(raw, timedIsBetter);
-  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
-  return { list: deduped.slice(0, TIMED_LEADERBOARD_MAX), offline: offline };
+  deduped.sort((a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
+  const { players, coaches } = splitByCoach(deduped);
+  return { list: players.slice(0, TIMED_LEADERBOARD_MAX), players: players.slice(0, TIMED_LEADERBOARD_MAX), coaches: coaches.slice(0, TIMED_LEADERBOARD_MAX), offline: offline };
 }
 // Play Calls Quiz doesn't need its own manual "save to leaderboard" step or
 // storage path -- every signed-in player's best run is already tracked on
 // their player record (pcqBestScore), so this just reads that straight
 // from PlayerIdentity instead of duplicating the data.
 async function fetchPCQLeaderboardData(){
-  if(!window.PlayerIdentity) return { list: [], offline: true };
+  if(!window.PlayerIdentity) return { list: [], players: [], coaches: [], offline: true };
   const [players, historyRaw] = await Promise.all([window.PlayerIdentity.fetchAllPlayers(), cloudFetch('analytics/pcqResults')]);
   const raw = Object.values(players)
     .filter(p => p.pcqBestScore)
@@ -533,19 +560,51 @@ async function fetchPCQLeaderboardData(){
   const deduped = dedupeBestByName(raw, (a, b) => a.score > b.score);
   const history = historyRaw || [];
   deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.maxScore === e.maxScore); });
-  deduped.sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.score - a.score);
-  return { list: deduped.slice(0, LEADERBOARD_MAX), offline: false };
+  deduped.sort((a,b)=> b.score - a.score);
+  const split = splitByCoach(deduped);
+  return { list: split.players.slice(0, LEADERBOARD_MAX), players: split.players.slice(0, LEADERBOARD_MAX), coaches: split.coaches.slice(0, LEADERBOARD_MAX), offline: false };
 }
 
+// Nathan: "send out push notifications to congratulate kids for... getting
+// ranked... need more gamification." Fires when a freshly-saved score/time
+// lands in the top 3 of its board (a medal position) -- the moment worth
+// celebrating, rather than pinging on every single save. Skips coach
+// entries entirely (isCoachEntryName), matching how coaches are kept out of
+// the kids' points pool everywhere else on the leaderboards now. `data` is
+// whatever a fetch*LeaderboardData() call just returned (already split into
+// players/coaches).
+async function notifyIfRanked(name, boardLabel, data){
+  if(!name || isCoachEntryName(name)) return;
+  if(!('Notification' in window) || Notification.permission !== 'granted' || !window.showLocalNotification) return;
+  const { rank } = findEntryAndRank(data.players, name);
+  if(rank && rank <= 3){
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+    window.showLocalNotification(
+      `${medal} You're Ranked #${rank}!`,
+      `${name}, you're #${rank} on the ${boardLabel} board -- nice work!`,
+      { tag: `aslBengalsRank${boardLabel.replace(/\s+/g,'')}` }
+    );
+  }
+}
+// Nathan: "coaches shouldn't be awarded points with the kids -- they can be
+// completely separate." Renders the coach group (if any coach has a saved
+// score) as its own section below the player board -- its own header, its
+// own #1/#2/#3 medals starting fresh, never touching the player ranks or
+// counting toward anything above it.
+function coachSectionHtml(coaches, scoreFn){
+  if(!coaches.length) return '';
+  return '<div class="lbSectionHeader" style="margin-top:14px;">🔐 Coaches</div>' +
+    coaches.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('');
+}
 async function renderLeaderboard(highlightEntry){
   const lbList = document.getElementById('lbList');
   lbList.innerHTML = '<div class="lbEmpty">Loading team scores…</div>';
-  const { list, offline } = await fetchQuizLeaderboardData();
-  if(list.length === 0){
-    lbList.innerHTML = '<div class="lbEmpty">No scores yet — finish a quiz to be the first!</div>';
-  } else {
-    lbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${e.score}/${e.total}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`)).join('');
-  }
+  const { players, coaches, offline } = await fetchQuizLeaderboardData();
+  const scoreFn = e => `${e.score}/${e.total}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`;
+  lbList.innerHTML = players.length === 0
+    ? '<div class="lbEmpty">No scores yet — finish a quiz to be the first!</div>'
+    : players.map((e,i)=> lbRowHtml(e, i, highlightEntry, scoreFn(e))).join('');
+  lbList.innerHTML += coachSectionHtml(coaches, scoreFn);
   if(offline){
     lbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing scores saved on this device only — could not reach the team server.</div>';
   }
@@ -553,12 +612,12 @@ async function renderLeaderboard(highlightEntry){
 async function renderTimedLeaderboard(highlightEntry){
   const timedLbList = document.getElementById('timedLbList');
   timedLbList.innerHTML = '<div class="lbEmpty">Loading team times…</div>';
-  const { list, offline } = await fetchTimedLeaderboardData();
-  if(list.length === 0){
-    timedLbList.innerHTML = '<div class="lbEmpty">No times yet — finish a Timed Quiz to be the first!</div>';
-  } else {
-    timedLbList.innerHTML = list.map((e,i)=> lbRowHtml(e, i, highlightEntry, `${formatClock(e.timeMs)} • ✗${e.mistakes}`)).join('');
-  }
+  const { players, coaches, offline } = await fetchTimedLeaderboardData();
+  const scoreFn = e => `${formatClock(e.timeMs)} • ✗${e.mistakes}`;
+  timedLbList.innerHTML = players.length === 0
+    ? '<div class="lbEmpty">No times yet — finish a Timed Quiz to be the first!</div>'
+    : players.map((e,i)=> lbRowHtml(e, i, highlightEntry, scoreFn(e))).join('');
+  timedLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
   if(offline){
     timedLbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing times saved on this device only — could not reach the team server.</div>';
   }
@@ -566,10 +625,12 @@ async function renderTimedLeaderboard(highlightEntry){
 async function renderPCQLeaderboard(){
   const pcqLbList = document.getElementById('pcqLbList');
   pcqLbList.innerHTML = '<div class="lbEmpty">Loading team scores…</div>';
-  const { list } = await fetchPCQLeaderboardData();
-  pcqLbList.innerHTML = list.length
-    ? list.map((e,i)=> lbRowHtml(e, i, null, `${e.score}/${e.maxScore}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}`)).join('')
+  const { players, coaches } = await fetchPCQLeaderboardData();
+  const scoreFn = e => `${e.score}/${e.maxScore}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}`;
+  pcqLbList.innerHTML = players.length
+    ? players.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('')
     : '<div class="lbEmpty">No Play Calls Quiz scores yet — finish a run to be the first!</div>';
+  pcqLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
 }
 
 // ---- Overall: rank-based points (20 for 1st down to 1 for 20th) on each
@@ -581,28 +642,39 @@ function pointsForRank(list){
   list.slice(0, 20).forEach((e, i) => { pts[normName(e.name)] = { name: e.name, points: 20 - i }; });
   return pts;
 }
-// Shared by both the Overall leaderboard tab and My Stats, so the two
-// never disagree about what someone's overall rank/points actually are.
-async function computeOverallStandings(){
-  const [timedData, pcqData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData()]);
-  const timedPts = pointsForRank(timedData.list);
-  const pcqPts = pointsForRank(pcqData.list);
+function combinePoints(...ptsMaps){
   const combined = {};
-  [timedPts, pcqPts].forEach(ptsMap => {
+  ptsMaps.forEach(ptsMap => {
     Object.keys(ptsMap).forEach(key => {
       if(!combined[key]) combined[key] = { name: ptsMap[key].name, points: 0 };
       combined[key].points += ptsMap[key].points;
     });
   });
-  return Object.values(combined).sort((a,b)=> coachSortWeight(a) - coachSortWeight(b) || b.points - a.points);
+  return Object.values(combined).sort((a,b)=> b.points - a.points);
+}
+// Shared by both the Overall leaderboard tab and My Stats, so the two
+// never disagree about what someone's overall rank/points actually are.
+// Nathan: "coaches shouldn't be awarded points with the kids -- they can be
+// completely separate." players/coaches each get rank-based points from
+// their OWN group only (a coach's rank-based points come from ranking
+// against other coaches on Timed/PCQ, never against the team) -- two
+// entirely separate points pools, not one shared one with coaches just
+// sorted to the bottom.
+async function computeOverallStandings(){
+  const [timedData, pcqData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData()]);
+  const players = combinePoints(pointsForRank(timedData.players), pointsForRank(pcqData.players));
+  const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches));
+  return { players, coaches };
 }
 async function renderOverallLeaderboard(){
   const overallLbList = document.getElementById('overallLbList');
   overallLbList.innerHTML = '<div class="lbEmpty">Loading overall standings…</div>';
-  const ranked = await computeOverallStandings();
-  overallLbList.innerHTML = ranked.length
-    ? ranked.map((e,i)=> lbRowHtml(e, i, null, `${e.points} pt${e.points===1?'':'s'}`)).join('')
+  const { players, coaches } = await computeOverallStandings();
+  const scoreFn = e => `${e.points} pt${e.points===1?'':'s'}`;
+  overallLbList.innerHTML = players.length
+    ? players.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('')
     : '<div class="lbEmpty">No points yet — finish a Timed Quiz or Play Calls Quiz to get on the board!</div>';
+  overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
 }
 
 // ---- My Stats: a signed-in player's own bests + ranks. Deliberately
@@ -643,6 +715,12 @@ function myStatRowHtml(icon, label, valueText, rank, total, isHero){
     <div class="msCaption">${caption}</div>
   </div>`;
 }
+// Nathan: "coaches shouldn't be awarded points with the kids -- they can be
+// completely separate." My Stats/child-progress ranks whoever's being
+// looked up against their own group only -- a coach's own board (rank +
+// total) never mixes with the player board's numbers, matching how the
+// leaderboard tabs themselves now render two fully separate sections.
+function groupFor(data, name){ return isCoachEntryName(name) ? data.coaches : data.players; }
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
   const overlay = document.getElementById('myStatsOverlay');
@@ -650,18 +728,30 @@ window.showMyStats = async function showMyStats(){
   if(!overlay || !body || !session) return;
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading your stats…</div>';
-  const [timedData, pcqData, quizData, overallList] = await Promise.all([
+  const [timedData, pcqData, quizData, overallData, ownRecord] = await Promise.all([
     fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
+    window.PlayerIdentity.getPlayerRecord(session.playerId),
   ]);
-  const pcq = findEntryAndRank(pcqData.list, session.name);
-  const timed = findEntryAndRank(timedData.list, session.name);
-  const quiz = findEntryAndRank(quizData.list, session.name);
+  const overallList = groupFor(overallData, session.name);
+  const timedList = groupFor(timedData, session.name);
+  const pcqList = groupFor(pcqData, session.name);
+  const quizList = groupFor(quizData, session.name);
+  const pcq = findEntryAndRank(pcqList, session.name);
+  const timed = findEntryAndRank(timedList, session.name);
+  const quiz = findEntryAndRank(quizList, session.name);
   const overall = findEntryAndRank(overallList, session.name);
-  body.innerHTML = '<div class="msStatList">' + [
+  // Nathan: "need more gamification" -- surfaces the login streak
+  // player-identity.js's touchLastSeen() already tracks, so it's visible
+  // somewhere beyond just the milestone push notifications.
+  const streak = (ownRecord && ownRecord.loginStreak) || 0;
+  const streakHtml = streak > 1
+    ? `<div class="lbSub" style="text-align:center;margin-bottom:8px;font-weight:700;">🔥 ${streak}-day login streak</div>`
+    : '';
+  body.innerHTML = streakHtml + '<div class="msStatList">' + [
     myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank, overallList.length, true),
-    myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank, timedData.list.length),
-    myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank, pcqData.list.length),
-    myStatRowHtml('📝', 'Quiz Scores', quiz.entry ? `${quiz.entry.score}/${quiz.entry.total}${quiz.entry.bestStreak ? ` 🔥${quiz.entry.bestStreak}` : ''}` : 'No score yet', quiz.rank, quizData.list.length),
+    myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank, timedList.length),
+    myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank, pcqList.length),
+    myStatRowHtml('📝', 'Quiz Scores', quiz.entry ? `${quiz.entry.score}/${quiz.entry.total}${quiz.entry.bestStreak ? ` 🔥${quiz.entry.bestStreak}` : ''}` : 'No score yet', quiz.rank, quizList.length),
   ].join('') + '</div>' +
   '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>';
 };
@@ -737,15 +827,18 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
   // pointsForRank) -- most engaged players clear 31/31, so ranking it
   // wouldn't mean anything and it's excluded from Overall Points on
   // purpose, not by oversight.
-  const [pcqRoundAttempts, signalAttempts, timedData, pcqData, quizData, overallList] = await Promise.all([
+  const [pcqRoundAttempts, signalAttempts, timedData, pcqData, quizData, overallData] = await Promise.all([
     cloudFetch('analytics/pcqRoundAttempts'),
     cloudFetch('analytics/signalAttempts'),
     fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
   ]);
-  const childPcq = findEntryAndRank(pcqData.list, rec.name);
-  const childTimed = findEntryAndRank(timedData.list, rec.name);
-  const childQuiz = findEntryAndRank(quizData.list, rec.name);
-  const childOverall = findEntryAndRank(overallList, rec.name);
+  // A linked child is always a player, never a coach, but grouping through
+  // groupFor() (same helper showMyStats uses) keeps this consistent rather
+  // than assuming.
+  const childPcq = findEntryAndRank(groupFor(pcqData, rec.name), rec.name);
+  const childTimed = findEntryAndRank(groupFor(timedData, rec.name), rec.name);
+  const childQuiz = findEntryAndRank(groupFor(quizData, rec.name), rec.name);
+  const childOverall = findEntryAndRank(groupFor(overallData, rec.name), rec.name);
 
   // Weakest Play Calls Quiz play types -- same shape as weakestPlayFor()
   // in Coach Tools > Dashboard (js/coachtools-dashboard.js), just kept
@@ -799,10 +892,10 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
   body.innerHTML = `
     <div class="lbSub" style="margin-bottom:6px;">${escStatsHtml(rec.name)}'s quiz activity</div>
     <div class="msStatList">
-      ${myStatRowHtml('🏆', 'Overall Points', childOverall.entry ? `${childOverall.entry.points} pts` : '0 pts', childOverall.rank, overallList.length, true)}
-      ${myStatRowHtml('⏱️', 'Timed Quiz', childTimed.entry ? formatClock(childTimed.entry.timeMs) : 'No time saved yet', childTimed.rank, timedData.list.length)}
-      ${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, childPcq.rank, pcqData.list.length)}
-      ${myStatRowHtml('📝', 'Quiz Scores', childQuiz.entry ? `${childQuiz.entry.score}/${childQuiz.entry.total}${childQuiz.entry.bestStreak ? ` 🔥${childQuiz.entry.bestStreak}` : ''}` : 'No score yet', childQuiz.rank, quizData.list.length)}
+      ${myStatRowHtml('🏆', 'Overall Points', childOverall.entry ? `${childOverall.entry.points} pts` : '0 pts', childOverall.rank, groupFor(overallData, rec.name).length, true)}
+      ${myStatRowHtml('⏱️', 'Timed Quiz', childTimed.entry ? formatClock(childTimed.entry.timeMs) : 'No time saved yet', childTimed.rank, groupFor(timedData, rec.name).length)}
+      ${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, childPcq.rank, groupFor(pcqData, rec.name).length)}
+      ${myStatRowHtml('📝', 'Quiz Scores', childQuiz.entry ? `${childQuiz.entry.score}/${childQuiz.entry.total}${childQuiz.entry.bestStreak ? ` 🔥${childQuiz.entry.bestStreak}` : ''}` : 'No score yet', childQuiz.rank, groupFor(quizData, rec.name).length)}
     </div>
     <div class="lbSub" style="margin-top:4px;">Overall Points comes from Timed Quiz and Play Calls Quiz ranks only -- Quiz Scores isn't point-scored, since most players clear 31/31 and ranking it wouldn't mean much.</div>
     <div class="statsGroupHeading" style="margin-top:14px;">🎯 Could use extra reps on -- Play Calls</div>
@@ -848,6 +941,7 @@ document.getElementById('lbSaveBtn').addEventListener('click', async ()=>{
   lbOverlay.classList.add('show');
   await cloudPush('leaderboard', entry);
   renderLeaderboard(entry);
+  fetchQuizLeaderboardData().then(data => notifyIfRanked(entry.name, 'Quiz Scores', data));
 });
 document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   const nameInput = document.getElementById('timedLbNameInput');
@@ -860,6 +954,7 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   await cloudPush('timedLeaderboard', entry);
   renderTimedLeaderboard(entry);
   renderOverallLeaderboard();
+  fetchTimedLeaderboardData().then(data => notifyIfRanked(entry.name, 'Timed Quiz', data));
 });
 
 /* ============================================================

@@ -51,6 +51,8 @@
     navigator.serviceWorker.addEventListener('message', function(e){
       if (e.data && e.data.type === 'openPractice' && window.openPracticeDetail) {
         window.openPracticeDetail(e.data.id);
+      } else if (e.data && e.data.type === 'openThisWeek' && typeof setSection === 'function') {
+        setSection('thisweek');
       }
     });
   }
@@ -76,8 +78,20 @@
 
 <div class="topToolbar" id="topToolbar" style="display:none">
   <div class="toolbarRow">
-    <div class="playerMenuWrap" id="playerMenuWrap">
-      <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeName"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
+    <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
+    <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
+    <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
+    <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
+  </div>
+  <!-- Nathan: "I hate the placement of this... right below the top icons
+       next to the V3 icon. v3 icon can now go away." Moved out of the icon
+       row into the dev tag's old spot (dev2Tag removed below), and
+       redesigned to show a football icon + name + jersey # instead of just
+       a bare name -- see player-identity.js's updateBadge() for how the #
+       gets filled in (best-effort roster name match, since a session
+       doesn't carry a jersey # of its own). -->
+  <div class="playerMenuWrap" id="playerMenuWrap">
+    <button class="playerMenuBtn" id="playerMenuBtn">🏈 <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
       <div class="playerMenuDropdown" id="playerMenuDropdown">
         <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
         <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
@@ -91,6 +105,12 @@
              Notification.permission. -->
         <button id="notifyOptInBtn" style="display:none;">🔔 Enable Notifications</button>
         <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
+        <!-- Nathan: "By clicking it up a menu dropdown with card and
+             progress" -- My Card opens the same ESPN-style player card
+             view roster/stats pages use (window.showPlayerProfile), looked
+             up by the same best-effort roster name match as the jersey #
+             badge above; hidden if there's no roster match to open. -->
+        <button id="myCardBtn" style="display:none;">🃏 My Card</button>
         <button id="myStatsBtn">📊 My Stats</button>
         <button id="myPositionBtn">🏈 My Position</button>
         <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
@@ -108,16 +128,7 @@
         <button id="studyGuideBtn" style="display:none">📖 Study Guide</button>
         <button id="playerIdSwitchBtn">🚪 Sign Out</button>
       </div>
-    </div>
-    <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
-    <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
-    <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
-    <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
   </div>
-  <!-- Nathan: replace the old full-width "DEV2 -- internal build" banner
-       with a small, out-of-the-way tag instead -- still visibly marks this
-       as the dev build, just doesn't eat a whole bar across the top. -->
-  <div class="dev2Tag">V3</div>
 </div>
 
 <div class="loginScreen" id="loginScreen">
@@ -349,17 +360,21 @@
     No keys or featured plays set for this week yet.
   </div>
   <div id="thisweekKeysBox" class="thisweekKeysBox" style="display:none;">
-    <div class="thisweekKeysTitle">🔑 3 Keys This Week</div>
-    <ol id="thisweekKeysList" class="thisweekKeysList"></ol>
+    <div class="thisweekKeysTitle">🔑 Coaches' Keys This Week</div>
+    <div id="thisweekKeysList"></div>
   </div>
   <div class="gameplanCardsGrid" id="thisweekCardsGrid"></div>
 
   <div id="thisweekEditSection" style="display:none;max-width:900px;margin:22px auto 0;">
     <div class="lbSub" style="text-align:center;margin-bottom:10px;">🔐 Coach editing — the inputs below aren't visible to players, only the result above is</div>
     <select id="thisweekGameSelect" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px;"></select>
-    <input type="text" id="thisweekKeyInput0" class="thisweekKeyInput" maxlength="80" placeholder="Key #1 (e.g. &quot;Win the edge on outside runs&quot;)">
-    <input type="text" id="thisweekKeyInput1" class="thisweekKeyInput" maxlength="80" placeholder="Key #2">
-    <input type="text" id="thisweekKeyInput2" class="thisweekKeyInput" maxlength="80" placeholder="Key #3">
+    <!-- Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS...
+         they should be editable and removable if needed." Replaces the old
+         single shared 3-input block -- js/thisweek.js builds one card per
+         coach in here (name field + 3 key inputs + Remove), seeded from
+         DEFAULT_COACHES on first-ever save. -->
+    <div id="thisweekCoachEditorList"></div>
+    <button type="button" class="lbLinkBtn" id="thisweekAddCoachBtn" style="display:block;margin:4px auto 16px;">+ Add Coach</button>
     <div id="thisweekPickerCount" class="lbSub" style="margin:14px 0 6px;text-align:center;">Featured plays</div>
     <div class="gameplanPickerGrid" id="thisweekPickerGrid"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
@@ -463,14 +478,23 @@
     <div class="lbSectionHeader" style="text-align:center;">📊 Dashboard</div>
     <div class="hint" style="max-width:600px;margin:6px auto 4px;text-align:center;">Team-wide usage and coaching insights -- not visible to players or parents.</div>
     <div class="lbSub" style="opacity:.6;text-align:center;margin-bottom:10px;">Build <span id="coachDashBuildVersion">—</span></div>
-    <!-- Outside #coachDashboardBody on purpose -- that div gets fully
-         rebuilt every time this tab opens (see initCoachToolsDashboard()),
-         which would wipe this toggle's wiring/state along with it. -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 14px;padding:10px;border:2px solid #ccc;border-radius:8px;max-width:520px;">
-      <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
-      <button type="button" class="navBtn" id="coachDashDroneToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
-    </div>
     <div id="coachDashboardBody" style="max-width:700px;margin:0 auto;"><div class="lbEmpty">Loading…</div></div>
+  </div>
+  <!-- Nathan: "Drone footage visible toggle should come out of Dashboard
+       and have a new pill called settings with that and other toggles to
+       turn on and off visibility to groups." Moved out of Dashboard --
+       js/coachtools-settings.js owns this now, with room to grow into more
+       group-visibility toggles over time without cluttering the Dashboard
+       tab. -->
+  <div id="coachSettingsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">⚙️ Settings</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Visibility toggles for what players/parents can see -- not visible to them.</div>
+    <div id="coachSettingsBody" style="max-width:520px;margin:0 auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 10px;padding:10px;border:2px solid #ccc;border-radius:8px;">
+        <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
+        <button type="button" class="navBtn" id="coachSettingsDroneToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1173,7 +1197,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817au';
+  const BUILD_V = '20260817av';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1237,7 +1261,7 @@ window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBenga
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

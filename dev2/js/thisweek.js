@@ -6,12 +6,15 @@
 // should be able to click their profile name and go to 'This Week' and they
 // can add their 3 Keys to the week for all players to see."
 //
-// One shared team page, not per-coach (matches how the rest of the app's
-// data -- Play Calls, Study Guide -- is already shared, not per-login).
-// Any coach session can edit it; every signed-in player/coach sees the same
-// read result. The 3 Keys + featured-play picker only render for a coach
-// session; everyone else gets a read-only view of whatever's currently
-// saved.
+// One shared team page (the featured-play picker + which game it's tied to
+// stay team-wide, not per-coach). The 3 Keys, though, are per-coach --
+// Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS...
+// editable and removable if needed" -- so thisWeek.json's `keys` (one flat
+// array) became `coachKeys` (an array of {name, keys[3]}, one entry per
+// coach), seeded with the named coaches on first load. Any coach session
+// can edit the whole list (add/rename/remove coaches, edit anyone's keys);
+// every signed-in player/coach sees the same read result, grouped by coach
+// name, skipping any coach who hasn't filled in a key yet.
 //
 // Featured plays reuse the exact same family+direction numbering the Call
 // Sheet PDF uses (see call-sheet-pdf.js's buildPlayNumberIndex) so a play
@@ -27,6 +30,12 @@
   const MAX_PLAYS = 15;
   const MIN_RECOMMENDED = 5;
   const NUM_KEYS = 3;
+  // Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS.
+  // Include the following coaches names but they should be editable and
+  // removable if needed." Seeded once, the first time coachKeys doesn't
+  // exist yet in the cloud -- after that, whatever the coach editor last
+  // saved (including any adds/renames/removals) is the source of truth.
+  const DEFAULT_COACHES = ['Coach Tom', 'Coach Joe', 'Coach Matt', 'Coach Aaron', 'Coach Shane', 'Coach Nate'];
 
   // Coach-name allowlist now lives in auth.js (window.isApprovedCoachProfile)
   // since Coach Tools / Drive Builder need the exact same check -- read-only
@@ -39,9 +48,14 @@
   // at a specific upcoming Schedule game via gameId -- shown as a link here,
   // and schedule.js pulls the same saved keys/plays onto that game's own
   // detail page when its id matches.
-  let saved = { keys: ['', '', ''], plays: [], gameId: '', updatedAt: null };
+  let saved = { coachKeys: [], plays: [], gameId: '', updatedAt: null };
   let pendingSelection = []; // coach's in-progress play selection: [{key, direction}]
   let pendingGameId = '';
+  // Editor's working copy of coachKeys -- [{name, keys:['','','']}, ...],
+  // mutated directly by the Add/Remove/rename/key-input handlers below and
+  // written back wholesale on Save (same in-progress-copy pattern as
+  // pendingSelection above).
+  let pendingCoachKeys = [];
   let upcomingGames = []; // light read-only copy of schedule.json for the game picker
   let upcomingPractices = []; // light read-only copy of practices.json for the Week Ahead write-up
   let loaded = false;
@@ -224,18 +238,45 @@
     if (statusEl) statusEl.textContent = 'Loading this week’s page…';
     return window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
       .then(data => {
+        let coachKeys = null;
+        if (data && Array.isArray(data.coachKeys)) {
+          coachKeys = data.coachKeys
+            .filter(c => c && typeof c === 'object')
+            .map(c => {
+              const keys = Array.isArray(c.keys) ? c.keys.slice(0, NUM_KEYS).map(k => k || '') : [];
+              while (keys.length < NUM_KEYS) keys.push('');
+              return { name: (c.name || '').toString(), keys };
+            });
+        }
+        if (!coachKeys) {
+          // First time this ever loads (or nothing saved yet) -- seed the
+          // named coaches with blank keys.
+          coachKeys = DEFAULT_COACHES.map(name => ({ name, keys: ['', '', ''] }));
+          // Don't drop a still-in-place legacy single shared "3 Keys" set
+          // (the pre-per-coach data shape) -- fold it into its own editable
+          // row up top so a coach can see it, redistribute or delete it,
+          // nothing silently vanishes.
+          if (data && Array.isArray(data.keys)) {
+            const legacyKeys = data.keys.slice(0, NUM_KEYS).map(k => (k || '').toString());
+            while (legacyKeys.length < NUM_KEYS) legacyKeys.push('');
+            if (legacyKeys.some(k => k.trim())) {
+              coachKeys.unshift({ name: '(Unassigned — from before per-coach keys)', keys: legacyKeys });
+            }
+          }
+        }
         if (data && typeof data === 'object') {
-          const keys = Array.isArray(data.keys) ? data.keys.slice(0, NUM_KEYS) : [];
-          while (keys.length < NUM_KEYS) keys.push('');
           saved = {
-            keys,
+            coachKeys,
             plays: Array.isArray(data.plays) ? data.plays.filter(p => p && p.key && p.direction) : [],
             gameId: data.gameId || '',
             updatedAt: data.updatedAt || null,
           };
+        } else {
+          saved = { coachKeys, plays: [], gameId: '', updatedAt: null };
         }
         pendingSelection = saved.plays.slice();
         pendingGameId = saved.gameId || '';
+        pendingCoachKeys = saved.coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
         if (statusEl) statusEl.textContent = '';
         return Promise.all([loadUpcomingGames(), loadUpcomingPractices()]);
       })
@@ -253,12 +294,13 @@
   function saveThisWeek() {
     const saveBtn = document.getElementById('thisweekSaveBtn');
     const statusEl = document.getElementById('thisweekCloudStatus');
-    const keys = [];
-    for (let i = 0; i < NUM_KEYS; i++) {
-      const el = document.getElementById(`thisweekKeyInput${i}`);
-      keys.push(el ? el.value.trim() : '');
-    }
-    const payload = { keys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() };
+    // Drop fully-blank rows (no name typed, no keys filled) so an
+    // accidental "+ Add Coach" tap that's never used doesn't get saved --
+    // anything with a name and/or at least one key is kept as-is.
+    const coachKeys = pendingCoachKeys
+      .map(c => ({ name: (c.name || '').trim(), keys: (c.keys || ['', '', '']).slice(0, NUM_KEYS).map(k => (k || '').trim()) }))
+      .filter(c => c.name || c.keys.some(k => k));
+    const payload = { coachKeys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() };
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
     window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url, {
       method: 'PUT',
@@ -267,9 +309,23 @@
     })).then(r => {
       if (r.ok) {
         saved = payload;
+        pendingCoachKeys = coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
         if (statusEl) statusEl.textContent = 'Saved -- this is what the team sees now.';
         if (saveBtn) saveBtn.textContent = 'Saved!';
         renderReadOnly();
+        // Nathan: "make sure that when coaches add Keys to the week, it is
+        // visible as a notification linking them to the This Week section."
+        // Only fires when there's actually a non-blank key set to tell
+        // people about -- saving with everything cleared shouldn't ping
+        // anyone.
+        const hasKeysNow = coachKeys.some(c => c.keys.some(k => k));
+        if (hasKeysNow && window.showLocalNotification) {
+          window.showLocalNotification(
+            '🎯 This Week\'s Keys are up',
+            'Coaches posted new keys for this week -- tap to check them out.',
+            { tag: 'aslBengalsThisWeek', thisWeek: true }
+          );
+        }
       } else {
         if (statusEl) statusEl.textContent = `Save failed (HTTP ${r.status}).`;
         if (saveBtn) saveBtn.textContent = 'Save Failed';
@@ -322,16 +378,30 @@
       }
     }
 
-    const realKeys = (saved.keys || []).map(k => (k || '').trim()).filter(Boolean);
-    const hasContent = realKeys.length > 0 || (saved.plays && saved.plays.length > 0);
+    // Only coaches who actually filled in at least one key show up here --
+    // an empty seeded row (e.g. a coach who hasn't posted keys yet) stays
+    // invisible to players rather than showing a blank heading.
+    const coachesWithKeys = (saved.coachKeys || [])
+      .map(c => ({ name: (c.name || '').trim() || 'Coach', keys: (c.keys || []).map(k => (k || '').trim()).filter(Boolean) }))
+      .filter(c => c.keys.length);
+    const hasContent = coachesWithKeys.length > 0 || (saved.plays && saved.plays.length > 0);
     if (emptyEl) emptyEl.style.display = hasContent ? 'none' : '';
 
-    keysBox.style.display = realKeys.length ? '' : 'none';
+    keysBox.style.display = coachesWithKeys.length ? '' : 'none';
     keysList.innerHTML = '';
-    realKeys.forEach(k => {
-      const li = document.createElement('li');
-      li.textContent = k;
-      keysList.appendChild(li);
+    coachesWithKeys.forEach(c => {
+      const heading = document.createElement('div');
+      heading.className = 'thisweekCoachName';
+      heading.textContent = c.name;
+      keysList.appendChild(heading);
+      const ol = document.createElement('ol');
+      ol.className = 'thisweekKeysList';
+      c.keys.forEach(k => {
+        const li = document.createElement('li');
+        li.textContent = k;
+        ol.appendChild(li);
+      });
+      keysList.appendChild(ol);
     });
 
     gridEl.innerHTML = '';
@@ -343,6 +413,59 @@
   }
 
   // ---- Coach editor ----
+  // Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS...
+  // they should be editable and removable if needed." One card per coach
+  // in pendingCoachKeys -- a name field, 3 key inputs, and a Remove button.
+  // Rebuilds are skipped while a coach is actively typing inside this list
+  // (same "don't stomp on what someone's mid-typing" pattern already used
+  // for thisweekGameSelect/the old key inputs below) unless `force` is
+  // passed, which Add Coach / Remove use since those are structural
+  // changes that have to redraw regardless.
+  function renderCoachEditorList(force) {
+    const listEl = document.getElementById('thisweekCoachEditorList');
+    if (!listEl) return;
+    if (!force && listEl.contains(document.activeElement)) return;
+    listEl.innerHTML = '';
+    pendingCoachKeys.forEach((coach, idx) => {
+      const card = document.createElement('div');
+      card.className = 'thisweekCoachEditCard';
+
+      const row = document.createElement('div');
+      row.className = 'thisweekCoachEditRow';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'thisweekCoachNameInput';
+      nameInput.maxLength = 40;
+      nameInput.placeholder = 'Coach name';
+      nameInput.value = coach.name || '';
+      nameInput.addEventListener('input', () => { coach.name = nameInput.value; });
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'thisweekCoachRemoveBtn';
+      removeBtn.textContent = '✕ Remove';
+      removeBtn.addEventListener('click', () => {
+        pendingCoachKeys.splice(idx, 1);
+        renderCoachEditorList(true);
+      });
+      row.appendChild(nameInput);
+      row.appendChild(removeBtn);
+      card.appendChild(row);
+
+      if (!coach.keys) coach.keys = ['', '', ''];
+      for (let i = 0; i < NUM_KEYS; i++) {
+        const keyInput = document.createElement('input');
+        keyInput.type = 'text';
+        keyInput.className = 'thisweekKeyInput';
+        keyInput.maxLength = 80;
+        keyInput.placeholder = `Key #${i + 1}`;
+        keyInput.value = coach.keys[i] || '';
+        keyInput.addEventListener('input', () => { coach.keys[i] = keyInput.value; });
+        card.appendChild(keyInput);
+      }
+      listEl.appendChild(card);
+    });
+  }
+
   function renderEditor() {
     const section = document.getElementById('thisweekEditSection');
     if (!section) return;
@@ -350,10 +473,7 @@
     section.style.display = approved ? '' : 'none';
     if (!approved) return;
 
-    for (let i = 0; i < NUM_KEYS; i++) {
-      const el = document.getElementById(`thisweekKeyInput${i}`);
-      if (el && document.activeElement !== el) el.value = (saved.keys && saved.keys[i]) || '';
-    }
+    renderCoachEditorList(false);
 
     const gameSelect = document.getElementById('thisweekGameSelect');
     if (gameSelect && document.activeElement !== gameSelect) {
@@ -422,6 +542,11 @@
     controlsWired = true;
     const saveBtn = document.getElementById('thisweekSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', saveThisWeek);
+    const addCoachBtn = document.getElementById('thisweekAddCoachBtn');
+    if (addCoachBtn) addCoachBtn.addEventListener('click', () => {
+      pendingCoachKeys.push({ name: '', keys: ['', '', ''] });
+      renderCoachEditorList(true);
+    });
   }
 
   window.initThisWeek = function () {
