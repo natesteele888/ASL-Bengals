@@ -229,6 +229,29 @@
     });
     Object.keys(pcqByPlayer).forEach(id => pcqByPlayer[id].sort((a, b) => new Date(b.date) - new Date(a.date)));
 
+    // Nathan: "don't just look at play quiz scores for that" (Excelling /
+    // Needs Attention) -- Standard Quiz and Timed Quiz results are tagged
+    // with playerId too (study-quiz.js's currentPlayerTag(), same as PCQ),
+    // just never rolled into these two highlight lists before now. Standard
+    // Quiz already has a natural score/total %; Timed Quiz only logs a
+    // mistake count against the full signal deck, so its % here is
+    // accuracy -- (deck size - mistakes) / deck size -- comparable to the
+    // other two even though the run itself is about speed.
+    const standardResultsSafe = standardResults || [];
+    const timedResultsSafe = timedResults || [];
+    const standardByPlayer = {};
+    standardResultsSafe.forEach(r => {
+      if (!r.playerId || !r.total) return;
+      (standardByPlayer[r.playerId] = standardByPlayer[r.playerId] || []).push(r.score / r.total);
+    });
+    const timedDeckSize = (window.ALL_CARDS && window.ALL_CARDS.length) || 0;
+    const timedByPlayer = {};
+    timedResultsSafe.forEach(r => {
+      if (!r.playerId || !timedDeckSize) return;
+      const mistakes = typeof r.mistakes === 'number' ? r.mistakes : 0;
+      (timedByPlayer[r.playerId] = timedByPlayer[r.playerId] || []).push(Math.max(0, timedDeckSize - mistakes) / timedDeckSize);
+    });
+
     const roundsByPlayer = {};
     pcqRoundAttemptsSafe.forEach(a => {
       if (!a.playerId) return;
@@ -252,14 +275,20 @@
     // many short visits reads differently than a few long ones).
     const playerActivityRows = nonCoachPlayers.map(p => {
       const history = pcqByPlayer[p.id] || [];
-      const scored = history.filter(r => r.maxScore);
-      const avgPct = scored.length ? Math.round(scored.reduce((s, r) => s + r.score / r.maxScore, 0) / scored.length * 100) : null;
+      const pcqPcts = history.filter(r => r.maxScore).map(r => r.score / r.maxScore);
+      // Nathan: "don't just look at play quiz scores for that" -- combined
+      // pool of every scored quiz attempt (PCQ + Standard + Timed) this
+      // player has, pooled rather than averaged-per-type-then-combined so a
+      // player who's done a lot of one quiz type isn't drowned out by a
+      // single attempt on another.
+      const allPcts = pcqPcts.concat(standardByPlayer[p.id] || [], timedByPlayer[p.id] || []);
+      const avgPct = allPcts.length ? Math.round(allPcts.reduce((s, x) => s + x, 0) / allPcts.length * 100) : null;
       const playerSessions = sessionsSafe.filter(s => s.playerId === p.id);
       const playerSessionsWithDur = playerSessions.filter(s => typeof s.durationMs === 'number' && s.durationMs > 0);
       const totalMs = playerSessionsWithDur.reduce((s, x) => s + x.durationMs, 0);
       const avgDur = playerSessionsWithDur.length ? totalMs / playerSessionsWithDur.length : 0;
       return {
-        id: p.id, name: p.name, attempts: scored.length, avgPct: avgPct,
+        id: p.id, name: p.name, attempts: allPcts.length, avgPct: avgPct,
         sessionsCount: playerSessions.length, avgSessionMs: avgDur, totalSessionMs: totalMs,
         lastSeen: p.lastSeen, history: history.slice(0, 5),
       };
@@ -267,28 +296,30 @@
 
     const MIN_ATTEMPTS_FOR_HIGHLIGHT = 2;
     const eligibleForHighlights = playerActivityRows.filter(p => p.attempts >= MIN_ATTEMPTS_FOR_HIGHLIGHT && p.avgPct !== null);
-    const excelling = [...eligibleForHighlights].sort((a, b) => b.avgPct - a.avgPct).slice(0, 3);
-    // Nathan: "Add more of the Needs More Attention call outs" -- widened
-    // from top 3 to top 6 so this is actually useful for a full-size roster
-    // instead of only ever surfacing the very worst three.
-    const needsAttention = [...eligibleForHighlights].sort((a, b) => a.avgPct - b.avgPct).slice(0, 6);
+    // Nathan: "show the top 5 in most time logged - show the top 5 in
+    // needs attention - and the 5 in excelling" -- all three capped at 5.
+    const excelling = [...eligibleForHighlights].sort((a, b) => b.avgPct - a.avgPct).slice(0, 5);
+    const needsAttention = [...eligibleForHighlights].sort((a, b) => a.avgPct - b.avgPct).slice(0, 5);
     // Nathan: "say who is spending the most cumulative time on it" --
     // credit for effort/engagement, separate from who's scoring well.
-    const mostTime = playerActivityRows.filter(p => p.totalSessionMs > 0).sort((a, b) => b.totalSessionMs - a.totalSessionMs).slice(0, 3);
+    const mostTime = playerActivityRows.filter(p => p.totalSessionMs > 0).sort((a, b) => b.totalSessionMs - a.totalSessionMs).slice(0, 5);
 
     function highlightRowHtml(p, kind) {
       const icon = kind === 'excelling' ? '🌟' : kind === 'time' ? '⏳' : '🧭';
       const weak = kind === 'attention' ? weakestPlayFor(p.id) : null;
       let tip, right;
-      if (kind === 'excelling') { tip = `Averaging ${p.avgPct}% across ${p.attempts} plays.`; right = `${p.avgPct}%`; }
+      if (kind === 'excelling') { tip = `Averaging ${p.avgPct}% across ${p.attempts} quiz attempts.`; right = `${p.avgPct}%`; }
       else if (kind === 'time') { tip = `${p.sessionsCount} visit${p.sessionsCount === 1 ? '' : 's'} logged.`; right = fmtDuration(p.totalSessionMs); }
-      else { tip = weak ? `Missing "${weak}" calls most -- worth a few extra reps there.` : `Averaging ${p.avgPct}% across ${p.attempts} plays -- keep at it!`; right = `${p.avgPct}%`; }
+      else { tip = weak ? `Missing "${weak}" calls most -- worth a few extra reps there.` : `Averaging ${p.avgPct}% across ${p.attempts} quiz attempts -- keep at it!`; right = `${p.avgPct}%`; }
       return `<div class="lbRow"><div class="lbRank">${icon}</div>
         <div class="lbNameTip"><div class="lbNameTipTitle">${escapeHtml(p.name)}</div><div class="lbTip">${tip}</div></div>
         <div class="lbScore">${right}</div></div>`;
     }
-    const excellingHtml = excelling.length ? excelling.map(p => highlightRowHtml(p, 'excelling')).join('') : '<div class="lbEmpty">Not enough Play Calls Quiz data yet (needs at least 2 scored attempts per player).</div>';
-    const needsAttentionHtml = needsAttention.length ? needsAttention.map(p => highlightRowHtml(p, 'attention')).join('') : '<div class="lbEmpty">Not enough Play Calls Quiz data yet (needs at least 2 scored attempts per player).</div>';
+    // Nathan: "don't just look at play quiz scores for that" -- avgPct now
+    // pools Standard Quiz + Timed Quiz + Play Calls Quiz attempts, so the
+    // empty-state copy shouldn't single out PCQ either.
+    const excellingHtml = excelling.length ? excelling.map(p => highlightRowHtml(p, 'excelling')).join('') : '<div class="lbEmpty">Not enough quiz data yet (needs at least 2 scored Standard/Timed/Play Calls Quiz attempts per player).</div>';
+    const needsAttentionHtml = needsAttention.length ? needsAttention.map(p => highlightRowHtml(p, 'attention')).join('') : '<div class="lbEmpty">Not enough quiz data yet (needs at least 2 scored Standard/Timed/Play Calls Quiz attempts per player).</div>';
     const mostTimeHtml = mostTime.length ? mostTime.map(p => highlightRowHtml(p, 'time')).join('') : '<div class="lbEmpty">No session time logged yet.</div>';
 
     const activitySorted = playerActivityRows.slice().sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
