@@ -99,12 +99,23 @@ window.refreshCoachToolsVisibility = function(){
   const isParent = !!window.isParentSession;
   const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
 
+  // Nathan: "make sure the players can see the This Week info on their
+  // end as well - even if it's just the AI write up." This tab used to be
+  // isCoach-only, which also hid it from players (players aren't
+  // isCoachSession -- that's only true for a coach-code login). Open it
+  // to anyone who isn't a parent: thisweek.js itself already renders the
+  // Week Ahead write-up (and read-only 3 Keys/plays) for anyone once the
+  // tab is reachable -- only the coach-editing inputs inside stay gated
+  // by isApprovedCoachProfile(). Parents deliberately keep Schedule as
+  // their whole app (see the comment above this function) so they're
+  // still excluded here.
+  const isPlayerOrCoach = window.userRole !== 'parent';
   const thisweekBtn = document.getElementById('thisweekSectionBtn');
-  if (thisweekBtn) thisweekBtn.style.display = isCoach ? '' : 'none';
+  if (thisweekBtn) thisweekBtn.style.display = isPlayerOrCoach ? '' : 'none';
   const scheduleBtn = document.getElementById('scheduleSectionBtn');
   if (scheduleBtn) scheduleBtn.style.display = ''; // visible to everyone
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
-  if (thisweekMenuBtn) thisweekMenuBtn.style.display = isCoach ? '' : 'none';
+  if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 
   const coachToolsBtn = document.getElementById('coachToolsSectionBtn');
   if (coachToolsBtn) coachToolsBtn.style.display = approvedCoach ? '' : 'none';
