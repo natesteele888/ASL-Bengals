@@ -1433,6 +1433,25 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    out in a row instead of the 2-column grid .adminStatGrid uses elsewhere. */
 .weekAheadStats { display: flex; gap: 10px; margin-bottom: 4px; }
 .weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 80px; }
+/* Nathan: "also keep a short write up in there with a little
+   motivation." One short auto-generated hype sentence (see
+   js/thisweek.js's weekAheadHypeLine) between the stat callouts and the
+   game/practice cards -- distinct treatment (italic, orange, centered)
+   so it reads as a quick pep-talk line, not another data label. */
+.weekAheadHype { font-size: 13.5px; font-weight: 800; font-style: italic; color: var(--bengal-orange-dark); text-align: center; margin: 10px 0 4px; line-height: 1.4; }
+/* Nathan: "Game and Practices cards on Week Ahead should be side by
+   side." 2 columns on anything wide enough to hold them (the
+   .scheduleRow/.practiceRow cards inside still read fine narrower than
+   their usual full-width Schedule-tab home), collapsing to 1 column
+   under 480px so a phone doesn't squeeze team names/logos down to
+   nothing. If only one of the two columns has content (e.g. a
+   practice-only week), grid-column:1/-1 lets it take the full row
+   instead of leaving an empty second column. */
+.weekAheadColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.weekAheadCol:only-child { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .weekAheadColumns { grid-template-columns: 1fr; }
+}
 .thisweekKeysTitle { font-weight: 900; font-size: 14px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
 .thisweekKeysList { margin: 0; padding-left: 22px; }
 .thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }

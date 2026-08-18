@@ -285,10 +285,47 @@
       </button>`;
   }
 
+  function joinList(items) {
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return items.join(' and ');
+    return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1];
+  }
+
+  // Nathan: "also keep a short write up in there with a little
+  // motivation. First game action of the year, scrimmage Wednesday and
+  // Jamboree on Sunday, should be exciting." One short hype sentence,
+  // separate from the stat callouts/cards -- not the old multi-sentence
+  // prose write-up, just an opening line of energy naming what's coming
+  // up this week. "First game action of the year" is detected off
+  // data.record: bengalsRecord() only counts games with an entered score
+  // (see resultFor), so an empty record string across the WHOLE season
+  // (not just this week) plus a game this week means nothing's been
+  // played yet.
+  function weekAheadHypeLine(data) {
+    if (!data.hasAny) return '';
+    const gameParts = data.gameEntries.map(({ d, g }) => {
+      const label = (g.gameType && g.gameType !== 'Regular Season') ? g.gameType : 'Game';
+      return `${label} ${d.toLocaleDateString(undefined, { weekday: 'long' })}`;
+    });
+    const isSeasonOpener = !data.record && data.gameEntries.length > 0;
+    const hook = isSeasonOpener ? 'First game action of the year'
+      : data.gameEntries.length > 1 ? 'Big week on tap'
+      : data.gameEntries.length === 1 ? 'Gameday is coming'
+      : 'Time to sharpen up';
+    return gameParts.length
+      ? `${hook}, ${joinList(gameParts)} — should be exciting!`
+      : `${hook} at practice this week!`;
+  }
+
   // Nathan: "callouts for number of games and practices... just make it a
   // place to visit." Stat cards up top (reusing the same .adminStatCard
   // look Coach Dashboard's Team Snapshot uses), then real clickable
   // Schedule/Practice cards below instead of a paragraph of prose.
+  // Nathan (later): "Game and Practices cards on Week Ahead should be
+  // side by side" -- .weekAheadColumns lays the two card lists out as a
+  // 2-column grid (collapsing to 1 column on narrow phones, see
+  // css/styles.css) instead of one full-width section stacked above the
+  // other.
   function weekAheadInfographicHtml(data) {
     if (!data.hasAny) {
       return '<div class="lbEmpty">Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they\'ll show up here.</div>';
@@ -303,8 +340,11 @@
 
     return `
       <div class="weekAheadStats">${statCards.join('')}</div>
-      ${gamesHtml ? `<div class="lbSectionHeader">🏈 Games this week</div>${gamesHtml}` : ''}
-      ${practicesHtml ? `<div class="lbSectionHeader">🏃 Practice &amp; film</div>${practicesHtml}` : ''}
+      <div class="weekAheadHype">${escapeHtml(weekAheadHypeLine(data))}</div>
+      <div class="weekAheadColumns">
+        ${gamesHtml ? `<div class="weekAheadCol"><div class="lbSectionHeader">🏈 Games this week</div>${gamesHtml}</div>` : ''}
+        ${practicesHtml ? `<div class="weekAheadCol"><div class="lbSectionHeader">🏃 Practice &amp; film</div>${practicesHtml}</div>` : ''}
+      </div>
     `;
   }
 
