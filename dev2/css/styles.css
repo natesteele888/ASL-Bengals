@@ -129,6 +129,28 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .headerRow img{width:34px;height:34px;border-radius:8px;object-fit:contain;background:#fff;padding:2px}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+/* Nathan: "on Mobile the name pills are too big and collide with the
+   title and resizes the menu... make the title text on the left bigger
+   so it all fits in the same size header." At full pill width (170px max
+   + padding) plus a possible 2nd child pill, .pillRow could run wider
+   than a phone screen has room for next to the logo+title, forcing
+   .headerRow{flex-wrap:wrap} to drop the toolbar to its own line --
+   growing the header's real height (see syncStickyOffsets() in
+   index.html) rather than the app just showing a slightly squeezed pill.
+   Tightening the pill/icon sizing here reclaims enough width that both
+   stay on one line on a typical phone, with room left over to size the
+   title UP rather than down. */
+@media (max-width: 600px) {
+  .headerRow{gap:8px;padding:11px 12px}
+  .headerRow img{width:30px;height:30px}
+  .headerRow h1{font-size:20px}
+  .headerRow p{font-size:9.5px}
+  .topToolbar{gap:3px}
+  .toolbarRow{gap:4px}
+  .toolbarBtn{width:18px;height:18px;font-size:9px}
+  .pillRow{gap:4px}
+  .playerMenuBtn{max-width:96px;height:20px;padding:0 7px;font-size:9.5px}
+}
 
 /* Top-level section switcher (Play / This Week / ...), sits above the
    existing sub-tab bar -- both sticky, so #modeTabs' top offset is pushed

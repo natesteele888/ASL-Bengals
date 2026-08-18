@@ -404,13 +404,21 @@
   // player should be the football." Unicode has no actual whistle
   // character (confirmed -- no codepoint anywhere in the emoji ranges is
   // named WHISTLE/REFEREE; apps that show a "whistle" emoji, like Slack's
-  // :whistle:, are using a custom non-Unicode image), so this uses postal
+  // :whistle:, are using a custom non-Unicode image), so this used postal
   // horn as the closest real emoji to a coach's whistle. A parent viewing
   // their OWN pill also gets the football, same as a player -- this is
   // about coach-vs-everyone-else, not role in general (a parent isn't a
   // coach, and their linked child's pill is always a football regardless,
   // since a child is never a coach -- see renderChildToolbarPills).
-  function badgeIconFor(){ return window.isCoachSession ? '📯' : '🏈'; }
+  //
+  // Nathan (later): "on Mobile the name pills are too big and collide with
+  // the title... remove the horn icon from the name pill for coaches" --
+  // the horn was one more thing eating into the pill's already-tight
+  // max-width on a phone, so it's dropped for coaches entirely now. The
+  // icon span in index.html owns its own trailing space ("🏈 ", not "🏈"
+  // + a separate space node) specifically so an empty icon here leaves
+  // zero leftover gap in front of "Coach Nate" -- not just a blank icon.
+  function badgeIconFor(){ return window.isCoachSession ? '' : '🏈 '; }
   function updateBadge(name){
     if(badgeNameEl) badgeNameEl.textContent = name;
     const iconEl = document.getElementById('playerIdBadgeIcon');

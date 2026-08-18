@@ -240,7 +240,7 @@
            doesn't carry a jersey # of its own). -->
       <div class="pillRow" id="pillRow">
         <div class="playerMenuWrap" id="playerMenuWrap">
-          <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeIcon">🏈</span> <span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
+          <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeIcon">🏈 </span><span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
             <div class="playerMenuDropdown" id="playerMenuDropdown">
               <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
               <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
@@ -1244,7 +1244,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260817bb';
+  const BUILD_V = '20260817bc';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
