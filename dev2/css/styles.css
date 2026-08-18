@@ -1492,7 +1492,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .gameplanCardLabel { font-size: 10.5px; font-weight: 800; text-align: center; padding: 6px 4px; text-transform: uppercase; letter-spacing: .02em; }
 .gameplanCardSvg { display: block; width: 100%; height: auto; background: #fff; }
 .gameplanPickerGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.gameplanChip { border: 2px solid var(--chip-color, var(--line)); background: #fff; color: var(--chip-color, var(--ink)); border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
+/* Nathan: "keep the pills a consistent size" -- these sit in a flex row
+   with no shared width, so a short label ("Games") and a long one ("Full
+   Schedule"/"Drive Scripts") hugged their own text and made the row look
+   uneven. A shared min-width (still lets long labels grow past it) plus
+   centered text gives every chip a matching floor size instead. */
+.gameplanChip { border: 2px solid var(--chip-color, var(--line)); background: #fff; color: var(--chip-color, var(--ink)); border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; min-width: 84px; text-align: center; }
 .gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
 [data-theme="dark"] .thisweekKeysBox { background: var(--card); }
 [data-theme="dark"] .thisweekKeysList li { color: var(--ink); }
@@ -1501,6 +1506,16 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 [data-theme="dark"] .thisweekCoachNameInput { background: var(--card); color: var(--ink); border-color: var(--line); }
 [data-theme="dark"] .thisweekCoachEditCard { background: var(--card); }
 [data-theme="dark"] .gameplanChip { background: var(--paper); }
+/* Nathan: "pills under Schedule... should show orange like light mode."
+   Root cause: this dark-mode override above and the base `.gameplanChip.
+   active` rule (which already sets the orange/chip-color background
+   unconditionally) are the same specificity (0,2,0) -- with a tie, CSS
+   falls back to source order, and this rule sits later in the file, so
+   in dark mode it was winning and silently flattening every selected
+   chip back to the plain unselected --paper background, active or not.
+   This adds the missing higher-specificity override so .active still
+   reads as selected in dark mode exactly like it does in light mode. */
+[data-theme="dark"] .gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
 
 /* ---- Drive Builder ---- */
 .driveScriptRow { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; }
