@@ -1,66 +1,224 @@
 // ---------------------------------------------------------------------------
-// Call Sheet PDF -- a numbered play index, text only (no diagrams). Modeled
-// on a call sheet example Nathan shared: a plain numbered list of every
-// callable base play, grouped by family, so a play can be called/logged by
-// number instead of only by name. Left gets odd numbers, Right gets the
-// next even number, mirroring the odd/even Left/Right convention in the
-// reference sheet.
+// Play Call Chart PDF (a.k.a. "Print Play Sheet" in Coach Tools > Resources).
 //
-// Design notes from Nathan's feedback (in order of how the design evolved):
-// - Read A/B (inside_zone's hasReadToggle) is something the ball carrier
-//   reads on the field after the snap, not something a coach calls -- one
-//   base number covers both reads.
-// - Motion and Boot are optional ADD-ONS layered onto a base call, not
-//   separate numbered plays -- listed in an Add-Ons column per row instead.
-// - Wing L/R is its own independent alignment call, not tied to which way
-//   the play runs -- also an add-on, not baked into the base numbering.
-// - Split formation doesn't need its own separate numbered section --
-//   every base play can also be run out of Split, so "Split" is just
-//   another add-on on the same base number rather than a whole second list.
-// - Route Calls (Seattle/Houston/Florida/Boston) are called live at the
-//   line, not planned ahead by number -- kept as a plain reference table,
-//   not part of the numbered system.
+// Replaces the old plain numbered-index call sheet with the landscape
+// decision-tree chart Nathan designed by hand over a few review rounds:
+// Formation -> Side -> (Motion, Wing only) -> Play Call -> Direction ->
+// (Boot, Wing / Pass, Split), plus a Receiver Routes reference at the
+// bottom showing the real route shapes for Seattle/Houston/Florida/Boston,
+// drawn Left and Right, pulled live from window.DATA.splitRoutes.
 //
-// IMPORTANT: this app has no pre-existing play-numbering convention
-// (coaches call plays by hand signal, not a shouted number) -- the
-// numbering here is a clean, consistent scheme invented for this document.
+// Layout/box chrome (rects, rounded rects, text) is drawn as native jsPDF
+// vector content -- reliable and crisp, the same approach call-sheet-pdf.js
+// always used. The curved route paths are the one thing jsPDF's own path
+// API has burned this codebase before (see playbook-pdf.js's note: "curve
+// /path shapes wrong on anything more complex than a gentle bend, confirmed
+// even after flattening into hundreds of line segments"). So exactly like
+// playbook-pdf.js's diagrams, each route icon is built as a real <svg>,
+// rasterized through the browser's own SVG renderer via a plain <img>
+// decode + canvas (svgToPng), then embedded as a PNG. Can't misdraw a curve
+// the browser itself is rendering.
 // ---------------------------------------------------------------------------
 (function () {
 
-  function buildPlayNumberIndex(families) {
-    let n = 1;
-    const rows = []; // { number, familyLabel, color, direction, addOns: [] }
-    families.forEach(fam => {
-      const pt = window.DATA.playTypes.find(p => p.key === fam.key);
-      const addOns = ['Wing L/R', 'Motion'];
-      if (!pt.noBoot) addOns.push('Boot');
-      addOns.push('Split');
-      ['Left', 'Right'].forEach(direction => {
-        rows.push({ number: n++, familyLabel: fam.label, color: fam.color, direction, addOns });
-      });
-    });
-    return rows;
+  const COLOR = {
+    orange: '#ff6a13', orangeDark: '#e0570a', black: '#111111',
+    ink: '#1b1b1b', muted: '#6b6a66', line: '#d8d3c8', paper: '#faf9f6',
+    motion: '#1baf7a', motionTint: '#e6f7f0',
+    boot: '#e34948', bootTint: '#fdecec',
+    pass: '#2a78d6', passTint: '#e9f1fb',
+  };
+
+  // Coach's chosen call-order (matches the app's own play grid, and keeps
+  // Wing and Split reading the same left-to-right so a coach scanning both
+  // bands doesn't have to re-search for a play).
+  const PLAY_ORDER = ['inside_zone', 'outside_zone', 'blast', 'sweep', 'option', 'option_pass', 'double_blast'];
+  const ROUTE_NAMES = ['seattle', 'houston', 'florida', 'boston'];
+
+  // ---- SVG rasterization helpers (same pattern as playbook-pdf.js's
+  // makeStage/svgToPng -- kept local here since these two files don't share
+  // an internal module scope). ----
+  function makeStage(vw, vh) {
+    const wrap = document.createElement('div');
+    wrap.style.position = 'fixed';
+    wrap.style.left = '-99999px';
+    wrap.style.top = '0';
+    wrap.style.width = '0';
+    wrap.style.height = '0';
+    wrap.style.overflow = 'hidden';
+    document.body.appendChild(wrap);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+    svg.setAttribute('width', vw);
+    svg.setAttribute('height', vh);
+    wrap.appendChild(svg);
+    return { svg, wrap };
   }
 
-  function buildRouteCallReference() {
-    const rows = [];
-    ['seattle', 'houston', 'florida', 'boston'].forEach(call => {
-      ['Left', 'Right'].forEach(side => {
-        rows.push({ side, name: `${call[0].toUpperCase()}${call.slice(1)}` });
-      });
+  function svgToPng(stage, cellWpt, cellHpt, scale) {
+    return new Promise((resolve, reject) => {
+      const xml = new XMLSerializer().serializeToString(stage);
+      const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+      const img = new Image();
+      img.onload = () => {
+        const canvasEl = document.createElement('canvas');
+        canvasEl.width = Math.round(cellWpt * scale);
+        canvasEl.height = Math.round(cellHpt * scale);
+        const ctx = canvasEl.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
+        resolve(canvasEl.toDataURL('image/png'));
+      };
+      img.onerror = (e) => reject(e);
+      img.src = dataUri;
     });
-    return rows;
+  }
+
+  // ---- Route icon geometry -- ports the same normalize/scale/quad-bezier
+  // math the app itself uses to draw these (play-calls.js quadPathD/
+  // straightPathD): 2-point routes are a straight line, 3-point routes are
+  // a QUADRATIC BEZIER through [start, control, end] -- not a polyline
+  // through all three, which looks visibly wrong (sharp Vs instead of the
+  // real curl/comeback/out shapes). Computed live from window.DATA
+  // .splitRoutes so an edited route reprints correctly without a code change. ----
+  // Nathan, on the first pass at these icons (both routes redrawn from a
+  // shared synthetic start point): "it needs to be more visual... use the
+  // images provided for the routes. The lower receiver is inside man." His
+  // reference screenshots are crops of the app's own diagram: two numbered
+  // circles sitting at their REAL relative field position (the wide guy
+  // up, the flex/inside guy below-right of him -- they're naturally
+  // "stacked" because that's really where they line up), each with its own
+  // colored route. So this keeps both routes in one pair's TRUE relative
+  // geometry (via DATA.split[side], not renormalized to a shared origin)
+  // instead of collapsing both to one point.
+  function buildRouteGeometry(splitRoutes) {
+    const sides = ['Left', 'Right'];
+    const roles = ['wide', 'flex'];
+    const W = 100, H = 84, padL = 15, padR = 15, padT = 15, padB = 15;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+
+    // One shared scale across every pair so a deep route (Houston) reads
+    // visibly longer than a short one (Boston) -- fit the scale to
+    // whichever pair is largest, then center each pair individually within
+    // its own icon at that same scale.
+    const pairBBox = {};
+    let maxSpanX = 0, maxSpanY = 0;
+    sides.forEach(side => ROUTE_NAMES.forEach(name => {
+      const pts = splitRoutes[side].wide[name].concat(splitRoutes[side].flex[name]);
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      const bbox = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      pairBBox[`${side}_${name}`] = bbox;
+      maxSpanX = Math.max(maxSpanX, bbox[1] - bbox[0]);
+      maxSpanY = Math.max(maxSpanY, bbox[3] - bbox[2]);
+    }));
+    const scale = Math.min(innerW / maxSpanX, innerH / maxSpanY);
+
+    function pathD(pts) {
+      if (pts.length === 2) {
+        const [[x0, y0], [x1, y1]] = pts;
+        return { d: `M ${x0.toFixed(1)} ${y0.toFixed(1)} L ${x1.toFixed(1)} ${y1.toFixed(1)}`, end: [x1, y1], tangent: [x1 - x0, y1 - y0] };
+      }
+      const [[x0, y0], [x1, y1], [x2, y2]] = pts;
+      return { d: `M ${x0.toFixed(1)} ${y0.toFixed(1)} Q ${x1.toFixed(1)} ${y1.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`, end: [x2, y2], tangent: [x2 - x1, y2 - y1] };
+    }
+    function arrowPts(end, tangent, length, half) {
+      const [ex, ey] = end, [dx, dy] = tangent;
+      const norm = Math.hypot(dx, dy) || 1;
+      const ux = dx / norm, uy = dy / norm, bx = -uy, by = ux;
+      const backx = ex - ux * length, backy = ey - uy * length;
+      const p1 = [backx + bx * half, backy + by * half], p2 = [backx - bx * half, backy - by * half];
+      return `${ex.toFixed(1)},${ey.toFixed(1)} ${p1[0].toFixed(1)},${p1[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+
+    const out = {};
+    sides.forEach(side => ROUTE_NAMES.forEach(name => {
+      const bbox = pairBBox[`${side}_${name}`];
+      const cx0 = (bbox[0] + bbox[1]) / 2, cy0 = (bbox[2] + bbox[3]) / 2;
+      const toSvg = (pts) => pts.map(([x, y]) => [W / 2 + (x - cx0) * scale, H / 2 + (y - cy0) * scale]);
+      roles.forEach(role => {
+        const rawPts = splitRoutes[side][role][name];
+        const svgPts = toSvg(rawPts);
+        const { d, end, tangent } = pathD(svgPts);
+        const startPt = svgPts[0];
+        out[`${side}_${name}_${role}`] = {
+          d, arrow: arrowPts(end, tangent, 7, 3),
+          startX: startPt[0], startY: startPt[1],
+          player: splitRoutes[side][role].player,
+        };
+      });
+    }));
+    return { geo: out, W, H };
+  }
+
+  function renderRouteIcon(svgEl, geo, W, H, name) {
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    const NS = 'http://www.w3.org/2000/svg';
+    const GAP = 18;
+    const totalW = W * 2 + GAP;
+    svgEl.setAttribute('viewBox', `0 0 ${totalW} ${H}`);
+    svgEl.setAttribute('width', totalW);
+    svgEl.setAttribute('height', H);
+    const ROLE_COLOR = { wide: COLOR.pass, flex: COLOR.boot };
+    ['Left', 'Right'].forEach((side, i) => {
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('transform', `translate(${i * (W + GAP)},0)`);
+      // Circles first, THEN routes on top -- #5/#3 (or #6/#2) line up close
+      // enough that their circles overlap, so a route drawn underneath can
+      // vanish behind the OTHER player's circle right where it starts
+      // (confirmed on Seattle's flex route -- almost entirely hidden
+      // behind the wide receiver's circle). Routes on top guarantees the
+      // full path is always visible; the tradeoff (a route stub crossing
+      // through a nearby circle) reads fine and matches the density of the
+      // reference screenshots.
+      ['wide', 'flex'].forEach(role => {
+        const entry = geo[`${side}_${name}_${role}`];
+        const circle = document.createElementNS(NS, 'circle');
+        circle.setAttribute('cx', entry.startX); circle.setAttribute('cy', entry.startY);
+        circle.setAttribute('r', 9);
+        circle.setAttribute('fill', '#ffffff');
+        circle.setAttribute('stroke', COLOR.black);
+        circle.setAttribute('stroke-width', 2.2);
+        g.appendChild(circle);
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', entry.startX); t.setAttribute('y', entry.startY + 3.3);
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('font-size', '9.5');
+        t.setAttribute('font-weight', '900');
+        t.setAttribute('font-style', 'italic');
+        t.setAttribute('font-family', 'Helvetica, Arial, sans-serif');
+        t.setAttribute('fill', COLOR.black);
+        t.textContent = entry.player;
+        g.appendChild(t);
+      });
+      ['wide', 'flex'].forEach(role => {
+        const entry = geo[`${side}_${name}_${role}`];
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', entry.d);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', ROLE_COLOR[role]);
+        path.setAttribute('stroke-width', '2.6');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        g.appendChild(path);
+        const poly = document.createElementNS(NS, 'polygon');
+        poly.setAttribute('points', entry.arrow);
+        poly.setAttribute('fill', ROLE_COLOR[role]);
+        g.appendChild(poly);
+      });
+      svgEl.appendChild(g);
+    });
   }
 
   async function generateCallSheetPDF() {
-    if (!window.DATA || !window.DATA.playTypes) throw new Error('Play data not loaded yet.');
+    if (!window.DATA || !window.DATA.playTypes || !window.DATA.splitRoutes) throw new Error('Play data not loaded yet.');
     if (!window.jspdf) throw new Error('PDF library not loaded yet.');
-    if (!window.playbookLiveFamilies) throw new Error('Playbook helper not loaded yet.');
 
-    // Same freshness fix as playbook-pdf.js -- pull the coach's real saved
-    // edits (noBoot flags etc. come from window.DATA.playTypes) before
-    // building the index, so this doesn't silently read stale bootstrap
-    // data either.
+    // Same freshness fix as the playbook/game-stats PDFs -- pull the
+    // coach's real saved edits (renamed plays, noBoot flags, edited route
+    // shapes) before drawing anything, so this can't silently print stale
+    // bootstrap data.
     if (window.loadLiveEditsIntoData) await window.loadLiveEditsIntoData();
 
     const { jsPDF } = window.jspdf;
@@ -69,134 +227,380 @@
     const USABLE_W = PAGE_W - 2 * MARGIN;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
 
-    const families = window.playbookLiveFamilies();
-    const baseRows = buildPlayNumberIndex(families);
-    const routeRows = buildRouteCallReference();
+    const playByKey = {};
+    window.DATA.playTypes.forEach(p => { playByKey[p.key] = p; });
+    const wingPlays = PLAY_ORDER.map(k => playByKey[k]).filter(Boolean);
 
+    // ---- Header ----
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
-    doc.setTextColor('#111111');
-    doc.text('ASL Bengals — Numbered Play Index', MARGIN, MARGIN);
+    doc.setFontSize(16);
+    doc.setTextColor(COLOR.black);
+    doc.text('ASL Bengals Play Call Chart', MARGIN, MARGIN + 4);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor('#666666');
-    doc.text('Odd = Left, Even = Right. Add-Ons are called alongside the number, not their own numbers.', MARGIN, MARGIN + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(COLOR.muted);
+    doc.text('SIDELINE QUICK REFERENCE — CALL IT LEFT TO RIGHT', MARGIN, MARGIN + 15);
+    doc.setDrawColor(COLOR.black);
+    doc.setLineWidth(1.6);
+    doc.line(MARGIN, MARGIN + 22, PAGE_W - MARGIN, MARGIN + 22);
 
-    // ==== BASE PLAYS table: Number | Play | Dir | Add-Ons ====
-    const topY = MARGIN + 26;
-    const TABLE_W = USABLE_W * 0.62;
-    const NUM_W = 22, PLAY_W = TABLE_W * 0.42, DIR_W = 30, ADDON_W = TABLE_W - NUM_W - PLAY_W - DIR_W;
-    const ROW_H = 15, HEADER_H = 14;
-
-    let y = topY;
-    doc.setFillColor('#111111');
-    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor('#ffffff');
-    doc.text('#', MARGIN + 4, y + HEADER_H - 4);
-    doc.text('PLAY', MARGIN + NUM_W + 4, y + HEADER_H - 4);
-    doc.text('DIR', MARGIN + NUM_W + PLAY_W + 4, y + HEADER_H - 4);
-    doc.text('ADD-ONS AVAILABLE', MARGIN + NUM_W + PLAY_W + DIR_W + 4, y + HEADER_H - 4);
-    y += HEADER_H;
-
-    let curFamily = null;
-    baseRows.forEach(row => {
-      if (row.familyLabel !== curFamily) {
-        curFamily = row.familyLabel;
-        doc.setFillColor(row.color);
-        doc.rect(MARGIN, y, TABLE_W, 11, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.8);
-        doc.setTextColor('#ffffff');
-        doc.text(curFamily.toUpperCase(), MARGIN + 4, y + 8);
-        y += 11;
-      }
+    // ---- Legend ----
+    let ly = MARGIN + 36;
+    function legendDot(x, y, color, label) {
+      doc.setFillColor(color);
+      doc.circle(x, y - 2.5, 3, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor('#111111');
-      doc.text(String(row.number), MARGIN + 4, y + ROW_H - 5);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.text(row.familyLabel, MARGIN + NUM_W + 4, y + ROW_H - 5);
-      doc.text(row.direction, MARGIN + NUM_W + PLAY_W + 4, y + ROW_H - 5);
-      doc.setFontSize(7.3);
-      doc.setTextColor('#555555');
-      doc.text(row.addOns.join(', '), MARGIN + NUM_W + PLAY_W + DIR_W + 4, y + ROW_H - 5);
-      doc.setDrawColor('#e5e5e5');
-      doc.setLineWidth(0.4);
-      doc.line(MARGIN, y + ROW_H, MARGIN + TABLE_W, y + ROW_H);
-      y += ROW_H;
-    });
-
-    // ==== ROUTE CALL REFERENCE, below the base table -- called live at the
-    // line, not part of the numbered system, so it's visually distinct
-    // (gray, no numbers) rather than looking like more numbered plays.
-    y += 10;
-    doc.setFillColor('#777777');
-    doc.rect(MARGIN, y, TABLE_W, HEADER_H, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor('#ffffff');
-    doc.text('ROUTE CALLS (Split formation — called at the line, not numbered)', MARGIN + 4, y + HEADER_H - 4);
-    y += HEADER_H + 3;
-
-    const ROUTE_COLS = 4;
-    const ROUTE_COL_W = (TABLE_W - (ROUTE_COLS - 1) * 8) / ROUTE_COLS;
-    let rx = MARGIN, ry = y;
-    routeRows.forEach((row, i) => {
-      doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.setTextColor('#333333');
-      doc.text(`${row.name} — ${row.side}`, rx + 4, ry + 10);
-      if ((i + 1) % ROUTE_COLS === 0) { rx = MARGIN; ry += 14; }
-      else { rx += ROUTE_COL_W + 8; }
-    });
-
-    // ==== ADD-ON LEGEND, to the right of the base table ====
-    const legendX = MARGIN + TABLE_W + 24;
-    const legendW = USABLE_W - TABLE_W - 24;
-    let ly = topY;
-    doc.setFillColor('#111111');
-    doc.rect(legendX, ly, legendW, HEADER_H, 'F');
+      doc.setTextColor(COLOR.muted);
+      doc.text(label, x + 7, y);
+    }
+    legendDot(MARGIN, ly, COLOR.motion, 'Motion');
+    legendDot(MARGIN + 72, ly, COLOR.boot, 'Boot');
+    legendDot(MARGIN + 134, ly, COLOR.pass, 'Pass');
+    // Unicode dash glyphs (┈) aren't in jsPDF's built-in Helvetica metrics
+    // and print as "%" -- draw an actual short dashed line instead.
+    doc.setDrawColor(COLOR.muted);
+    doc.setLineWidth(1.4);
+    doc.setLineDashPattern([2, 1.6], 0);
+    doc.line(MARGIN + 192, ly - 2.5, MARGIN + 210, ly - 2.5);
+    doc.setLineDashPattern([], 0);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor('#ffffff');
-    doc.text('ADD-ON CALLS', legendX + 4, ly + HEADER_H - 4);
-    ly += HEADER_H + 4;
+    doc.setFontSize(8);
+    doc.setTextColor(COLOR.muted);
+    doc.text('dashed = optional', MARGIN + 216, ly);
 
-    const legend = [
-      ['Wing L/R', 'Sets which side #4 lines up on before the snap. Independent of which way the play runs — call it either side regardless of direction.'],
-      ['Motion', 'Sends the wing in motion to the opposite side just before the snap.'],
-      ['Boot', 'QB fakes the handoff and rolls out. Only legal on plays marked "Boot" in Add-Ons — not every play allows it.'],
-      ['Split', 'Runs the same numbered play out of Split formation instead of Shotgun. Direction still applies the same way.'],
-    ];
-    doc.setTextColor('#111111');
-    legend.forEach(([term, desc]) => {
+    // Nathan: "For Blast and Double Blast -- it can either be inside or
+    // outside. If just Double Blast is shown, it's inside. If they want it
+    // to the outside, Outside Zone is shown, then Blast or Double Blast."
+    // I.e. Inside is the unmarked default for either play; calling "Outside
+    // Zone" immediately before Blast/Double Blast is what selects the
+    // Outside variant -- it's a modifier in that spot, not a second play.
+    // Flagged generically off playTypes[].hasInsideOutside (same flag
+    // play-calls.js itself uses for its own Inside/Outside toggle) rather
+    // than hardcoding "blast"/"double_blast", so this note and the *
+    // markers below stay correct if that ever changes.
+    ly += 13;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.6);
+    doc.setTextColor(COLOR.pass);
+    doc.text('*', MARGIN, ly);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(COLOR.muted);
+    doc.text('Inside by default — call "Outside Zone" right before it for the Outside variant (e.g. "Outside Zone, Blast").', MARGIN + 8, ly);
+
+    // ---- Shared column layout for the Wing & Split bands (fixed widths
+    // so every box lines up vertically between the two bands -- Split has
+    // no Motion step, so it gets an empty placeholder column instead of
+    // just being skipped). ----
+    const COL = { formation: 66, arrow: 15, side: 64, motion: 98, direction: 64, optional: 112 };
+    const bandX0 = MARGIN;
+    const bandW = USABLE_W;
+    const accentW = 6;
+    const innerX0 = bandX0 + accentW + 12;
+    const innerRight = bandX0 + bandW - 12;
+    const innerW = innerRight - innerX0;
+    const fixedSum = COL.formation + COL.arrow + COL.side + COL.arrow + COL.motion + COL.arrow + COL.arrow + COL.direction + COL.arrow + COL.optional;
+    const playcallW = innerW - fixedSum;
+
+    function roundedBox(x, y, w, h, r, fill, stroke) {
+      doc.setDrawColor(stroke || COLOR.line);
+      doc.setLineWidth(1.1);
+      if (fill) { doc.setFillColor(fill); doc.roundedRect(x, y, w, h, r, r, 'FD'); }
+      else doc.roundedRect(x, y, w, h, r, r, 'S');
+    }
+
+    function stepTitle(x, w, y, label) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(COLOR.muted);
+      doc.text(label.toUpperCase(), x + w / 2, y, { align: 'center' });
+    }
+
+    function lrBox(x, w, yTop, rowH) {
+      const boxH = 32;
+      const y = yTop + (rowH - boxH) / 2;
+      roundedBox(x, y, w, boxH, 7, '#ffffff', COLOR.ink);
+      doc.setDrawColor(COLOR.ink);
+      const chipW = (w - 3 * 7) / 2;
+      ['L', 'R'].forEach((l, i) => {
+        const cx = x + 7 + i * (chipW + 7);
+        const cy = y + 5;
+        doc.setFillColor(COLOR.paper);
+        doc.setDrawColor(COLOR.line);
+        doc.setLineWidth(0.8);
+        doc.roundedRect(cx, cy, chipW, boxH - 10, 4, 4, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(COLOR.ink);
+        doc.text(l, cx + chipW / 2, cy + (boxH - 10) / 2 + 3.5, { align: 'center' });
+      });
+      return y + boxH;
+    }
+
+    function formationChip(x, w, yTop, rowH, label, bg, border) {
+      const boxH = 32;
+      const y = yTop + (rowH - boxH) / 2;
+      doc.setFillColor(bg);
+      doc.setDrawColor(border);
+      doc.setLineWidth(1.2);
+      doc.roundedRect(x, y, w, boxH, 7, 7, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12.5);
+      doc.setTextColor('#ffffff');
+      doc.text(label, x + w / 2, y + boxH / 2 + 4.2, { align: 'center' });
+    }
+
+    function optionalBox(x, w, yTop, rowH, border, tint, name, note) {
+      const boxH = 50;
+      const y = yTop + (rowH - boxH) / 2;
+      doc.setFillColor(tint);
+      doc.setDrawColor(border);
+      doc.setLineWidth(1.2);
+      doc.setLineDashPattern([2, 1.6], 0);
+      doc.roundedRect(x, y, w, boxH, 7, 7, 'FD');
+      doc.setLineDashPattern([], 0);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.4);
+      doc.setTextColor(COLOR.muted);
+      doc.text('OPTIONAL', x + w / 2, y + 12, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(COLOR.ink);
+      doc.text(name, x + w / 2, y + 25, { align: 'center' });
+      if (note) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.4);
+        doc.setTextColor(COLOR.ink);
+        const lines = doc.splitTextToSize(note, w - 12);
+        doc.text(lines, x + w / 2, y + 36, { align: 'center' });
+      }
+    }
+
+    function playGrid(x, w, yTop, rowH, plays, showTags) {
+      const boxH = 70;
+      const y = yTop + (rowH - boxH) / 2;
+      roundedBox(x, y, w, boxH, 9, '#ffffff', COLOR.ink);
+      const cols = 4, gap = 6;
+      const chipW = (w - 12 - (cols - 1) * gap) / cols;
+      const chipH = (boxH - 12 - gap) / 2;
+      plays.forEach((p, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const cx = x + 6 + col * (chipW + gap);
+        const cy = y + 6 + row * (chipH + gap);
+        doc.setFillColor(COLOR.paper);
+        doc.setDrawColor(COLOR.line);
+        doc.setLineWidth(0.8);
+        doc.roundedRect(cx, cy, chipW, chipH, 5, 5, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.8);
+        doc.setTextColor(COLOR.ink);
+        // Flags the Inside/Outside plays (see the "*" note under the top
+        // legend) -- driven off the same hasInsideOutside flag play-calls.js
+        // uses for its own toggle, not a hardcoded key check.
+        const displayLabel = p.hasInsideOutside ? `${p.label} *` : p.label;
+        const lines = doc.splitTextToSize(displayLabel, chipW - 10);
+        const lineH = 11;
+        const startY = cy + chipH / 2 - ((lines.length - 1) * lineH) / 2 + 3.5;
+        lines.forEach((ln, li) => doc.text(ln, cx + chipW / 2, startY + li * lineH, { align: 'center' }));
+        if (showTags) {
+          // A checkmark/X glyph isn't in jsPDF's built-in Helvetica metrics
+          // (renders as a stray apostrophe) -- draw the check/X as vectors
+          // instead of text.
+          const allowBoot = !p.noBoot;
+          doc.setFillColor(allowBoot ? COLOR.motion : COLOR.boot);
+          const tw = 18, th = 11;
+          const tx = cx + chipW - tw + 5, ty = cy - 5;
+          doc.roundedRect(tx, ty, tw, th, 5, 5, 'F');
+          doc.setDrawColor('#ffffff');
+          doc.setLineWidth(1.3);
+          const mcx = tx + tw / 2, mcy = ty + th / 2;
+          if (allowBoot) {
+            doc.lines([[2.2, 2.2], [4, -5.2]], mcx - 4.4, mcy + 0.3, [1, 1], 'S', false);
+          } else {
+            doc.line(mcx - 3, mcy - 3, mcx + 3, mcy + 3);
+            doc.line(mcx - 3, mcy + 3, mcx + 3, mcy - 3);
+          }
+        }
+      });
+      return y + boxH;
+    }
+
+    function drawArrow(x, yTop, rowH, dashed) {
+      const y = yTop + rowH / 2;
+      doc.setDrawColor(dashed ? COLOR.muted : COLOR.line);
+      doc.setLineWidth(1.3);
+      if (dashed) doc.setLineDashPattern([2, 1.6], 0);
+      doc.line(x, y, x + COL.arrow - 3, y);
+      doc.setLineDashPattern([], 0);
+      doc.setFillColor(dashed ? COLOR.muted : COLOR.line);
+      doc.triangle(x + COL.arrow - 3, y - 2.6, x + COL.arrow - 3, y + 2.6, x + COL.arrow + 2, y, 'F');
+    }
+
+    function drawBand(yTop, opts) {
+      const bandH = opts.bandH;
+      roundedBox(bandX0, yTop, bandW, bandH, 10, '#ffffff', COLOR.line);
+      doc.setFillColor(opts.accentColor);
+      doc.roundedRect(bandX0, yTop, accentW, bandH, 3, 3, 'F');
+      doc.rect(bandX0 + accentW / 2, yTop, accentW / 2, bandH, 'F'); // square off the inner edge
+
+      const rowTop = yTop + 14;
+      const rowH = 84;
+      let x = innerX0;
+
+      stepTitle(x, COL.formation, rowTop, 'Formation');
+      formationChip(x, COL.formation, rowTop + 7, rowH - 7, opts.formationLabel, opts.accentColor, opts.accentBorder);
+      x += COL.formation;
+
+      drawArrow(x, rowTop + 7, rowH - 7, false); x += COL.arrow;
+
+      stepTitle(x, COL.side, rowTop, opts.sideLabel);
+      lrBox(x, COL.side, rowTop + 7, rowH - 7);
+      x += COL.side;
+
+      if (opts.motion) {
+        drawArrow(x, rowTop + 7, rowH - 7, true); x += COL.arrow;
+        stepTitle(x, COL.motion, rowTop, 'Optional');
+        optionalBox(x, COL.motion, rowTop + 7, rowH - 7, COLOR.motion, COLOR.motionTint, '+ Motion', null);
+        x += COL.motion;
+      } else {
+        x += COL.arrow + COL.motion; // empty placeholder -- keeps Play Call aligned under Wing's
+      }
+
+      drawArrow(x, rowTop + 7, rowH - 7, false); x += COL.arrow;
+
+      stepTitle(x, playcallW, rowTop, 'Play Call');
+      playGrid(x, playcallW, rowTop + 7, rowH - 7, opts.plays, opts.showTags);
+      x += playcallW;
+
+      drawArrow(x, rowTop + 7, rowH - 7, false); x += COL.arrow;
+
+      stepTitle(x, COL.direction, rowTop, 'Direction');
+      lrBox(x, COL.direction, rowTop + 7, rowH - 7);
+      x += COL.direction;
+
+      drawArrow(x, rowTop + 7, rowH - 7, true); x += COL.arrow;
+
+      stepTitle(x, COL.optional, rowTop, 'Optional');
+      optionalBox(x, COL.optional, rowTop + 7, rowH - 7, opts.optColor, opts.optTint, opts.optName, opts.optNote);
+
+      const exampleY = yTop + bandH - 12;
+      doc.setDrawColor(COLOR.line);
+      doc.setLineWidth(0.6);
+      doc.setLineDashPattern([2, 1.6], 0);
+      doc.line(innerX0, exampleY - 14, innerRight, exampleY - 14);
+      doc.setLineDashPattern([], 0);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
-      doc.text(term, legendX, ly);
-      ly += 11;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.3);
-      doc.setTextColor('#555555');
-      const lines = doc.splitTextToSize(desc, legendW);
-      doc.text(lines, legendX, ly);
-      ly += lines.length * 9 + 8;
-      doc.setTextColor('#111111');
-    });
-
-    // Same build stamp as the Sideline Playbook PDF, so a printed call
-    // sheet can be matched back to the app build that generated it.
-    const buildLabel = window.BUILD_V ? `ASL Bengals Call Sheet — Build ${window.BUILD_V}` : 'ASL Bengals Call Sheet';
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let p = 1; p <= pageCount; p++) {
-      doc.setPage(p);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6.5);
-      doc.setTextColor('#999999');
-      doc.text(`${buildLabel} · Page ${p}/${pageCount}`, PAGE_W - MARGIN, PAGE_H - 5, { align: 'right' });
+      doc.setTextColor(COLOR.muted);
+      doc.text('Example: ', innerX0, exampleY);
+      const w1 = doc.getTextWidth('Example: ');
+      doc.setTextColor(COLOR.ink);
+      doc.text(opts.exampleBold, innerX0 + w1, exampleY);
+      const w2 = doc.getTextWidth(opts.exampleBold);
+      doc.setTextColor(opts.optColor);
+      doc.text(' ' + opts.examplePlus, innerX0 + w1 + w2, exampleY);
     }
+
+    const BAND_H = 128;
+    let y = ly + 18;
+    drawBand(y, {
+      formationLabel: 'WING', accentColor: COLOR.orange, accentBorder: COLOR.orangeDark,
+      sideLabel: 'Wing Side', motion: true, plays: wingPlays, showTags: true,
+      optColor: COLOR.boot, optTint: COLOR.bootTint, optName: '+ Boot', optNote: 'Not on Option / Opt. Pass / Dbl Blast',
+      exampleBold: 'WING · RIGHT · INSIDE ZONE · LEFT', examplePlus: '+ BOOT', bandH: BAND_H,
+    });
+    y += BAND_H + 14;
+
+    drawBand(y, {
+      formationLabel: 'SPLIT', accentColor: COLOR.black, accentBorder: '#000000',
+      sideLabel: 'Split Side', motion: false, plays: wingPlays, showTags: false,
+      optColor: COLOR.pass, optTint: COLOR.passTint, optName: '+ Pass', optNote: 'Routes below',
+      exampleBold: 'SPLIT · LEFT · SWEEP · RIGHT', examplePlus: '+ PASS (Houston)', bandH: BAND_H,
+    });
+    y += BAND_H + 14;
+
+    // ---- Receiver Routes ----
+    const ROUTES_H = 190;
+    roundedBox(bandX0, y, bandW, ROUTES_H, 10, '#ffffff', COLOR.line);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(COLOR.muted);
+    doc.text('RECEIVER ROUTES — SPLIT + PASS', innerX0, y + 18);
+
+    const { geo, W: iconW, H: iconH } = buildRouteGeometry(window.DATA.splitRoutes);
+    const ICON_GAP = 18;
+    const iconPairW = iconW * 2 + ICON_GAP;
+    const { svg: stage, wrap: stageWrap } = makeStage(iconPairW, iconH);
+    const routeColW = innerW / ROUTE_NAMES.length;
+    const ICON_DISPLAY_W = Math.min(190, routeColW - 14);
+    const ICON_DISPLAY_H = ICON_DISPLAY_W * (iconH / iconPairW);
+    for (let i = 0; i < ROUTE_NAMES.length; i++) {
+      const name = ROUTE_NAMES[i];
+      const colX = innerX0 + i * routeColW;
+      const label = name.charAt(0).toUpperCase() + name.slice(1);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11.5);
+      doc.setTextColor(COLOR.ink);
+      doc.text(label, colX + routeColW / 2, y + 36, { align: 'center' });
+
+      renderRouteIcon(stage, geo, iconW, iconH, name);
+      const png = await svgToPng(stage, ICON_DISPLAY_W, ICON_DISPLAY_H, 3);
+      const imgX = colX + (routeColW - ICON_DISPLAY_W) / 2;
+      doc.addImage(png, 'PNG', imgX, y + 44, ICON_DISPLAY_W, ICON_DISPLAY_H);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.6);
+      doc.setTextColor(COLOR.muted);
+      const halfW = (ICON_DISPLAY_W - 10) / 2;
+      doc.text('L', imgX + halfW / 2, y + 44 + ICON_DISPLAY_H + 11, { align: 'center' });
+      doc.text('R', imgX + halfW + 10 + halfW / 2, y + 44 + ICON_DISPLAY_H + 11, { align: 'center' });
+    }
+    stageWrap.remove();
+
+    const legendY = y + ROUTES_H - 28;
+    doc.setDrawColor(COLOR.line);
+    doc.setLineWidth(0.6);
+    doc.setLineDashPattern([2, 1.6], 0);
+    doc.line(innerX0, legendY - 14, innerRight, legendY - 14);
+    doc.setLineDashPattern([], 0);
+    // Solid-color swatches (blue = wide, red = flex/inside) instead of a
+    // solid-vs-dashed distinction -- matches Nathan's reference images,
+    // where the two routes are told apart by color, not line style, and
+    // each has its own numbered circle at its real release point besides.
+    doc.setDrawColor(COLOR.pass);
+    doc.setLineWidth(2.4);
+    doc.line(innerX0, legendY - 3, innerX0 + 18, legendY - 3);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(COLOR.muted);
+    doc.text('Wide receiver', innerX0 + 24, legendY);
+    const seg2X = innerX0 + 24 + doc.getTextWidth('Wide receiver') + 18;
+    doc.setDrawColor(COLOR.boot);
+    doc.line(seg2X, legendY - 3, seg2X + 18, legendY - 3);
+    doc.text('Flex (inside) receiver', seg2X + 24, legendY);
+    const noteX = seg2X + 24 + doc.getTextWidth('Flex (inside) receiver') + 20;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(COLOR.muted);
+    doc.setFontSize(7.4);
+    doc.text('Same call, run independently either side of the field — shown here Left and Right.', noteX, legendY);
+
+    // Nathan: "For non split side, the wing on the opposite side runs the
+    // inside route" -- the lone receiver on the side without the split
+    // (player #4) isn't a third diagram here since it's literally the same
+    // shape as the flex/inside route above, just reanchored to his own
+    // spot (play-calls.js's getSplitRoutePaths + reanchorRoute) -- a note
+    // is clearer than a near-duplicate icon.
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.4);
+    doc.setTextColor(COLOR.muted);
+    doc.text('On the side without the split, the wing (#4) runs this same inside route shape, reanchored to his own spot.', innerX0, legendY + 13);
+
+    // ---- Footer / build stamp ----
+    const buildLabel = window.BUILD_V ? `ASL Bengals Play Call Chart — Build ${window.BUILD_V}` : 'ASL Bengals Play Call Chart';
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor('#999999');
+    doc.text(buildLabel, PAGE_W - MARGIN, PAGE_H - 8, { align: 'right' });
 
     return doc;
   }
