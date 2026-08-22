@@ -291,6 +291,7 @@ wireToggle(blockingToggle, () => (blockingEnabled ? 'on' : 'off'), v => blocking
 const editToggle = document.getElementById('editToggle');
 const exportBtn = document.getElementById('exportBtn');
 const saveCloudBtn = document.getElementById('saveCloudBtn');
+const syncDefaultsBtn = document.getElementById('syncDefaultsBtn');
 wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
   editMode = (v === 'on');
   editTarget = null;
@@ -455,6 +456,61 @@ saveCloudBtn.addEventListener('click', async () => {
     setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
   });
 });
+
+// "Save to Cloud" above only ever writes to playEdits.json -- a coach's own
+// edit overlay. It never touches dev2PlayData/plays.json, the separate
+// "shipped defaults" node index.html itself boots window.DATA from (see
+// index.html's boot() and SHIPPED_PLAY_FLAGS in play-calls.js). Nothing in
+// a normal code push updates that node -- it only changes when someone
+// writes the deployed data/plays.json into it directly. Nathan hit this
+// after Counter shipped: a real data-model change (new hasCounter flag,
+// new Normal/Counter structure under each direction) that the Counter
+// toggle can't even appear for until dev2PlayData/plays.json itself has
+// that shape, and neither of us had a way to write to Firebase directly
+// (this session's own network is sandboxed off from it, and pasting a
+// fetch/PUT into the browser console runs into Chrome's paste-lock
+// warning). This button does the exact same fetch+PUT from inside the app
+// itself instead -- a normal click, no console needed -- using whichever
+// coach is logged in right now's own already-authenticated session.
+if (syncDefaultsBtn) {
+  syncDefaultsBtn.addEventListener('click', async () => {
+    const ok = confirm(
+      'This overwrites the SHIPPED DEFAULTS in the cloud (dev2PlayData/plays.json) ' +
+      'with whatever data/plays.json is in the build currently deployed at this URL.\n\n' +
+      'It does NOT touch anything saved via "Save to Cloud" -- that stays exactly as-is.\n\n' +
+      'Only run this right after a deploy that changes the play data itself (a new toggle, ' +
+      'a new play, restructured routes) -- not as a routine save. Continue?'
+    );
+    if (!ok) return;
+    syncDefaultsBtn.textContent = 'Syncing…';
+    try {
+      const shippedPlays = await fetch('data/plays.json').then(r => {
+        if (!r.ok) throw new Error(`Could not fetch this build's data/plays.json (HTTP ${r.status})`);
+        return r.json();
+      });
+      const url = await window.firebaseAuthed(`${FIREBASE_URL}/dev2PlayData/plays.json`);
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shippedPlays),
+      });
+      if (res.ok) {
+        syncDefaultsBtn.textContent = 'Synced!';
+        cloudStatusEl.textContent = 'Shipped defaults synced to the cloud -- reload to pick them up.';
+      } else {
+        const bodyText = await res.text().catch(() => '');
+        syncDefaultsBtn.textContent = 'Sync Failed';
+        alert(`Sync failed (HTTP ${res.status}): ${bodyText.slice(0, 200)}`);
+        console.error('Sync shipped defaults failed:', res.status, bodyText);
+      }
+    } catch (err) {
+      syncDefaultsBtn.textContent = 'Sync Failed';
+      alert(`Sync failed: ${err.message}`);
+      console.error('Sync shipped defaults failed:', err);
+    }
+    setTimeout(() => { syncDefaultsBtn.textContent = 'Admin: Sync Shipped Defaults to Cloud'; }, 3000);
+  });
+}
 
 function loadSavedPlaysFromCloud() {
   return Promise.all([

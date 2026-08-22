@@ -774,6 +774,21 @@
     <button class="action-btn" id="exportBtn" style="display:none;">Export Points</button>
     <button class="action-btn" id="saveCloudBtn" style="display:none;">Save to Cloud</button>
   </div>
+  <!-- "Save to Cloud" above only ever writes to playEdits.json -- a coach's
+       own edit overlay. It never touches dev2PlayData/plays.json, the
+       separate "shipped defaults" node index.html itself boots from (see
+       index.html's boot() and SHIPPED_PLAY_FLAGS in play-calls.js). That
+       node only changes when someone pushes the deployed data/plays.json
+       into it by hand -- there's no automatic sync from a code deploy.
+       Nathan: needed this after adding the Counter toggle (a real data
+       model change -- new hasCounter flag, new Normal/Counter structure)
+       since the toggle can't show at all until dev2PlayData/plays.json
+       itself has that shape. Small/separate from the main action row on
+       purpose -- this is a rare, deliberate "push a data model change
+       live" action, not a routine save. -->
+  <div style="text-align:center; margin-top:10px;">
+    <button class="standalone-btn tiny" id="syncDefaultsBtn" title="Overwrites dev2PlayData/plays.json in the cloud with whatever data/plays.json is in the currently-deployed build. Use this after a code deploy changes the play data model (like adding a new toggle) -- never touches your Save to Cloud edits.">Admin: Sync Shipped Defaults to Cloud</button>
+  </div>
 </div>
 
 <div class="diagram-card">
@@ -1552,7 +1567,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822p';
+  const BUILD_V = '20260822q';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
