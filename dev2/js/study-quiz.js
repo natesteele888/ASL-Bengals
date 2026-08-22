@@ -88,12 +88,16 @@ if (topSectionsEl) {
 // Nathan: "I need a way for parents to utilize the app too... not sure
 // they need visibility to the stats or play calls and all. Just want
 // them to log in, see how their child is doing, see the schedule." A
-// parent (window.isParentSession, set at role-pick time in auth.js) gets
-// Schedule as their entire app -- Play (Study/Quiz/Play Calls/Play Quiz)
-// hides alongside This Week and Coach Tools, which were already
-// coach-only. Their one extra bit of visibility -- their own child's
+// parent (window.isParentSession, set at role-pick time in auth.js)
+// defaults to Schedule and stays out of This Week/Coach Tools (still
+// coach-only). Their one extra bit of visibility -- their own child's
 // player card -- lives in the toolbar's child pill (#childPillsWrap, see
 // player-identity.js's renderChildToolbarPills), not in this nav.
+// Nathan (later): "Parents should also see the play signals and play
+// diagrams but don't need the quizzes." So Play itself is no longer
+// hidden for parents -- only its Quiz/Timed/Play Quiz sub-tabs are, so a
+// parent who taps into Play still gets Study (signals) and Play Calls
+// (diagrams), same as everyone else.
 window.refreshCoachToolsVisibility = function(){
   const isCoach = !!window.isCoachSession;
   const isParent = !!window.isParentSession;
@@ -127,8 +131,30 @@ window.refreshCoachToolsVisibility = function(){
   const editPlaysBtn = document.getElementById('editPlaysTabBtn');
   if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
 
+  // Nathan: "Parents should also see the play signals and play diagrams
+  // but don't need the quizzes." Play used to be all-or-nothing for a
+  // parent (hidden entirely); now it's always visible, but the three
+  // quiz-flavored sub-tabs (Quiz, Timed, Play Quiz) stay hidden for a
+  // parent while Study (signals) and Play Calls (diagrams) stay open --
+  // same split a coach/player already sees, just missing the quiz tabs.
   const playBtn = document.getElementById('playSectionBtn');
-  if (playBtn) playBtn.style.display = isParent ? 'none' : '';
+  if (playBtn) playBtn.style.display = '';
+  if (modeTabsEl) {
+    modeTabsEl.querySelectorAll('.modeBtn').forEach(b => {
+      const m = b.dataset.mode;
+      if (m === 'quiz' || m === 'timed' || m === 'playcallsquiz') {
+        b.style.display = isParent ? 'none' : '';
+      }
+    });
+  }
+  // If a coach/player switched into a parent profile (Switch Profile) while
+  // sitting on one of the now-hidden quiz tabs, lastPlaySubMode would still
+  // point at it -- clicking into Play would then land a parent on a panel
+  // whose own tab button is hidden. Fall back to Study for a parent in
+  // that case.
+  if (isParent && (lastPlaySubMode === 'quiz' || lastPlaySubMode === 'timed' || lastPlaySubMode === 'playcallsquiz')) {
+    lastPlaySubMode = 'study';
+  }
 
   // Study/Quiz/Play Calls have nothing to do with a parent account -- swap
   // the leaderboard and My Stats/My Position for a My Child shortcut

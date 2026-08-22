@@ -109,21 +109,58 @@
       return;
     }
 
+    // Merged-login groups -- Nathan: "we need a way of merging them
+    // [duplicate player logins]." A merge (js/player-identity.js's
+    // mergeIntoPrimary) tags a secondary account with aliasOf pointing at
+    // the primary; this mirrors that file's own getAliasGroupIds so this
+    // dashboard's per-player numbers (visits, total time, last seen) can
+    // count a merged pair's activity together instead of splitting it
+    // across two rows. Kept as a sync local copy rather than awaiting the
+    // async version per player, since `players` is already fully loaded.
+    function aliasGroupIdsSync(id) {
+      const rec = players[id];
+      const root = (rec && rec.aliasOf) ? rec.aliasOf : id;
+      const ids = [root];
+      Object.keys(players).forEach(pid => { if (pid !== root && players[pid] && players[pid].aliasOf === root) ids.push(pid); });
+      return ids;
+    }
+
     // ---- Registered players ----
     const playerRows = Object.keys(players).map(id => Object.assign({ id }, players[id]))
       .sort((a, b) => new Date(b.lastSeen || b.createdAt || 0) - new Date(a.lastSeen || a.createdAt || 0));
     function playerRowHtml(p) {
       const roleTag = p.role === 'parent' ? ' <span style="opacity:.6">(parent)</span>'
         : (p.role === 'coach' || p.isCoach) ? ' <span style="opacity:.6">(coach)</span>' : '';
+      // Merged secondary -- still its own record (nothing deleted), but its
+      // stats/sign-ins now count under the primary account it's aliased to.
+      // See the Merged Logins panel for the full pair and an Undo option.
+      const mergedTag = p.aliasOf ? ' <span style="opacity:.6">🔗 merged</span>' : '';
       const best = p.pcqBestScore ? `🧠 ${p.pcqBestScore}/${p.pcqBestMaxScore}` : '—';
       const resetBtn = p.pcqBestScore
         ? `<button class="lbLinkBtn pcqResetBtn" data-player-id="${p.id}" data-player-name="${escapeHtml(p.name)}" style="display:block;margin-left:auto;font-size:9.5px;margin-top:1px;">Reset</button>`
         : '';
       return `<div class="lbRow"><div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(p.lastSeen)}</div>
-        <div class="lbName">${escapeHtml(p.name)}${roleTag}</div>
+        <div class="lbName">${escapeHtml(p.name)}${roleTag}${mergedTag}</div>
         <div class="lbScore" style="font-size:10px;text-align:right;">${best}${resetBtn}</div></div>`;
     }
     const playersHtml = playerRows.length ? playerRows.map(playerRowHtml).join('') : '<div class="lbEmpty">No one has signed in with a name+code yet.</div>';
+
+    // ---- Merged logins -- Nathan: "We need a way of merging them [duplicate
+    // player logins]... Allow me as the admin to undue it on the backend if
+    // a player accidentally does it." A merge (see js/player-identity.js's
+    // mergeIntoPrimary, offered to a player via the "Is this you too?"
+    // prompt on sign-in) never deletes or rewrites anything -- it just tags
+    // the secondary account with aliasOf pointing at the primary. Every row
+    // here is one of those secondaries; Undo just clears aliasOf, splitting
+    // the pair back into two independent accounts.
+    const mergedRows = playerRows.filter(p => p.aliasOf);
+    function mergedRowHtml(p) {
+      const primary = players[p.aliasOf];
+      const primaryName = primary ? primary.name : '(unknown account)';
+      return `<div class="lbRow"><div class="lbName">${escapeHtml(p.name)} <span style="opacity:.6">→ ${escapeHtml(primaryName)}</span></div>
+        <div class="lbScore" style="font-size:10px;text-align:right;"><button class="lbLinkBtn mergeUndoBtn" data-player-id="${p.id}" data-player-name="${escapeHtml(p.name)}" style="font-size:9.5px;">Undo</button></div></div>`;
+    }
+    const mergedHtml = mergedRows.length ? mergedRows.map(mergedRowHtml).join('') : '<div class="lbEmpty">No merged logins right now.</div>';
 
     // ---- Standard quiz aggregate ----
     let standardBlock = '<div class="lbEmpty">No completed Standard Quiz runs yet.</div>';
@@ -212,9 +249,26 @@
     const pcqResultsSafe = pcqResults || [];
     const nowMs = Date.now();
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    const nonCoachPlayers = playerRows.filter(p => !isCoachRecord(p));
+    // Merged secondaries don't get their own row here -- their activity
+    // counts under the primary account they were merged into instead (see
+    // aliasGroupIdsSync above and its use throughout this section).
+    const nonCoachPlayers = playerRows.filter(p => !isCoachRecord(p) && !p.aliasOf);
 
-    const activePlayers7d = nonCoachPlayers.filter(p => p.lastSeen && (nowMs - new Date(p.lastSeen).getTime()) <= SEVEN_DAYS_MS).length;
+    // effectiveLastSeen -- the most recent lastSeen across a player's whole
+    // alias group, not just this one record, so "Active Players (7d)" and
+    // every per-player lastSeen display below stay accurate even when the
+    // player's most recent visit happened to be under a merged-in name.
+    function effectiveLastSeen(id) {
+      return aliasGroupIdsSync(id).reduce((latest, gid) => {
+        const rec = players[gid];
+        if (!rec || !rec.lastSeen) return latest;
+        return (!latest || new Date(rec.lastSeen) > new Date(latest)) ? rec.lastSeen : latest;
+      }, null);
+    }
+    const activePlayers7d = nonCoachPlayers.filter(p => {
+      const seen = effectiveLastSeen(p.id);
+      return seen && (nowMs - new Date(seen).getTime()) <= SEVEN_DAYS_MS;
+    }).length;
     const sessions7dCount = sessionsSafe.filter(s => s.startedAt && (nowMs - new Date(s.startedAt).getTime()) <= SEVEN_DAYS_MS).length;
     const sessionsWithDuration = sessionsSafe.filter(s => typeof s.durationMs === 'number' && s.durationMs > 0);
     const avgSessionMsTeam = sessionsWithDuration.length ? sessionsWithDuration.reduce((sum, s) => sum + s.durationMs, 0) / sessionsWithDuration.length : 0;
@@ -260,10 +314,21 @@
       entry.attempts++;
       if (!a.correct) entry.misses++;
     });
-    function weakestPlayFor(playerId) {
-      const byKey = roundsByPlayer[playerId];
-      if (!byKey) return null;
-      const candidates = Object.keys(byKey).map(k => Object.assign({ key: k, missRate: byKey[k].misses / byKey[k].attempts }, byKey[k])).filter(c => c.attempts >= 2 && c.misses > 0);
+    // groupIds (plural) -- combines a merged pair/group's rounds together
+    // before picking the weakest play, same alias-aware treatment as
+    // everything else in this section.
+    function weakestPlayFor(groupIds) {
+      const combined = {};
+      groupIds.forEach(id => {
+        const byKey = roundsByPlayer[id];
+        if (!byKey) return;
+        Object.keys(byKey).forEach(k => {
+          const entry = (combined[k] = combined[k] || { attempts: 0, misses: 0 });
+          entry.attempts += byKey[k].attempts;
+          entry.misses += byKey[k].misses;
+        });
+      });
+      const candidates = Object.keys(combined).map(k => Object.assign({ key: k, missRate: combined[k].misses / combined[k].attempts }, combined[k])).filter(c => c.attempts >= 2 && c.misses > 0);
       if (!candidates.length) return null;
       candidates.sort((a, b) => b.missRate - a.missRate);
       return playLabel(candidates[0].key);
@@ -274,23 +339,29 @@
     // kept alongside since it's still useful context (a big total from
     // many short visits reads differently than a few long ones).
     const playerActivityRows = nonCoachPlayers.map(p => {
-      const history = pcqByPlayer[p.id] || [];
+      // Merged pair/group's activity is pooled together under this (the
+      // primary/root) row -- see aliasGroupIdsSync above.
+      const groupIds = aliasGroupIdsSync(p.id);
+      const history = groupIds.flatMap(gid => pcqByPlayer[gid] || []).sort((a, b) => new Date(b.date) - new Date(a.date));
       const pcqPcts = history.filter(r => r.maxScore).map(r => r.score / r.maxScore);
       // Nathan: "don't just look at play quiz scores for that" -- combined
       // pool of every scored quiz attempt (PCQ + Standard + Timed) this
       // player has, pooled rather than averaged-per-type-then-combined so a
       // player who's done a lot of one quiz type isn't drowned out by a
       // single attempt on another.
-      const allPcts = pcqPcts.concat(standardByPlayer[p.id] || [], timedByPlayer[p.id] || []);
+      const allPcts = pcqPcts.concat(
+        groupIds.flatMap(gid => standardByPlayer[gid] || []),
+        groupIds.flatMap(gid => timedByPlayer[gid] || [])
+      );
       const avgPct = allPcts.length ? Math.round(allPcts.reduce((s, x) => s + x, 0) / allPcts.length * 100) : null;
-      const playerSessions = sessionsSafe.filter(s => s.playerId === p.id);
+      const playerSessions = sessionsSafe.filter(s => groupIds.indexOf(s.playerId) !== -1);
       const playerSessionsWithDur = playerSessions.filter(s => typeof s.durationMs === 'number' && s.durationMs > 0);
       const totalMs = playerSessionsWithDur.reduce((s, x) => s + x.durationMs, 0);
       const avgDur = playerSessionsWithDur.length ? totalMs / playerSessionsWithDur.length : 0;
       return {
-        id: p.id, name: p.name, attempts: allPcts.length, avgPct: avgPct,
+        id: p.id, groupIds: groupIds, name: p.name, attempts: allPcts.length, avgPct: avgPct,
         sessionsCount: playerSessions.length, avgSessionMs: avgDur, totalSessionMs: totalMs,
-        lastSeen: p.lastSeen, history: history.slice(0, 5),
+        lastSeen: effectiveLastSeen(p.id), history: history.slice(0, 5),
       };
     });
 
@@ -312,7 +383,7 @@
 
     function highlightRowHtml(p, kind) {
       const icon = kind === 'excelling' ? '🌟' : kind === 'time' ? '⏳' : kind === 'visits' ? '🚪' : '🧭';
-      const weak = kind === 'attention' ? weakestPlayFor(p.id) : null;
+      const weak = kind === 'attention' ? weakestPlayFor(p.groupIds || [p.id]) : null;
       let tip, right;
       if (kind === 'excelling') { tip = `Averaging ${p.avgPct}% across ${p.attempts} quiz attempts.`; right = `${p.avgPct}%`; }
       else if (kind === 'time') { tip = `${p.sessionsCount} visit${p.sessionsCount === 1 ? '' : 's'} logged.`; right = fmtDuration(p.totalSessionMs); }
@@ -432,6 +503,7 @@
           <button class="adminDashBtn" data-panel="activity">📈 Player Activity &amp; Highlights</button>
           <button class="adminDashBtn" data-panel="accounts">🧾 Account Setup${noAccount.length ? `<span class="adminDashCount">${noAccount.length} missing</span>` : ''}</button>
           <button class="adminDashBtn" data-panel="players">👤 Registered Players<span class="adminDashCount">${playerRows.length}</span></button>
+          <button class="adminDashBtn" data-panel="merges">🔗 Merged Logins${mergedRows.length ? `<span class="adminDashCount">${mergedRows.length}</span>` : ''}</button>
           <button class="adminDashBtn" data-panel="difficulty">🎯 Difficulty (Signals &amp; Plays)</button>
           <button class="adminDashBtn" data-panel="standard">📝 Standard Quiz</button>
           <button class="adminDashBtn" data-panel="timed">⏱️ Timed Quiz</button>
@@ -475,6 +547,11 @@
         <div class="lbSectionHeader">👤 Registered Players (${playerRows.length})</div>
         <div class="lbList" style="max-height:340px;overflow-y:auto;">${playersHtml}</div>
         <div class="lbSub" style="margin:2px 0 12px;">Sorted by most recently active. 🧠 column is each player's Play Calls Quiz personal best (Study/Timed Quiz aren't tied to player IDs yet).</div>
+      </div>
+      <div class="adminPanel" data-panel="merges" style="display:none;">
+        <div class="lbSectionHeader">🔗 Merged Logins (${mergedRows.length})</div>
+        <div class="lbList" style="max-height:340px;overflow-y:auto;">${mergedHtml}</div>
+        <div class="lbSub" style="margin:2px 0 12px;">These were combined via the "Is this you too?" prompt a player sees on sign-in when this device recognizes another one of their names. Undo splits a pair back into two separate accounts -- nothing is ever deleted either way.</div>
       </div>
       <div class="adminPanel" data-panel="difficulty" style="display:none;">
         <div class="lbSectionHeader">🥵 Hardest Signals (team-wide)</div>
@@ -528,6 +605,25 @@
         } catch (e) {
           btn.disabled = false;
           btn.textContent = 'Reset';
+          alert('Could not reach the team server -- try again.');
+        }
+      });
+    });
+    body.querySelectorAll('.mergeUndoBtn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.playerId;
+        const name = btn.dataset.playerName;
+        if (!confirm(`Undo the merge for ${name}? This splits it back into its own separate account.`)) return;
+        btn.disabled = true;
+        btn.textContent = '…';
+        try {
+          await window.PlayerIdentity.undoMerge(id);
+          await window.initCoachToolsDashboard();
+          const mergesBtnAgain = body.querySelector('.adminDashBtn[data-panel="merges"]');
+          if (mergesBtnAgain) mergesBtnAgain.dispatchEvent(new Event('click'));
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Undo';
           alert('Could not reach the team server -- try again.');
         }
       });
@@ -643,4 +739,79 @@
   if (coachDigestCloseBtn) coachDigestCloseBtn.addEventListener('click', closeCoachDigest);
   const coachDigestOkBtn = document.getElementById('coachDigestOkBtn');
   if (coachDigestOkBtn) coachDigestOkBtn.addEventListener('click', closeCoachDigest);
+
+  // ---------------------------------------------------------------------------
+  // Parent digest -- Nathan: "Parents should get notifications of how many
+  // times their player signed in and used the app... Give parents pop up
+  // notifications of when the last time their player signed in." Asked
+  // afterward whether those were one notice or two, he picked one combined
+  // popup -- so this mirrors the coach daily digest just above (same
+  // once-per-real-day-on-open trigger) but walks the PARENT's own linked
+  // child(ren) instead of team-wide "yesterday" activity, and shows
+  // all-time sign-in count + last-seen rather than a single day's window
+  // (a parent cares "how many times ever," not just yesterday).
+  //
+  // Chain: parent session -> childRosterIds (roster.js entries the parent
+  // picked, or a coach set up for them) -> each entry's loginPlayerId (set
+  // by a coach in Coach Tools > Roster) -> that dev2Players record's
+  // lastSeen + a count of analytics/sessions rows for that playerId.
+  // Alias-aware throughout (getAliasGroupIds) so a merged duplicate login
+  // doesn't undercount a kid's real activity. Coach sessions are excluded
+  // even though a coach can also link a child (Nathan's ask was specifically
+  // about parents; a coach already gets the team-wide digest above).
+  const PARENT_DIGEST_SHOWN_KEY = 'aslBengalsParentDigestShown';
+  window.maybeShowParentDigest = async function () {
+    try {
+      if (window.userRole !== 'parent') return;
+      if (!window.PlayerIdentity) return;
+      const session = window.PlayerIdentity.getSession();
+      const childRosterIds = session && session.childRosterIds;
+      if (!childRosterIds || !childRosterIds.length) return;
+      const overlay = document.getElementById('parentDigestOverlay');
+      const body = document.getElementById('parentDigestBody');
+      if (!overlay || !body) return;
+      let shown = null;
+      try { shown = localStorage.getItem(PARENT_DIGEST_SHOWN_KEY); } catch (e) { /* ignore */ }
+      const today = new Date().toDateString();
+      if (shown === today) return;
+
+      const roster = (window.isTeamRosterLoaded && window.isTeamRosterLoaded())
+        ? window.getTeamRosterCached()
+        : (window.loadTeamRoster ? await window.loadTeamRoster() : []);
+      const entries = childRosterIds.map(id => roster.find(r => r.id === id)).filter(Boolean).filter(r => r.loginPlayerId);
+      if (!entries.length) return; // nothing linked to an actual login yet -- nothing to report
+
+      const [players, sessions] = await Promise.all([
+        window.PlayerIdentity.fetchAllPlayers(),
+        cloudFetch('analytics/sessions'),
+      ]);
+      const sessionsSafe = sessions || [];
+
+      const rows = await Promise.all(entries.map(async e => {
+        const groupIds = await window.PlayerIdentity.getAliasGroupIds(e.loginPlayerId, players);
+        const sessionsCount = sessionsSafe.filter(s => groupIds.indexOf(s.playerId) !== -1).length;
+        const lastSeen = groupIds.reduce((latest, gid) => {
+          const rec = players[gid];
+          if (!rec || !rec.lastSeen) return latest;
+          return (!latest || new Date(rec.lastSeen) > new Date(latest)) ? rec.lastSeen : latest;
+        }, null);
+        return { name: e.name, sessionsCount, lastSeen };
+      }));
+
+      body.innerHTML = rows.map(r => `
+        <div class="spotlightRow"><span class="spotlightIcon">📱</span><span class="spotlightText"><b>${escapeHtml(r.name)}</b> has signed in ${r.sessionsCount} time${r.sessionsCount === 1 ? '' : 's'}${r.lastSeen ? ` -- last on ${fmtWhen(r.lastSeen)}` : ', never yet'}.</span></div>
+      `).join('') || '<div class="lbEmpty">No sign-in activity yet.</div>';
+
+      overlay.classList.add('show');
+      try { localStorage.setItem(PARENT_DIGEST_SHOWN_KEY, today); } catch (e) { /* ignore */ }
+    } catch (e) { /* best-effort -- a failed fetch shouldn't block anything else */ }
+  };
+  function closeParentDigest() {
+    const overlay = document.getElementById('parentDigestOverlay');
+    if (overlay) overlay.classList.remove('show');
+  }
+  const parentDigestCloseBtn = document.getElementById('parentDigestCloseBtn');
+  if (parentDigestCloseBtn) parentDigestCloseBtn.addEventListener('click', closeParentDigest);
+  const parentDigestOkBtn = document.getElementById('parentDigestOkBtn');
+  if (parentDigestOkBtn) parentDigestOkBtn.addEventListener('click', closeParentDigest);
 })();

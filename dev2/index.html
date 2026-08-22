@@ -1195,6 +1195,27 @@
   </div>
 </div>
 
+<!-- Nathan: "Parents should get notifications of how many times their
+     player signed in and used the app... Give parents pop up notifications
+     of when the last time their player signed in." Combined into one
+     popup per his own follow-up answer. Fired by js/coachtools-dashboard.js's
+     maybeShowParentDigest() the first time a parent with a linked child
+     opens the app on a new calendar day -- same once-per-day gating as the
+     coach digest just above, see that function's comment for the shared
+     reasoning. -->
+<div class="lbOverlay" id="parentDigestOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="parentDigestCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader digestHeroHeader">
+      <div class="lbHeroTrophy">📱</div>
+      <h3>Your Player's Activity</h3>
+      <div class="lbSub">Parents only</div>
+    </div>
+    <div id="parentDigestBody"></div>
+    <button class="navBtn" id="parentDigestOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it</button>
+  </div>
+</div>
+
 <!-- Nathan: "within the whats new, it would be good to show new plays added
      to the playbook." A play only shows up here once it's an actual new
      PLAY (created via the Duplicate flow in Edit Plays, not a route tweak
@@ -1383,6 +1404,28 @@
   </div>
 </div>
 
+<!-- Duplicate-login merge prompt -- Nathan: "We also need to make sure
+     players are only using one sign in... We need a way of merging them.
+     Maybe ask them upon long if they those submissions belong to them, if
+     yes, they will be merged into the account they have their pin on."
+     Fires from player-identity.js's gate() onReady, the next time a player
+     opens the app -- checks this device's known-profiles list (the same
+     one #switchProfileList already shows) for any other name that hasn't
+     been merged yet, and asks about one at a time. "Yes" tags the other
+     account as an alias of the one just signed into (nothing destructive,
+     see mergeIntoPrimary); "No" remembers the decline; "Not now" just skips
+     asking for the rest of this visit. A coach can always undo a merge
+     from Coach Tools > Dashboard > Registered Players. -->
+<div class="lbOverlay" id="mergePromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3>👤 Is this you too?</h3>
+    <div class="lbSub">This device has also signed in as <strong id="mergePromptOtherName"></strong>. If that's another one of your own logins, we can combine it with <strong id="mergePromptCurrentName"></strong> so your stats and sign-ins all count together.</div>
+    <button type="button" class="navBtn" id="mergePromptYesBtn" style="width:100%;margin:10px 0 8px;">Yes, that's me -- combine them</button>
+    <button type="button" class="navBtn secondary" id="mergePromptNoBtn" style="width:100%;">No, that's someone else</button>
+    <button type="button" class="lbLinkBtn" id="mergePromptLaterBtn" style="display:block;margin:10px auto 0;">Not now</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="historyOverlay">
   <div class="lbCard">
     <h3>📜 Your History</h3>
@@ -1493,7 +1536,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822m';
+  const BUILD_V = '20260822n';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

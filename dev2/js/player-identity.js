@@ -874,6 +874,177 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Duplicate-login merge -- Nathan: "We also need to make sure players are
+  // only using one sign in. Some players like Caden who has Caden86,
+  // Caden#86, and Caden... We need a way of merging them. Maybe ask them
+  // upon long if they those submissions belong to them, if yes, they will
+  // be merged into the account they have their pin on." Follow-up made the
+  // trigger explicit: "the next time they log in" -- so this fires from
+  // gate()'s onReady below, same trigger point as every other post-session
+  // check there, not literally tied to the long-press Switch Profile
+  // gesture. It catches both a brand-new duplicate name (fresh signup) and
+  // an existing one (returning session), since onReady covers both paths.
+  //
+  // A "merge" never rewrites or deletes anything -- it just tags the
+  // duplicate record with aliasOf: <survivor's playerId> (mergeIntoPrimary
+  // below). Every stats/leaderboard/digest query that needs to treat merged
+  // accounts as one person calls getAliasGroupIds() and sums across the
+  // whole group instead of a single playerId. Because nothing historical
+  // gets touched, a coach can always undo a mistaken merge from Coach
+  // Tools > Dashboard > Registered Players (Nathan: "Allow me as the admin
+  // to undue it on the backend if a player accidentally does it" -- see
+  // undoMerge below and its coachtools-dashboard.js wiring).
+  //
+  // Candidates only ever come from THIS DEVICE's own known-profiles list
+  // (the same local, capped-at-8 list Switch Profile already shows) --
+  // never a team-wide fuzzy-name search -- since there's no reliable way to
+  // algorithmically guess that, say, "Stretch" and "Jaxon Racca" are the
+  // same kid; a device that's actually been signed into both names is real
+  // signal, a name-similarity guess across the whole roster wouldn't be.
+  // Restricted to role:'player' on both sides so a shared family device can
+  // never offer to merge a coach or parent login with a kid's.
+  const MERGE_DECLINED_KEY = 'bengalsMergeDeclined'; // ["id1|id2", ...] -- pairs the player said "no" to, so we stop asking about that specific pair
+  function pairKey(a, b){ return [a, b].sort().join('|'); }
+  function getDeclinedPairs(){
+    try { const list = JSON.parse(localStorage.getItem(MERGE_DECLINED_KEY) || '[]'); return Array.isArray(list) ? list : []; }
+    catch(e){ return []; }
+  }
+  function declinePair(a, b){
+    try {
+      const list = getDeclinedPairs();
+      const key = pairKey(a, b);
+      if(list.indexOf(key) === -1){ list.push(key); localStorage.setItem(MERGE_DECLINED_KEY, JSON.stringify(list.slice(-50))); }
+    } catch(e){}
+  }
+
+  // One hop only -- mergeIntoPrimary always re-points a chain onto the true
+  // root at merge time (see below), so nothing here should ever need to
+  // walk more than one aliasOf link.
+  async function getAliasGroupIds(playerId, allPlayers){
+    const all = allPlayers || await fetchAllPlayers();
+    const rec = all[playerId];
+    const root = (rec && rec.aliasOf) ? rec.aliasOf : playerId;
+    const ids = [root];
+    Object.keys(all).forEach(id => {
+      if(id !== root && all[id] && all[id].aliasOf === root) ids.push(id);
+    });
+    return ids;
+  }
+
+  async function mergeIntoPrimary(secondaryId, primaryId){
+    if(secondaryId === primaryId) return;
+    const all = await fetchAllPlayers();
+    let root = primaryId;
+    if(all[root] && all[root].aliasOf) root = all[root].aliasOf; // primary itself was already merged elsewhere -- point at the true root instead
+    if(root === secondaryId) return;
+    const writes = [];
+    const secUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${secondaryId}.json`);
+    writes.push(fetch(secUrl, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ aliasOf: root, aliasMergedAt: new Date().toISOString() }),
+    }));
+    // Re-point anything that was previously merged INTO the secondary, so
+    // the group never ends up more than one hop deep after this merge.
+    for (const id of Object.keys(all)) {
+      if(id !== secondaryId && all[id] && all[id].aliasOf === secondaryId){
+        const u = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${id}.json`);
+        writes.push(fetch(u, {
+          method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ aliasOf: root }),
+        }));
+      }
+    }
+    await Promise.all(writes);
+  }
+
+  // Admin-only (Coach Tools > Dashboard > Registered Players) -- reverses
+  // mergeIntoPrimary by clearing aliasOf, so the account goes back to
+  // standing on its own. Nathan explicitly asked for this backstop before
+  // agreeing to the merge feature at all.
+  async function undoMerge(secondaryId){
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${secondaryId}.json`);
+    const res = await fetch(url, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ aliasOf: null, aliasMergedAt: null }),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+  }
+
+  const mergePromptOverlay = document.getElementById('mergePromptOverlay');
+  const mergePromptOtherNameEl = document.getElementById('mergePromptOtherName');
+  const mergePromptCurrentNameEl = document.getElementById('mergePromptCurrentName');
+  const mergePromptYesBtn = document.getElementById('mergePromptYesBtn');
+  const mergePromptNoBtn = document.getElementById('mergePromptNoBtn');
+  const mergePromptLaterBtn = document.getElementById('mergePromptLaterBtn');
+  let mergePromptShownThisLoad = false; // once per page load is enough -- gate() can run more than once, same guard spirit as startSessionTracking
+  let mergeQueue = [];
+  let mergeCurrentSession = null;
+
+  function showNextMergeCandidate(){
+    if(!mergePromptOverlay) return;
+    if(!mergeQueue.length){ mergePromptOverlay.classList.remove('show'); return; }
+    const candidate = mergeQueue[0];
+    if(mergePromptOtherNameEl) mergePromptOtherNameEl.textContent = candidate.name;
+    if(mergePromptCurrentNameEl) mergePromptCurrentNameEl.textContent = mergeCurrentSession.name;
+    mergePromptOverlay.classList.add('show');
+  }
+  async function maybeShowMergePrompt(session){
+    if(!session || mergePromptShownThisLoad || !mergePromptOverlay) return;
+    mergePromptShownThisLoad = true;
+    try {
+      const all = await fetchAllPlayers();
+      const myRecord = all[session.playerId];
+      // Only ever offered for plain player logins -- see the block comment
+      // above for why coach/parent accounts are excluded on both sides.
+      if(!myRecord || myRecord.role !== 'player') return;
+      const groupIds = await getAliasGroupIds(session.playerId, all);
+      const declined = getDeclinedPairs();
+      const known = getKnownProfiles();
+      const candidates = known.filter(p => {
+        if(groupIds.indexOf(p.playerId) !== -1) return false; // already the same person (or is themselves)
+        const rec = all[p.playerId];
+        if(!rec || rec.role !== 'player') return false;
+        if(rec.aliasOf) return false; // already merged into someone else -- that merge is offered from the survivor's side instead
+        if(declined.indexOf(pairKey(session.playerId, p.playerId)) !== -1) return false;
+        return true;
+      });
+      if(!candidates.length) return;
+      mergeCurrentSession = session;
+      mergeQueue = candidates;
+      showNextMergeCandidate();
+    } catch(e){ /* best-effort, same spirit as the other post-session checks in gate() */ }
+  }
+  if(mergePromptYesBtn){
+    mergePromptYesBtn.addEventListener('click', async () => {
+      if(!mergeQueue.length || !mergeCurrentSession) return;
+      const candidate = mergeQueue[0];
+      mergePromptYesBtn.disabled = true;
+      try {
+        await mergeIntoPrimary(candidate.playerId, mergeCurrentSession.playerId);
+        mergeQueue.shift();
+      } catch(e){ console.error('Merge failed:', e); /* leave it queued -- try again on the next login rather than silently dropping it */ }
+      mergePromptYesBtn.disabled = false;
+      showNextMergeCandidate();
+    });
+  }
+  if(mergePromptNoBtn){
+    mergePromptNoBtn.addEventListener('click', () => {
+      if(!mergeQueue.length || !mergeCurrentSession) return;
+      const candidate = mergeQueue.shift();
+      declinePair(mergeCurrentSession.playerId, candidate.playerId);
+      showNextMergeCandidate();
+    });
+  }
+  if(mergePromptLaterBtn){
+    mergePromptLaterBtn.addEventListener('click', () => {
+      // Not a decline -- doesn't remember anything, just stops asking for
+      // the rest of this visit. Will ask again next login.
+      mergeQueue = [];
+      if(mergePromptOverlay) mergePromptOverlay.classList.remove('show');
+    });
+  }
+
   // ---- Switch Profile overlay -- Nathan: "some people have two kids in
   // the house on the team that may need a way to swap between 2 users...
   // click and hold the name plate. It gives you the option to switch
@@ -1133,12 +1304,24 @@
       // gates itself to an approved coach + once-per-real-day internally.
       // See js/coachtools-dashboard.js's maybeShowCoachDailyDigest.
       if (typeof window.maybeShowCoachDailyDigest === 'function') window.maybeShowCoachDailyDigest();
+      // Nathan: "Parents should get notifications of how many times their
+      // player signed in and used the app... pop up notifications of when
+      // the last time their player signed in." Same trigger point as the
+      // coach digest above -- gates itself to a parent with a linked child
+      // + once-per-real-day internally. See coachtools-dashboard.js's
+      // maybeShowParentDigest.
+      if (typeof window.maybeShowParentDigest === 'function') window.maybeShowParentDigest();
       // Nathan: "love the gamification stuff - make sure they are aware of
       // the badges when they log in." Same trigger point as the other
       // post-session checks here -- gates itself internally (skips coach
       // sessions, only shows the full intro once per player). See
       // js/study-quiz.js's maybeShowBadgesIntro.
       if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
+      // Nathan: "make sure players are only using one sign in... ask them
+      // upon [next] log in if those submissions belong to them." Same
+      // trigger point as the other post-session checks here -- see the
+      // duplicate-login merge block above for the full design.
+      maybeShowMergePrompt(getSession());
       // A drone-footage notification tapped while the app was closed opens
       // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
       // JS in a not-yet-loaded page) -- jump straight to that practice now
@@ -1185,6 +1368,7 @@
     recordQuizResult, resetQuizStats, setPosition, openPositionPicker,
     setChildLinks, openChildPicker, renderParentChildBanner,
     getKnownProfiles, openSwitchProfileOverlay,
+    getAliasGroupIds, mergeIntoPrimary, undoMerge,
     POSITION_OPTIONS, POSITION_LABELS,
   };
 })();
