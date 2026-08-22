@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260822k">
+<link rel="stylesheet" href="css/styles.css?v=20260822l">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1305,23 +1305,23 @@
      lightning (natesteele888/lybs-cards) as "a better understanding of
      lightning" and gave a thunderstorm loop to go with it. That app draws
      each bolt as a randomized jagged SVG polyline (glow + mid + white-hot
-     core layers) fired by JS on a timer, not a fixed pre-drawn shape --
-     js/practice-cancel.js's fireLightningBolt() ports that same technique
-     into #cancelBoltHost below instead of the old static CSS-keyframe
-     bolts. #cancelFlash is the single screen-brightness flash it pairs
-     each bolt with. When the thunder loop (assets/audio/thunder-loop.mp3)
-     is actually playing, bolts fire synced to the real thunder hits in
-     that file (same "flash ~0.4s before the boom" idea LYBS uses for its
-     own ambient loop, timestamps in AMBIENT_FLASH_TIMES); if audio is
-     blocked by the browser's autoplay policy, it falls back to a random
-     2-6s bolt timer instead -- the effect still works with no sound.
+     core layers) fired by JS on a timer, not a fixed pre-drawn shape.
+     When the thunder loop (assets/audio/thunder-loop.mp3) is actually
+     playing, flashes fire synced to the real thunder hits in that file
+     (same "flash ~0.4s before the boom" idea LYBS uses for its own
+     ambient loop, timestamps in AMBIENT_FLASH_TIMES); if audio is blocked
+     by the browser's autoplay policy, it falls back to a random 2-6s
+     timer instead -- the effect still works with no sound. (The drawn
+     bolt shapes themselves are gone as of the 7th pass below -- see that
+     note for what replaced them; the sync-to-thunder-audio mechanics
+     described here are otherwise unchanged.)
 
      Nathan (4th pass): "I really like this realistic image for the
      background instead" -- .cancelSky now paints his own real night-storm
      football-field photo (assets/images/cancel-storm-field.jpg) full-bleed
      in place of the procedural sky-gradient/cloud/field layers from the
-     2nd pass. The JS-fired lightning + thunder audio from the 3rd pass are
-     unchanged and still layer right on top of it.
+     2nd pass. The thunder audio from the 3rd pass is unchanged and still
+     plays right alongside it.
 
      Nathan (6th pass): moved from a Coach Tools > Settings form to a
      "Cancel Due to Weather" button on the game/practice itself (see
@@ -1332,13 +1332,24 @@
      eventType, which swaps .cancelSky's background photo (see
      css/styles.css) to assets/images/cancel-storm-game.jpg and swaps this
      header's text to "Game Canceled" -- practices keep the original
-     field photo/copy from the 4th pass above unchanged. -->
+     field photo/copy from the 4th pass above unchanged.
+
+     Nathan (7th pass): "instead of the lightning bolts and the lines on
+     the screen, we use the rain drops from the LYBS card app and just
+     have the lightning in the background photo get super bright and dim
+     with the lightning." The #cancelBoltHost SVG-bolt layer and
+     #cancelFlash white screen-flash from the 3rd pass are both gone.
+     js/practice-cancel.js's flashSkyPhoto() now animates .cancelSky's own
+     filter:brightness() instead -- the photo's own baked-in bolt is what
+     visibly flashes, still on the same thunder-synced/fallback-timer
+     schedule the 3rd pass set up. #cancelRainHost is new -- a straight
+     port of LYBS's real .raindrop/spawnRain() individual-streak rain
+     (js/practice-cancel.js's spawnCancelRain()), replacing the single
+     scrolling repeating-gradient texture the 4th pass had been using. -->
 <div class="cancelNoticeOverlay" id="cancelNoticeOverlay">
   <div class="cancelScene" aria-hidden="true">
     <div class="cancelSky"></div>
-    <div class="cancelFlash" id="cancelFlash"></div>
-    <div class="cancelBoltHost" id="cancelBoltHost"></div>
-    <div class="cancelRain"></div>
+    <div class="cancelRainHost" id="cancelRainHost"></div>
     <div class="cancelVignette"></div>
   </div>
   <audio id="cancelThunderAudio" loop preload="none" src="assets/audio/thunder-loop.mp3"></audio>
@@ -1482,7 +1493,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822k';
+  const BUILD_V = '20260822l';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

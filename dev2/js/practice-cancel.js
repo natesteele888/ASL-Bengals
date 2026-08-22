@@ -233,13 +233,13 @@
       .catch(() => null);
   }
 
-  // ---- Lightning bolts + thunder audio -- ported from the LYBS Cards app
-  // (natesteele888/lybs-cards, its fireCardAmbientBolt()/startAmbientAudio()
-  // pair) per Nathan: "Let's now reference the LYBS cards app. This has a
-  // better understanding of lightning I want, also added a sound file with
-  // a thunderstorm going." Same randomized-jagged-3-layer-SVG-polyline bolt
-  // as that app, and the same "AMBIENT_FLASH_TIMES scheduled against the
-  // real audio's playback position" sync idea -- but reading a plain
+  // ---- Lightning flash + rain + thunder audio -- ported from the LYBS
+  // Cards app (natesteele888/lybs-cards, its fireCardAmbientBolt()/
+  // startAmbientAudio()/spawnRain() functions) per Nathan: "Let's now
+  // reference the LYBS cards app. This has a better understanding of
+  // lightning I want, also added a sound file with a thunderstorm going."
+  // The same "AMBIENT_FLASH_TIMES scheduled against the real audio's
+  // playback position" sync idea as that app -- but reading a plain
   // <audio> element's .currentTime instead of LYBS's Web Audio
   // AudioBufferSourceNode/AudioContext.currentTime, since this feature
   // doesn't need sample-accurate sync (a few hundred ms of drift against a
@@ -258,130 +258,103 @@
     catch (e) { return false; }
   }
 
-  function fireLightningBolt() {
-    const host = document.getElementById('cancelBoltHost');
-    const flash = document.getElementById('cancelFlash');
-    if (!host) return;
-    const W = host.clientWidth || window.innerWidth || 400;
-    const H = host.clientHeight || window.innerHeight || 800;
-    // Dim bluish palette -- an ambient background bolt, not a screen-filling
-    // pack-break flash (LYBS's own "card bolts are subtle" comment).
-    const colors = [[60, 120, 220], [80, 100, 200], [100, 140, 255]];
-    const [r, g, b] = colors[Math.floor(Math.random() * colors.length)];
-    const boltColor = `rgba(${r + 100},${g + 100},${b + 100},0.95)`;
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;opacity:0;transition:opacity 0.04s';
-    svg.setAttribute('width', W);
-    svg.setAttribute('height', H);
-
-    // Randomized jagged path, starting from a random top edge point (or
-    // occasionally a side edge lower down) and drifting toward the bottom.
-    const sx = Math.random() * W;
-    const fromTop = Math.random() > 0.4;
-    const sx2 = fromTop ? sx : (Math.random() > 0.5 ? 0 : W);
-    const sy2 = fromTop ? 0 : Math.random() * H * 0.4;
-    const pts = [[sx2, sy2]];
-    let cx = sx2, cy = sy2;
-    const steps = 5 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < steps; i++) {
-      cx += (Math.random() - 0.4) * 90;
-      cy += (H / steps) * (0.7 + Math.random() * 0.5);
-      pts.push([cx, cy]);
-    }
-    const pstr = pts.map(([x, y]) => `${x},${y}`).join(' ');
-
-    // Three stacked layers -- blurred outer glow, mid glow, white-hot core.
-    const gl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    gl.setAttribute('points', pstr); gl.setAttribute('fill', 'none');
-    gl.setAttribute('stroke', `rgba(${r},${g},${b},0.55)`);
-    gl.setAttribute('stroke-width', '12'); gl.setAttribute('stroke-linecap', 'round');
-    gl.style.filter = 'blur(7px)';
-    svg.appendChild(gl);
-
-    const md = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    md.setAttribute('points', pstr); md.setAttribute('fill', 'none');
-    md.setAttribute('stroke', boltColor); md.setAttribute('stroke-width', '3');
-    md.setAttribute('stroke-linecap', 'round');
-    md.style.filter = 'blur(1.5px)';
-    svg.appendChild(md);
-
-    const cr = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    cr.setAttribute('points', pstr); cr.setAttribute('fill', 'none');
-    cr.setAttribute('stroke', 'rgba(255,255,255,.92)'); cr.setAttribute('stroke-width', '1.2');
-    cr.setAttribute('stroke-linecap', 'round');
-    svg.appendChild(cr);
-
-    host.appendChild(svg);
-
-    requestAnimationFrame(() => {
-      svg.style.opacity = '1';
-      if (flash) {
-        flash.style.transition = 'none';
-        flash.style.opacity = '0.6';
-        void flash.offsetWidth; // force reflow so the fade-out below actually animates
-        flash.style.transition = 'opacity .5s ease-out';
-        flash.style.opacity = '0';
-      }
-      setTimeout(() => {
-        svg.style.transition = 'opacity 0.12s';
-        svg.style.opacity = '0';
-        setTimeout(() => svg.remove(), 200);
-      }, 90 + Math.random() * 110);
-    });
+  // Nathan (7th pass): "instead of the lightning bolts and the lines on
+  // the screen... just have the lightning in the background photo get
+  // super bright and dim with the lightning." Replaces the old drawn-SVG-
+  // bolt-plus-white-screen-flash pair with a single filter:brightness()
+  // pulse directly on .cancelSky -- the photo's own real lightning bolt is
+  // what visibly flashes, same randomized peak/decay feel as a real strike
+  // instead of a fixed value.
+  function flashSkyPhoto() {
+    const sky = document.querySelector('#cancelNoticeOverlay .cancelSky');
+    if (!sky) return;
+    const peak = 1.9 + Math.random() * 0.9;
+    sky.style.transition = 'none';
+    sky.style.filter = `brightness(${peak})`;
+    void sky.offsetWidth; // force reflow so the fade-out below actually animates
+    const fadeMs = 300 + Math.random() * 250;
+    sky.style.transition = `filter ${fadeMs}ms ease-out`;
+    sky.style.filter = 'brightness(1)';
   }
 
-  let _boltRaf = null;
-  let _boltFallbackTimer = null;
-  let _boltNextFlashIdx = 0;
-  let _boltLastElapsed = 0;
+  let _flashRaf = null;
+  let _flashFallbackTimer = null;
+  let _flashNextIdx = 0;
+  let _flashLastElapsed = 0;
 
-  function stopBolts() {
-    if (_boltRaf) { cancelAnimationFrame(_boltRaf); _boltRaf = null; }
-    if (_boltFallbackTimer) { clearTimeout(_boltFallbackTimer); _boltFallbackTimer = null; }
-    const host = document.getElementById('cancelBoltHost');
-    if (host) host.innerHTML = '';
-    const flash = document.getElementById('cancelFlash');
-    if (flash) { flash.style.transition = 'none'; flash.style.opacity = '0'; }
+  function stopFlash() {
+    if (_flashRaf) { cancelAnimationFrame(_flashRaf); _flashRaf = null; }
+    if (_flashFallbackTimer) { clearTimeout(_flashFallbackTimer); _flashFallbackTimer = null; }
+    const sky = document.querySelector('#cancelNoticeOverlay .cancelSky');
+    if (sky) { sky.style.transition = 'none'; sky.style.filter = 'brightness(1)'; }
   }
 
-  // Bolts fire in sync with the real thunder hits in thunder-loop.mp3,
+  // Flashes fire in sync with the real thunder hits in thunder-loop.mp3,
   // reading the playing <audio> element's own currentTime each frame --
   // same idea as LYBS's _scheduleAmbientFlashCheck, just against
   // HTMLMediaElement.currentTime instead of an AudioContext clock.
-  function startSyncedBolts(audioEl) {
-    _boltNextFlashIdx = 0;
-    _boltLastElapsed = 0;
+  function startSyncedFlashes(audioEl) {
+    _flashNextIdx = 0;
+    _flashLastElapsed = 0;
     function tick() {
-      if (!audioEl || audioEl.paused || audioEl.ended) { _boltRaf = null; return; }
+      if (!audioEl || audioEl.paused || audioEl.ended) { _flashRaf = null; return; }
       const elapsed = audioEl.currentTime % LOOP_DURATION;
-      if (elapsed < _boltLastElapsed) _boltNextFlashIdx = 0; // loop wrapped
-      _boltLastElapsed = elapsed;
-      while (_boltNextFlashIdx < AMBIENT_FLASH_TIMES.length && elapsed >= AMBIENT_FLASH_TIMES[_boltNextFlashIdx]) {
-        fireLightningBolt();
-        _boltNextFlashIdx++;
+      if (elapsed < _flashLastElapsed) _flashNextIdx = 0; // loop wrapped
+      _flashLastElapsed = elapsed;
+      while (_flashNextIdx < AMBIENT_FLASH_TIMES.length && elapsed >= AMBIENT_FLASH_TIMES[_flashNextIdx]) {
+        flashSkyPhoto();
+        _flashNextIdx++;
       }
-      _boltRaf = requestAnimationFrame(tick);
+      _flashRaf = requestAnimationFrame(tick);
     }
-    _boltRaf = requestAnimationFrame(tick);
+    _flashRaf = requestAnimationFrame(tick);
   }
 
   // If the browser's autoplay policy blocks the thunder audio (e.g. the
   // panel appears on first load before any tap has happened), the storm
-  // still needs to feel alive -- fall back to random 2-6s bolts, same as
+  // still needs to feel alive -- fall back to random 2-6s flashes, same as
   // LYBS's own startCardLightning() fallback rhythm.
-  function startFallbackBolts() {
+  function startFallbackFlashes() {
     function scheduleNext() {
       const delay = 2000 + Math.random() * 4000;
-      _boltFallbackTimer = setTimeout(() => {
+      _flashFallbackTimer = setTimeout(() => {
         const overlay = document.getElementById('cancelNoticeOverlay');
-        if (!overlay || !overlay.classList.contains('show')) { _boltFallbackTimer = null; return; }
-        fireLightningBolt();
-        if (Math.random() > 0.65) setTimeout(fireLightningBolt, 120 + Math.random() * 180);
+        if (!overlay || !overlay.classList.contains('show')) { _flashFallbackTimer = null; return; }
+        flashSkyPhoto();
+        if (Math.random() > 0.65) setTimeout(flashSkyPhoto, 120 + Math.random() * 180);
         scheduleNext();
       }, delay);
     }
     scheduleNext();
+  }
+
+  // Nathan (7th pass): "use the rain drops from the LYBS card app" -- a
+  // straight port of that app's spawnRain()/.raindrop technique
+  // (individually randomized falling streaks) in place of the single
+  // scrolling repeating-gradient rain texture the 4th pass had been using.
+  // Spawned once each time the panel opens and cleared when it closes
+  // (see showPanel/hidePanel below), same lifecycle as the thunder audio.
+  const RAIN_DROP_COUNT = 120;
+  function spawnCancelRain() {
+    const host = document.getElementById('cancelRainHost');
+    if (!host || host.childElementCount) return; // already spawned for this show
+    for (let i = 0; i < RAIN_DROP_COUNT; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'cancelRaindrop';
+      const left = Math.random() * 102;       // % across screen
+      const len = 12 + Math.random() * 28;    // streak length px
+      const dur = 0.5 + Math.random() * 0.8;  // fall speed
+      const delay = -(Math.random() * dur * 4); // stagger start
+      const opacity = 0.15 + Math.random() * 0.3;
+      const angle = -5 + Math.random() * 10;  // slight diagonal
+      drop.style.cssText = `left:${left}%;top:-5%;height:${len}px;opacity:${opacity};` +
+        `transform:rotate(${angle}deg);animation-duration:${dur}s;animation-delay:${delay}s`;
+      host.appendChild(drop);
+    }
+  }
+  function clearCancelRain() {
+    const host = document.getElementById('cancelRainHost');
+    if (host) host.innerHTML = '';
   }
 
   // Primes the <audio> element's playback rights inside a real user
@@ -438,9 +411,9 @@
   }
 
   function playThunder() {
-    if (prefersReducedMotion()) return; // skip bolts + audio entirely
+    if (prefersReducedMotion()) return; // skip flashes + audio entirely
     const audioEl = document.getElementById('cancelThunderAudio');
-    if (!audioEl) { startFallbackBolts(); return; }
+    if (!audioEl) { startFallbackFlashes(); return; }
     const myToken = ++_audioOpToken;
     // A priming pause() from unlockAudioOnce() could still be queued -- cancel
     // it so it can't land right after this real play() and pause it back out.
@@ -452,15 +425,15 @@
     const onOk = () => {
       if (myToken !== _audioOpToken) return; // hidden again before playback actually started
       fadeAudioTo(audioEl, 0.55, 800, null, myToken);
-      startSyncedBolts(audioEl);
+      startSyncedFlashes(audioEl);
     };
-    const onBlocked = () => { if (myToken === _audioOpToken) startFallbackBolts(); }; // autoplay refused -- still storm, just unsynced
+    const onBlocked = () => { if (myToken === _audioOpToken) startFallbackFlashes(); }; // autoplay refused -- still storm, just unsynced
     if (p && p.then) p.then(onOk).catch(onBlocked);
     else onOk();
   }
 
   function stopThunder() {
-    stopBolts();
+    stopFlash();
     const audioEl = document.getElementById('cancelThunderAudio');
     if (!audioEl || audioEl.paused) return;
     const myToken = ++_audioOpToken;
@@ -494,6 +467,7 @@
     shownNoticeId = setting.noticeId || null;
     if (!overlay.classList.contains('show')) {
       overlay.classList.add('show');
+      if (!prefersReducedMotion()) spawnCancelRain();
       playThunder();
     }
   }
@@ -501,6 +475,7 @@
     const overlay = document.getElementById('cancelNoticeOverlay');
     if (overlay && overlay.classList.contains('show')) {
       overlay.classList.remove('show');
+      clearCancelRain();
       stopThunder();
     }
   }
