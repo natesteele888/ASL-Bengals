@@ -12,11 +12,18 @@ let playKey = DATA.playTypes[0].key;
 let direction = 'Left';
 let readPosition = 'A';
 let insideOutside = 'Outside';
+// Nathan: "Both Option and Outside Zone need a new toggle for Counter."
+// Unlike Boot (a live ball-carrier swap, no new geometry), Counter needs a
+// real different route for #4's sweep -- so it's a stored sub-variant per
+// direction (Normal/Counter), same shape as Inside/Outside and Read A/B,
+// authored here by dragging points same as any other play/direction.
+let counterVariant = 'Normal';
 
 function getPlayVariant(playType, dir) {
   let v = playType.directions[dir];
   if (playType.hasInsideOutside) v = v[insideOutside];
   if (playType.hasReadToggle) v = v[readPosition];
+  if (playType.hasCounter) v = v[counterVariant];
   return v;
 }
 let selectedPlayer = null;
@@ -274,6 +281,10 @@ const readPosGroup = document.getElementById('readPosGroup');
 const readPosToggle = document.getElementById('readPosToggle');
 wireToggle(readPosToggle, () => readPosition, v => readPosition = v);
 
+const counterGroup = document.getElementById('counterGroup');
+const counterToggle = document.getElementById('counterToggle');
+wireToggle(counterToggle, () => counterVariant, v => counterVariant = v);
+
 const blockingToggle = document.getElementById('blockingToggle');
 wireToggle(blockingToggle, () => (blockingEnabled ? 'on' : 'off'), v => blockingEnabled = (v === 'on'));
 
@@ -335,9 +346,15 @@ function sanitizeBlockingDistances(playTypes) {
   playTypes.forEach(pt => {
     Object.keys(pt.directions || {}).forEach(direction => {
       const dirData = pt.directions[direction];
-      const variants = pt.hasReadToggle ? [dirData.A, dirData.B].filter(Boolean)
-        : pt.hasInsideOutside ? [dirData.Inside, dirData.Outside].filter(Boolean)
-        : [dirData];
+      // Generic "flat vs nested sub-variant" unwrap -- same as
+      // normalizePlayData (play-calls.js) and getPlayVariant above. Used to
+      // be a hardcoded hasReadToggle/hasInsideOutside check, which silently
+      // stopped sanitizing Option/Outside Zone's blocking once they gained
+      // a THIRD kind of sub-variant (hasCounter's Normal/Counter) that
+      // hardcoded chain didn't know about -- Object.values() here reaches
+      // whatever sub-variant keys actually exist, regardless of which flag
+      // put them there.
+      const variants = dirData.paths ? [dirData] : Object.values(dirData).filter(Boolean);
       variants.forEach(variant => {
         (variant.paths || []).forEach(p => {
           if (!p.isBlocking) return;
@@ -479,11 +496,13 @@ function updateReadPosVisibility() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   readPosGroup.style.display = playType.hasReadToggle ? 'flex' : 'none';
   insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
+  counterGroup.style.display = playType.hasCounter ? 'flex' : 'none';
   // These groups start hidden (display:none), so their thumb couldn't be
   // measured correctly by wireToggle()'s initial call -- re-place it now
   // that they're actually laid out, whenever they're shown.
   if (playType.hasReadToggle) placeToggleThumb(readPosToggle);
   if (playType.hasInsideOutside) placeToggleThumb(insideOutsideToggle);
+  if (playType.hasCounter) placeToggleThumb(counterToggle);
   // Boot doesn't make sense on plays where #1 already has the ball or
   // already has a built-in fake (Option, Option Pass, Double Blast) --
   // hide the toggle and force it back off so a swap from a previously
@@ -1506,7 +1525,8 @@ function render() {
   const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
     'text-anchor':'middle', fill:'#111111'});
   title.textContent = `WING ${wingSide.toUpperCase()}` + (motionOn ? ' MOTION' : '') +
-    ` ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' BOOT' : '');
+    ` ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' BOOT' : '') +
+    (playType.hasCounter && counterVariant === 'Counter' ? ' COUNTER' : '');
   stage.appendChild(title);
 
 

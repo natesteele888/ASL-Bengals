@@ -25,6 +25,14 @@ const SHIPPED_PLAY_FLAGS = {};
     hasReadToggle: !!pt.hasReadToggle,
     hasInsideOutside: !!pt.hasInsideOutside,
     directionFixed: !!pt.directionFixed,
+    // Nathan: "Both Option and Outside Zone need a new toggle for
+    // Counter." Same allowlist idea as hasInsideOutside/hasReadToggle
+    // (opt-in, only Option and Outside Zone have it in data/plays.json) --
+    // unlike Boot (a live ball-carrier swap with no new geometry needed),
+    // Counter genuinely needs a different route for #4's sweep, so it's a
+    // real stored sub-variant under each direction (Normal/Counter),
+    // authored in Edit Plays, not a runtime swap. See getVariant below.
+    hasCounter: !!pt.hasCounter,
   };
 });
 
@@ -60,16 +68,32 @@ const SHIPPED_PLAY_TYPES_BY_KEY = {};
 function repairStaleDirectionOrientation(pt) {
   if (!pt.directions || !pt.directions.Left || !pt.directions.Right) return;
   const isDirectionPath = (p) => p.player === 1 || p.player === 2 || p.player === 3 || p.optionLine;
-  const leftMatches = (pt.directions.Left.paths || []).filter(isDirectionPath);
-  const rightMatches = (pt.directions.Right.paths || []).filter(isDirectionPath);
-  leftMatches.forEach(lp => {
-    const key = lp.player != null ? lp.player : 'optionLine';
-    const rp = rightMatches.find(r => (r.player != null ? r.player : 'optionLine') === key);
-    if (!rp) return;
-    const tmp = lp.points;
-    lp.points = rp.points;
-    rp.points = tmp;
-  });
+  function swapVariant(leftVariant, rightVariant) {
+    const leftMatches = (leftVariant.paths || []).filter(isDirectionPath);
+    const rightMatches = (rightVariant.paths || []).filter(isDirectionPath);
+    leftMatches.forEach(lp => {
+      const key = lp.player != null ? lp.player : 'optionLine';
+      const rp = rightMatches.find(r => (r.player != null ? r.player : 'optionLine') === key);
+      if (!rp) return;
+      const tmp = lp.points;
+      lp.points = rp.points;
+      rp.points = tmp;
+    });
+  }
+  // Option (the only directionFixed play) now nests a Normal/Counter
+  // sub-variant under each direction instead of paths living directly on
+  // Left/Right (see hasCounter above) -- same "flat vs nested" unwrap as
+  // normalizePlayData below, repairing each matching sub-variant pair
+  // rather than assuming paths sit right on Left/Right.
+  if (pt.directions.Left.paths) {
+    swapVariant(pt.directions.Left, pt.directions.Right);
+  } else {
+    Object.keys(pt.directions.Left).forEach(subKey => {
+      const lv = pt.directions.Left[subKey];
+      const rv = pt.directions.Right[subKey];
+      if (lv && rv) swapVariant(lv, rv);
+    });
+  }
 }
 
 // Same problem, one level deeper: a path can gain a brand-new BLOCKING
@@ -429,10 +453,11 @@ const BALL_COLOR = '#e0201a';
 const NOBALL_COLOR = '#123a8c';
 const CIRCLE_R = 36;
 
-function getVariant(playType, direction, insideOutside, readPosition) {
+function getVariant(playType, direction, insideOutside, readPosition, counterOn) {
   let v = playType.directions[direction];
   if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
   if (playType.hasReadToggle) v = v[readPosition || 'A'];
+  if (playType.hasCounter) v = v[counterOn ? 'Counter' : 'Normal'];
   return v;
 }
 
@@ -444,7 +469,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -612,10 +637,10 @@ window.renderCardDiagram = renderCardDiagram;
 window.renderSplitDiagram = renderSplitDiagram;
 
 // ---- Render a card's diagram into its SVG stage ----
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const variant = getVariant(playType, direction, insideOutside, readPosition);
+  const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn);
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
   // Boot: swap which path is treated as the ball carrier, purely for this
@@ -1231,10 +1256,10 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition) {
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
 
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
@@ -1399,6 +1424,12 @@ function buildCard(combo) {
   // play as authored, not a state most cards should start in.
   let motionOn = false;
   let bootOn = false;
+  // Nathan: "Both Option and Outside Zone need a new toggle for Counter...
+  // added to the end of the play call like boot." Defaults off, same as
+  // Motion/Boot. Unlike Boot, this doesn't swap anything live -- it just
+  // picks the Counter sub-variant authored in Edit Plays (see getVariant),
+  // so a play without hasCounter simply never shows this toggle at all.
+  let counterOn = false;
   const isPlayingRef = { value: false };
 
   // FRONT
@@ -1541,12 +1572,20 @@ function buildCard(combo) {
 
   const readSlot = document.createElement('div');
   readSlot.className = 'toggle-slot';
+  let counterToggle = null;
   if (combo.hasReadToggle) {
     const readToggle = buildToggleGroup('brown', [
       { value: 'A', label: 'Read A' },
       { value: 'B', label: 'Read B' },
     ], readPosition, (v) => { if (isPlayingRef.value) return; readPosition = v; onComboChanged(); });
     readSlot.appendChild(readToggle);
+  } else if (combo.hasCounter) {
+    // Read and Counter never coexist on the same play today (Read is
+    // Inside Zone only, Counter is Option/Outside Zone only), so Counter
+    // reuses this same always-otherwise-empty slot rather than adding a
+    // 5th grid column just for it.
+    counterToggle = buildSwitchToggle('Counter', counterOn, (v) => { if (isPlayingRef.value) return; counterOn = v; onComboChanged(); });
+    readSlot.appendChild(counterToggle);
   }
   extrasRow.appendChild(readSlot);
 
@@ -1568,6 +1607,7 @@ function buildCard(combo) {
     // instead of being squeezed into one of four equal columns.
     ioSlot.style.display = isSplit ? 'none' : '';
     readSlot.style.display = isSplit ? 'none' : '';
+    if (counterToggle) counterToggle.style.display = isSplit ? 'none' : '';
     extrasRow.classList.toggle('split-extras', isSplit);
     requestAnimationFrame(() => {
       [...toggleRow.querySelectorAll('.toggle-group')].forEach(g => placeToggleThumb(g));
@@ -1591,7 +1631,7 @@ function buildCard(combo) {
 
   function rerenderDiagram() {
     if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer); return; }
-    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
   }
 
   stage.addEventListener('playerclick', (ev) => {
@@ -1616,7 +1656,7 @@ function buildCard(combo) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
   });
 
   const speedToggle = document.createElement('div');
@@ -1724,13 +1764,19 @@ function buildCard(combo) {
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
       // after the wing spot is set), then In/Out if this play has it, then
-      // the play itself, then Direction, then Boot tacked on at the very end.
+      // the play itself, then Direction, then Boot/Counter tacked on at the
+      // very end (Nathan: "It is added to the end of the play call like
+      // boot"). Boot and Counter can't both be on in practice -- Boot's
+      // slot is empty for Option (noBoot) and Counter's toggle only exists
+      // on Option/Outside Zone -- but pushing both here regardless costs
+      // nothing if that ever changes.
       parts = [`Wing ${wingSide}`];
       if (motionOn) parts.push('Motion');
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
       parts.push(direction);
       if (bootOn) parts.push('Boot');
+      if (counterOn) parts.push('Counter');
     }
     titleBar.textContent = parts.join(' ');
     if (outer.classList.contains('flipped')) startSignalSequence();

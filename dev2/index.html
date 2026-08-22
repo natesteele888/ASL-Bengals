@@ -794,6 +794,22 @@
     </div>
     <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
   </div>
+  <!-- Nathan: "Both Option and Outside Zone need a new toggle for
+       Counter... added to the end of the play call like boot." Unlike
+       Boot (a live ball-carrier swap, no new geometry), Counter needs a
+       real different route for #4's sweep, so it's authored here as its
+       own stored sub-variant (Normal/Counter) per direction -- same
+       pattern as Read A/B and In/Out above, gated on hasCounter in
+       data/plays.json (Option, Outside Zone only). See
+       js/edit-plays.js's counterVariant/getPlayVariant. -->
+  <div class="corner-control" id="counterGroup" style="display:none;">
+    <label>Counter</label>
+    <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
+      <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
+    </div>
+  </div>
   
   <div class="edit-toolbar" id="editToolbar" style="display:none;">
     <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
@@ -1536,7 +1552,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822n';
+  const BUILD_V = '20260822o';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
