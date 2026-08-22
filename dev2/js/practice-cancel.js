@@ -8,17 +8,12 @@
 //
 // A single team-wide setting (like drone-footage.js's visibility toggle),
 // lives at settings/practiceCancellation in the RTDB:
-//   { active, message, practiceId, practiceLabel, endsAt, updatedAt }
+//   { active, message, eventId, eventLabel, eventType, endsAt, updatedAt, noticeId }
 // -- active is the coach's on/off switch, endsAt is a real timestamp so the
 // full-screen block disappears on its own once that time passes even if
-// nobody remembers to turn it back off.
-//
-// Coach Tools > Settings (js/coachtools-settings.js calls
-// window.initPracticeCancelSettings on that tab's init) is where a coach
-// writes the message and either picks an upcoming practice -- reusing its
-// real end time from js/practices.js's own data instead of making the
-// coach retype a duration -- or, if this isn't tied to one specific
-// practice on the calendar, sets an end time by hand.
+// nobody remembers to turn it back off. eventType is 'practice' or 'game'
+// (see the 6th-pass note below) and picks which real photo/copy the
+// full-screen panel shows.
 //
 // window.maybeShowCancellationPanel() is called from player-identity.js's
 // gate() once a session is known, same hook point as the What's New badge
@@ -51,6 +46,39 @@
 //    write here should never block someone dismissing the panel) and only
 //    fires when a real player session exists, which player-identity.js's
 //    gate() guarantees by the time this panel can even be showing.
+//
+// Nathan (6th pass): "I also don't want it to be in the Coach Tools
+// section. It should be available to coaches when they click into a
+// scheduled game or practice... the pop up is activated and won't come
+// down until 30 minutes after the scheduled event's end time." Three
+// changes:
+//
+// 1. The Coach Tools > Settings manual form (wireCancelSettingsForm /
+//    populatePracticeSelect / refreshCancelSettingsUI /
+//    window.initPracticeCancelSettings, plus its index.html markup) is
+//    gone -- clicking into the specific game/practice on the schedule is
+//    now the ONLY way to activate or end a notice.
+//
+// 2. Generalized from practice-only to also cover games. The setting
+//    object now carries `eventId`/`eventLabel`/`eventType` ('practice' or
+//    'game') instead of practice-only field names -- window.getGamesCached
+//    (js/schedule.js) is read the same way window.getPracticesCached
+//    (js/practices.js) already was. window.activatePracticeCancellation
+//    keeps its name (still the one function js/practices.js calls) but
+//    now takes an optional trailing eventType, defaulting to 'practice' so
+//    that existing call site didn't need to change; js/schedule.js's new
+//    "Cancel Due to Weather" button passes 'game'.
+//    window.renderPracticeCancelSection / window.renderGameCancelSection
+//    are now thin wrappers around one shared renderEventCancelSection.
+//
+// 3. computeEndsAt() now adds a 30-minute grace period on top of whatever
+//    end time it lands on (explicit endTime, or the default-duration
+//    fallback below) -- "If practice is from 530 to 730, then it would
+//    turn off at 800." Games don't carry their own endTime field (just
+//    arrive/warm-up/gameTime), so they get the same 120-minute default
+//    duration js/calendar-export.js already assumes for a game with no
+//    other info, the same way a practice with no endTime falls back to
+//    105 minutes.
 // ---------------------------------------------------------------------------
 (function () {
 
@@ -97,31 +125,53 @@
       return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     } catch (e) { return iso; }
   }
-  // A practice with no endTime saved yet still needs a real cutoff --
-  // same 105-minute default calendar-export.js already falls back to for
-  // a start-only practice (minutesBetween(...) || 105).
-  function computeEndsAt(practice) {
-    if (!practice || !practice.date) return null;
-    const dparts = practice.date.split('-').map(Number);
+  // How long the full-screen notice stays up after the coach hits Cancel --
+  // whatever real end time the event has (or a sane default duration when
+  // it doesn't), PLUS a fixed grace window. Nathan: "If practice is from
+  // 530 to 730, then it would turn off at 800" -- 30 minutes past the
+  // scheduled end, every time, regardless of event type.
+  const END_GRACE_MIN = 30;
+  // A practice with no endTime saved yet still needs a real cutoff -- same
+  // 105-minute default calendar-export.js already falls back to for a
+  // start-only practice (minutesBetween(...) || 105). Games don't have an
+  // endTime field at all (just arrive/warm-up/gameTime), so they use
+  // calendar-export.js's own 120-minute game default instead.
+  const DEFAULT_DURATION_MIN = { practice: 105, game: 120 };
+  function computeEndsAt(event, eventType) {
+    if (!event || !event.date) return null;
+    const dparts = event.date.split('-').map(Number);
     if (dparts.length !== 3 || dparts.some(isNaN)) return null;
     const [y, mo, d] = dparts;
-    let eh, em;
-    if (practice.endTime) {
-      const t = practice.endTime.split(':').map(Number);
-      eh = t[0]; em = t[1];
-    } else if (practice.time) {
-      const t = practice.time.split(':').map(Number);
-      const totalMin = t[0] * 60 + t[1] + 105;
-      eh = Math.floor(totalMin / 60) % 24; em = totalMin % 60;
+    const startTimeStr = eventType === 'game' ? (event.gameTime || event.time) : event.time;
+    let totalMin;
+    if (event.endTime) {
+      const t = event.endTime.split(':').map(Number);
+      totalMin = t[0] * 60 + t[1];
+    } else if (startTimeStr) {
+      const t = startTimeStr.split(':').map(Number);
+      totalMin = t[0] * 60 + t[1] + (DEFAULT_DURATION_MIN[eventType] || 105);
     } else {
-      eh = 23; em = 59; // no time at all on file -- default to end of that day
+      totalMin = 23 * 60 + 59; // no time at all on file -- default to end of that day
     }
+    totalMin += END_GRACE_MIN;
+    const eh = Math.floor(totalMin / 60) % 24;
+    const em = totalMin % 60;
+    // Carry the date forward a day for every 24h the grace period pushed
+    // past midnight (only realistically matters for the end-of-day
+    // fallback above landing right at the grace window).
+    const dayOverflow = Math.floor(totalMin / (24 * 60));
     if ([eh, em].some(isNaN)) return null;
-    return new Date(y, mo - 1, d, eh, em, 0, 0);
+    return new Date(y, mo - 1, d + dayOverflow, eh, em, 0, 0);
   }
-  function fmtPracticeMeta(practice) {
-    const dateLabel = fmtDateLocal(practice.date);
-    const timeLabel = practice.time ? (practice.endTime ? `${to12h(practice.time)} – ${to12h(practice.endTime)}` : to12h(practice.time)) : '';
+  function fmtEventMeta(event, eventType) {
+    const dateLabel = fmtDateLocal(event.date);
+    let timeLabel = '';
+    if (eventType === 'game') {
+      const t = event.gameTime || event.time;
+      timeLabel = t ? `Kickoff ${to12h(t)}` : '';
+    } else {
+      timeLabel = event.time ? (event.endTime ? `${to12h(event.time)} – ${to12h(event.endTime)}` : to12h(event.time)) : '';
+    }
     return timeLabel ? `${dateLabel} • ${timeLabel}` : dateLabel;
   }
 
@@ -148,16 +198,17 @@
     return !isNaN(t) && t > Date.now();
   }
 
-  // Shared by both places a notice gets activated -- the Coach Tools >
-  // Settings form (wireCancelSettingsForm below) and the practice-detail
-  // "Cancel Due to Weather" button (window.activatePracticeCancellation) --
-  // so neither can forget the noticeId confirmation-tracking needs.
-  function buildCancelSetting(message, practiceId, practiceLabel, endsAtDate) {
+  // Shared by every place a notice gets activated (window.
+  // activatePracticeCancellation, called from both js/practices.js's and
+  // js/schedule.js's "Cancel Due to Weather" buttons) so none of them can
+  // forget the noticeId confirmation-tracking needs.
+  function buildCancelSetting(message, eventId, eventLabel, endsAtDate, eventType) {
     return {
       active: true,
       message,
-      practiceId: practiceId || null,
-      practiceLabel: practiceLabel || null,
+      eventId: eventId || null,
+      eventLabel: eventLabel || null,
+      eventType: eventType || 'practice',
       endsAt: endsAtDate.toISOString(),
       updatedAt: new Date().toISOString(),
       noticeId: genNoticeId(),
@@ -428,10 +479,17 @@
   function showPanel(setting) {
     const overlay = document.getElementById('cancelNoticeOverlay');
     if (!overlay) return;
+    const isGame = setting.eventType === 'game';
+    const headerEl = document.getElementById('cancelNoticeHeaderText');
     const msgEl = document.getElementById('cancelNoticeMessageText');
     const metaEl = document.getElementById('cancelNoticeMetaText');
-    if (msgEl) msgEl.textContent = setting.message || 'Practice has been canceled.';
-    if (metaEl) metaEl.textContent = setting.practiceLabel ? setting.practiceLabel : `Notice ends ${fmtEndsAt(setting.endsAt)}`;
+    if (headerEl) headerEl.textContent = isGame ? 'Game Canceled' : 'Practice Canceled';
+    if (msgEl) msgEl.textContent = setting.message || (isGame ? 'This game has been canceled.' : 'Practice has been canceled.');
+    if (metaEl) metaEl.textContent = setting.eventLabel ? setting.eventLabel : `Notice ends ${fmtEndsAt(setting.endsAt)}`;
+    // Games use Nathan's separate game-day storm photo (assets/images/
+    // cancel-storm-game.jpg) -- see the .cancelSky.game rule in
+    // css/styles.css -- practices keep the original field photo.
+    overlay.classList.toggle('game', isGame);
     shownUpdatedAt = setting.updatedAt;
     shownNoticeId = setting.noticeId || null;
     if (!overlay.classList.contains('show')) {
@@ -494,127 +552,9 @@
     }
   }
 
-  // ---- Coach Tools > Settings wiring ----
-  function refreshCancelSettingsUI() {
-    const statusEl = document.getElementById('cancelNoticeStatus');
-    const formWrap = document.getElementById('cancelNoticeForm');
-    const deactivateBtn = document.getElementById('cancelDeactivateBtn');
-    if (!statusEl) return;
-    statusEl.textContent = 'Loading…';
-    loadCancelSetting().then(setting => {
-      if (isActiveNow(setting)) {
-        statusEl.innerHTML = `<b style="color:#c62828;">🚨 Notice is active</b><br>"${escapeHtml(setting.message)}"<br>` +
-          `Ends ${escapeHtml(fmtEndsAt(setting.endsAt))}${setting.practiceLabel ? ' · ' + escapeHtml(setting.practiceLabel) : ''}`;
-        if (formWrap) formWrap.style.display = 'none';
-        if (deactivateBtn) deactivateBtn.style.display = 'block';
-      } else {
-        statusEl.textContent = 'No active cancellation notice.';
-        if (formWrap) formWrap.style.display = '';
-        if (deactivateBtn) deactivateBtn.style.display = 'none';
-      }
-    });
-  }
-
-  function populatePracticeSelect() {
-    const select = document.getElementById('cancelPracticeSelect');
-    if (!select || !window.ensurePracticesLoaded) return;
-    window.ensurePracticesLoaded().then(items => {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const upcoming = (items || [])
-        .filter(p => p.type === 'practice' && p.date >= todayStr)
-        .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
-      while (select.options.length > 1) select.remove(1);
-      upcoming.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = fmtPracticeMeta(p);
-        select.appendChild(opt);
-      });
-    });
-  }
-
-  function wireCancelSettingsForm() {
-    const select = document.getElementById('cancelPracticeSelect');
-    const manualInput = document.getElementById('cancelManualEndInput');
-    const messageInput = document.getElementById('cancelMessageInput');
-    const activateBtn = document.getElementById('cancelActivateBtn');
-    const deactivateBtn = document.getElementById('cancelDeactivateBtn');
-    const errEl = document.getElementById('cancelNoticeError');
-
-    if (select && manualInput && !select.dataset.wired) {
-      select.dataset.wired = '1';
-      select.addEventListener('change', () => {
-        manualInput.style.display = select.value ? 'none' : '';
-      });
-    }
-
-    if (activateBtn && !activateBtn.dataset.wired) {
-      activateBtn.dataset.wired = '1';
-      activateBtn.addEventListener('click', () => {
-        if (errEl) errEl.textContent = '';
-        const practiceId = select ? select.value : '';
-        const message = (messageInput && messageInput.value.trim()) ||
-          'Practice is canceled due to lightning in the area. Stay safe -- see you next time!';
-
-        let endsAtDate = null, practiceLabel = null;
-        if (practiceId) {
-          const items = window.getPracticesCached ? window.getPracticesCached() : [];
-          const practice = items.find(p => p.id === practiceId);
-          if (practice) {
-            endsAtDate = computeEndsAt(practice);
-            practiceLabel = fmtPracticeMeta(practice);
-          }
-        } else if (manualInput && manualInput.value) {
-          const parsed = new Date(manualInput.value);
-          if (!isNaN(parsed.getTime())) endsAtDate = parsed;
-        }
-
-        if (!endsAtDate || isNaN(endsAtDate.getTime())) {
-          if (errEl) errEl.textContent = 'Pick a practice, or set an end time by hand, first.';
-          return;
-        }
-        if (endsAtDate.getTime() <= Date.now()) {
-          if (errEl) errEl.textContent = 'That end time has already passed -- pick a later one.';
-          return;
-        }
-
-        activateBtn.disabled = true;
-        activateBtn.textContent = 'Activating…';
-        const setting = buildCancelSetting(message, practiceId, practiceLabel, endsAtDate);
-        saveCancelSetting(setting, () => {
-          activateBtn.disabled = false;
-          activateBtn.textContent = '🚨 Activate Cancellation Notice';
-          if (messageInput) messageInput.value = '';
-          refreshCancelSettingsUI();
-        }, msg => {
-          activateBtn.disabled = false;
-          activateBtn.textContent = '🚨 Activate Cancellation Notice';
-          if (errEl) errEl.textContent = `Save failed: ${msg}`;
-        });
-      });
-    }
-
-    if (deactivateBtn && !deactivateBtn.dataset.wired) {
-      deactivateBtn.dataset.wired = '1';
-      deactivateBtn.addEventListener('click', () => {
-        deactivateBtn.disabled = true;
-        deactivateBtn.textContent = 'Ending…';
-        deactivateCancelSetting(() => {
-          deactivateBtn.disabled = false;
-          deactivateBtn.textContent = '✅ End Notice Now';
-          refreshCancelSettingsUI();
-        }, msg => {
-          deactivateBtn.disabled = false;
-          deactivateBtn.textContent = '✅ End Notice Now';
-          if (errEl) errEl.textContent = `Save failed: ${msg}`;
-        });
-      });
-    }
-  }
-
-  // Shared by the Settings-form Deactivate button above and
-  // window.deactivatePracticeCancellation below (the practice-detail "End
-  // Notice Now" link).
+  // Shared by window.deactivatePracticeCancellation below (the game/
+  // practice-detail "End Notice Now" link -- the only way to end a notice
+  // now that the Coach Tools > Settings form is gone).
   function deactivateCancelSetting(afterOk, afterFail) {
     loadCancelSetting().then(setting => {
       if (!setting) { if (afterOk) afterOk(); return; }
@@ -623,107 +563,115 @@
     });
   }
 
-  window.initPracticeCancelSettings = function () {
-    wireCancelSettingsForm();
-    populatePracticeSelect();
-    refreshCancelSettingsUI();
-  };
-
-  // ---- Practice-detail "Cancel Due to Weather" (js/practices.js) ----
+  // ---- Game/practice-detail "Cancel Due to Weather" (js/schedule.js,
+  // js/practices.js) ----
   // Nathan: "coaches should have an option of going into the schedule,
   // clicking on the practice and a cancel due to weather button, that you
   // confirm and it creates the active push notice until the end of the
-  // event time for that day." Same underlying settings/practiceCancellation
-  // node the Settings-panel form writes to (there's still only ever ONE
-  // active notice team-wide) -- this is just a second, faster on-ramp to
-  // it that's pre-scoped to whichever practice the coach already has open,
-  // reusing that practice's own real end time exactly like the Settings
-  // form's practice picker does.
-  window.activatePracticeCancellation = function (practiceId, message, afterOk, afterFail) {
-    const items = window.getPracticesCached ? window.getPracticesCached() : [];
-    const practice = items.find(p => p.id === practiceId);
-    if (!practice) { if (afterFail) afterFail('Practice not found.'); return; }
-    const endsAtDate = computeEndsAt(practice);
+  // event time for that day" -- and later, "It should be available to
+  // coaches when they click into a scheduled game or practice" (not Coach
+  // Tools). There's still only ever ONE active notice team-wide.
+  //
+  // eventType defaults to 'practice' so js/practices.js's existing 4-arg
+  // call site didn't need to change; js/schedule.js's game button passes
+  // 'game' explicitly.
+  window.activatePracticeCancellation = function (eventId, message, afterOk, afterFail, eventType) {
+    eventType = eventType || 'practice';
+    const items = (eventType === 'game'
+      ? (window.getGamesCached ? window.getGamesCached() : [])
+      : (window.getPracticesCached ? window.getPracticesCached() : []));
+    const event = items.find(x => x.id === eventId);
+    if (!event) { if (afterFail) afterFail(`${eventType === 'game' ? 'Game' : 'Practice'} not found.`); return; }
+    const endsAtDate = computeEndsAt(event, eventType);
     if (!endsAtDate || isNaN(endsAtDate.getTime()) || endsAtDate.getTime() <= Date.now()) {
-      if (afterFail) afterFail('This practice has already ended.');
+      if (afterFail) afterFail(`This ${eventType} has already ended.`);
       return;
     }
     const finalMessage = (message && message.trim()) ||
-      'Practice is canceled due to lightning in the area. Stay safe -- see you next time!';
-    const setting = buildCancelSetting(finalMessage, practiceId, fmtPracticeMeta(practice), endsAtDate);
+      (eventType === 'game'
+        ? 'This game is canceled due to weather. Stay safe -- see you next time!'
+        : 'Practice is canceled due to lightning in the area. Stay safe -- see you next time!');
+    const setting = buildCancelSetting(finalMessage, eventId, fmtEventMeta(event, eventType), endsAtDate, eventType);
     saveCancelSetting(setting, afterOk, afterFail);
   };
   window.deactivatePracticeCancellation = deactivateCancelSetting;
 
   // Nathan: "Coaches should see if in the canceled practice how many have
   // confirmed in the app during the cancellation period." Renders into a
-  // <div id="practiceCancelSection"> that js/practices.js's practice-detail
-  // view provides (same "owns its own section, called from practices.js's
-  // renderDetail()" pattern as js/drone-footage.js's
+  // wrap <div> that the game/practice-detail view provides (same "owns its
+  // own section, called from renderDetail()" pattern as js/drone-footage.js's
   // window.renderDroneFootageSection). Three states: no notice tied to
-  // this practice yet (show the Cancel button, coaches only), a notice tied
-  // to THIS practice that's still active (red status + live confirm count
-  // + End Notice Now), or one that already ended (same confirm count, kept
+  // this event yet (show the Cancel button, coaches only), a notice tied
+  // to THIS event that's still active (red status + live confirm count +
+  // End Notice Now), or one that already ended (same confirm count, kept
   // around as a record instead of just vanishing the moment it expires).
-  function renderPracticeCancelSection(practice) {
-    const wrap = document.getElementById('practiceCancelSection');
-    if (!wrap || !practice || !practice.id) return;
-    const savedItems = window.getPracticesCached ? window.getPracticesCached() : [];
-    if (!savedItems.some(p => p.id === practice.id)) { wrap.innerHTML = ''; return; } // not saved yet -- nothing to cancel
+  //
+  // window.renderPracticeCancelSection(practice) and
+  // window.renderGameCancelSection(game) are thin wrappers so
+  // js/practices.js and js/schedule.js each just call the one that matches
+  // what they're rendering.
+  function renderEventCancelSection(wrapId, event, eventType) {
+    const wrap = document.getElementById(wrapId);
+    if (!wrap || !event || !event.id) return;
+    const savedItems = (eventType === 'game'
+      ? (window.getGamesCached ? window.getGamesCached() : [])
+      : (window.getPracticesCached ? window.getPracticesCached() : []));
+    if (!savedItems.some(x => x.id === event.id)) { wrap.innerHTML = ''; return; } // not saved yet -- nothing to cancel
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
 
     loadCancelSetting().then(setting => {
-      if (document.getElementById('practiceCancelSection') !== wrap) return; // coach navigated on while this was loading
-      const tiedToThisPractice = setting && setting.practiceId === practice.id;
-      if (tiedToThisPractice) {
-        renderCancelStatusBlock(wrap, practice, setting, approved, isActiveNow(setting));
+      if (document.getElementById(wrapId) !== wrap) return; // coach navigated on while this was loading
+      const tiedToThisEvent = setting && setting.eventId === event.id && setting.eventType === eventType;
+      if (tiedToThisEvent) {
+        renderCancelStatusBlock(wrap, event, eventType, setting, approved, isActiveNow(setting));
       } else if (approved) {
-        renderCancelButton(wrap, practice);
+        renderCancelButton(wrap, event, eventType);
       } else {
         wrap.innerHTML = '';
       }
     });
   }
 
-  function renderCancelButton(wrap, practice) {
-    const endsAtDate = computeEndsAt(practice);
+  function renderCancelButton(wrap, event, eventType) {
+    const endsAtDate = computeEndsAt(event, eventType);
     if (!endsAtDate || isNaN(endsAtDate.getTime()) || endsAtDate.getTime() <= Date.now()) {
       wrap.innerHTML = ''; // already over -- nothing left to cancel
       return;
     }
+    const btnId = eventType === 'game' ? 'gameCancelWeatherBtn' : 'practiceCancelWeatherBtn';
     wrap.innerHTML = `<div style="margin:12px 0;">
-      <button type="button" class="navBtn danger" id="practiceCancelWeatherBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;">⛈️ Cancel Due to Weather</button>
+      <button type="button" class="navBtn danger" id="${btnId}" style="display:block;width:100%;text-align:center;box-sizing:border-box;">⛈️ Cancel Due to Weather</button>
     </div>`;
-    const btn = document.getElementById('practiceCancelWeatherBtn');
+    const btn = document.getElementById(btnId);
     if (!btn) return;
     btn.addEventListener('click', () => {
-      if (!confirm('Cancel this practice due to weather?\n\nEveryone will get a full-screen notice until it ends. This replaces any other active cancellation notice.')) return;
+      if (!confirm(`Cancel this ${eventType} due to weather?\n\nEveryone will get a full-screen notice until it ends. This replaces any other active cancellation notice.`)) return;
       btn.disabled = true;
       btn.textContent = 'Canceling…';
-      window.activatePracticeCancellation(practice.id, null, () => {
-        renderPracticeCancelSection(practice);
+      window.activatePracticeCancellation(event.id, null, () => {
+        renderEventCancelSection(wrap.id, event, eventType);
       }, msg => {
         btn.disabled = false;
         btn.textContent = '⛈️ Cancel Due to Weather';
         alert(`Could not cancel: ${msg}`);
-      });
+      }, eventType);
     });
   }
 
-  function renderCancelStatusBlock(wrap, practice, setting, approved, active) {
+  function renderCancelStatusBlock(wrap, event, eventType, setting, approved, active) {
     const header = active
       ? `<div class="lbSectionHeader" style="text-align:center;color:#c62828;">🚨 Canceled Due to Weather</div>
          <div class="lbSub" style="text-align:center;margin:2px 0 8px;">"${escapeHtml(setting.message)}"<br>Notice ends ${escapeHtml(fmtEndsAt(setting.endsAt))}</div>`
-      : `<div class="lbSub" style="text-align:center;margin:10px 0 4px;">⛈️ This practice was canceled due to weather.</div>`;
+      : `<div class="lbSub" style="text-align:center;margin:10px 0 4px;">⛈️ This ${eventType} was canceled due to weather.</div>`;
     // Confirmation names are coach-only -- everyone else already got the
     // popup itself; who-tapped-what isn't really their business to browse.
-    const countLine = approved ? `<div class="lbSub" style="text-align:center;margin-bottom:8px;" id="practiceCancelConfirmCount">Loading confirmations…</div>` : '';
-    const endBtn = active && approved ? `<div style="text-align:center;"><button type="button" class="lbLinkBtn" id="practiceCancelEndBtn">End Notice Now</button></div>` : '';
+    const countLine = approved ? `<div class="lbSub" style="text-align:center;margin-bottom:8px;" id="eventCancelConfirmCount">Loading confirmations…</div>` : '';
+    const endBtn = active && approved ? `<div style="text-align:center;"><button type="button" class="lbLinkBtn" id="eventCancelEndBtn">End Notice Now</button></div>` : '';
     wrap.innerHTML = header + countLine + endBtn;
 
     if (approved) {
       loadConfirmations(setting.noticeId).then(confirmations => {
-        const el = document.getElementById('practiceCancelConfirmCount');
+        const el = document.getElementById('eventCancelConfirmCount');
         if (!el) return;
         const names = confirmations ? Object.values(confirmations).map(c => c && c.name).filter(Boolean).sort() : [];
         el.textContent = names.length
@@ -731,12 +679,12 @@
           : (setting.noticeId ? 'No one has confirmed yet.' : 'Confirmations weren’t tracked for this older notice.');
       });
     }
-    const endBtnEl = document.getElementById('practiceCancelEndBtn');
+    const endBtnEl = document.getElementById('eventCancelEndBtn');
     if (endBtnEl) {
       endBtnEl.addEventListener('click', () => {
         if (!confirm('End this cancellation notice now?')) return;
         endBtnEl.disabled = true;
-        window.deactivatePracticeCancellation(() => renderPracticeCancelSection(practice), msg => {
+        window.deactivatePracticeCancellation(() => renderEventCancelSection(wrap.id, event, eventType), msg => {
           alert(`Could not end notice: ${msg}`);
           endBtnEl.disabled = false;
         });
@@ -744,5 +692,6 @@
     }
   }
 
-  window.renderPracticeCancelSection = renderPracticeCancelSection;
+  window.renderPracticeCancelSection = function (practice) { renderEventCancelSection('practiceCancelSection', practice, 'practice'); };
+  window.renderGameCancelSection = function (game) { renderEventCancelSection('gameCancelSection', game, 'game'); };
 })();

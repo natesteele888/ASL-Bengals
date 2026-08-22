@@ -35,9 +35,12 @@
 
   window.initCoachToolsSettings = function () {
     refreshDroneVisibilityToggle();
-    // Nathan: "due to weather we may need to cancel practice... a popup we
-    // can enable in the coach tools with a custom message." See
-    // js/practice-cancel.js for the full-screen notice this drives.
-    if (window.initPracticeCancelSettings) window.initPracticeCancelSettings();
+    // Nathan (6th pass on weather cancellation): "I also don't want it to
+    // be in the Coach Tools section. It should be available to coaches
+    // when they click into a scheduled game or practice." The manual
+    // Practice Cancellation Notice form that used to live here is gone --
+    // see js/practice-cancel.js's window.renderPracticeCancelSection /
+    // window.renderGameCancelSection, wired into js/practices.js and
+    // js/schedule.js's own detail views instead.
   };
 })();

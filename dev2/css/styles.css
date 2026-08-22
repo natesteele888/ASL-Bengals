@@ -284,6 +284,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .cancelSky{position:absolute;inset:0;background-color:#05070d;
   background-image:url(../assets/images/cancel-storm-field.jpg);
   background-size:cover;background-position:center 40%;background-repeat:no-repeat}
+/* Nathan (6th pass): "use this photo for cancellation of a GAME" -- a
+   second real storm-over-field photo, swapped in only for game cancellations
+   (js/practice-cancel.js's showPanel() toggles .cancelNoticeOverlay.game
+   based on the active notice's eventType). Practices keep the original
+   4th-pass photo above unchanged. */
+.cancelNoticeOverlay.game .cancelSky{background-image:url(../assets/images/cancel-storm-game.jpg)}
 
 /* Flash + bolts are now JS-driven (js/practice-cancel.js's
    fireLightningBolt(), ported from LYBS Cards' own randomized-jagged-bolt

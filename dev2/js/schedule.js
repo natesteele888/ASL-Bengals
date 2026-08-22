@@ -905,6 +905,7 @@
           ${injuryReportReadOnlyHtml(current)}
         </div>
         <div id="schedLast5Wrap" style="margin-top:16px;"></div>
+        <div id="gameCancelSection"></div>
         <div class="lbSub" style="margin:16px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
@@ -931,6 +932,12 @@
       renderHeadToHead();
       renderSeasonLeaders();
       renderLast5Panel('last5');
+      // Nathan (6th pass on weather cancellation): "It should be available
+      // to coaches when they click into a scheduled game or practice." See
+      // js/practice-cancel.js's window.renderGameCancelSection -- same
+      // "Cancel Due to Weather" button/status pattern js/practices.js
+      // already had, just pointed at this game instead.
+      if (window.renderGameCancelSection) window.renderGameCancelSection(current);
       return;
     }
 
@@ -998,6 +1005,7 @@
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
+      <div id="gameCancelSection"></div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>
       <div class="scheduleFinePrint">Game Preview is auto-generated -- updates once you save.</div>`;
@@ -1111,6 +1119,11 @@
     }
     renderGamePreview();
     renderWeather();
+    // Same "Cancel Due to Weather" section as the read-only view above --
+    // available from the edit view too, not just the read-only default,
+    // since a coach mid-edit shouldn't have to back out to read-only just
+    // to cancel the game they're already looking at.
+    if (window.renderGameCancelSection) window.renderGameCancelSection(current);
   }
 
   // If This Week (js/thisweek.js) is currently pointed at this game, pull
