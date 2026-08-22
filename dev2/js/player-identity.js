@@ -371,7 +371,19 @@
       // files) -- only worth checking when this run actually moved the
       // needle (a new best).
       if(isNewBest && typeof fetchPCQLeaderboardData === 'function' && typeof notifyIfRanked === 'function'){
-        fetchPCQLeaderboardData().then(data => notifyIfRanked(session.name, 'Play Calls Quiz', data)).catch(() => {});
+        fetchPCQLeaderboardData().then(data => {
+          notifyIfRanked(session.name, 'Play Calls Quiz', data);
+          // Nathan: "if a kid does good and moves up the leaderboard rank,
+          // give them a popup... confetti animation." Same rank-up
+          // celebration study-quiz.js's own Quiz Scores/Timed Quiz saves
+          // trigger -- see checkRankUpCelebration's comment there. This call
+          // only happens when isNewBest is already true (see the outer if
+          // above), so pass it straight through rather than having
+          // checkRankUpCelebration try to re-derive it -- PCQ's synced
+          // pcqBestScore field on the player record already IS the real
+          // "was this actually their best?" answer, no guessing needed.
+          if(typeof checkRankUpCelebration === 'function') checkRankUpCelebration('pcq', 'Play Calls Quiz', session.name, data, { isNewBest: true });
+        }).catch(() => {});
       }
       return { isNewBest: isNewBest, bestScore: isNewBest ? score : prevBest, bestMaxScore: isNewBest ? maxScore : (existing && existing.pcqBestMaxScore) || maxScore };
     } catch(e){ return null; } // best-effort; a failed save shouldn't block the done screen

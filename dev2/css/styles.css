@@ -439,6 +439,33 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
 .lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
 
+/* Rank-up celebration (js/study-quiz.js's showRankUpCelebration) -- a
+   gold-toned variant of .lbHeroHeader (same layout, warmer color) so it
+   reads as a distinct "you earned this" moment rather than just another
+   plain leaderboard popup. */
+.rankUpHeroHeader{background:linear-gradient(160deg, #ffb703 0%, var(--bengal-orange) 100%)}
+.rankUpMeRow{position:relative;z-index:1;box-shadow:0 2px 10px rgba(255,106,19,.35)}
+
+/* Confetti -- a handful of small colored rectangles JS drops in on a
+   timer, falling + drifting + spinning via this one keyframe, each with
+   its own random duration/delay/drift/rotation set as inline custom
+   properties at spawn time (see spawnConfetti). Confined to the overlay's
+   own bounds (position:absolute inside the position:fixed overlay), not
+   pointer-interactive, and self-removing after their animation ends. */
+.rankUpConfettiHost{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5}
+.confettiPiece{position:absolute;top:-16px;opacity:0;border-radius:2px;
+  animation-name:confettiFall;animation-timing-function:ease-in;animation-fill-mode:forwards}
+@keyframes confettiFall{
+  0%{opacity:1;transform:translateY(0) translateX(0) rotate(0deg)}
+  100%{opacity:.85;transform:translateY(640px) translateX(var(--confettiDrift)) rotate(var(--confettiRotate))}
+}
+@media (prefers-reduced-motion: reduce){
+  .confettiPiece{display:none}
+  /* js/study-quiz.js's spawnConfetti/showRankUpCelebration also check this
+     same media query themselves and skip spawning confetti + the row-slide
+     transform entirely when it matches, rather than relying on CSS alone. */
+}
+
 /* Nathan: "players who are excelling then those who are struggling and
    what they could do." Same lbRow layout as everywhere else in this
    panel, but the name needs a second, wrapping line underneath for the

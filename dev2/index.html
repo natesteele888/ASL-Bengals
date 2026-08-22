@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260822e">
+<link rel="stylesheet" href="css/styles.css?v=20260822g">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1104,6 +1104,36 @@
   </div>
 </div>
 
+<!-- Rank-up celebration -- Nathan: "If a kid does good and moves up the
+     leaderboard rank, give them a popup notification congratulating them...
+     confetti animation. Show the leaderboard and they're name moving up
+     from where they were." Fired by js/study-quiz.js's
+     checkRankUpCelebration()/showRankUpCelebration() right after a Quiz
+     Scores, Timed Quiz, or Play Calls Quiz save actually improves that
+     player's own rank on that board -- see the big comment above
+     checkRankUpCelebration for how "improves" is tracked. #rankUpMiniLb
+     gets a few rows of that board re-rendered (same lbRowHtml the real
+     leaderboard tabs use) centered on this player's new position, with
+     their own row (#rankUpMeRow, tagged at render time) sliding up into
+     place from roughly where it used to sit. #rankUpConfettiHost is a
+     plain absolutely-positioned layer JS drops small colored divs into and
+     lets fall via CSS animation -- same "JS builds a few divs, CSS
+     animates them, JS cleans them up after" shape as
+     js/practice-cancel.js's lightning bolts. -->
+<div class="lbOverlay" id="rankUpOverlay">
+  <div class="lbCard lbCardCool">
+    <div class="rankUpConfettiHost" id="rankUpConfettiHost" aria-hidden="true"></div>
+    <button class="lbXClose" id="rankUpCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🎉</div>
+      <h3 id="rankUpHeadline">Way to go!</h3>
+      <div class="lbSub" id="rankUpSubtext"></div>
+    </div>
+    <div class="lbList" id="rankUpMiniLb"></div>
+    <button class="navBtn" id="rankUpNiceBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Nice! 🙌</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="myStatsOverlay">
   <div class="lbCard">
     <h3>📊 My Stats</h3>
@@ -1389,7 +1419,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822f';
+  const BUILD_V = '20260822h';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

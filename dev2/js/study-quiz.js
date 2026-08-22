@@ -538,7 +538,13 @@ async function fetchQuizLeaderboardData(){
   const deduped = dedupeBestByName(raw, quizIsBetter);
   const history = historyRaw || [];
   deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.total === e.total); });
-  deduped.sort((a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  // Nathan: "If a kid gets 31/31 once and another gets 31/31 two times, the
+  // kid who did it twice should get the advantage and higher spot." Same
+  // timesAchieved count that was already computed above for the "×N" badge
+  // (see countTimesAchieved's comment) -- it just wasn't part of the sort
+  // order before now, so a tie on score fell through to bestStreak/date
+  // instead and ignored how many times each person actually hit that score.
+  deduped.sort((a,b)=> b.score - a.score || (b.timesAchieved||0) - (a.timesAchieved||0) || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
   const { players, coaches } = splitByCoach(deduped);
   return { list: players.slice(0, LEADERBOARD_MAX), players: players.slice(0, LEADERBOARD_MAX), coaches: coaches.slice(0, LEADERBOARD_MAX), offline: offline };
 }
@@ -564,7 +570,10 @@ async function fetchPCQLeaderboardData(){
   const deduped = dedupeBestByName(raw, (a, b) => a.score > b.score);
   const history = historyRaw || [];
   deduped.forEach(e => { e.timesAchieved = countTimesAchieved(history, e.name, r => r.score === e.score && r.maxScore === e.maxScore); });
-  deduped.sort((a,b)=> b.score - a.score);
+  // Same tie-break as fetchQuizLeaderboardData above -- more completions at
+  // the same top score outranks fewer, instead of falling back to whatever
+  // order Object.values(players) happened to yield.
+  deduped.sort((a,b)=> b.score - a.score || (b.timesAchieved||0) - (a.timesAchieved||0));
   const split = splitByCoach(deduped);
   return { list: split.players.slice(0, LEADERBOARD_MAX), players: split.players.slice(0, LEADERBOARD_MAX), coaches: split.coaches.slice(0, LEADERBOARD_MAX), offline: false };
 }
@@ -590,6 +599,173 @@ async function notifyIfRanked(name, boardLabel, data){
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Rank-up celebration -- Nathan: "If a kid does good and moves up the
+// leaderboard rank, give them a popup notification congratulating them...
+// have some confetti animation. Show the leaderboard and they're name
+// moving up from where they were." notifyIfRanked above is a quiet OS-level
+// notification gated to top-3 only; this is the louder in-app version, and
+// it fires on ANY rank improvement, not just a medal finish -- every step
+// up is worth celebrating, not just cracking the podium.
+//
+// Needs a "where were they before" baseline to detect movement, so each
+// player's last-seen rank on each board is cached locally per device (same
+// spirit as practice-cancel.js's SEEN_KEY) rather than added to their cloud
+// player record -- this is just a per-device UI trigger, not real team
+// data worth syncing/reporting on. A player switching devices might get an
+// extra (or missed) celebration once as the new device's baseline catches
+// up -- a harmless false positive/negative for a "nice job!" popup.
+const RANK_TRACK_PREFIX = 'aslBengalsLastRank_';
+function getLastKnownRank(boardKey, name){
+  try { const v = localStorage.getItem(RANK_TRACK_PREFIX + boardKey + '_' + normName(name)); return v ? Number(v) : null; }
+  catch(e){ return null; }
+}
+function setLastKnownRank(boardKey, name, rank){
+  try { localStorage.setItem(RANK_TRACK_PREFIX + boardKey + '_' + normName(name), String(rank)); } catch(e){ /* ignore */ }
+}
+function prefersReducedMotionSQ(){
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch(e){ return false; }
+}
+
+// `data` is the same already-fetched players/coaches result notifyIfRanked's
+// caller passes it -- no extra network round-trip needed here.
+//
+// Nathan (follow-up): "have the confetti animation come up if it's a new
+// personal best for any of the games" -- a separate trigger from rank
+// movement, since a kid can beat their own record and still not crack a
+// higher spot if others are still ahead of them. `opts.isNewBest` covers
+// two cases: PCQ already knows for certain (recordQuizResult compares
+// against the real synced pcqBestScore field on the player record and
+// passes the boolean straight through), while Quiz Scores/Timed Quiz don't
+// have a synced "best" field to check against, so instead the caller passes
+// `opts.submittedEntry` (the entry it just saved) and this function matches
+// its timestamp against whichever entry dedupeBestByName just decided IS
+// this player's best across their ENTIRE saved history -- an exact match
+// means nothing beat it, i.e. it just became their new best.
+function checkRankUpCelebration(boardKey, boardLabel, name, data, opts){
+  if(!name || isCoachEntryName(name)) return;
+  opts = opts || {};
+  const { entry: boardEntry, rank } = findEntryAndRank(data.players, name);
+  if(!rank) return;
+  const lastRank = getLastKnownRank(boardKey, name);
+  setLastKnownRank(boardKey, name, rank); // always refresh the baseline for next time
+  const rankImproved = lastRank !== null && rank < lastRank;
+  const isNewBest = typeof opts.isNewBest === 'boolean'
+    ? opts.isNewBest
+    : !!(opts.submittedEntry && boardEntry && boardEntry.date === opts.submittedEntry.date);
+  if(!rankImproved && !isNewBest) return;
+  showRankUpCelebration({ name, boardLabel, oldRank: lastRank, newRank: rank, players: data.players, rankImproved, isNewBest });
+}
+
+function spawnConfetti(host){
+  if(!host || prefersReducedMotionSQ()) return;
+  const colors = ['#ff6a13', '#ffb703', '#2d7a2d', '#1f6fb2', '#c62828', '#7b2cbf'];
+  const W = host.clientWidth || window.innerWidth || 320;
+  const COUNT = 70;
+  for(let i = 0; i < COUNT; i++){
+    const el = document.createElement('div');
+    el.className = 'confettiPiece';
+    const x = Math.random() * W;
+    const w = 5 + Math.random() * 6;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const duration = 1700 + Math.random() * 1300;
+    const delay = Math.random() * 350;
+    const rotate = 180 + Math.random() * 540;
+    const drift = (Math.random() - 0.5) * 140;
+    el.style.left = x + 'px';
+    el.style.width = w + 'px';
+    el.style.height = (w * 0.4) + 'px';
+    el.style.background = color;
+    el.style.animationDuration = duration + 'ms';
+    el.style.animationDelay = delay + 'ms';
+    el.style.setProperty('--confettiRotate', rotate + 'deg');
+    el.style.setProperty('--confettiDrift', drift + 'px');
+    host.appendChild(el);
+    setTimeout(() => el.remove(), duration + delay + 150);
+  }
+}
+
+// A small window of rows centered on the player's NEW rank (not the whole
+// board -- this is about showing THEIR movement, not re-showing the full
+// leaderboard they can already open separately), reusing the exact same
+// lbRowHtml the real leaderboard tabs render with so it looks identical.
+function rankUpSliceHtml(players, newRank, scoreFn){
+  const idx = newRank - 1;
+  const start = Math.max(0, idx - 2);
+  const end = Math.min(players.length, idx + 3);
+  return players.slice(start, end).map((e, i) => {
+    const rank = start + i + 1;
+    const html = lbRowHtml(e, rank - 1, null, scoreFn(e));
+    // Tag the player's own row so showRankUpCelebration can animate it --
+    // lbRowHtml already gives it the "me" look via highlightEntry, but that
+    // needs an exact date+name match this synthetic call doesn't have, so
+    // the id is added here instead by string-patching the one row that
+    // matches their normalized name.
+    return normName(e.name) === normName(players[idx].name)
+      ? html.replace('class="lbRow', 'id="rankUpMeRow" class="lbRow me')
+      : html;
+  }).join('');
+}
+
+function showRankUpCelebration({ name, boardLabel, oldRank, newRank, players, rankImproved, isNewBest }){
+  const overlay = document.getElementById('rankUpOverlay');
+  if(!overlay) return;
+  const headline = document.getElementById('rankUpHeadline');
+  const subtext = document.getElementById('rankUpSubtext');
+  const miniLb = document.getElementById('rankUpMiniLb');
+  if(!headline || !subtext || !miniLb) return;
+
+  const scoreFn = boardLabel === 'Play Calls Quiz'
+    ? (e => `${e.score}/${e.maxScore}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}`)
+    : boardLabel === 'Timed Quiz'
+      ? (e => `${formatClock(e.timeMs)} • ✗${e.mistakes}`)
+      : (e => `${e.score}/${e.total}${e.timesAchieved>1?` ×${e.timesAchieved}`:''}${e.bestStreak?` • 🔥${e.bestStreak}`:''}`);
+
+  headline.textContent = `Way to go, ${name}!`;
+  // Word it based on which trigger(s) actually fired -- a plain "moved up"
+  // claim would be misleading on a personal-best-only save where the rank
+  // didn't change (others are still ahead), and vice versa.
+  subtext.textContent = rankImproved && isNewBest
+    ? `New personal best! You moved up from #${oldRank} to #${newRank} on the ${boardLabel} board!`
+    : rankImproved
+      ? `You moved up from #${oldRank} to #${newRank} on the ${boardLabel} board!`
+      : `New personal best on the ${boardLabel} board!`;
+  miniLb.innerHTML = rankUpSliceHtml(players, newRank, scoreFn);
+
+  overlay.classList.add('show');
+
+  const meRow = document.getElementById('rankUpMeRow');
+  const confettiHost = document.getElementById('rankUpConfettiHost');
+  // The slide-up-into-place row animation only makes sense when the rank
+  // actually moved -- a personal-best-only save (rank unchanged) just gets
+  // the highlighted row + confetti, no motion to fake.
+  if(meRow && rankImproved && !prefersReducedMotionSQ()){
+    const rowStep = meRow.offsetHeight + 6; // +6px matches .lbList's row gap
+    const positionsUp = Math.min(oldRank - newRank, 4); // clamp -- a huge jump would fly in from way off-card
+    meRow.style.transition = 'none';
+    meRow.style.transform = `translateY(${positionsUp * rowStep}px) scale(.96)`;
+    meRow.style.opacity = '.5';
+    void meRow.offsetWidth; // force reflow so the animation below actually plays
+    requestAnimationFrame(() => {
+      meRow.style.transition = 'transform .6s cubic-bezier(.2,.8,.3,1.2), opacity .5s ease-out';
+      meRow.style.transform = 'translateY(0) scale(1)';
+      meRow.style.opacity = '1';
+    });
+  }
+  spawnConfetti(confettiHost);
+
+  const closeAndClear = () => {
+    overlay.classList.remove('show');
+    if(confettiHost) confettiHost.innerHTML = '';
+  };
+  const niceBtn = document.getElementById('rankUpNiceBtn');
+  const closeBtn = document.getElementById('rankUpCloseBtn');
+  if(niceBtn) niceBtn.onclick = closeAndClear;
+  if(closeBtn) closeBtn.onclick = closeAndClear;
+}
+
 // Nathan: "coaches shouldn't be awarded points with the kids -- they can be
 // completely separate." Renders the coach group (if any coach has a saved
 // score) as its own section below the player board -- its own header, its
@@ -945,7 +1121,10 @@ document.getElementById('lbSaveBtn').addEventListener('click', async ()=>{
   lbOverlay.classList.add('show');
   await cloudPush('leaderboard', entry);
   renderLeaderboard(entry);
-  fetchQuizLeaderboardData().then(data => notifyIfRanked(entry.name, 'Quiz Scores', data));
+  fetchQuizLeaderboardData().then(data => {
+    notifyIfRanked(entry.name, 'Quiz Scores', data);
+    checkRankUpCelebration('quiz', 'Quiz Scores', entry.name, data, { submittedEntry: entry });
+  });
 });
 document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   const nameInput = document.getElementById('timedLbNameInput');
@@ -958,7 +1137,10 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   await cloudPush('timedLeaderboard', entry);
   renderTimedLeaderboard(entry);
   renderOverallLeaderboard();
-  fetchTimedLeaderboardData().then(data => notifyIfRanked(entry.name, 'Timed Quiz', data));
+  fetchTimedLeaderboardData().then(data => {
+    notifyIfRanked(entry.name, 'Timed Quiz', data);
+    checkRankUpCelebration('timed', 'Timed Quiz', entry.name, data, { submittedEntry: entry });
+  });
 });
 
 /* ============================================================
