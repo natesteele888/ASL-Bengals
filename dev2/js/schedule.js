@@ -236,6 +236,28 @@
     return 'T';
   }
 
+  // Nathan: "Once an event date has passed don't show it as upcoming... it
+  // should be a running calendar and date should be reflective of the
+  // dates. Only keep the upcoming badge there until the event time has
+  // passed." Without this, a game that already happened but hasn't had its
+  // score entered yet kept saying "Upcoming" forever -- date-driven, not
+  // score-driven. Parses the same 'YYYY-MM-DD' + 'HH:MM' shapes fmtDate/
+  // to12h already use elsewhere in this file. When only a date is known (no
+  // kickoff time saved yet), the game stays "not passed" through the end of
+  // that calendar day rather than flipping the instant midnight local time
+  // starts, so a same-day game doesn't lose its Upcoming badge mid-morning
+  // just because no time was ever entered.
+  function hasEventPassed(dateStr, timeStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const tm = (timeStr || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const d = tm
+      ? new Date(parts[0], parts[1] - 1, parts[2], Number(tm[1]), Number(tm[2]))
+      : new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
+  }
+
   // Nathan: "If teams have a record, it should be shown below the team
   // name on the game cards." We only track results for our own games (an
   // opponent's overall season record against everyone else isn't data
@@ -495,7 +517,7 @@
     const result = resultFor(g);
     const badge = result
       ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
-      : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+      : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
     const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
     const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
     return `
@@ -733,7 +755,7 @@
       row.className = 'scheduleRow';
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
-        : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+        : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
       const gameTime = to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
@@ -842,7 +864,7 @@
       const result = resultFor(current);
       const badgeHtml = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
-        : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+        : hasEventPassed(current.date, current.gameTime || current.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
       const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${preGameTimesLine ? ' • ' + preGameTimesLine : ''}`;

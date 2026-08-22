@@ -45,7 +45,7 @@
   // removable if needed." Seeded once, the first time coachKeys doesn't
   // exist yet in the cloud -- after that, whatever the coach editor last
   // saved (including any adds/renames/removals) is the source of truth.
-  const DEFAULT_COACHES = ['Coach Tom', 'Coach Joe', 'Coach Matt', 'Coach Aaron', 'Coach Shane', 'Coach Nate'];
+  const DEFAULT_COACHES = ['Coach Joe', 'Coach Matt', 'Coach Aaron', 'Coach Shane', 'Coach Nate'];
 
   // Coach-name allowlist now lives in auth.js (window.isApprovedCoachProfile)
   // since Coach Tools / Drive Builder need the exact same check -- read-only
@@ -138,6 +138,19 @@
     const us = Number(g.ourScore), them = Number(g.oppScore);
     if (isNaN(us) || isNaN(them)) return null;
     if (us > them) return 'W'; if (us < them) return 'L'; return 'T';
+  }
+  // Same date-driven fix as js/schedule.js's hasEventPassed -- duplicated
+  // locally rather than reaching into that file's closure, same spirit as
+  // the other small helpers on this page. See that file's comment for why.
+  function hasEventPassed(dateStr, timeStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const tm = (timeStr || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const d = tm
+      ? new Date(parts[0], parts[1] - 1, parts[2], Number(tm[1]), Number(tm[2]))
+      : new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
   }
   // Same record math as js/schedule.js's bengalsRecord() -- duplicated
   // locally rather than reaching into that file's closure.
@@ -249,7 +262,7 @@
     const recordHtml = record ? `<span class="scheduleTeamRecord">${escapeHtml(record)}</span>` : '';
     const badge = result
       ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
-      : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
+      : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
     const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
     const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
     const gameTime = to12h(g.gameTime || g.time || '');

@@ -164,11 +164,18 @@
         yesterday.setDate(yesterday.getDate() - 1);
         streak = (prevSeenStr === dateOnlyStr(yesterday)) ? streak + 1 : 1;
       }
+      // Nathan (gamification follow-up): badges need a PERMANENT record of
+      // the longest streak ever reached -- loginStreak itself resets to 1
+      // the moment a day gets missed, which is correct for the milestone
+      // push below (that's about the CURRENT run) but would silently take
+      // an already-earned streak badge away. bestLoginStreak only ever goes
+      // up.
+      const bestStreak = Math.max((prev && prev.bestLoginStreak) || 0, streak);
       const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${PLAYERS_PATH}/${playerId}.json`);
       await fetch(url, {
         method: 'PATCH',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ lastSeen: today.toISOString(), loginStreak: streak }),
+        body: JSON.stringify({ lastSeen: today.toISOString(), loginStreak: streak, bestLoginStreak: bestStreak }),
       });
       if(!alreadyLoggedToday && STREAK_MILESTONES.indexOf(streak) !== -1 && !window.isCoachSession &&
         'Notification' in window && Notification.permission === 'granted' && window.showLocalNotification){
@@ -368,21 +375,32 @@
       // getting ranked." notifyIfRanked/fetchPCQLeaderboardData are bare
       // globals from study-quiz.js (loaded before this file, same sharing
       // pattern as everything else cross-referenced between these two
-      // files) -- only worth checking when this run actually moved the
-      // needle (a new best).
-      if(isNewBest && typeof fetchPCQLeaderboardData === 'function' && typeof notifyIfRanked === 'function'){
+      // files).
+      //
+      // Nathan (follow-up): "Add popup notifications to encourage the kids to keep doing
+      // more tests... show them where they currently are." That nudge needs
+      // to fire on EVERY completion, not just a new best, so this now always
+      // fetches the leaderboard (same fire-and-forget, non-blocking read
+      // Quiz Scores/Timed Quiz already do on every save) -- notifyIfRanked/
+      // checkRankUpCelebration stay gated to isNewBest as before, since
+      // those are both specifically about something having actually
+      // improved.
+      if(typeof fetchPCQLeaderboardData === 'function'){
         fetchPCQLeaderboardData().then(data => {
-          notifyIfRanked(session.name, 'Play Calls Quiz', data);
-          // Nathan: "if a kid does good and moves up the leaderboard rank,
-          // give them a popup... confetti animation." Same rank-up
-          // celebration study-quiz.js's own Quiz Scores/Timed Quiz saves
-          // trigger -- see checkRankUpCelebration's comment there. This call
-          // only happens when isNewBest is already true (see the outer if
-          // above), so pass it straight through rather than having
-          // checkRankUpCelebration try to re-derive it -- PCQ's synced
-          // pcqBestScore field on the player record already IS the real
-          // "was this actually their best?" answer, no guessing needed.
-          if(typeof checkRankUpCelebration === 'function') checkRankUpCelebration('pcq', 'Play Calls Quiz', session.name, data, { isNewBest: true });
+          let celebrated = false;
+          if(isNewBest){
+            if(typeof notifyIfRanked === 'function') notifyIfRanked(session.name, 'Play Calls Quiz', data);
+            // Nathan: "if a kid does good and moves up the leaderboard rank,
+            // give them a popup... confetti animation." Same rank-up
+            // celebration study-quiz.js's own Quiz Scores/Timed Quiz saves
+            // trigger -- see checkRankUpCelebration's comment there. isNewBest
+            // is passed straight through rather than having
+            // checkRankUpCelebration try to re-derive it -- PCQ's synced
+            // pcqBestScore field on the player record already IS the real
+            // "was this actually their best?" answer, no guessing needed.
+            if(typeof checkRankUpCelebration === 'function') celebrated = checkRankUpCelebration('pcq', 'Play Calls Quiz', session.name, data, { isNewBest: true });
+          }
+          if(!celebrated && typeof maybeShowQuizNudge === 'function') maybeShowQuizNudge('pcq', 'Play Calls Quiz', session.name, data);
         }).catch(() => {});
       }
       return { isNewBest: isNewBest, bestScore: isNewBest ? score : prevBest, bestMaxScore: isNewBest ? maxScore : (existing && existing.pcqBestMaxScore) || maxScore };
@@ -1109,6 +1127,12 @@
       // session (coach, player, or parent -- everyone sees this) is known.
       // See js/practice-cancel.js.
       if (typeof window.maybeShowCancellationPanel === 'function') window.maybeShowCancellationPanel();
+      // Nathan: "Do a daily pop up notification to the coaches on how the
+      // team is doing with the app and top performers from the previous
+      // day." Same trigger point as the other post-session checks here --
+      // gates itself to an approved coach + once-per-real-day internally.
+      // See js/coachtools-dashboard.js's maybeShowCoachDailyDigest.
+      if (typeof window.maybeShowCoachDailyDigest === 'function') window.maybeShowCoachDailyDigest();
       // A drone-footage notification tapped while the app was closed opens
       // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
       // JS in a not-yet-loaded page) -- jump straight to that practice now

@@ -446,6 +446,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .rankUpHeroHeader{background:linear-gradient(160deg, #ffb703 0%, var(--bengal-orange) 100%)}
 .rankUpMeRow{position:relative;z-index:1;box-shadow:0 2px 10px rgba(255,106,19,.35)}
 
+/* "Keep playing" nudge (js/study-quiz.js's showQuizNudge) -- a cooler
+   blue/green variant of .lbHeroHeader so it visually reads as a nudge/
+   reminder rather than the warmer gold "you earned this" rank-up/personal-
+   best celebration above. */
+.nudgeHeroHeader{background:linear-gradient(160deg, #1f6fb2 0%, #2d7a2d 100%)}
+
+/* Daily coach digest (js/coachtools-dashboard.js's maybeShowCoachDailyDigest)
+   -- a cooler, more "report" toned navy variant, distinct from the warm
+   kid-facing celebration/nudge colors above since this is a coach-only
+   status summary, not a reward moment. */
+.digestHeroHeader{background:linear-gradient(160deg, #2c3e6b 0%, #1a2647 100%)}
+
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with
    its own random duration/delay/drift/rotation set as inline custom
@@ -539,6 +551,33 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 [data-theme="dark"] .msValue{color:var(--accent)}
 [data-theme="dark"] .msBarFill{background:var(--accent)}
 
+/* Badges (js/study-quiz.js's computeBadges/badgeGridHtml, shown in My
+   Stats) -- a locked/earned grid, same .msStatCard paper-card language as
+   the rank rows above so it reads as part of the same page. Locked badges
+   stay visible (grayed, with a progress fraction) rather than hidden, since
+   seeing "18/25" is itself part of the motivation to keep playing. */
+.badgeGrid{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-top:8px}
+.badgeCard{background:var(--paper);border-radius:12px;padding:10px 6px;text-align:center;opacity:.45}
+.badgeCard.earned{opacity:1;background:linear-gradient(160deg, #fff7e6 0%, #ffe8c2 100%);box-shadow:0 2px 8px rgba(255,183,3,.35)}
+.badgeIcon{font-size:24px;line-height:1;margin-bottom:4px}
+.badgeLabel{font-size:10px;font-weight:800;color:var(--ink);line-height:1.2}
+.badgeProgress{font-size:9.5px;font-weight:700;color:var(--muted);margin-top:3px}
+.badgeCard.earned .badgeProgress{color:var(--bengal-orange-dark);font-weight:900}
+[data-theme="dark"] .badgeCard{background:var(--card)}
+[data-theme="dark"] .badgeCard.earned{background:linear-gradient(160deg, #3a2c10 0%, #4a3410 100%)}
+[data-theme="dark"] .badgeCard.earned .badgeProgress{color:var(--accent)}
+
+/* Spotlight (js/study-quiz.js's renderSpotlight, inside #lbOverlay) -- a
+   small callout strip above the leaderboard tabs naming each board's #1
+   plus the current streak leader. Warm gold-tinted card (same family as the
+   earned badge cards above) so it reads as "good news", not just more list
+   rows. */
+.lbSpotlightWrap{margin:0 18px 10px;background:linear-gradient(160deg, #fff7e6 0%, #ffe8c2 100%);border-radius:12px;padding:10px 12px}
+.lbSpotlightHeader{font-size:11.5px;font-weight:900;color:var(--bengal-orange-dark);margin-bottom:6px}
+.spotlightRow{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:11.5px;font-weight:700;color:var(--ink)}
+.spotlightIcon{font-size:15px;flex-shrink:0}
+[data-theme="dark"] .lbSpotlightWrap{background:linear-gradient(160deg, #3a2c10 0%, #4a3410 100%)}
+[data-theme="dark"] .lbSpotlightHeader{color:var(--accent)}
 
 .lbTabRow{display:flex;gap:4px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
 .lbTabBtn{flex:1;min-width:0;border:none;background:transparent;padding:9px 3px;border-radius:8px;font-size:10.5px;

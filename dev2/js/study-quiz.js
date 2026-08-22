@@ -644,19 +644,23 @@ function prefersReducedMotionSQ(){
 // its timestamp against whichever entry dedupeBestByName just decided IS
 // this player's best across their ENTIRE saved history -- an exact match
 // means nothing beat it, i.e. it just became their new best.
+// Returns true when it actually showed the celebration -- callers use this
+// to skip the "keep playing" nudge popup below on the same completion (one
+// popup per finish, not two competing for attention).
 function checkRankUpCelebration(boardKey, boardLabel, name, data, opts){
-  if(!name || isCoachEntryName(name)) return;
+  if(!name || isCoachEntryName(name)) return false;
   opts = opts || {};
   const { entry: boardEntry, rank } = findEntryAndRank(data.players, name);
-  if(!rank) return;
+  if(!rank) return false;
   const lastRank = getLastKnownRank(boardKey, name);
   setLastKnownRank(boardKey, name, rank); // always refresh the baseline for next time
   const rankImproved = lastRank !== null && rank < lastRank;
   const isNewBest = typeof opts.isNewBest === 'boolean'
     ? opts.isNewBest
     : !!(opts.submittedEntry && boardEntry && boardEntry.date === opts.submittedEntry.date);
-  if(!rankImproved && !isNewBest) return;
+  if(!rankImproved && !isNewBest) return false;
   showRankUpCelebration({ name, boardLabel, oldRank: lastRank, newRank: rank, players: data.players, rankImproved, isNewBest });
+  return true;
 }
 
 function spawnConfetti(host){
@@ -763,6 +767,63 @@ function showRankUpCelebration({ name, boardLabel, oldRank, newRank, players, ra
   const niceBtn = document.getElementById('rankUpNiceBtn');
   const closeBtn = document.getElementById('rankUpCloseBtn');
   if(niceBtn) niceBtn.onclick = closeAndClear;
+  if(closeBtn) closeBtn.onclick = closeAndClear;
+}
+
+// ---------------------------------------------------------------------------
+// "Keep playing" nudge -- Nathan: "Add popup notifications to encourage the
+// kids to keep doing more tests. Let them know that if they complete the
+// quizzes multiple times they can move up the leaderboard and show them
+// where they currently are." Distinct from the rank-up celebration above
+// (which only fires on a real improvement) -- this fires periodically
+// regardless of whether anything changed this run, just to remind them
+// where they stand and that playing again helps. Every NUDGE_EVERY
+// completions on a board (not every single one -- Nathan: "only sometimes",
+// so it reinforces without turning into nagging), and callers skip it
+// entirely on any completion that already triggered the louder
+// rank-up/personal-best celebration -- one popup per finish, never two.
+const NUDGE_EVERY = 4;
+const NUDGE_COUNT_PREFIX = 'aslBengalsNudgeCount_';
+function bumpNudgeCounter(boardKey, name){
+  const key = NUDGE_COUNT_PREFIX + boardKey + '_' + normName(name);
+  let n = 0;
+  try { n = Number(localStorage.getItem(key)) || 0; } catch(e){ /* ignore */ }
+  n += 1;
+  try { localStorage.setItem(key, String(n)); } catch(e){ /* ignore */ }
+  return n;
+}
+function resetNudgeCounter(boardKey, name){
+  try { localStorage.removeItem(NUDGE_COUNT_PREFIX + boardKey + '_' + normName(name)); } catch(e){ /* ignore */ }
+}
+function maybeShowQuizNudge(boardKey, boardLabel, name, data){
+  if(!name || isCoachEntryName(name)) return;
+  const n = bumpNudgeCounter(boardKey, name);
+  if(n < NUDGE_EVERY) return;
+  resetNudgeCounter(boardKey, name);
+  const { rank } = findEntryAndRank(data.players, name);
+  showQuizNudge({ name, boardLabel, rank, total: data.players.length });
+}
+function showQuizNudge({ name, boardLabel, rank, total }){
+  const overlay = document.getElementById('quizNudgeOverlay');
+  if(!overlay) return;
+  const headline = document.getElementById('quizNudgeHeadline');
+  const subtext = document.getElementById('quizNudgeSubtext');
+  const rankCard = document.getElementById('quizNudgeRankCard');
+  if(!headline || !subtext || !rankCard) return;
+  headline.textContent = `Keep it up, ${name}!`;
+  subtext.textContent = rank
+    ? `Play the ${boardLabel} again -- every run counts toward climbing the board!`
+    : `Save a score on the ${boardLabel} board to start climbing the leaderboard!`;
+  // Reuses the exact same rank-bar row My Stats already renders (icon,
+  // label, value, rank/total -> progress bar + "Top X% - #N of M" caption)
+  // so their current standing reads consistently everywhere it shows up.
+  const icon = boardLabel === 'Play Calls Quiz' ? '🧠' : boardLabel === 'Timed Quiz' ? '⏱️' : '📝';
+  rankCard.innerHTML = rank ? myStatRowHtml(icon, boardLabel, `#${rank} of ${total}`, rank, total, true) : '';
+  overlay.classList.add('show');
+  const closeAndClear = () => overlay.classList.remove('show');
+  const goBtn = document.getElementById('quizNudgeBtn');
+  const closeBtn = document.getElementById('quizNudgeCloseBtn');
+  if(goBtn) goBtn.onclick = closeAndClear;
   if(closeBtn) closeBtn.onclick = closeAndClear;
 }
 
@@ -901,6 +962,63 @@ function myStatRowHtml(icon, label, valueText, rank, total, isHero){
 // total) never mixes with the player board's numbers, matching how the
 // leaderboard tabs themselves now render two fully separate sections.
 function groupFor(data, name){ return isCoachEntryName(name) ? data.coaches : data.players; }
+
+// ---------------------------------------------------------------------------
+// Badges -- Nathan: "develop more gamification... I want them to be in it
+// more. Needs to be fun for them so getting rewards and things like that."
+// Computed fresh every time My Stats opens straight from real synced data
+// (no separate "badges earned" list stored anywhere) -- nothing to migrate
+// or backfill, and a badge can never drift out of sync with the record it's
+// based on:
+//  - Streak tiers read player.bestLoginStreak, the PERMANENT high-water mark
+//    player-identity.js's touchLastSeen() now tracks -- not the current
+//    loginStreak, which resets to 1 the moment a day is missed and would
+//    silently take an already-earned badge away.
+//  - Perfect Score checks the append-only Quiz Scores/PCQ history logs for
+//    any run that ever hit a perfect score.
+//  - Dedication tiers count total completions across all three games'
+//    history logs, keyed by playerId when present else by normalized name
+//    (entries logged before a kid had a player account only have a name).
+const STREAK_BADGE_TIERS = [
+  { threshold: 3, icon: '🔥', label: '3-Day Streak' },
+  { threshold: 7, icon: '🔥', label: '7-Day Streak' },
+  { threshold: 14, icon: '🔥', label: '14-Day Streak' },
+  { threshold: 30, icon: '🔥', label: '30-Day Streak' },
+];
+const DEDICATION_BADGE_TIERS = [
+  { threshold: 10, icon: '🎯', label: 'Rookie (10 plays)' },
+  { threshold: 25, icon: '🎯', label: 'Starter (25 plays)' },
+  { threshold: 50, icon: '🎯', label: 'Veteran (50 plays)' },
+  { threshold: 100, icon: '🎯', label: 'All-Pro (100 plays)' },
+];
+function matchesPlayer(entry, playerId, name){
+  if(!entry) return false;
+  if(playerId && entry.playerId && entry.playerId === playerId) return true;
+  return !!normName(name) && normName(entry.name) === normName(name);
+}
+function computeBadges(playerRecord, quizHistory, timedHistory, pcqHistory, name, playerId){
+  quizHistory = quizHistory || []; timedHistory = timedHistory || []; pcqHistory = pcqHistory || [];
+  const totalCompletions = quizHistory.concat(timedHistory, pcqHistory).filter(e => matchesPlayer(e, playerId, name)).length;
+  const perfectScore = quizHistory.some(e => matchesPlayer(e, playerId, name) && e.total && e.score === e.total)
+    || pcqHistory.some(e => matchesPlayer(e, playerId, name) && e.maxScore && e.score === e.maxScore);
+  const bestStreak = (playerRecord && playerRecord.bestLoginStreak) || 0;
+  const streakBadges = STREAK_BADGE_TIERS.map(tier => Object.assign({}, tier, { earned: bestStreak >= tier.threshold, progress: bestStreak, category: 'streak' }));
+  const dedicationBadges = DEDICATION_BADGE_TIERS.map(tier => Object.assign({}, tier, { earned: totalCompletions >= tier.threshold, progress: totalCompletions, category: 'dedication' }));
+  const perfectBadge = { icon: '💯', label: 'Perfect Score', threshold: 1, earned: perfectScore, progress: perfectScore ? 1 : 0, category: 'perfect' };
+  return streakBadges.concat(dedicationBadges, [perfectBadge]);
+}
+function badgeGridHtml(badges){
+  if(!badges || !badges.length) return '';
+  const cards = badges.map(b => `
+    <div class="badgeCard${b.earned ? ' earned' : ''}">
+      <div class="badgeIcon">${b.icon}</div>
+      <div class="badgeLabel">${escStatsHtml(b.label)}</div>
+      <div class="badgeProgress">${b.earned ? 'Earned!' : `${Math.min(b.progress, b.threshold)}/${b.threshold}`}</div>
+    </div>`).join('');
+  const earnedCount = badges.filter(b => b.earned).length;
+  return `<div class="lbSub" style="margin-top:14px;font-weight:700;">🎖️ Badges (${earnedCount}/${badges.length})</div><div class="badgeGrid">${cards}</div>`;
+}
+
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
   const overlay = document.getElementById('myStatsOverlay');
@@ -908,9 +1026,10 @@ window.showMyStats = async function showMyStats(){
   if(!overlay || !body || !session) return;
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading your stats…</div>';
-  const [timedData, pcqData, quizData, overallData, ownRecord] = await Promise.all([
+  const [timedData, pcqData, quizData, overallData, ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
     fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
     window.PlayerIdentity.getPlayerRecord(session.playerId),
+    cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
   ]);
   const overallList = groupFor(overallData, session.name);
   const timedList = groupFor(timedData, session.name);
@@ -927,13 +1046,15 @@ window.showMyStats = async function showMyStats(){
   const streakHtml = streak > 1
     ? `<div class="lbSub" style="text-align:center;margin-bottom:8px;font-weight:700;">🔥 ${streak}-day login streak</div>`
     : '';
+  const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
   body.innerHTML = streakHtml + '<div class="msStatList">' + [
     myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank, overallList.length, true),
     myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank, timedList.length),
     myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank, pcqList.length),
     myStatRowHtml('📝', 'Quiz Scores', quiz.entry ? `${quiz.entry.score}/${quiz.entry.total}${quiz.entry.bestStreak ? ` 🔥${quiz.entry.bestStreak}` : ''}` : 'No score yet', quiz.rank, quizList.length),
   ].join('') + '</div>' +
-  '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>';
+  '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>' +
+  badgeGridHtml(badges);
 };
 document.getElementById('myStatsCloseBtn').addEventListener('click', () => {
   document.getElementById('myStatsOverlay').classList.remove('show');
@@ -1095,6 +1216,47 @@ function showLbTab(tabKey){
   if(overallNote) overallNote.style.display = tabKey === 'overall' ? '' : 'none';
 }
 
+// ---------------------------------------------------------------------------
+// Spotlight -- Nathan: "Call out names of top performers to other teammates
+// to encourage them to be one of the leaders." Sits above the leaderboard
+// tabs so every kid who opens the board (which is already a normal, regular
+// thing to do) sees who's leading each board plus who's on the hottest
+// streak, without needing a live push to every device (this app has no
+// server to fire that from -- see the tab list right below it for the
+// actual full standings). Does its own independent fetch of each board
+// rather than threading data out of renderLeaderboard/renderTimedLeaderboard
+// /renderPCQLeaderboard (which each fetch-and-render in one step) -- a
+// little duplicate reads, but far lower risk than restructuring those.
+async function renderSpotlight(){
+  const wrap = document.getElementById('lbSpotlightWrap');
+  if(!wrap) return;
+  wrap.style.display = 'none';
+  wrap.innerHTML = '';
+  const [timedData, pcqData, quizData, allPlayers] = await Promise.all([
+    fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(),
+    window.PlayerIdentity ? window.PlayerIdentity.fetchAllPlayers().catch(() => ({})) : Promise.resolve({}),
+  ]);
+  const rows = [];
+  if(quizData.players[0]) rows.push({ icon: '📝', text: `<b>${escStatsHtml(quizData.players[0].name)}</b> is #1 on Quiz Scores!` });
+  if(timedData.players[0]) rows.push({ icon: '⏱️', text: `<b>${escStatsHtml(timedData.players[0].name)}</b> is #1 on Timed Quiz!` });
+  if(pcqData.players[0]) rows.push({ icon: '🧠', text: `<b>${escStatsHtml(pcqData.players[0].name)}</b> is #1 on Play Calls Quiz!` });
+  // Streak leader -- whoever's CURRENT loginStreak (player-identity.js's
+  // touchLastSeen) is highest among real players (coaches excluded, same as
+  // every other leaderboard on this page). Current, not bestLoginStreak,
+  // since this is about "who's hot right now", not a permanent record.
+  let streakLeader = null;
+  Object.values(allPlayers || {}).forEach(p => {
+    if(!p || !p.name || isCoachEntryName(p.name)) return;
+    const streak = p.loginStreak || 0;
+    if(streak > 1 && (!streakLeader || streak > streakLeader.streak)) streakLeader = { name: p.name, streak };
+  });
+  if(streakLeader) rows.push({ icon: '🔥', text: `<b>${escStatsHtml(streakLeader.name)}</b> is on a ${streakLeader.streak}-day streak!` });
+  if(!rows.length) return;
+  wrap.style.display = '';
+  wrap.innerHTML = '<div class="lbSpotlightHeader">🌟 Spotlight</div>' +
+    rows.map(r => `<div class="spotlightRow"><span class="spotlightIcon">${r.icon}</span><span class="spotlightText">${r.text}</span></div>`).join('');
+}
+
 const lbOverlay = document.getElementById('lbOverlay');
 document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
   lbOverlay.classList.add('show');
@@ -1103,6 +1265,7 @@ document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
   renderTimedLeaderboard(null);
   renderLeaderboard(null);
   renderPCQLeaderboard();
+  renderSpotlight();
 });
 [...document.querySelectorAll('.lbTabBtn')].forEach(btn => {
   btn.addEventListener('click', () => showLbTab(btn.dataset.lbtab));
@@ -1123,7 +1286,8 @@ document.getElementById('lbSaveBtn').addEventListener('click', async ()=>{
   renderLeaderboard(entry);
   fetchQuizLeaderboardData().then(data => {
     notifyIfRanked(entry.name, 'Quiz Scores', data);
-    checkRankUpCelebration('quiz', 'Quiz Scores', entry.name, data, { submittedEntry: entry });
+    const celebrated = checkRankUpCelebration('quiz', 'Quiz Scores', entry.name, data, { submittedEntry: entry });
+    if(!celebrated) maybeShowQuizNudge('quiz', 'Quiz Scores', entry.name, data);
   });
 });
 document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
@@ -1139,7 +1303,8 @@ document.getElementById('timedLbSaveBtn').addEventListener('click', async ()=>{
   renderOverallLeaderboard();
   fetchTimedLeaderboardData().then(data => {
     notifyIfRanked(entry.name, 'Timed Quiz', data);
-    checkRankUpCelebration('timed', 'Timed Quiz', entry.name, data, { submittedEntry: entry });
+    const celebrated = checkRankUpCelebration('timed', 'Timed Quiz', entry.name, data, { submittedEntry: entry });
+    if(!celebrated) maybeShowQuizNudge('timed', 'Timed Quiz', entry.name, data);
   });
 });
 

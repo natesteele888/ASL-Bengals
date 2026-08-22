@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260822g">
+<link rel="stylesheet" href="css/styles.css?v=20260822i">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1089,6 +1089,12 @@
       <h3>Leaderboard</h3>
       <div class="lbSub">Top 20 across the whole team</div>
     </div>
+    <!-- Nathan: "Call out names of top performers to other teammates to
+         encourage them to be one of the leaders." Filled in by
+         js/study-quiz.js's renderSpotlight() every time this overlay opens
+         -- board leaders + the current streak leader, hidden entirely
+         (display:none) until there's actually something to call out. -->
+    <div class="lbSpotlightWrap" id="lbSpotlightWrap" style="display:none"></div>
     <div class="lbTabRow">
       <button class="lbTabBtn active" id="lbTabOverall" data-lbtab="overall">🏆 Overall</button>
       <button class="lbTabBtn" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
@@ -1134,12 +1140,53 @@
   </div>
 </div>
 
+<!-- Nathan: "Add popup notifications to encourage the kids to keep doing
+     more tests... show them where they currently are." Fired by
+     js/study-quiz.js's maybeShowQuizNudge()/showQuizNudge() every few
+     completions on a board (not every one -- see the big comment above
+     maybeShowQuizNudge), skipped entirely on any completion that already
+     triggered the louder #rankUpOverlay celebration. #quizNudgeRankCard
+     reuses the exact same myStatRowHtml() row My Stats renders, so their
+     current standing looks identical everywhere it shows up. -->
+<div class="lbOverlay" id="quizNudgeOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="quizNudgeCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader nudgeHeroHeader">
+      <div class="lbHeroTrophy">💪</div>
+      <h3 id="quizNudgeHeadline">Keep it up!</h3>
+      <div class="lbSub" id="quizNudgeSubtext"></div>
+    </div>
+    <div class="msStatList" id="quizNudgeRankCard"></div>
+    <button class="navBtn" id="quizNudgeBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="myStatsOverlay">
   <div class="lbCard">
     <h3>📊 My Stats</h3>
     <div class="lbSub">Just for you — not visible to teammates</div>
     <div id="myStatsBody"><div class="lbEmpty">Loading…</div></div>
     <button class="navBtn secondary lbCloseBtn" id="myStatsCloseBtn">Close</button>
+  </div>
+</div>
+
+<!-- Nathan: "Do a daily pop up notification to the coaches on how the team
+     is doing with the app and top performers from the previous day." Fired
+     by js/coachtools-dashboard.js's maybeShowCoachDailyDigest() the first
+     time an approved coach opens the app on a new calendar day -- gates
+     itself internally (isApprovedCoachProfile + a once-per-day localStorage
+     flag), see that function's comment for why this fires on open rather
+     than a true scheduled push (no backend to fire one from). -->
+<div class="lbOverlay" id="coachDigestOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="coachDigestCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader digestHeroHeader">
+      <div class="lbHeroTrophy">📋</div>
+      <h3 id="coachDigestHeadline">Yesterday's App Activity</h3>
+      <div class="lbSub">Coaches only</div>
+    </div>
+    <div id="coachDigestBody"></div>
+    <button class="navBtn" id="coachDigestOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it</button>
   </div>
 </div>
 
@@ -1419,7 +1466,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822h';
+  const BUILD_V = '20260822i';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
