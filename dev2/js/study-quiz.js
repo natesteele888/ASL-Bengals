@@ -1019,6 +1019,83 @@ function badgeGridHtml(badges){
   return `<div class="lbSub" style="margin-top:14px;font-weight:700;">🎖️ Badges (${earnedCount}/${badges.length})</div><div class="badgeGrid">${cards}</div>`;
 }
 
+// ---------------------------------------------------------------------------
+// Badges awareness -- Nathan: "love the gamification stuff - make sure they
+// are aware of the badges when they log in." Two parts:
+//  1. A one-time intro popup the first time this feature exists for a kid,
+//     celebrating any badges they've ALREADY earned retroactively (from
+//     streaks/completions/perfect scores logged before badges existed)
+//     rather than silently crediting them with something they never get to
+//     see themselves unlock.
+//  2. An ongoing small dot on the My Stats menu item -- same whatsNewDot/
+//     whatsNewCount pattern whats-new.js already uses for new plays --
+//     whenever they've earned a badge since the last time they actually
+//     opened My Stats, so awareness doesn't stop after the one-time popup.
+// Both skip coach sessions entirely -- this is kid-facing gamification,
+// same exclusion as the rank-up celebration/nudge/spotlight above.
+const BADGES_INTRO_SEEN_PREFIX = 'aslBengalsBadgesIntroSeen_';
+const BADGES_SEEN_KEY_PREFIX = 'aslBengalsBadgesSeen_';
+function badgesStorageKey(prefix, playerId, name){ return prefix + (playerId || normName(name)); }
+function getSeenBadgeLabels(playerId, name){
+  try { const raw = localStorage.getItem(badgesStorageKey(BADGES_SEEN_KEY_PREFIX, playerId, name)); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+function setSeenBadgeLabels(playerId, name, labels){
+  try { localStorage.setItem(badgesStorageKey(BADGES_SEEN_KEY_PREFIX, playerId, name), JSON.stringify(labels)); } catch(e){ /* ignore */ }
+}
+function markAllEarnedBadgesSeen(playerId, name, badges){
+  setSeenBadgeLabels(playerId, name, badges.filter(b => b.earned).map(b => b.label));
+}
+function refreshMyStatsBadgeDot(playerId, name, badges){
+  const dot = document.getElementById('myStatsNewBadgeDot');
+  if(!dot) return;
+  const seen = getSeenBadgeLabels(playerId, name);
+  const hasNew = badges.some(b => b.earned && seen.indexOf(b.label) === -1);
+  dot.style.display = hasNew ? '' : 'none';
+}
+function showBadgesIntro(name, badges){
+  const overlay = document.getElementById('badgesIntroOverlay');
+  const subtext = document.getElementById('badgesIntroSubtext');
+  const body = document.getElementById('badgesIntroBody');
+  if(!overlay || !subtext || !body) return;
+  const earnedCount = badges.filter(b => b.earned).length;
+  subtext.textContent = earnedCount
+    ? `You've already earned ${earnedCount} just from playing -- nice work, ${name}!`
+    : `Play quizzes, keep your streak going, and hit perfect scores to start earning these, ${name}!`;
+  body.innerHTML = badgeGridHtml(badges);
+  overlay.classList.add('show');
+  const closeAndClear = () => overlay.classList.remove('show');
+  const okBtn = document.getElementById('badgesIntroOkBtn');
+  const closeBtn = document.getElementById('badgesIntroCloseBtn');
+  if(okBtn) okBtn.onclick = closeAndClear;
+  if(closeBtn) closeBtn.onclick = closeAndClear;
+}
+// Called once a name/session is known (player-identity.js's gate() wrapper,
+// same hook point as refreshWhatsNewBadge/maybeShowCoachDailyDigest etc.).
+window.maybeShowBadgesIntro = async function(){
+  try {
+    const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
+    if(!session || !session.name || isCoachEntryName(session.name)) return;
+    const introKey = badgesStorageKey(BADGES_INTRO_SEEN_PREFIX, session.playerId, session.name);
+    let alreadySeen = false;
+    try { alreadySeen = localStorage.getItem(introKey) === '1'; } catch(e){ /* ignore */ }
+    const [ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
+      window.PlayerIdentity.getPlayerRecord(session.playerId),
+      cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+    ]);
+    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
+    if(!alreadySeen){
+      showBadgesIntro(session.name, badges);
+      try { localStorage.setItem(introKey, '1'); } catch(e){ /* ignore */ }
+      // They just saw every currently-earned badge in the intro itself --
+      // mark them seen so the ongoing My Stats dot doesn't ALSO fire this
+      // same session for the exact same badges.
+      markAllEarnedBadgesSeen(session.playerId, session.name, badges);
+    }
+    refreshMyStatsBadgeDot(session.playerId, session.name, badges);
+  } catch(e){ /* best-effort -- badges awareness shouldn't block login */ }
+};
+
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
   const overlay = document.getElementById('myStatsOverlay');
@@ -1055,6 +1132,10 @@ window.showMyStats = async function showMyStats(){
   ].join('') + '</div>' +
   '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>' +
   badgeGridHtml(badges);
+  // They're looking right at their badges now -- clear the "new badge"
+  // dot on the menu item that got them here (see maybeShowBadgesIntro).
+  markAllEarnedBadgesSeen(session.playerId, session.name, badges);
+  refreshMyStatsBadgeDot(session.playerId, session.name, badges);
 };
 document.getElementById('myStatsCloseBtn').addEventListener('click', () => {
   document.getElementById('myStatsOverlay').classList.remove('show');

@@ -126,6 +126,11 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   backdrop-filter:blur(3px);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .playerIdBadgeNum{opacity:.75;font-weight:800;margin-left:2px}
 .whatsNewDot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bengal-orange);border:1.5px solid #fff;}
+/* My Stats "new badge" dot (index.html's #myStatsNewBadgeDot) -- same idea
+   as .whatsNewDot but inline rather than position:absolute, since this one
+   sits inside a plain dropdown list button rather than the position:relative
+   profile pill .whatsNewDot anchors against. */
+.myStatsNewDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bengal-orange);margin-left:6px;vertical-align:middle}
 .playerMenuBtn:active{background:rgba(17,17,17,.85)}
 .playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
   box-shadow:0 6px 20px rgba(0,0,0,.25);display:none;min-width:150px;overflow:hidden;z-index:1200}

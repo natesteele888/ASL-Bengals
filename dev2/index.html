@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260822i">
+<link rel="stylesheet" href="css/styles.css?v=20260822j">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -290,7 +290,14 @@
                    up by the same best-effort roster name match as the jersey #
                    badge above; hidden if there's no roster match to open. -->
               <button id="myCardBtn" style="display:none;">🃏 My Card</button>
-              <button id="myStatsBtn">📊 My Stats</button>
+              <!-- Nathan: "make sure they are aware of the badges when they
+                   log in" -- inline dot (not .whatsNewDot's position:absolute
+                   corner-callout treatment, which needs a position:relative
+                   button it doesn't have here) shown whenever
+                   js/study-quiz.js's maybeShowBadgesIntro/showMyStats finds
+                   an earned badge they haven't actually opened My Stats to
+                   see yet. -->
+              <button id="myStatsBtn">📊 My Stats<span id="myStatsNewBadgeDot" class="myStatsNewDot" style="display:none;"></span></button>
               <button id="myPositionBtn">🏈 My Position</button>
               <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
                    myStatsBtn/myPositionBtn by refreshCoachToolsVisibility() in
@@ -1170,6 +1177,26 @@
   </div>
 </div>
 
+<!-- Nathan: "love the gamification stuff - make sure they are aware of the
+     badges when they log in." Fired by js/study-quiz.js's
+     maybeShowBadgesIntro() the first time this feature exists for a signed-
+     in player (once ever, per player, per device) -- celebrates any badges
+     they've already earned retroactively rather than crediting them with
+     something they never get to see themselves unlock. Reuses the exact
+     same badgeGridHtml() grid My Stats renders. -->
+<div class="lbOverlay" id="badgesIntroOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="badgesIntroCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🎖️</div>
+      <h3>New: Badges!</h3>
+      <div class="lbSub" id="badgesIntroSubtext"></div>
+    </div>
+    <div id="badgesIntroBody"></div>
+    <button class="navBtn" id="badgesIntroOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
 <!-- Nathan: "Do a daily pop up notification to the coaches on how the team
      is doing with the app and top performers from the previous day." Fired
      by js/coachtools-dashboard.js's maybeShowCoachDailyDigest() the first
@@ -1466,7 +1493,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822i';
+  const BUILD_V = '20260822j';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

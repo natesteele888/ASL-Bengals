@@ -1133,6 +1133,12 @@
       // gates itself to an approved coach + once-per-real-day internally.
       // See js/coachtools-dashboard.js's maybeShowCoachDailyDigest.
       if (typeof window.maybeShowCoachDailyDigest === 'function') window.maybeShowCoachDailyDigest();
+      // Nathan: "love the gamification stuff - make sure they are aware of
+      // the badges when they log in." Same trigger point as the other
+      // post-session checks here -- gates itself internally (skips coach
+      // sessions, only shows the full intro once per player). See
+      // js/study-quiz.js's maybeShowBadgesIntro.
+      if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
       // A drone-footage notification tapped while the app was closed opens
       // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
       // JS in a not-yet-loaded page) -- jump straight to that practice now
