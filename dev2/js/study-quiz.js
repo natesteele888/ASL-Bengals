@@ -875,9 +875,16 @@ async function renderPCQLeaderboard(){
 }
 
 // ---- Overall: rank-based points (20 for 1st down to 1 for 20th) on each
-// contributing board, summed by name. Quiz Scores is deliberately left out
-// -- with the standard quiz being easy enough that most engaged players
-// land on 30/30, ranking it wouldn't mean much (per Nathan's note).
+// contributing board, summed by name. Quiz Scores used to be left out
+// here -- with the standard quiz being easy enough that most engaged
+// players land on 30/30, a tie on score fell back to whatever order the
+// data happened to come back in, so ranking it wouldn't have meant much.
+// Nathan: "since there is a tie breaker for the standard quiz now, we can
+// award the points for that category for top 20 as we do the others" --
+// fetchQuizLeaderboardData's sort now breaks ties by timesAchieved, then
+// bestStreak, then earliest date (see that function's own comment), so a
+// tie on score no longer means an arbitrary rank. Quiz Scores is now a
+// full third contributing board, same as Timed Quiz and Play Calls Quiz.
 function pointsForRank(list){
   const pts = {};
   list.slice(0, 20).forEach((e, i) => { pts[normName(e.name)] = { name: e.name, points: 20 - i }; });
@@ -902,9 +909,9 @@ function combinePoints(...ptsMaps){
 // entirely separate points pools, not one shared one with coaches just
 // sorted to the bottom.
 async function computeOverallStandings(){
-  const [timedData, pcqData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData()]);
-  const players = combinePoints(pointsForRank(timedData.players), pointsForRank(pcqData.players));
-  const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches));
+  const [timedData, pcqData, quizData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData()]);
+  const players = combinePoints(pointsForRank(timedData.players), pointsForRank(pcqData.players), pointsForRank(quizData.players));
+  const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches), pointsForRank(quizData.coaches));
   return { players, coaches };
 }
 async function renderOverallLeaderboard(){
@@ -914,7 +921,7 @@ async function renderOverallLeaderboard(){
   const scoreFn = e => `${e.points} pt${e.points===1?'':'s'}`;
   overallLbList.innerHTML = players.length
     ? players.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('')
-    : '<div class="lbEmpty">No points yet — finish a Timed Quiz or Play Calls Quiz to get on the board!</div>';
+    : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
   overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
 }
 
@@ -1130,7 +1137,7 @@ window.showMyStats = async function showMyStats(){
     myStatRowHtml('🧠', 'Play Calls Quiz', pcq.entry ? `${pcq.entry.score}/${pcq.entry.maxScore}` : 'No score yet', pcq.rank, pcqList.length),
     myStatRowHtml('📝', 'Quiz Scores', quiz.entry ? `${quiz.entry.score}/${quiz.entry.total}${quiz.entry.bestStreak ? ` 🔥${quiz.entry.bestStreak}` : ''}` : 'No score yet', quiz.rank, quizList.length),
   ].join('') + '</div>' +
-  '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Timed Quiz and Play Calls Quiz ranks (Quiz Scores isn\'t point-scored -- most players clear it, so ranking it wouldn\'t mean much). Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>' +
+  '<div class="lbSub" style="margin-top:4px;">Ranks are out of the top 20 saved on each board. Overall points come from your Quiz Scores, Timed Quiz, and Play Calls Quiz ranks. Timed Quiz and Quiz Scores need a saved name matching yours to show up here.</div>' +
   badgeGridHtml(badges);
   // They're looking right at their badges now -- clear the "new badge"
   // dot on the menu item that got them here (see maybeShowBadgesIntro).
@@ -1204,11 +1211,9 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
   // own name, just run against the child's roster/login name instead --
   // reuses fetchTimedLeaderboardData/fetchPCQLeaderboardData/
   // fetchQuizLeaderboardData/computeOverallStandings so the numbers can
-  // never drift from what the actual leaderboards show. Quiz Scores is
-  // deliberately NOT point-scored (see computeOverallStandings/
-  // pointsForRank) -- most engaged players clear 31/31, so ranking it
-  // wouldn't mean anything and it's excluded from Overall Points on
-  // purpose, not by oversight.
+  // never drift from what the actual leaderboards show. Quiz Scores counts
+  // toward Overall Points same as the other two boards (see
+  // computeOverallStandings/pointsForRank for why it didn't used to).
   const [pcqRoundAttempts, signalAttempts, timedData, pcqData, quizData, overallData] = await Promise.all([
     cloudFetch('analytics/pcqRoundAttempts'),
     cloudFetch('analytics/signalAttempts'),
@@ -1279,7 +1284,7 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
       ${myStatRowHtml('🧠', 'Play Calls Quiz', pcqLine, childPcq.rank, groupFor(pcqData, rec.name).length)}
       ${myStatRowHtml('📝', 'Quiz Scores', childQuiz.entry ? `${childQuiz.entry.score}/${childQuiz.entry.total}${childQuiz.entry.bestStreak ? ` 🔥${childQuiz.entry.bestStreak}` : ''}` : 'No score yet', childQuiz.rank, groupFor(quizData, rec.name).length)}
     </div>
-    <div class="lbSub" style="margin-top:4px;">Overall Points comes from Timed Quiz and Play Calls Quiz ranks only -- Quiz Scores isn't point-scored, since most players clear 31/31 and ranking it wouldn't mean much.</div>
+    <div class="lbSub" style="margin-top:4px;">Overall Points comes from Quiz Scores, Timed Quiz, and Play Calls Quiz ranks.</div>
     <div class="statsGroupHeading" style="margin-top:14px;">🎯 Could use extra reps on -- Play Calls</div>
     ${weakPlaysHtml}
     <div class="statsGroupHeading" style="margin-top:14px;">✋ Could use extra reps on -- Signals</div>

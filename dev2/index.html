@@ -1408,7 +1408,7 @@
       <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change. Tap any player's number to give him an orange glow so it's easy to track just his job — set your position from the name menu and this happens automatically every time you open a play.</li>
       <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching Wing/Motion/Play/In-Out/Direction/Boot answer. Starts easy and gets tougher round by round.</li>
       <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
-      <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Timed and Play Quiz boards (Quiz Scores isn't ranked — most players clear it, so it wouldn't mean much).</li>
+      <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Quiz, Timed, and Play Quiz boards.</li>
       <li>🌙 Tap the moon/sun to switch between dark and light mode.</li>
       <li>🔊 Tap the speaker to mute or unmute the music.</li>
       <li>? Tap this icon anytime to see these tips again.</li>
@@ -1493,7 +1493,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260822l';
+  const BUILD_V = '20260822m';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
