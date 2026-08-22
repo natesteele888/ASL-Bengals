@@ -180,6 +180,26 @@ function normalizePlayData(playTypes) {
       repairStaleDirectionOrientation(pt);
     }
     if (shippedFlags) Object.assign(pt, shippedFlags);
+    // Counter shipped as a genuinely new stored sub-variant (Normal/
+    // Counter) nested under each direction, not just a flag -- a "Save to
+    // Cloud" snapshot saved before this feature existed still has
+    // pt.directions.Left/Right sitting FLAT (paths directly on it), even
+    // though the line above just force-stamped hasCounter:true onto it.
+    // Left alone that mismatch crashes getVariant/getPlayVariant the
+    // moment anyone opens Option or Outside Zone (v['Normal'] on a flat
+    // object is undefined, then variant.paths throws). Graft the wrapper
+    // on the fly here, exactly like the one-time data/plays.json
+    // restructuring did: Normal keeps the existing (only) routes, Counter
+    // starts as an identical copy for a coach to redraw in Edit Plays --
+    // never touches a direction that's already properly nested.
+    if (pt.hasCounter && pt.directions) {
+      ['Left', 'Right'].forEach(dirKey => {
+        const dv = pt.directions[dirKey];
+        if (dv && dv.paths) {
+          pt.directions[dirKey] = { Normal: dv, Counter: JSON.parse(JSON.stringify(dv)) };
+        }
+      });
+    }
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
       const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
       variants.forEach(variant => {
