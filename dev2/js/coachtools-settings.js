@@ -35,5 +35,9 @@
 
   window.initCoachToolsSettings = function () {
     refreshDroneVisibilityToggle();
+    // Nathan: "due to weather we may need to cancel practice... a popup we
+    // can enable in the coach tools with a custom message." See
+    // js/practice-cancel.js for the full-screen notice this drives.
+    if (window.initPracticeCancelSettings) window.initPracticeCancelSettings();
   };
 })();

@@ -1091,6 +1091,12 @@
       // -- same trigger point as the What's New badge/notify check above,
       // now that a session is actually known.
       if (typeof window.maybeNotifyNewDroneClips === 'function') window.maybeNotifyNewDroneClips();
+      // Nathan: "have a full screen panel that pops up to say [practice is]
+      // canceled and they have to confirm before they move on" -- same
+      // trigger point as the other post-session checks above, now that a
+      // session (coach, player, or parent -- everyone sees this) is known.
+      // See js/practice-cancel.js.
+      if (typeof window.maybeShowCancellationPanel === 'function') window.maybeShowCancellationPanel();
       // A drone-footage notification tapped while the app was closed opens
       // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
       // JS in a not-yet-loaded page) -- jump straight to that practice now

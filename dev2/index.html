@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide [DEV2 — internal build]</title>
-<link rel="stylesheet" href="css/styles.css?v=20260818a">
+<link rel="stylesheet" href="css/styles.css?v=20260822e">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -553,6 +553,28 @@
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 10px;padding:10px;border:2px solid #ccc;border-radius:8px;">
         <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
         <button type="button" class="navBtn" id="coachSettingsDroneToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
+      </div>
+
+      <!-- Nathan: "due to weather we may need to cancel practice. Have a
+           practice canceled due to lightning popup that we can enable in
+           the coach tools with a custom message we can write." See
+           js/practice-cancel.js -- this writes settings/practiceCancellation,
+           which drives the full-screen #cancelNoticeOverlay panel everyone
+           (players/parents included) gets gated behind on their next app
+           open/poll while it's active and not yet past its end time. -->
+      <div style="margin:0 auto 10px;padding:10px;border:2px solid #ccc;border-radius:8px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;">⛈️ Practice Cancellation Notice</div>
+        <div id="cancelNoticeStatus" class="lbSub" style="margin-bottom:10px;">Loading…</div>
+        <div id="cancelNoticeForm">
+          <select id="cancelPracticeSelect" style="width:100%;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:8px;">
+            <option value="">— No specific practice (set end time by hand) —</option>
+          </select>
+          <input type="datetime-local" id="cancelManualEndInput" style="width:100%;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:8px;">
+          <textarea id="cancelMessageInput" rows="3" placeholder="Practice is canceled due to lightning in the area. Stay safe -- see you next time!" style="width:100%;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;margin-bottom:8px;"></textarea>
+          <button type="button" class="navBtn danger" id="cancelActivateBtn" style="display:block;width:100%;text-align:center;">🚨 Activate Cancellation Notice</button>
+        </div>
+        <button type="button" class="navBtn danger" id="cancelDeactivateBtn" style="display:none;width:100%;text-align:center;">✅ End Notice Now</button>
+        <div id="cancelNoticeError" style="color:#c62828;font-size:11.5px;margin-top:8px;text-align:center;"></div>
       </div>
     </div>
   </div>
@@ -1180,6 +1202,62 @@
      name+PIN form, reused for both "enter this known profile's PIN to
      switch to it" (name locked) and "+ Add Another Profile" (name
      editable, same create-or-verify logic as the very first sign-in). -->
+<!-- ---- Practice Cancellation notice -- Nathan: "Have a practice canceled
+     due to lightning popup ... Have a full screen panel that pops up to
+     say its canceled and they have to confirm before they move on. after
+     the canceled event end time the notice goes away." js/practice-
+     cancel.js drives this; shown to everyone (coaches included) whenever
+     Coach Tools > Settings has an active notice whose end time hasn't
+     passed. Deliberately its own highest-priority overlay (no backdrop-
+     click or Escape to dismiss) rather than reusing .lbOverlay, since this
+     one specifically must not be dismissable without the confirm tap.
+
+     Nathan (2nd pass): "looking for it to be full screen... instead of
+     being plain white, a cool graphic of a football field with lightning
+     in the distance, animated." So this isn't a centered card anymore --
+     the whole viewport is a night storm scene (sky, a perspective-tilted
+     field with yard lines, drifting clouds, rain) with the message sitting
+     directly on top of it.
+
+     Nathan (3rd pass): pointed at the LYBS Cards app's own card-reveal
+     lightning (natesteele888/lybs-cards) as "a better understanding of
+     lightning" and gave a thunderstorm loop to go with it. That app draws
+     each bolt as a randomized jagged SVG polyline (glow + mid + white-hot
+     core layers) fired by JS on a timer, not a fixed pre-drawn shape --
+     js/practice-cancel.js's fireLightningBolt() ports that same technique
+     into #cancelBoltHost below instead of the old static CSS-keyframe
+     bolts. #cancelFlash is the single screen-brightness flash it pairs
+     each bolt with. When the thunder loop (assets/audio/thunder-loop.mp3)
+     is actually playing, bolts fire synced to the real thunder hits in
+     that file (same "flash ~0.4s before the boom" idea LYBS uses for its
+     own ambient loop, timestamps in AMBIENT_FLASH_TIMES); if audio is
+     blocked by the browser's autoplay policy, it falls back to a random
+     2-6s bolt timer instead -- the effect still works with no sound.
+
+     Nathan (4th pass): "I really like this realistic image for the
+     background instead" -- .cancelSky now paints his own real night-storm
+     football-field photo (assets/images/cancel-storm-field.jpg) full-bleed
+     in place of the procedural sky-gradient/cloud/field layers from the
+     2nd pass. The JS-fired lightning + thunder audio from the 3rd pass are
+     unchanged and still layer right on top of it. -->
+<div class="cancelNoticeOverlay" id="cancelNoticeOverlay">
+  <div class="cancelScene" aria-hidden="true">
+    <div class="cancelSky"></div>
+    <div class="cancelFlash" id="cancelFlash"></div>
+    <div class="cancelBoltHost" id="cancelBoltHost"></div>
+    <div class="cancelRain"></div>
+    <div class="cancelVignette"></div>
+  </div>
+  <audio id="cancelThunderAudio" loop preload="none" src="assets/audio/thunder-loop.mp3"></audio>
+  <div class="cancelNoticeContent">
+    <div class="cancelNoticeIcon">⛈️</div>
+    <div class="cancelNoticeHeader">Practice Canceled</div>
+    <div class="cancelNoticeMessage" id="cancelNoticeMessageText"></div>
+    <div class="cancelNoticeMeta" id="cancelNoticeMetaText"></div>
+    <button type="button" class="cancelNoticeConfirmBtn" id="cancelNoticeConfirmBtn">Confirm</button>
+  </div>
+</div>
+
 <div class="lbOverlay" id="switchProfileOverlay">
   <div class="lbCard" style="max-width:380px;">
     <h3>🔀 Switch Profile</h3>
@@ -1311,7 +1389,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260819c';
+  const BUILD_V = '20260822f';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1375,7 +1453,7 @@ if (window.ResizeObserver) {
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

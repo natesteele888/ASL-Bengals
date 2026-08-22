@@ -252,6 +252,7 @@
         <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
         <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(timeRangeLabel(current.time, current.endTime)) : ''}</div>
         <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
+        <div id="practiceCancelSection"></div>
         <div id="practiceWeatherWrap" style="display:none;"></div>
         <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceAddToCalBtn">📅 Add to Calendar</button></div>
         ${current.location ? `<div style="text-align:center;"><a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a></div><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
@@ -261,6 +262,7 @@
       wireAddToCalendar();
       renderWeather();
       if (window.renderDroneFootageSection) window.renderDroneFootageSection(current);
+      if (window.renderPracticeCancelSection) window.renderPracticeCancelSection(current);
       return;
     }
 
@@ -288,6 +290,7 @@
       </div>
       <div id="practiceMapPreviewWrap" style="margin-bottom:8px;"></div>
       <div id="practiceWeatherWrap" style="display:none;"></div>
+      <div id="practiceCancelSection"></div>
       ${isNew ? `
       <div class="lbSectionHeader" style="margin-top:6px;">🔁 Repeat (optional)</div>
       <div class="lbSub" style="margin:2px 0 8px;">Pick the day(s) of the week and an end date to add this on every matching date at once -- each one saves as its own entry, so you can still move or cancel a single day later.</div>
@@ -364,6 +367,11 @@
     // read-only and coach-edit views (above), so it's still there while a
     // coach is mid-edit of the date/notes/etc, not just after Save.
     if (window.renderDroneFootageSection) window.renderDroneFootageSection(current);
+    // Same idea for the weather-cancellation status/Cancel button (see
+    // js/practice-cancel.js) -- available from the edit view too, not just
+    // the read-only default, since a coach mid-edit shouldn't have to back
+    // out to read-only just to cancel the practice they're already looking at.
+    if (window.renderPracticeCancelSection) window.renderPracticeCancelSection(current);
   }
 
   // Nathan: "add in projected weather for the event when available."

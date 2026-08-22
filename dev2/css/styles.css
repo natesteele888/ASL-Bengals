@@ -236,7 +236,99 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .navBtn{background:var(--bengal-orange);color:#fff;border:none;border-radius:50px;padding:11px 20px;
   font-size:13px;font-weight:700;cursor:pointer}
 .navBtn.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}
+/* Alert-red variant -- Coach Tools > Settings' practice-cancellation
+   Activate/End buttons (js/practice-cancel.js), same alert red as the
+   full-screen notice card below so the coach-facing control visually
+   matches what everyone else is about to see. */
+.navBtn.danger{background:#c62828}
 .navBtn:active{transform:scale(.96)}
+
+/* ===== Practice Cancellation full-screen notice (js/practice-cancel.js) =====
+   Nathan: "a full screen panel that pops up to say its canceled and they
+   have to confirm before they move on" -- then, 2nd pass: "looking for it
+   to be full screen [not a card]... a cool graphic of a football field
+   with lightning in the distance, animated." Deliberately the app's
+   highest z-index (above .welcomeOverlay's 1600) and no way to dismiss
+   except the Confirm tap -- see index.html for why this isn't reusing
+   .lbOverlay/.lbCard.
+   Nathan (4th pass): "I really like this realistic image for the
+   background instead" -- pointed at an actual night-storm football-field
+   photo (lightning striking beyond the goal post, rain streaking past a
+   sideline light pole, wet track in the foreground), so the procedural
+   CSS sky/cloud/field layers from the 2nd pass are gone; .cancelSky now
+   just paints that photo full-bleed (assets/images/cancel-storm-field.jpg)
+   instead of a gradient. What stays on top of it, and still moving: the
+   JS-fired lightning (js/practice-cancel.js's fireLightningBolt(), synced
+   to the thunder audio -- see the 3rd-pass comment on the overlay markup
+   in index.html for that whole story), and a faint animated rain-streak
+   overlay for a little extra life over an otherwise still image.
+   The photo's own lightning bolt sits almost exactly in the vertical
+   center of the frame -- which is also where a vertically-centered text
+   block would naturally land -- so .cancelNoticeContent is anchored to
+   the BOTTOM of the screen instead (over the photo's foreground wet
+   pavement, which doesn't need to be seen clearly) and .cancelVignette's
+   dark halo is centered down there with it. That leaves the sky/bolt in
+   the upper two-thirds of the screen fully visible instead of getting
+   washed out behind the message. prefers-reduced-motion freezes the rain
+   and lets the photo alone read as a stormy field, just not moving. */
+.cancelNoticeOverlay{position:fixed;inset:0;z-index:1800;overflow:hidden;
+  background:#060a13;display:none}
+.cancelNoticeOverlay.show{display:block}
+
+.cancelScene{position:absolute;inset:0;overflow:hidden}
+.cancelSky{position:absolute;inset:0;background-color:#05070d;
+  background-image:url(../assets/images/cancel-storm-field.jpg);
+  background-size:cover;background-position:center 40%;background-repeat:no-repeat}
+
+/* Flash + bolts are now JS-driven (js/practice-cancel.js's
+   fireLightningBolt(), ported from LYBS Cards' own randomized-jagged-bolt
+   reveal effect) instead of fixed CSS @keyframes -- real thunderstorms
+   don't flicker on a metronome, and syncing to the actual thunder-hit
+   timestamps in the audio loop needs JS anyway. These two rules just give
+   the JS something to animate: .cancelFlash's opacity is toggled directly
+   (transition below handles the fade-out), and #cancelBoltHost is a plain
+   full-screen layer JS appends/removes generated <svg> bolts into. */
+.cancelFlash{position:absolute;inset:0;background:#dcecff;opacity:0;mix-blend-mode:screen;
+  pointer-events:none;transition:opacity .5s ease-out}
+.cancelBoltHost{position:absolute;inset:0;overflow:visible;pointer-events:none}
+
+.cancelRain{position:absolute;inset:0;opacity:.11;pointer-events:none;
+  background-image:repeating-linear-gradient(112deg, rgba(255,255,255,.7) 0 1px, transparent 1px 16px);
+  animation:cancelRainFall .3s linear infinite}
+@keyframes cancelRainFall{from{background-position:0 0}to{background-position:-34px 56px}}
+
+/* Soft dark halo behind the text/button -- keeps the message legible
+   against a background that's constantly changing brightness, and on a
+   short/wide viewport where the field's top edge can sit close to the
+   vertically-centered content, blends that overlap instead of it reading
+   like a layout bug. */
+.cancelVignette{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 95% 62% at 50% 92%, rgba(0,0,0,.72) 0%, rgba(0,0,0,0) 58%)}
+
+.cancelNoticeContent{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;text-align:center;
+  padding:24px 24px calc(44px + env(safe-area-inset-bottom, 0px));box-sizing:border-box}
+.cancelNoticeIcon{font-size:min(15vw,64px);line-height:1;margin-bottom:10px;
+  filter:drop-shadow(0 4px 14px rgba(0,0,0,.6));animation:cancelIconPulse 2.6s ease-in-out infinite}
+@keyframes cancelIconPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.cancelNoticeHeader{font-size:min(7vw,26px);font-weight:900;font-style:italic;color:#fff;
+  text-shadow:0 2px 4px rgba(0,0,0,.7), 0 0 24px rgba(198,40,40,.7);margin-bottom:14px}
+.cancelNoticeMessage{font-size:15.5px;line-height:1.6;color:#f5f7fb;max-width:440px;
+  text-shadow:0 1px 3px rgba(0,0,0,.85);margin-bottom:12px;white-space:pre-wrap}
+.cancelNoticeMeta{font-size:12.5px;color:#c9d3e6;text-shadow:0 1px 3px rgba(0,0,0,.85);margin-bottom:26px}
+.cancelNoticeConfirmBtn{width:100%;max-width:320px;padding:15px;border:none;border-radius:50px;
+  background:#c62828;color:#fff;font-weight:800;font-size:16px;letter-spacing:.02em;cursor:pointer;
+  box-shadow:0 4px 18px rgba(198,40,40,.55);animation:cancelBtnGlow 2.6s ease-in-out infinite}
+.cancelNoticeConfirmBtn:active{transform:scale(.97)}
+@keyframes cancelBtnGlow{0%,100%{box-shadow:0 4px 18px rgba(198,40,40,.55)}50%{box-shadow:0 4px 26px rgba(198,40,40,.9)}}
+
+@media (prefers-reduced-motion: reduce){
+  .cancelRain,.cancelNoticeIcon,.cancelNoticeConfirmBtn{animation:none}
+  .cancelFlash{transition:none;opacity:0}
+  /* js/practice-cancel.js also checks this same media query itself and
+     skips firing bolts/audio entirely when it matches, rather than firing
+     them and relying on CSS alone to suppress the motion. */
+}
 
 #signalQuiz{max-width:380px;margin:0 auto}
 #timedQuiz{max-width:380px;margin:0 auto}
