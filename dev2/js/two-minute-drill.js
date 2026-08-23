@@ -483,6 +483,258 @@
   }
 
   // ================================================================
+  // SECTION 1b: Split formation rendering -- Nathan: "add in split as we
+  // will run a lot of split on 2 minute drill." Copied near-verbatim from
+  // js/play-calls.js's own Split support (getSplitDefense/
+  // getSplitBlockingPaths/getSplitPassProtectionPaths/getSplitRoutePaths/
+  // reanchorRoute/renderSplitDiagram/playSplitAnimation -- see that file
+  // for the full history/rationale on each piece), with one deliberate
+  // simplification: the drill's diagram is never player-selectable/click-
+  // to-highlight the way Play Calls' card is (playGainAnimation always
+  // renders with nothing selected), so the click-to-select wiring and
+  // isSelected/glow plumbing from the original drawCircle isn't ported --
+  // every circle just draws plain. Split route EDITS (a coach's saved
+  // Houston/Seattle/Florida/Boston tweaks, separate from playEdits.json)
+  // also aren't fetched here -- same "generic shipped data is an
+  // acceptable fallback" trade-off this file already makes for Wing.
+  // ================================================================
+  function getSplitDefense() {
+    return [
+      { id: 'DE_L', label: 'DE', pos: [436, 110] },
+      { id: 'DT_L', label: 'DT', pos: [662, 110] },
+      { id: 'DT_R', label: 'DT', pos: [949, 110] },
+      { id: 'DE_R', label: 'DE', pos: [1183, 110] },
+      { id: 'LB1', label: 'LB', pos: [500, -20] },
+      { id: 'LB2', label: 'LB', pos: [700, -20] },
+      { id: 'LB3', label: 'LB', pos: [900, -20] },
+      { id: 'LB4', label: 'LB', pos: [1100, -20] },
+      { id: 'CB_L', label: 'CB', pos: [150, 90] },
+      { id: 'CB_R', label: 'CB', pos: [1460, 90] },
+      { id: 'FS', label: 'S', pos: [805, -190] },
+    ];
+  }
+
+  // "Option-style relative blocking isn't wired for Split yet" (same
+  // caveat as play-calls.js) -- optionLine/dualSideBlock paths are
+  // dropped rather than shown wrong.
+  function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
+    const variant = getVariant(playType, splitSide, insideOutside, readPosition);
+    const wideNum = splitSide === 'Right' ? 6 : 5;
+    const flexBackNum = splitSide === 'Right' ? 2 : 3;
+    const excluded = new Set([wideNum, flexBackNum, 4]);
+    return (variant.paths || []).filter(p => {
+      if (p.optionLine || p.dualSideBlock) return false;
+      return p.player === null || !excluded.has(p.player);
+    });
+  }
+
+  function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
+    const pos = DATA.split[splitSide];
+    const tightNum = splitSide === 'Right' ? 5 : 6;
+    const companionNum = splitSide === 'Right' ? 3 : 2;
+    const paths = [];
+    ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
+      const [x, y] = DATA.formation[k];
+      paths.push({ id: k, isBlocking: true, endType: 'block', width: 7, points: [[x, y], [x, y + 22]] });
+    });
+    const [tx, ty] = pos[tightNum];
+    paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
+    const [cx] = pos[companionNum];
+    const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
+    const realBallPath = variant && (variant.paths || []).find(p => p.player === companionNum && p.ball && !p.optionLine);
+    if (realBallPath) {
+      paths.push({ player: companionNum, ball: false, fake: true, width: 9, points: realBallPath.points });
+    }
+    const [qx, qy] = pos['1'];
+    const meshSign = cx >= qx ? 1 : -1;
+    const fakeMeshSpot = [qx + meshSign * 40, qy - 15];
+    paths.push({ player: 1, ball: false, fake: true, width: 9, points: [[qx, qy], fakeMeshSpot] });
+    const dropSpot = [qx, qy + 35];
+    paths.push({ player: 1, ball: true, endType: 'run', width: 9, points: [fakeMeshSpot, dropSpot] });
+    return paths;
+  }
+
+  function reanchorRoute(points, newAnchor) {
+    const [ax, ay] = points[0];
+    const vw = (DATA.viewBox && DATA.viewBox[0]) || 1600;
+    return points.map(([x, y]) => [
+      Math.max(20, Math.min(vw - 20, x - ax + newAnchor[0])),
+      Math.max(-390, Math.min(600, y - ay + newAnchor[1])),
+    ]);
+  }
+
+  function getSplitRoutePaths(splitSide, leftCall, rightCall) {
+    const routes = DATA.splitRoutes;
+    if (!routes) return [];
+    const out = [];
+    const splitSideData = routes[splitSide];
+    const splitSideCall = splitSide === 'Right' ? rightCall : leftCall;
+    if (splitSideData) {
+      if (splitSideData.wide && splitSideData.wide[splitSideCall]) {
+        out.push({ points: splitSideData.wide[splitSideCall], player: splitSideData.wide.player, width: 7 });
+      }
+      if (splitSideData.flex && splitSideData.flex[splitSideCall]) {
+        out.push({ points: splitSideData.flex[splitSideCall], player: splitSideData.flex.player, width: 7 });
+      }
+    }
+    const oppositeSideKey = splitSide === 'Right' ? 'Left' : 'Right';
+    const oppositeCall = splitSide === 'Right' ? leftCall : rightCall;
+    const oppositeFlexSource = routes[oppositeSideKey] && routes[oppositeSideKey].flex;
+    const fourPos = DATA.split[splitSide] && DATA.split[splitSide]['4'];
+    if (oppositeFlexSource && oppositeFlexSource[oppositeCall] && fourPos) {
+      out.push({ points: reanchorRoute(oppositeFlexSource[oppositeCall], fourPos), player: 4, width: 7 });
+    }
+    return out;
+  }
+
+  function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn) {
+    stage.innerHTML = '';
+    const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
+    stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+    const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
+    const pathsLayer = svgEl('g', {});
+    const circlesLayer = svgEl('g', {});
+    const pos = DATA.split[splitSide];
+
+    function drawCircle(x, y, label, fontSize) {
+      const wrap = svgEl('g', { class: 'full-op' });
+      wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: CIRCLE_R, fill: '#fff', stroke: '#111', 'stroke-width': 8 }));
+      const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: '#111' });
+      t.textContent = label;
+      wrap.appendChild(t);
+      wrap.circleEl = wrap.children[0]; wrap.textEl = t;
+      return wrap;
+    }
+    function drawDefCircle(x, y, label) {
+      const wrap = svgEl('g', { class: 'full-op' });
+      wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: CIRCLE_R, fill: '#fff', stroke: DEFENSE_COLOR, 'stroke-width': 8 }));
+      const t = svgEl('text', { x, y: y + 12, 'font-size': 26, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: DEFENSE_COLOR });
+      t.textContent = label;
+      wrap.appendChild(t);
+      return wrap;
+    }
+
+    getSplitDefense().forEach(d => circlesLayer.appendChild(drawDefCircle(d.pos[0], d.pos[1], d.label)));
+
+    const playerCircles = {};
+    ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
+      const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22);
+      circlesLayer.appendChild(c); playerCircles[k] = c;
+    });
+    ['5', '6', '3', '4', '1', '2'].forEach(num => {
+      const c = drawCircle(pos[num][0], pos[num][1], num, 34);
+      circlesLayer.appendChild(c); playerCircles[num] = c;
+    });
+
+    const lastRenderedPaths = [];
+    function drawPath(p) {
+      const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+      const points = p.points;
+      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+        : points.length === 5 ? multiCurvePathD(points)
+        : points.length === 2 ? straightPathD(points)
+        : points.length === 3 ? quadPathD(points)
+        : chainedCurvePathD(points);
+      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+      if (p.fake) attrs['stroke-dasharray'] = '10 8';
+      const pathEl = svgEl('path', attrs);
+      const wrap = svgEl('g', { class: 'full-op' });
+      wrap.appendChild(pathEl);
+      let arrowEl = null;
+      if (!p.fake) {
+        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        wrap.appendChild(arrowEl);
+        placeArrowAtFraction(arrowEl, pathEl, 1);
+      }
+      pathsLayer.appendChild(wrap);
+      const ownerKey = (p.player !== null && p.player !== undefined) ? String(p.player) : p.id;
+      const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
+      lastRenderedPaths.push({
+        el: pathEl, arrowEl, player: p.player, id: p.id, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+      });
+    }
+
+    const playType = DATA.playTypes.find(p => p.key === playKey);
+    if (passOn) {
+      getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+    } else if (playType) {
+      getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+    }
+    getSplitRoutePaths(splitSide, leftCall, rightCall).forEach(drawPath);
+
+    g.appendChild(pathsLayer);
+    g.appendChild(circlesLayer);
+    stage.appendChild(g);
+
+    stage._mainGroup = g;
+    stage._circlesLayerRef = circlesLayer;
+    stage._lastRenderedPaths = lastRenderedPaths;
+  }
+
+  async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef) {
+    if (isPlayingRef.value) return;
+    isPlayingRef.value = true;
+    const animMs = 1400 * speedMultiplier;
+    const mainGroup = stage._mainGroup;
+    const circlesLayerRef = stage._circlesLayerRef;
+    const lastRenderedPaths = stage._lastRenderedPaths || [];
+
+    const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
+    const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
+    const qbPos = { x: DATA.split[splitSide]['1'][0], y: DATA.split[splitSide]['1'][1] };
+    ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
+    mainGroup.insertBefore(ball, circlesLayerRef);
+
+    await wait(250 * speedMultiplier);
+    await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    await wait(150 * speedMultiplier);
+
+    const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl }) =>
+      animatePathDraw(el, arrowEl, animMs, (delayMs || 0) * speedMultiplier, circleEl, textEl));
+
+    const ballEntry = lastRenderedPaths.find(p => p.isBall);
+    const OFFY = 50;
+    if (ballEntry && ballEntry.circleEl) {
+      await wait((ballEntry.delayMs || 0) * speedMultiplier);
+      const carrier = ballEntry.circleEl;
+      let cx = qbPos.x, cy = qbPos.y;
+      let catchingUp = true;
+      function catchUpFrame() {
+        const targetX = Number(carrier.getAttribute('cx'));
+        const targetY = Number(carrier.getAttribute('cy')) + OFFY;
+        cx += (targetX - cx) * 0.25;
+        cy += (targetY - cy) * 0.25;
+        ball.setAttribute('cx', cx);
+        ball.setAttribute('cy', cy);
+        const dist = Math.hypot(targetX - cx, targetY - cy);
+        if (catchingUp && dist > 3) {
+          requestAnimationFrame(catchUpFrame);
+        } else {
+          catchingUp = false;
+          track();
+        }
+      }
+      catchUpFrame();
+      let tracking = true;
+      function track() {
+        if (!tracking) return;
+        ball.setAttribute('cx', carrier.getAttribute('cx'));
+        ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
+        requestAnimationFrame(track);
+      }
+      await wait(animMs);
+      tracking = false;
+    } else {
+      await wait(animMs);
+    }
+    await Promise.all(pathPromises);
+    await wait(300 * speedMultiplier);
+    ball.remove();
+    isPlayingRef.value = false;
+  }
+
+  // ================================================================
   // SECTION 2: signal-sequence builder
   // (copied from js/play-calls.js's buildSignalSequence + its
   // supporting constants/random-finger-id logic -- self-contained,
@@ -513,7 +765,47 @@
     return options[Math.floor(Math.random() * options.length)];
   }
 
-  function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, counterOn) {
+  // Split-only signal touch/finger cards -- see js/play-calls.js's own
+  // SPLIT_TOUCH_ID/PASS_SIGNAL_IDS/SPLIT_ROUTE_CALLS for the full history.
+  const SPLIT_TOUCH_ID = 31;
+  const PASS_SIGNAL_IDS = [28, 29, 30];
+  const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida', 'boston'];
+  // Nathan (on Play Calls, same idea reused here): "we abbreviate them on
+  // mobile view to SEA HOU FLO BOS" -- also doubles as the short label
+  // used in this drill's own (now-shortened) choice-button text.
+  const SPLIT_ROUTE_SHORT_LABELS = { seattle: 'SEA', houston: 'HOU', florida: 'FLO', boston: 'BOS' };
+
+  // Split's signal order: Split -> Direction (split side) -> Play call ->
+  // Direction (split side again) -> optional Pass. See play-calls.js's
+  // buildSplitSignalSequence for the full history on why both direction
+  // cards say the same side.
+  function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
+    const splitFingerId = randomFingerId(splitSide);
+    const dirFingerId = randomFingerId(splitSide, splitFingerId);
+    const playType = DATA.playTypes.find(p => p.key === playKey);
+    const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
+    const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
+    const signals = [
+      { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
+      { src: SIGNAL_CARDS[splitFingerId], label: `Split: ${splitSide}` },
+    ];
+    if (playKey === 'blast' || playKey === 'double_blast') {
+      if (insideOutside === 'Outside') {
+        signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
+      }
+      signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
+    } else {
+      signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
+    }
+    signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${splitSide}` });
+    if (passOn) {
+      const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
+      signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
+    }
+    return signals;
+  }
+
+  function buildWingSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, counterOn) {
     const wingFingerId = randomFingerId(wingSide);
     const dirFingerId = direction === wingSide
       ? randomFingerId(direction, wingFingerId)
@@ -547,6 +839,16 @@
       signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
     }
     return signals;
+  }
+
+  // Dispatches to the Wing or Split builder based on the call's own
+  // `formation` field -- the only thing runRound() actually calls; the two
+  // formation-specific builders above stay reachable individually (by
+  // their original names) for the test hooks below, unchanged.
+  function buildSignalSequenceForCall(call) {
+    return call.formation === 'split'
+      ? buildSplitSignalSequence(call.playKey, call.splitSide, call.insideOutside, call.passOn)
+      : buildWingSignalSequence(call.playKey, call.wingSide, call.direction, call.insideOutside, call.motionOn, call.bootOn, call.counterOn);
   }
 
   // ================================================================
@@ -597,10 +899,13 @@
   // them illegal) -- used both when generating the correct answer and
   // when generating each multiple-choice decoy, so nothing offered on
   // screen is ever a combo the real Play Calls toggles couldn't
-  // actually produce.
+  // actually produce. Dispatches to the Split-specific normalizer when
+  // the candidate is a Split call (see normalizeSplitCall below).
   function normalizeCall(call) {
+    if (call.formation === 'split') return normalizeSplitCall(call);
     const flags = playFlags(call.playKey);
     const out = {
+      formation: 'wing',
       playKey: call.playKey, wingSide: call.wingSide, direction: call.direction,
       motionOn: !!call.motionOn, bootOn: false, counterOn: false, insideOutside: null,
     };
@@ -614,28 +919,80 @@
     return out;
   }
 
+  // Split has none of Wing's Boot/Counter/Motion legality quirks --
+  // insideOutside is the only toggle that depends on the play type
+  // (Blast/Double Blast), everything else (splitSide/passOn/leftCall/
+  // rightCall) is always legal in any combination.
+  function normalizeSplitCall(call) {
+    const flags = playFlags(call.playKey);
+    return {
+      formation: 'split',
+      playKey: call.playKey,
+      splitSide: call.splitSide === 'Left' ? 'Left' : 'Right',
+      insideOutside: flags.hasInsideOutside ? (call.insideOutside === 'Inside' ? 'Inside' : 'Outside') : null,
+      passOn: !!call.passOn,
+      leftCall: SPLIT_ROUTE_CALLS.includes(call.leftCall) ? call.leftCall : SPLIT_ROUTE_CALLS[0],
+      rightCall: SPLIT_ROUTE_CALLS.includes(call.rightCall) ? call.rightCall : SPLIT_ROUTE_CALLS[0],
+    };
+  }
+
+  function shortSide(side) { return side === 'Left' ? 'L' : 'R'; }
+  function shortIO(io) { return io === 'Inside' ? 'In' : 'Out'; }
+
+  // Nathan: "Do shorten play calls" -- abbreviates every modifier word
+  // (Wing/Motion/Boot/Counter/Inside/Outside, and both formations' L/R
+  // sides) instead of spelling them out, so a 4-choice grid of these
+  // reads at a glance instead of wrapping across 3 lines each.
   function describeCall(call) {
-    const parts = [`Wing ${call.wingSide}`];
-    if (call.motionOn) parts.push('Motion');
-    if (call.insideOutside) parts.push(call.insideOutside);
+    if (call.formation === 'split') {
+      const parts = [`Split ${shortSide(call.splitSide)}`];
+      if (call.insideOutside) parts.push(shortIO(call.insideOutside));
+      parts.push(playLabel(call.playKey));
+      if (call.passOn) parts.push('Pass');
+      parts.push(`L ${SPLIT_ROUTE_SHORT_LABELS[call.leftCall]} R ${SPLIT_ROUTE_SHORT_LABELS[call.rightCall]}`);
+      return parts.join(' ');
+    }
+    const parts = [`Wing ${shortSide(call.wingSide)}`];
+    if (call.motionOn) parts.push('Mo');
+    if (call.insideOutside) parts.push(shortIO(call.insideOutside));
     parts.push(playLabel(call.playKey));
-    parts.push(call.direction);
-    if (call.bootOn) parts.push('Boot');
-    if (call.counterOn) parts.push('Counter');
+    parts.push(shortSide(call.direction));
+    if (call.bootOn) parts.push('Bt');
+    if (call.counterOn) parts.push('Ctr');
     return parts.join(' ');
   }
   function callKey(call) {
-    return [call.playKey, call.wingSide, call.direction, call.motionOn, call.bootOn, call.counterOn, call.insideOutside].join('|');
+    if (call.formation === 'split') {
+      return ['split', call.playKey, call.splitSide, call.insideOutside, call.passOn, call.leftCall, call.rightCall].join('|');
+    }
+    return ['wing', call.playKey, call.wingSide, call.direction, call.motionOn, call.bootOn, call.counterOn, call.insideOutside].join('|');
   }
 
   function randomSide() { return Math.random() < 0.5 ? 'Left' : 'Right'; }
+  function randomSplitRouteCall() { return SPLIT_ROUTE_CALLS[Math.floor(Math.random() * SPLIT_ROUTE_CALLS.length)]; }
+
+  // Nathan: "we will run a lot of split on 2 minute drill" -- Split comes
+  // up about as often as Wing, not as a rare curveball.
+  const SPLIT_FORMATION_CHANCE = 0.5;
 
   // "Full mix from play one" (Nathan's answer) -- every play, every
   // modifier, right from the first snap. No easy->hard ramp.
   function generateCorrectCall() {
     const playKey = ELIGIBLE_PLAY_KEYS[Math.floor(Math.random() * ELIGIBLE_PLAY_KEYS.length)];
     const flags = playFlags(playKey);
+    if (Math.random() < SPLIT_FORMATION_CHANCE) {
+      return normalizeCall({
+        formation: 'split',
+        playKey: playKey,
+        splitSide: randomSide(),
+        insideOutside: flags.hasInsideOutside ? (Math.random() < 0.5 ? 'Inside' : 'Outside') : null,
+        passOn: Math.random() < 0.35,
+        leftCall: randomSplitRouteCall(),
+        rightCall: randomSplitRouteCall(),
+      });
+    }
     const raw = {
+      formation: 'wing',
       playKey: playKey,
       wingSide: randomSide(),
       direction: randomSide(),
@@ -653,7 +1010,9 @@
   // One-attribute "neighbor" mutations of a legal call, each
   // re-normalized so it's still a combo the real toggles could
   // produce -- this is the "close to try and fool them" part.
+  // Dispatches to the Split-specific version for Split calls.
   function neighborCalls(call) {
+    if (call.formation === 'split') return neighborSplitCalls(call);
     const flags = playFlags(call.playKey);
     const candidates = [];
     candidates.push(normalizeCall(Object.assign({}, call, { wingSide: oppositeSide(call.wingSide) })));
@@ -671,9 +1030,40 @@
     (SIBLING_PLAY_KEYS[call.playKey] || []).forEach(siblingKey => {
       const siblingFlags = playFlags(siblingKey);
       candidates.push(normalizeCall({
+        formation: 'wing',
         playKey: siblingKey, wingSide: call.wingSide, direction: call.direction, motionOn: call.motionOn,
         insideOutside: siblingFlags.hasInsideOutside ? (call.insideOutside || (Math.random() < 0.5 ? 'Inside' : 'Outside')) : null,
         bootOn: call.bootOn, counterOn: call.counterOn,
+      }));
+    });
+    return candidates;
+  }
+
+  // Split's own "close to fool them" decoys: flip the split side, flip
+  // Pass, flip In/Out (Blast/Double Blast only), swap in each of the
+  // other 3 route calls one side at a time, plus the same sibling-play-key
+  // swaps Wing uses.
+  function neighborSplitCalls(call) {
+    const flags = playFlags(call.playKey);
+    const candidates = [];
+    candidates.push(normalizeCall(Object.assign({}, call, { splitSide: oppositeSide(call.splitSide) })));
+    candidates.push(normalizeCall(Object.assign({}, call, { passOn: !call.passOn })));
+    if (flags.hasInsideOutside) {
+      candidates.push(normalizeCall(Object.assign({}, call, { insideOutside: call.insideOutside === 'Inside' ? 'Outside' : 'Inside' })));
+    }
+    SPLIT_ROUTE_CALLS.filter(r => r !== call.leftCall).forEach(r => {
+      candidates.push(normalizeCall(Object.assign({}, call, { leftCall: r })));
+    });
+    SPLIT_ROUTE_CALLS.filter(r => r !== call.rightCall).forEach(r => {
+      candidates.push(normalizeCall(Object.assign({}, call, { rightCall: r })));
+    });
+    (SIBLING_PLAY_KEYS[call.playKey] || []).forEach(siblingKey => {
+      const siblingFlags = playFlags(siblingKey);
+      candidates.push(normalizeCall({
+        formation: 'split',
+        playKey: siblingKey, splitSide: call.splitSide,
+        insideOutside: siblingFlags.hasInsideOutside ? (call.insideOutside || (Math.random() < 0.5 ? 'Inside' : 'Outside')) : null,
+        passOn: call.passOn, leftCall: call.leftCall, rightCall: call.rightCall,
       }));
     });
     return candidates;
@@ -696,10 +1086,15 @@
     // single-attribute neighbors (rare -- e.g. Option has few
     // togglable extras), top up with fresh independent random calls
     // instead of ever showing fewer than 4 options.
+    // Keep the fallback's fresh random calls in the SAME formation as the
+    // correct answer -- a round only ever shows one formation's signal
+    // touch card, so a Split correct answer can never legitimately be
+    // fooled by a Wing-formation decoy or vice versa.
     let guard = 0;
     while (decoys.length < 3 && guard < 40) {
       guard++;
-      const fresh = generateCorrectCall();
+      let fresh = generateCorrectCall();
+      if (fresh.formation !== correctCall.formation) continue;
       const k = callKey(fresh);
       if (!seen.has(k)) { seen.add(k); decoys.push(fresh); }
     }
@@ -973,13 +1368,21 @@
   // football semantics: calling a timeout stops the game clock so you get
   // a breather. Doesn't touch the signal sequence or the current call,
   // just buys clock time -- usable any time the drive is running, not just
-  // mid-round, same as real football.
+  // mid-round, same as real football. (Used to buy a fixed number of
+  // seconds via clockPausedUntil -- now an open-ended hold via
+  // state.clockHoldForSelection instead, see the state object below.)
   const TIMEOUTS_PER_GAME = 2;
-  const TIMEOUT_PAUSE_MS = 10000;
+
+  // Nathan: "We need to time out after 10 seconds for delay of game.
+  // -5 yards, same whistle and crowd groan on the play." A per-play shot
+  // clock, independent of the master 2-minute clock (and of whether that
+  // master clock is currently held for a timeout/out-of-bounds) -- if
+  // choices have been visible/clickable this long with no pick made,
+  // it's an automatic penalty. See the Promise.race in runRound.
+  const DELAY_OF_GAME_MS = 10000;
 
   const state = {
     clockMs: CLOCK_START_MS,
-    clockPausedUntil: 0,
     running: false,
     fieldPos: START_FIELD_POS,
     score: 0, // touchdowns
@@ -987,17 +1390,33 @@
     bestStreak: 0,
     correctCount: 0,
     wrongCount: 0,
+    delayOfGameCount: 0,
     totalYards: 0,
     roundActive: false,
     currentCorrectCall: null,
     timeoutsLeft: TIMEOUTS_PER_GAME,
     // Nathan: "it shouldn't run the clock when it plays back the play
-    // diagram" -- unlike clockPausedUntil (a fixed future timestamp, used
-    // for timeouts/big-play stoppages of a known length), the diagram
-    // playback's length isn't known ahead of time, so it gets its own
-    // open-ended pause flag: set true right before playGainAnimation
-    // starts, false right after it resolves (see runRound).
+    // diagram" -- the diagram playback's length isn't known ahead of time,
+    // so it gets its own open-ended pause flag: set true right before
+    // playGainAnimation starts, false right after it resolves (see
+    // runRound).
     animationPauseActive: false,
+    // Nathan: "after a timeout, dont start the clock until you choose the
+    // play... If it's time out or out of bounds, don't start the clock
+    // until the play selection is made." Replaces the old fixed-duration
+    // clockPausedUntil timestamp -- real football doesn't restart the
+    // clock after a fixed number of seconds, it restarts on the next
+    // snap. Set true by callTimeout() and by an out-of-bounds big play
+    // (see resolveGain/runRound); cleared the instant a CORRECT pick is
+    // made in a later round (a false start/wrong pick while this is true
+    // leaves it true -- "if you false start on a stopped clock, it
+    // doesn't start").
+    clockHoldForSelection: false,
+    // Nathan: "at the end of the game, have a drive recap" -- one entry
+    // per resolved round (gain/touchdown/false start/delay of game),
+    // rendered by endGame() below. Timeouts don't get their own entry --
+    // they're not a play call.
+    driveLog: [],
   };
 
   function randRange(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
@@ -1030,7 +1449,10 @@
   // more yardage" + "bonus for multiple correct in a row" + "big gain
   // and get out of bounds" (all from Nathan) combined into one result:
   function resolveGain(call, pickElapsedMs) {
-    const isPass = PASSING_PLAY_KEYS.includes(call.playKey);
+    // Split's Pass is an independent toggle any play can carry (unlike
+    // Wing, where only Option Pass is a real drop-back pass) -- a Split
+    // call with Pass on gets the same passing-yardage treatment.
+    const isPass = call.formation === 'split' ? !!call.passOn : PASSING_PLAY_KEYS.includes(call.playKey);
     const base = isPass ? randRange(11, 22) : randRange(4, 9);
     const streakBonus = Math.min(state.streak * 2, 16); // streak counted AFTER this play increments it, see below
     const speedBonus = speedBonusYards(pickElapsedMs);
@@ -1045,10 +1467,6 @@
       bigPlay: bigPlay,
       bigYards: bigYards,
       totalYards: base + streakBonus + speedBonus + bigYards,
-      // Out of bounds "stops the clock" -- implemented as a brief
-      // window where the master countdown just doesn't tick, rather
-      // than literally adding time back (see tickClock below).
-      clockPauseMs: bigPlay ? randRange(3000, 6000) : 0,
     };
   }
 
@@ -1062,6 +1480,7 @@
     endScreen: document.getElementById('endScreen'),
     playAgainBtn: document.getElementById('playAgainBtn'),
     endSummary: document.getElementById('endSummary'),
+    driveRecap: document.getElementById('driveRecap'),
     hudClock: document.getElementById('hudClock'),
     hudScore: document.getElementById('hudScore'),
     hudStreak: document.getElementById('hudStreak'),
@@ -1166,6 +1585,16 @@
     try { a.pause(); } catch (e) { /* ignore */ }
   }
 
+  // Drive-recap rows are built from describeCall() output/fixed result
+  // strings, never real user input -- but escaping before innerHTML is
+  // still the cheap, safe default, same as the rest of the app's own
+  // escapeHtml/escapeHtmlGD helpers.
+  function escapeAttr(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
   function fmtClock(ms) {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
     const m = Math.floor(totalSec / 60);
@@ -1192,16 +1621,15 @@
     }
   }
 
-  // Nathan: "2 timeouts that you can take" -- pauses the master clock the
-  // same way an out-of-bounds big play does (see resolveGain's
-  // clockPauseMs), just player-triggered instead of luck-triggered.
-  // Usable any time the drive is running; Math.max so calling one while an
-  // existing pause (e.g. a big play) still has more time left never
-  // shortens it.
+  // Nathan: "after a timeout, dont start the clock until you choose the
+  // play" -- pauses the master clock the same open-ended way an
+  // out-of-bounds big play does now (see resolveGain/runRound), just
+  // player-triggered instead of luck-triggered. Usable any time the drive
+  // is running.
   function callTimeout() {
     if (!state.running || state.timeoutsLeft <= 0) return;
     state.timeoutsLeft--;
-    state.clockPausedUntil = Math.max(state.clockPausedUntil, performance.now() + TIMEOUT_PAUSE_MS);
+    state.clockHoldForSelection = true;
     updateHud();
     showBanner('⏱️ TIMEOUT!', 'timeout', 1100);
   }
@@ -1213,7 +1641,7 @@
       const now = performance.now();
       const delta = now - last;
       last = now;
-      if (now < state.clockPausedUntil || state.animationPauseActive) { updateHud(); return; }
+      if (state.clockHoldForSelection || state.animationPauseActive) { updateHud(); return; }
       state.clockMs -= delta;
       if (state.clockMs <= 0) {
         state.clockMs = 0;
@@ -1310,6 +1738,17 @@
     return new Promise(resolve => {
       stopSignalSequence();
       el.signalProgress.innerHTML = '';
+      // Bug fix (Nathan: "the play direction from the previous call still
+      // shows at the start of the next call") -- #signalImg/#signalTextCard
+      // are normal (non-absolutely-positioned) children of the same flex
+      // column as #getReadyEl, so showing #getReadyEl alone during the
+      // GET READY beat never hid whichever signal card the PREVIOUS round
+      // last displayed (often its Direction card) -- both sat stacked in
+      // the column together until the new sequence's first showStep() call
+      // finally overwrote signalImg.src. Hide both explicitly right here,
+      // before GET READY even shows, so a new round always starts blank.
+      el.signalImg.style.display = 'none';
+      el.signalTextCard.style.display = 'none';
       if (!signals.length) { resolve(); return; }
       signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; el.signalProgress.appendChild(d); });
       const stepMs = BASE_STEP_MS + Math.max(0, signals.length - 4) * EXTRA_MS_PER_SIGNAL;
@@ -1385,8 +1824,17 @@
     // decision time, never watch-the-replay time.
     state.animationPauseActive = true;
     try {
-      await playCardAnimation(el.playDiagramSvg, call.playKey, call.direction, call.wingSide, 1, isPlayingRef,
-        null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn);
+      if (call.formation === 'split') {
+        // renderSplitDiagram (unlike renderCardDiagram) isn't called
+        // implicitly by the animation function itself -- it has to be
+        // rendered first, then animated, same two-step split play-calls.js
+        // itself uses (rerenderDiagram() then playSplitAnimation()).
+        renderSplitDiagram(el.playDiagramSvg, call.playKey, call.splitSide, call.insideOutside, 'A', call.leftCall, call.rightCall, call.passOn);
+        await playSplitAnimation(el.playDiagramSvg, call.splitSide, 1, isPlayingRef);
+      } else {
+        await playCardAnimation(el.playDiagramSvg, call.playKey, call.direction, call.wingSide, 1, isPlayingRef,
+          null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn);
+      }
     } finally {
       state.animationPauseActive = false;
     }
@@ -1400,8 +1848,7 @@
     const correctCall = generateCorrectCall();
     state.currentCorrectCall = correctCall;
     const choices = generateChoices(correctCall);
-    const io = correctCall.insideOutside || 'Outside';
-    const signals = buildSignalSequence(correctCall.playKey, correctCall.wingSide, correctCall.direction, io, correctCall.motionOn, correctCall.bootOn, correctCall.counterOn);
+    const signals = buildSignalSequenceForCall(correctCall);
 
     await playSignals(signals);
     if (!state.running) { stopSignalSequence(); return; }
@@ -1413,39 +1860,88 @@
     // player. The signal display itself keeps looping through its second
     // pass in the background (see playSignals) until stopSignalSequence()
     // below, once an answer is in.
+    //
+    // Nathan: "We need to time out after 10 seconds for delay of game."
+    // Races the real pick against a 10s shot clock -- whichever settles
+    // first wins. If the shot clock wins, the choice buttons are disabled
+    // immediately so a stray late click on the old (still-visible) grid
+    // can't also resolve isCorrectPromise after the fact.
     const pickStartMs = performance.now();
     const isCorrectPromise = renderChoices(choices, correctCall);
-    const isCorrect = await isCorrectPromise;
+    const pickResult = await Promise.race([
+      isCorrectPromise.then(isCorrect => ({ delayOfGame: false, isCorrect })),
+      wait(DELAY_OF_GAME_MS).then(() => ({ delayOfGame: true, isCorrect: false })),
+    ]);
     stopSignalSequence();
     if (!state.running) return;
     const pickElapsedMs = performance.now() - pickStartMs;
 
+    if (pickResult.delayOfGame) {
+      [...el.choicesGrid.children].forEach(b => b.disabled = true);
+      state.streak = 0;
+      state.delayOfGameCount++;
+      // Nathan: "You also can't get backed up into the endzone" -- same
+      // Math.max(1, ...) floor false start already uses below.
+      state.fieldPos = Math.max(1, state.fieldPos - PENALTY_YARDS);
+      state.driveLog.push({ text: describeCall(correctCall), result: `DELAY OF GAME -${PENALTY_YARDS}`, cls: 'penalty' });
+      updateHud();
+      // "same whistle and crowd groan on the play" -- the exact false
+      // start sfx chain, just for a different cause of the dead play.
+      playFalseStartSfx();
+      await showBanner(`⏱️ DELAY OF GAME! -${PENALTY_YARDS} YDS`, 'bad', 1400);
+      if (!state.running) return;
+      state.roundActive = false;
+      if (state.running) runRound();
+      return;
+    }
+
+    const isCorrect = pickResult.isCorrect;
+
     if (isCorrect) {
+      // Nathan: "If it's time out or out of bounds, don't start the clock
+      // until the play selection is made." A correct pick IS the next
+      // snap -- clear any held-from-last-round stop right here, before
+      // this play's own potential out-of-bounds re-engages it below.
+      state.clockHoldForSelection = false;
+
       state.streak++;
       state.bestStreak = Math.max(state.bestStreak, state.streak);
       state.correctCount++;
       const gain = resolveGain(correctCall, pickElapsedMs);
       state.totalYards += gain.totalYards;
       state.fieldPos += gain.totalYards;
-      if (gain.clockPauseMs) state.clockPausedUntil = performance.now() + gain.clockPauseMs;
+      // Out of bounds stops the clock dead, same open-ended hold a
+      // timeout uses -- cleared again on the NEXT round's correct pick
+      // (see just above), not after a fixed number of seconds.
+      if (gain.bigPlay) state.clockHoldForSelection = true;
 
       await playGainAnimation(correctCall);
       // The clock is paused for the play-diagram replay itself (see
-      // animationPauseActive), but it was still running up through the
-      // pick, and a timeout/big-play stoppage from clockPausedUntil could
-      // have already expired mid-animation, so it can still have hit 0 and
-      // triggered endGame() before this line. Once that's happened,
-      // nothing from this in-flight round should touch state or the HUD
-      // any further, or a touchdown/gain resolving a beat late could
-      // increment the score (and repaint the live HUD) AFTER the end
-      // screen already rendered its now-stale summary.
+      // animationPauseActive), but a timeout/out-of-bounds hold clearing
+      // mid-animation could still let it hit 0 and trigger endGame()
+      // before this line (e.g. a timeout was called, then a LATER correct
+      // pick clears the hold while the diagram is still playing). Once
+      // that's happened, nothing from this in-flight round should touch
+      // state or the HUD any further, or a touchdown/gain resolving a
+      // beat late could increment the score (and repaint the live HUD)
+      // AFTER the end screen already rendered its now-stale summary.
       if (!state.running) return;
 
       const scored = state.fieldPos >= 100;
       if (scored) state.fieldPos = 100;
       updateHud();
 
+      state.driveLog.push({
+        text: describeCall(correctCall),
+        result: `+${gain.totalYards} YDS${gain.bigPlay ? ' (OOB)' : ''}`,
+        cls: 'gain',
+      });
+
       if (gain.bigPlay) {
+        // Nathan: "If you go out of bounds on a play, have the whistle
+        // blow." Plain whistle, no crowd-groan chain -- this is a good
+        // play, not a penalty.
+        playSfx(el.sndWhistle);
         await showBanner(`💥 BREAKS FREE! +${gain.totalYards} YDS — OUT OF BOUNDS!`, 'good big', 1700);
       } else {
         await showBanner(`GAIN! +${gain.totalYards} YDS`, 'good', 1300);
@@ -1455,6 +1951,7 @@
       if (scored) {
         state.score++;
         updateHud();
+        state.driveLog.push({ text: '', result: '🏈 TOUCHDOWN', cls: 'touchdown' });
         playTouchdownSfx();
         await showBanner('🏈 TOUCHDOWN!', 'touchdown', 2000);
         if (!state.running) return;
@@ -1464,8 +1961,14 @@
     } else {
       state.streak = 0;
       state.wrongCount++;
+      // Nathan: "You also can't get backed up into the endzone."
       state.fieldPos = Math.max(1, state.fieldPos - PENALTY_YARDS);
+      state.driveLog.push({ text: describeCall(correctCall), result: `FALSE START -${PENALTY_YARDS}`, cls: 'penalty' });
       updateHud();
+      // Nathan: "if you false start on a stopped clock, it doesn't
+      // start" -- a wrong pick never clears clockHoldForSelection (unlike
+      // the correct-pick branch above), so a hold from a prior timeout/
+      // out-of-bounds just carries through into the next round untouched.
       playFalseStartSfx();
       await showBanner(`FALSE START! -${PENALTY_YARDS} YDS`, 'bad', 1400);
       if (!state.running) return;
@@ -1488,14 +1991,27 @@
     el.gameScreen.style.display = 'none';
     el.endScreen.style.display = '';
     const maxScore = state.correctCount + state.wrongCount;
+    const totalPenaltyYards = (state.wrongCount + state.delayOfGameCount) * PENALTY_YARDS;
     el.endSummary.innerHTML = `
       <div class="twoMinEndStat">🏈 Touchdowns: <b>${state.score}</b></div>
       <div class="twoMinEndStat">Total yards gained: <b>${state.totalYards}</b></div>
-      <div class="twoMinEndStat">Yards lost to penalties: <b>${state.wrongCount * PENALTY_YARDS}</b></div>
+      <div class="twoMinEndStat">Yards lost to penalties: <b>${totalPenaltyYards}</b></div>
       <div class="twoMinEndStat">Calls correct: <b>${state.correctCount}</b> / ${maxScore || 0}</div>
       <div class="twoMinEndStat">False starts: <b>${state.wrongCount}</b></div>
+      <div class="twoMinEndStat">Delay of game penalties: <b>${state.delayOfGameCount}</b></div>
       <div class="twoMinEndStat">Best streak: <b>${state.bestStreak}</b></div>
     `;
+    // Nathan: "At the end of the game, have a drive recap." Oldest play
+    // first, so it reads top-to-bottom the same order the drive happened.
+    if (el.driveRecap) {
+      el.driveRecap.innerHTML = state.driveLog.length
+        ? state.driveLog.map((entry, i) => `
+            <div class="twoMinRecapRow ${entry.cls}">
+              <span class="recapPlay">${entry.text ? `${i + 1}. ${escapeAttr(entry.text)}` : `${i + 1}.`}</span>
+              <span class="recapResult">${escapeAttr(entry.result)}</span>
+            </div>`).join('')
+        : `<div class="twoMinRecapRow"><span class="recapPlay">No plays run this drive.</span></div>`;
+    }
     try {
       const bestTds = Number(localStorage.getItem('twoMinDrillBestTDs') || 0);
       const bestStreak = Number(localStorage.getItem('twoMinDrillBestStreak') || 0);
@@ -1506,10 +2022,10 @@
 
   function startGame() {
     Object.assign(state, {
-      clockMs: CLOCK_START_MS, clockPausedUntil: 0, running: true, fieldPos: START_FIELD_POS,
-      score: 0, streak: 0, bestStreak: 0, correctCount: 0, wrongCount: 0, totalYards: 0,
+      clockMs: CLOCK_START_MS, running: true, fieldPos: START_FIELD_POS,
+      score: 0, streak: 0, bestStreak: 0, correctCount: 0, wrongCount: 0, delayOfGameCount: 0, totalYards: 0,
       roundActive: false, currentCorrectCall: null, timeoutsLeft: TIMEOUTS_PER_GAME,
-      animationPauseActive: false,
+      animationPauseActive: false, clockHoldForSelection: false, driveLog: [],
     });
     el.startScreen.style.display = 'none';
     el.endScreen.style.display = 'none';
@@ -1543,9 +2059,21 @@
     describeCall: describeCall,
     callKey: callKey,
     forceClockMs: function (ms) { state.clockMs = ms; },
-    buildSignalSequence: buildSignalSequence,
+    // buildSignalSequence kept mapped to the original Wing-only positional
+    // function (same name/signature older tests already call) --
+    // buildSplitSignalSequence/buildSignalSequenceForCall are the new
+    // Split-aware entry points, exposed separately rather than changing
+    // this one's shape out from under existing tests.
+    buildSignalSequence: buildWingSignalSequence,
+    buildSplitSignalSequence: buildSplitSignalSequence,
+    buildSignalSequenceForCall: buildSignalSequenceForCall,
     resolveGain: resolveGain,
     speedBonusYards: speedBonusYards,
+    generateCorrectCall: generateCorrectCall,
+    generateChoices: generateChoices,
+    normalizeCall: normalizeCall,
+    renderSplitDiagram: renderSplitDiagram,
+    playSplitAnimation: playSplitAnimation,
   };
 
   init();

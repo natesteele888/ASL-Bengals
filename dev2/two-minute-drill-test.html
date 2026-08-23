@@ -40,6 +40,22 @@
   .twoMinBigBtn:disabled { opacity: .5; cursor: default; }
   .twoMinBigBtn:active:not(:disabled) { transform: scale(.97); }
   .twoMinEndStat { font-size: 15px; margin: 6px 0; }
+  /* Nathan: "At the end of the game, have a drive recap." -- a scrollable
+     play-by-play list under the summary stats, one row per resolved round
+     (gain/touchdown/false start/delay of game), oldest first. */
+  #driveRecapWrap { text-align: left; margin: 16px 0 6px; }
+  .twoMinRecapTitle { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 6px; }
+  #driveRecap { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); }
+  .twoMinRecapRow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px;
+    font-size: 13px; border-bottom: 1px solid var(--line); }
+  .twoMinRecapRow:last-child { border-bottom: none; }
+  .twoMinRecapRow .recapPlay { color: var(--ink); flex: 1; }
+  .twoMinRecapRow .recapResult { font-weight: 800; white-space: nowrap; }
+  .twoMinRecapRow.gain .recapResult { color: #1e7c34; }
+  .twoMinRecapRow.touchdown .recapResult { color: var(--bengal-orange); }
+  .twoMinRecapRow.penalty .recapResult { color: #c62828; }
 
   /* ---- HUD ---- */
   .twoMinHud { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
@@ -184,6 +200,10 @@
   <div class="twoMinPanel" id="endScreen" style="display:none;">
     <h2 style="margin-top:0;">⏱️ Time's Up!</h2>
     <div id="endSummary"></div>
+    <div id="driveRecapWrap">
+      <div class="twoMinRecapTitle">Drive Recap</div>
+      <div id="driveRecap"></div>
+    </div>
     <button class="twoMinBigBtn" id="playAgainBtn">Play Again</button>
   </div>
 </div>
