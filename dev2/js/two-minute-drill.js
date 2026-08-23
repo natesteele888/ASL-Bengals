@@ -1074,13 +1074,24 @@
       function showStep() {
         if (i >= signals.length) { resolve(); return; }
         const sig = signals[i];
+        // Nathan: "None of the signal images are showing" -- SIGNAL_CARDS
+        // is always empty on this standalone page (dev2PlayData/cards.json
+        // needs auth this login-free page doesn't have, confirmed 401), so
+        // every signal was ALWAYS falling through to the text-card branch
+        // below -- expected and fine, that's the documented fallback. The
+        // real bug: `style.display = ''` doesn't SHOW an element whose CSS
+        // class already sets `display: none` (like #signalTextCard here) --
+        // it just clears the inline override and falls back to that class
+        // rule, i.e. still hidden. Same pitfall already fixed once this
+        // session for #playDiagramWrap; missed here because this is a
+        // separate element. Explicit 'block' actually shows it.
         if (sig.src) {
           el.signalImg.src = sig.src;
-          el.signalImg.style.display = '';
+          el.signalImg.style.display = 'block';
           el.signalTextCard.style.display = 'none';
         } else {
           el.signalTextCard.textContent = sig.label;
-          el.signalTextCard.style.display = '';
+          el.signalTextCard.style.display = 'block';
           el.signalImg.style.display = 'none';
         }
         [...el.signalProgress.children].forEach((d, idx) => d.classList.toggle('done', idx <= i));
