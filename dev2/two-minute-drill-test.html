@@ -150,6 +150,22 @@
 
 <div class="twoMinBanner" id="resultBanner"></div>
 
+<!--
+  Nathan: "it cant say the name, that gives it away, just the image of the
+  signal" -- the text-card fallback (js/two-minute-drill.js's playSignals)
+  was only ever a graceful degrade for when the real signal photos can't
+  load, but for THIS game showing the label in plain English defeats the
+  whole point (players would just read the answer instead of recognizing
+  the hand signal). The photos live behind Firebase, gated to real
+  (non-anonymous) logins -- loading cloud-auth.js here gives this page the
+  same window.firebaseAuthed() the rest of the app uses. Since this page
+  shares an origin with index.html, if you're already signed in there as a
+  coach, the same saved session carries over automatically -- no separate
+  login on this page. Purely additive: two-minute-drill.js already checks
+  for window.firebaseAuthed and only uses it if present, so nothing breaks
+  if this ever fails to load.
+-->
+<script src="js/cloud-auth.js"></script>
 <script src="js/two-minute-drill.js"></script>
 </body>
 </html>

@@ -856,6 +856,27 @@
     ]);
   }
 
+  // window.firebaseAuthed (js/cloud-auth.js, loaded by two-minute-drill-
+  // test.html specifically so the real signal photos can load -- see
+  // "it cant say the name, that gives it away" below) itself makes a
+  // network call (sign-in/refresh) before it can return an authed URL --
+  // same unbounded-hang risk fetchWithTimeout exists to prevent, just one
+  // layer earlier. Races it the same way, and falls back to the plain
+  // (unauthenticated) URL on any failure/timeout rather than aborting the
+  // whole load -- an unauthenticated request to a gated path just comes
+  // back 401, which the caller's own try/catch already handles.
+  async function resolveAuthedUrl(url) {
+    if (typeof window.firebaseAuthed !== 'function') return url;
+    try {
+      return await Promise.race([
+        window.firebaseAuthed(url),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timed out getting auth token')), FETCH_TIMEOUT_MS)),
+      ]);
+    } catch (e) {
+      return url;
+    }
+  }
+
   async function loadData() {
     // No fetch, no network, nothing that can 404 or hang -- SHIPPED_PLAY_DATA
     // is baked directly into this file (see the comment where it's defined,
@@ -904,9 +925,7 @@
     // DATA.playTypes as the shipped defaults already loaded above, so the
     // drill still works fine with generic routes.
     try {
-      const editsUrl = (typeof window.firebaseAuthed === 'function')
-        ? await window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`)
-        : `${FIREBASE_DB_URL}/playEdits.json`;
+      const editsUrl = await resolveAuthedUrl(`${FIREBASE_DB_URL}/playEdits.json`);
       const res = await fetchWithTimeout(editsUrl);
       if (res.ok) {
         const saved = await res.json();
@@ -919,8 +938,16 @@
       // shipped routes are already in DATA, so the drill still works.
     }
 
+    // Nathan: "None of the signal images are showing" / "it cant say the
+    // name, that gives it away, just the image of the signal" -- this
+    // fetch previously never used window.firebaseAuthed at all (an
+    // oversight -- only the playEdits.json fetch above had it), so it was
+    // ALWAYS an unauthenticated request against a path that requires real
+    // login, ALWAYS 401ing, no matter what. Now goes through the same
+    // resolveAuthedUrl() as playEdits.json above.
     try {
-      const res = await fetchWithTimeout(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`);
+      const cardsUrl = await resolveAuthedUrl(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`);
+      const res = await fetchWithTimeout(cardsUrl);
       if (res.ok) {
         const cards = await res.json();
         if (Array.isArray(cards)) {
@@ -1074,23 +1101,23 @@
       function showStep() {
         if (i >= signals.length) { resolve(); return; }
         const sig = signals[i];
-        // Nathan: "None of the signal images are showing" -- SIGNAL_CARDS
-        // is always empty on this standalone page (dev2PlayData/cards.json
-        // needs auth this login-free page doesn't have, confirmed 401), so
-        // every signal was ALWAYS falling through to the text-card branch
-        // below -- expected and fine, that's the documented fallback. The
-        // real bug: `style.display = ''` doesn't SHOW an element whose CSS
-        // class already sets `display: none` (like #signalTextCard here) --
-        // it just clears the inline override and falls back to that class
-        // rule, i.e. still hidden. Same pitfall already fixed once this
-        // session for #playDiagramWrap; missed here because this is a
-        // separate element. Explicit 'block' actually shows it.
+        // Nathan: "it cant say the name, that gives it away, just the
+        // image of the signal" -- sig.label (e.g. "Wing Location: Left",
+        // "Outside Zone") is the literal answer, so it can NEVER be shown
+        // as visible text -- this fallback branch only exists for the rare
+        // case a signal photo genuinely fails to load (network hiccup,
+        // signed-out session), and even then it must not leak the call.
+        // Real fix for photos not loading at all is cloud-auth.js now
+        // being loaded on this page (see two-minute-drill-test.html) so
+        // window.firebaseAuthed can actually read the gated signal photos;
+        // this text branch is just the safety net under that, not a
+        // legitimate second way to play the game.
         if (sig.src) {
           el.signalImg.src = sig.src;
           el.signalImg.style.display = 'block';
           el.signalTextCard.style.display = 'none';
         } else {
-          el.signalTextCard.textContent = sig.label;
+          el.signalTextCard.textContent = '📡';
           el.signalTextCard.style.display = 'block';
           el.signalImg.style.display = 'none';
         }
