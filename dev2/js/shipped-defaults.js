@@ -2944,46 +2944,22 @@ window.SHIPPED_PLAYS_JSON = {
                 "player": 4,
                 "ball": false,
                 "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
+                "points": [
                   [
-                    0,
-                    0
+                    360,
+                    269
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                    520,
+                    340
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                    700,
+                    309
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    156,
-                    -188
+                    900,
+                    220
                   ]
                 ]
               }
@@ -3926,46 +3902,22 @@ window.SHIPPED_PLAYS_JSON = {
                 "player": 4,
                 "ball": false,
                 "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
+                "points": [
                   [
-                    0,
-                    0
+                    1251,
+                    269
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                    1091,
+                    340
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                    911,
+                    309
                   ],
                   [
-                    135.8499999999999,
-                    -116.35000000000002
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
+                    711,
+                    220
                   ]
                 ]
               }
@@ -4962,46 +4914,22 @@ window.SHIPPED_PLAYS_JSON = {
                 "player": 4,
                 "ball": false,
                 "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
+                "points": [
                   [
-                    0,
-                    0
+                    360,
+                    269
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                    480,
+                    360
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                    520,
+                    322
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    156,
-                    -188
+                    650,
+                    230
                   ]
                 ]
               }
@@ -5988,46 +5916,22 @@ window.SHIPPED_PLAYS_JSON = {
                 "player": 4,
                 "ball": false,
                 "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
+                "points": [
                   [
-                    0,
-                    0
+                    1251,
+                    269
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                    1131,
+                    360
                   ],
                   [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                    1091,
+                    322
                   ],
                   [
-                    135.8499999999999,
-                    -116.35000000000002
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
-                  ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
+                    961,
+                    230
                   ]
                 ]
               }

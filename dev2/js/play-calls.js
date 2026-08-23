@@ -420,6 +420,40 @@ function multiCurvePathD(pts) {
   const [[x0,y0],[x1,y1],[x2,y2],[x3,y3],[x4,y4]] = pts;
   return `M ${x0} ${y0} Q ${x1} ${y1} ${x2} ${y2} Q ${x3} ${y3} ${x4} ${y4}`;
 }
+// See the matching function/comment in js/edit-plays.js -- generalizes
+// quadPathD (3 pts)/multiCurvePathD (5 pts)'s exact alternating control/
+// on-curve point semantic to any point count, so a route authored with 4
+// or 6+ points (via Edit Plays' "Add Point to End") renders correctly
+// here too instead of silently dropping points past the 3rd. Only used as
+// a fallback (points.length !== 2, 3, 5, and no lineThenCurve) -- every
+// existing play's 2/3/5-point routes are unaffected.
+function chainedCurvePathD(points) {
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  let i = 1;
+  for (; i + 1 < points.length; i += 2) {
+    const [cx, cy] = points[i];
+    const [ex, ey] = points[i + 1];
+    d += ` Q ${cx} ${cy} ${ex} ${ey}`;
+  }
+  if (i < points.length) {
+    const [lx, ly] = points[i];
+    d += ` L ${lx} ${ly}`;
+  }
+  return d;
+}
+// Same dispatch as the main path-drawing code below, but callable on an
+// arbitrary slice of a route's points -- used to draw the two independently-
+// colored halves of a "Ball Starts Here" split (see handoffIndex). Each half
+// re-runs the alternating control/on-curve pairing from its OWN index 0, so
+// the two halves always meet exactly at the shared handoff coordinate; the
+// tangent right at that seam can kink slightly versus one unbroken curve,
+// which is an acceptable tradeoff for a coaching diagram.
+function routeDForRange(pts) {
+  if (pts.length === 2) return straightPathD(pts);
+  if (pts.length === 3) return quadPathD(pts);
+  if (pts.length === 5) return multiCurvePathD(pts);
+  return chainedCurvePathD(pts);
+}
 function placeArrowAtFraction(arrowEl, pathEl, frac) {
   const len = pathEl.getTotalLength();
   const pt = pathEl.getPointAtLength(len * frac);
@@ -883,29 +917,82 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
     const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
-    const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
-    const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
-    if (p.fake) attrs['stroke-dasharray'] = '10 8';
-    const path = svgEl('path', attrs);
-    wrap.appendChild(path);
+
+    // Nathan: "when the 4 goes by the red line, he needs to switch to
+    // having the ball and his line changes to red." handoffIndex (set via
+    // Edit Plays' "Ball Starts Here" button on one of #4's route handles)
+    // splits the route into two independently-colored/-animated segments
+    // instead of the usual single path -- blue up to the handoff point,
+    // red from there to the end. Only meaningful on a real drawn route
+    // (not a block/fake/option-fake line), and only a strict interior
+    // index -- 0 would mean "no blue segment at all" and is just as easily
+    // expressed by not setting handoffIndex, so it's excluded to keep the
+    // single-path path below as the one code path for "no handoff".
+    const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
+    const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1
+      && !p.isBlocking && !p.fake;
 
     let arrowEl = null;
-    if (!p.fake) {
-      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+    let ownerCircle = null;
+    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
+
+    if (hasHandoffSplit) {
+      const leftPts = points.slice(0, handoffIdx + 1);
+      const rightPts = points.slice(handoffIdx);
+      const leftPath = svgEl('path', { d: routeDForRange(leftPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+      wrap.appendChild(leftPath);
+      let rightPath = null;
+      if (rightPts.length >= 2) {
+        rightPath = svgEl('path', { d: routeDForRange(rightPts), fill: 'none', stroke: BALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+        wrap.appendChild(rightPath);
+      }
+      pathsLayer.appendChild(wrap);
+      // Lengths only resolve correctly once the elements are actually in
+      // the document (see wrap -> pathsLayer append just above).
+      const leftLen = leftPath.getTotalLength();
+      const rightLen = rightPath ? rightPath.getTotalLength() : 0;
+      const totalLen = leftLen + rightLen;
+      const startFracRight = totalLen > 0 ? leftLen / totalLen : 1;
+
+      arrowEl = buildEndCapEl(endTypeFor(p), BALL_COLOR, p.width);
       wrap.appendChild(arrowEl);
-      placeArrowAtFraction(arrowEl, path, 1);
+      placeArrowAtFraction(arrowEl, rightPath || leftPath, 1);
+
+      lastRenderedPaths.push({ el: leftPath, arrowEl: rightPath ? null : arrowEl, player: p.player, id: p.id, isBall: false, isBlocking: false, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+        startFrac: 0, lenFrac: startFracRight });
+      if (rightPath) {
+        lastRenderedPaths.push({ el: rightPath, arrowEl, player: p.player, id: p.id, isBall: false, isBlocking: false, delayMs: p.delayMs || 0,
+          circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+          startFrac: startFracRight, lenFrac: 1 - startFracRight, handoffFraction: startFracRight });
+      }
+    } else {
+      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+        : points.length === 5 ? multiCurvePathD(points)
+        : points.length === 2 ? straightPathD(points)
+        : points.length === 3 ? quadPathD(points)
+        : chainedCurvePathD(points);
+      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+      if (p.fake) attrs['stroke-dasharray'] = '10 8';
+      const path = svgEl('path', attrs);
+      wrap.appendChild(path);
+
+      if (!p.fake) {
+        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        wrap.appendChild(arrowEl);
+        placeArrowAtFraction(arrowEl, path, 1);
+      }
+      pathsLayer.appendChild(wrap);
+
+      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
     }
-    pathsLayer.appendChild(wrap);
 
     if (readNoteToShow) {
       flashDefenderAt(points[points.length - 1]);
       pathsLayer.appendChild(buildReadNoteEl(points[points.length - 1], readNoteToShow));
     }
-
-    const ownerKey = p.player !== null ? String(p.player) : p.id;
-    const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
-      circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
   });
 
   g.appendChild(pathsLayer);
@@ -1166,7 +1253,11 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   function drawPath(p) {
     const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
     const points = p.points;
-    const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
+    const d = p.lineThenCurve ? lineThenCurvePathD(points)
+      : points.length === 5 ? multiCurvePathD(points)
+      : points.length === 2 ? straightPathD(points)
+      : points.length === 3 ? quadPathD(points)
+      : chainedCurvePathD(points);
     // Same matching rule as renderCardDiagram's Shotgun path: a numbered
     // selection glows the matching route/carry; a LINE selection (O-line
     // id) glows just that one block. Everything else stays full opacity.
@@ -1324,20 +1415,34 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
   await wait(150 * speedMultiplier);
 
-  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl }) =>
-    animatePathDraw(el, arrowEl, animMs, (delayMs || 0) * speedMultiplier, circleEl, textEl));
+  // startFrac/lenFrac (set on a handoff split's two segments -- see
+  // renderCardDiagram) scale a segment's own share of animMs by its share
+  // of the route's total drawn length, and push its start out by the other
+  // segment's share, so the two segments draw back-to-back at a matching
+  // pace instead of each taking the full animMs (which would make a split
+  // route draw twice as slow as every other path).
+  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac }) =>
+    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
+      (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
 
   const ballEntry = lastRenderedPaths.find(p => p.isBall);
+  // The red (second) half of a "Ball Starts Here" split, if any -- see
+  // handoffIndex/hasHandoffSplit above. handoffFraction is that segment's
+  // startFrac: how far into the FULL animMs timeline #4's own path drawing
+  // reaches the marked point, assuming steady drawing speed (true for every
+  // path here -- animatePathDraw strokes linearly over its duration).
+  const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
   const OFFY = 50;
   if (ballEntry && ballEntry.circleEl) {
-    await wait((ballEntry.delayMs || 0) * speedMultiplier);
-    const carrier = ballEntry.circleEl;
+    let carrier = ballEntry.circleEl;
     // ease toward the carrier's LIVE position every frame (never a stale
     // snapshot target) -- the carrier is already moving along his own path
     // by this point, so tweening to a fixed captured point goes stale and
     // causes a visible jump once tracking begins
     let cx = qbPos.x, cy = qbPos.y;
     let catchingUp = true;
+    let easing = true;
+    let tracking = false;
     function catchUpFrame() {
       const targetX = Number(carrier.getAttribute('cx'));
       const targetY = Number(carrier.getAttribute('cy')) + OFFY;
@@ -1350,17 +1455,40 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
         requestAnimationFrame(catchUpFrame);
       } else {
         catchingUp = false;
+        easing = false;
         track();
       }
     }
-    catchUpFrame();
-    let tracking = true;
     function track() {
       if (!tracking) return;
+      // paused mid-loop while a fresh catchUpFrame() eases toward a newly
+      // handed-off carrier below, instead of snapping straight to him
+      if (easing) { requestAnimationFrame(track); return; }
       ball.setAttribute('cx', carrier.getAttribute('cx'));
       ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
       requestAnimationFrame(track);
     }
+
+    // Nathan: "when the 4 goes by the red line, he needs to switch to
+    // having the ball." Scheduled from the SAME time origin as pathPromises
+    // just above (t=0 here, before ballEntry's own delayMs wait below) so
+    // it lines up with when #4's own path drawing actually reaches the
+    // marked point, independent of whatever delay the ORIGINAL carrier
+    // happens to start with.
+    if (handoffEntry && handoffEntry.circleEl !== carrier) {
+      const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+      wait(handoffDelay).then(() => {
+        if (!tracking) return; // play already ended (or never started) -- nothing to hand off
+        carrier = handoffEntry.circleEl;
+        catchingUp = true;
+        easing = true;
+        catchUpFrame();
+      });
+    }
+
+    await wait((ballEntry.delayMs || 0) * speedMultiplier);
+    tracking = true;
+    catchUpFrame();
     await wait(animMs);
     tracking = false;
   } else {

@@ -829,6 +829,16 @@
   <div class="edit-toolbar" id="editToolbar" style="display:none;">
     <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
     <button id="addPointBtn">+ Add Point to End</button>
+    <!-- Nathan: "when the 4 goes by the red line, he needs to switch to
+         having the ball and his line changes to red." Pick a handle on a
+         route (tap one of the yellow dots, same as before adding/removing
+         points), then tap this to mark that spot as where the carry
+         switches -- the route draws blue up to there and red after, and
+         Play Calls' ▶ animation hands the moving ball off to this player
+         at that same point. Only shown for a real route (not a block
+         assignment), and only once a handle is actually selected -- see
+         edit-plays.js's updateEditUI/handoffIndex. -->
+    <button id="ballStartsHereBtn" style="display:none;">&#127944; Ball Starts Here</button>
   </div>
   <div class="assign-panel" id="assignPanel" style="display:none;">
     <span class="assign-label" id="assignLabel">Block assignment:</span>
@@ -1567,7 +1577,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260823a';
+  const BUILD_V = '20260823c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

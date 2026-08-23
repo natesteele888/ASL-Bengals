@@ -806,6 +806,46 @@ function multiCurvePathD(points) {
   const [[x0,y0],[x1,y1],[x2,y2],[x3,y3],[x4,y4]] = points;
   return `M ${x0} ${y0} Q ${x1} ${y1} ${x2} ${y2} Q ${x3} ${y3} ${x4} ${y4}`;
 }
+// Nathan: authoring #4's Counter sweep needed more shape than a single
+// bezier control point allows, and adding a 4th point via "Add Point to
+// End" appeared to do nothing -- the render() dispatch below only had
+// hand-built shapes for EXACTLY 2, 3, or 5 points; anything else (4, or
+// 6+) fell through to quadPathD, which only reads the first 3 points and
+// silently drops the rest. This generalizes quadPathD (3 pts, 1 segment)
+// and multiCurvePathD (5 pts, 2 chained segments)'s exact same semantic --
+// point 0 is the start (on-curve), then points alternate control/
+// on-curve/control/on-curve... -- to any point count, so every click of
+// Add Point actually changes the shape instead of silently no-op'ing
+// partway through. An even total (4, 6, ...) can't end cleanly on an
+// on-curve point under that alternation, so the last leftover point is
+// reached with a plain straight segment instead. Only used as a fallback
+// below (points.length !== 2, 3, 5, and no lineThenCurve) -- every
+// existing play's 2/3/5-point routes keep rendering through their exact
+// original functions above, untouched.
+function chainedCurvePathD(points) {
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  let i = 1;
+  for (; i + 1 < points.length; i += 2) {
+    const [cx, cy] = points[i];
+    const [ex, ey] = points[i + 1];
+    d += ` Q ${cx} ${cy} ${ex} ${ey}`;
+  }
+  if (i < points.length) {
+    const [lx, ly] = points[i];
+    d += ` L ${lx} ${ly}`;
+  }
+  return d;
+}
+// See the matching function/comment in js/play-calls.js -- same dispatch as
+// the main path-drawing code below, but callable on an arbitrary slice of a
+// route's points. Used to draw the two independently-colored halves of a
+// "Ball Starts Here" split (see handoffIndex).
+function routeDForRange(pts) {
+  if (pts.length === 2) return straightPathD(pts);
+  if (pts.length === 3) return quadPathD(pts);
+  if (pts.length === 5) return multiCurvePathD(pts);
+  return chainedCurvePathD(pts);
+}
 
 // Places an arrowhead polygon at a given fraction (0-1) along a path,
 // oriented along the path's direction of travel there -- this is what
@@ -958,6 +998,22 @@ function getEditablePointsArray(p) {
   return p.points;
 }
 
+// handoffIndex (see "Ball Starts Here"/hasHandoffSplit in render()) is a
+// raw array index into p.points -- adding or removing a point anywhere at
+// or before that index shifts everything after it, so the marker would
+// silently drift onto the wrong point unless it's kept in sync here too.
+// Called from every Add Point / delete-point site that touches a route's
+// own points array (not the separate split-route editor, which has no
+// handoff concept at all).
+function adjustHandoffOnInsert(p, insertAtIndex) {
+  if (Number.isInteger(p.handoffIndex) && p.handoffIndex >= insertAtIndex) p.handoffIndex += 1;
+}
+function adjustHandoffOnDelete(p, deletedIndex) {
+  if (!Number.isInteger(p.handoffIndex)) return;
+  if (p.handoffIndex === deletedIndex) delete p.handoffIndex; // the marked point itself got removed
+  else if (p.handoffIndex > deletedIndex) p.handoffIndex -= 1;
+}
+
 // selectedHandle: {pathData, pointIndex} -- the point awaiting a placement click
 let selectedHandle = null;
 // editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
@@ -1047,10 +1103,12 @@ const endTypeBlockBtn = document.getElementById('endTypeBlockBtn');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
+  const ballStartsHereBtn = document.getElementById('ballStartsHereBtn');
   if (!editMode || !editTarget) {
     editToolbar.style.display = 'none';
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
+    ballStartsHereBtn.style.display = 'none';
     return;
   }
   editToolbar.style.display = 'flex'; // Done Editing is always available once a target is picked
@@ -1059,11 +1117,27 @@ function updateEditUI(variant) {
     addPointBtn.style.display = 'none';
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
+    ballStartsHereBtn.style.display = 'none';
     return;
   }
 
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
+
+  // "Ball Starts Here" -- only makes sense on a real route (editableArr,
+  // same gate as Add Point) with a handle actually picked, and not on the
+  // very first point (index 0 would mean "no blue segment at all", which
+  // is just as easily expressed by leaving handoffIndex unset -- see
+  // hasHandoffSplit in render()) or the very last (nothing left to mark
+  // red). See index.html's comment on this button for the full feature.
+  const pickedIdx = (selectedHandle && selectedHandle.pathData === p) ? selectedHandle.pointIndex : null;
+  const canMarkHandoff = editableArr && pickedIdx !== null && pickedIdx >= 1 && pickedIdx <= editableArr.length - 1;
+  if (canMarkHandoff) {
+    ballStartsHereBtn.style.display = '';
+    ballStartsHereBtn.textContent = (p.handoffIndex === pickedIdx) ? '✕ Clear Ball Start' : '🏈 Ball Starts Here';
+  } else {
+    ballStartsHereBtn.style.display = 'none';
+  }
 
   // End cap (Run arrow / Block T-bar) -- available for any real drawn path,
   // independent of the assign-panel's own tap-a-defender/chip-block flow
@@ -1148,7 +1222,26 @@ document.getElementById('addPointBtn').addEventListener('click', () => {
   const b = arr[Math.min(insertAfter + 1, arr.length - 1)];
   const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
   arr.splice(insertAfter + 1, 0, mid);
+  adjustHandoffOnInsert(p, insertAfter + 1);
   selectedHandle = null;
+  render();
+});
+
+// Nathan: "when the 4 goes by the red line, he needs to switch to having
+// the ball and his line changes to red." Only enabled (see updateEditUI)
+// once a route handle is picked -- toggles that point as the handoff spot
+// (or clears it, if it's already marked there). Moving/removing points
+// around it afterward keeps it in sync via adjustHandoffOnInsert/Delete
+// above; moving the handoff to a DIFFERENT point just means picking that
+// handle and tapping this again.
+document.getElementById('ballStartsHereBtn').addEventListener('click', () => {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p || !selectedHandle || selectedHandle.pathData !== p) return;
+  const idx = selectedHandle.pointIndex;
+  p.handoffIndex = (p.handoffIndex === idx) ? undefined : idx;
+  if (p.handoffIndex === undefined) delete p.handoffIndex;
   render();
 });
 // ---- Split route editor: an entirely separate render path from Shotgun's
@@ -1518,6 +1611,7 @@ function render() {
           delBadge.addEventListener('click', (ev) => {
             ev.stopPropagation();
             editableArrForP.splice(idx, 1);
+            adjustHandoffOnDelete(p, idx);
             selectedHandle = null;
             render();
           });
@@ -1536,6 +1630,7 @@ function render() {
             const b = editableArrForP[Math.min(idx + 1, editableArrForP.length - 1)];
             const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
             editableArrForP.splice(idx + 1, 0, mid);
+            adjustHandoffOnInsert(p, idx + 1);
             selectedHandle = null;
             render();
           });
@@ -1555,28 +1650,81 @@ function render() {
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
     const color = effectiveBall ? BALL_COLOR : NOBALL_COLOR;
-    const d = p.lineThenCurve ? lineThenCurvePathD(points) : (points.length === 5 ? multiCurvePathD(points) : (points.length === 2 ? straightPathD(points) : quadPathD(points)));
-    const attrs = {d, fill:'none', stroke:color, 'stroke-width':p.width, 'stroke-linecap':'round'};
-    if (p.fake) attrs['stroke-dasharray'] = '10 8';
-    const path = svgEl('path', attrs);
-    wrap.appendChild(path);
 
-    let arrowEl = null;
-    if (!p.fake) {
-      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
-      wrap.appendChild(arrowEl);
-      placeArrowAtFraction(arrowEl, path, 1); // static: sits at the finished tip until animated
-    }
-
-    pathsLayer.appendChild(wrap);
+    // Nathan: "when the 4 goes by the red line, he needs to switch to
+    // having the ball and his line changes to red." handoffIndex (set via
+    // the "Ball Starts Here" button below, once a route handle is picked)
+    // splits the route into two independently-colored segments instead of
+    // the usual single path -- blue up to the handoff point, red from
+    // there on. See the matching block/comment in js/play-calls.js, which
+    // also handles the animated hand-off itself; this file only needs the
+    // static (and edit-preview) rendering.
+    const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
+    const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1 && !p.fake;
 
     const ownerKey = p.player !== null ? String(p.player) : p.id;
     const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
-    lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: effectiveBall,
-      delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
-      textEl: ownerCircle ? ownerCircle.textEl : null});
-    if (isSelected) animatePaths.push({el: path, arrowEl,
-      circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null});
+    let arrowEl = null;
+
+    if (hasHandoffSplit) {
+      const leftPts = points.slice(0, handoffIdx + 1);
+      const rightPts = points.slice(handoffIdx);
+      const leftPath = svgEl('path', {d: routeDForRange(leftPts), fill:'none', stroke:NOBALL_COLOR, 'stroke-width':p.width, 'stroke-linecap':'round'});
+      wrap.appendChild(leftPath);
+      let rightPath = null;
+      if (rightPts.length >= 2) {
+        rightPath = svgEl('path', {d: routeDForRange(rightPts), fill:'none', stroke:BALL_COLOR, 'stroke-width':p.width, 'stroke-linecap':'round'});
+        wrap.appendChild(rightPath);
+      }
+      pathsLayer.appendChild(wrap);
+      const leftLen = leftPath.getTotalLength();
+      const rightLen = rightPath ? rightPath.getTotalLength() : 0;
+      const totalLen = leftLen + rightLen;
+      const startFracRight = totalLen > 0 ? leftLen / totalLen : 1;
+
+      arrowEl = buildEndCapEl(endTypeFor(p), BALL_COLOR, p.width);
+      wrap.appendChild(arrowEl);
+      placeArrowAtFraction(arrowEl, rightPath || leftPath, 1);
+
+      lastRenderedPaths.push({el: leftPath, arrowEl: rightPath ? null : arrowEl, player: p.player, isBall: false,
+        delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+        textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: 0, lenFrac: startFracRight});
+      if (isSelected) animatePaths.push({el: leftPath, arrowEl: rightPath ? null : arrowEl,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+        startFrac: 0, lenFrac: startFracRight});
+      if (rightPath) {
+        lastRenderedPaths.push({el: rightPath, arrowEl, player: p.player, isBall: false,
+          delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+          textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: startFracRight, lenFrac: 1 - startFracRight});
+        if (isSelected) animatePaths.push({el: rightPath, arrowEl,
+          circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+          startFrac: startFracRight, lenFrac: 1 - startFracRight});
+      }
+    } else {
+      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+        : points.length === 5 ? multiCurvePathD(points)
+        : points.length === 2 ? straightPathD(points)
+        : points.length === 3 ? quadPathD(points)
+        : chainedCurvePathD(points);
+      const attrs = {d, fill:'none', stroke:color, 'stroke-width':p.width, 'stroke-linecap':'round'};
+      if (p.fake) attrs['stroke-dasharray'] = '10 8';
+      const path = svgEl('path', attrs);
+      wrap.appendChild(path);
+
+      if (!p.fake) {
+        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        wrap.appendChild(arrowEl);
+        placeArrowAtFraction(arrowEl, path, 1); // static: sits at the finished tip until animated
+      }
+
+      pathsLayer.appendChild(wrap);
+
+      lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: effectiveBall,
+        delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+        textEl: ownerCircle ? ownerCircle.textEl : null});
+      if (isSelected) animatePaths.push({el: path, arrowEl,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null});
+    }
   });
 
   g.appendChild(pathsLayer);
@@ -1594,8 +1742,13 @@ function render() {
   stage.appendChild(title);
 
 
-  animatePaths.forEach(({el, arrowEl, circleEl, textEl}) => {
-    animatePathDraw(el, arrowEl, ANIMATE_MS, 0, circleEl, textEl);
+  animatePaths.forEach(({el, arrowEl, circleEl, textEl, startFrac, lenFrac}) => {
+    // startFrac/lenFrac (set on a handoff split's two segments -- see
+    // hasHandoffSplit above) scale each segment's share of ANIMATE_MS by
+    // its share of the route's drawn length, so a split route's preview
+    // draws at the same overall pace as everything else instead of each
+    // half separately taking the full ANIMATE_MS.
+    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * ANIMATE_MS, (startFrac || 0) * ANIMATE_MS, circleEl, textEl);
   });
 
   updateEditUI(variant);
