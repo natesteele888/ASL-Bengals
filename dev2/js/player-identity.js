@@ -1298,6 +1298,16 @@
       // session (coach, player, or parent -- everyone sees this) is known.
       // See js/practice-cancel.js.
       if (typeof window.maybeShowCancellationPanel === 'function') window.maybeShowCancellationPanel();
+      // Nathan: "The app will display a full image background on Gamedays
+      // when you first open the app that day." Same trigger point as the
+      // other post-session full-screen checks here -- gates itself
+      // internally (only a day with a real game on Schedule, only once per
+      // calendar day per device). Placed right after the cancellation
+      // panel above on purpose: a same-day practice cancellation is
+      // safety-relevant and should never be visually buried under gameday
+      // hype (also enforced via z-index -- see css/styles.css). See
+      // js/gameday.js's maybeShowGameDaySplash.
+      if (typeof window.maybeShowGameDaySplash === 'function') window.maybeShowGameDaySplash();
       // Nathan: "Do a daily pop up notification to the coaches on how the
       // team is doing with the app and top performers from the previous
       // day." Same trigger point as the other post-session checks here --

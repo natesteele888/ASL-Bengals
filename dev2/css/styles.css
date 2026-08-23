@@ -354,6 +354,42 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
      suppress the motion. */
 }
 
+/* Gameday splash (js/gameday.js) -- full-bleed background photo with a
+   bottom-anchored gradient panel for the matchup/times/CTA, same
+   position:fixed;inset:0 full-screen-overlay shape as .cancelNoticeOverlay
+   above, but z-index 1750 (just under that overlay's 1800) so a same-day
+   practice cancellation always wins if both would otherwise fire. */
+.gameDaySplashOverlay{position:fixed;inset:0;z-index:1750;display:none;overflow:hidden}
+.gameDaySplashOverlay.show{display:block}
+.gameDaySplashBg{position:absolute;inset:0;background:#05070d url(../assets/images/gameday-bg.jpg) center top / cover no-repeat}
+.gameDaySplashVignette{position:absolute;left:0;right:0;bottom:0;height:58%;pointer-events:none;
+  background:linear-gradient(to top, rgba(5,7,13,.97) 0%, rgba(5,7,13,.8) 40%, rgba(5,7,13,0) 100%)}
+.gameDaySplashContent{position:absolute;left:0;right:0;bottom:0;z-index:1;
+  padding:22px 22px calc(28px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;text-align:center;color:#fff;
+  animation:gameDaySplashRise .5s ease-out}
+@keyframes gameDaySplashRise{0%{opacity:0;transform:translateY(24px)}100%{opacity:1;transform:translateY(0)}}
+.gameDayMatchup{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px}
+.gameDayTeamLogo{width:64px;height:64px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  background:#fff;border:3px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.4);flex-shrink:0;
+  color:#fff;font-weight:900;font-size:20px}
+.gameDayTeamLogo.hasLogo{background:#fff}
+.gameDayTeamLogo img{width:100%;height:100%;object-fit:cover}
+.gameDayVs{font-size:15px;font-weight:900;color:var(--bengal-orange);letter-spacing:.05em;text-shadow:0 2px 6px rgba(0,0,0,.7)}
+.gameDayOpponentName{font-size:20px;font-weight:900;margin-bottom:10px;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+.gameDayTimes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px}
+.gameDayTimeRow{font-size:13px;font-weight:700;color:rgba(255,255,255,.92);background:rgba(255,255,255,.14);
+  padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.3)}
+.gameDayCtaBtn{width:100%;max-width:360px;padding:16px;border:none;border-radius:14px;
+  background:linear-gradient(135deg, var(--bengal-orange), #b3410a);color:#fff;font-size:18px;font-weight:900;
+  letter-spacing:.02em;cursor:pointer;box-shadow:0 8px 26px rgba(255,106,19,.45);
+  animation:gameDayCtaPulse 1.8s ease-in-out infinite}
+.gameDayCtaBtn:active{transform:scale(.97)}
+@keyframes gameDayCtaPulse{0%,100%{box-shadow:0 8px 26px rgba(255,106,19,.45)}50%{box-shadow:0 8px 34px rgba(255,106,19,.75)}}
+@media (prefers-reduced-motion: reduce){
+  .gameDaySplashContent,.gameDayCtaBtn{animation:none}
+}
+
 #signalQuiz{max-width:380px;margin:0 auto}
 #timedQuiz{max-width:380px;margin:0 auto}
 .sigHint{color:var(--muted);font-size:11px;text-align:center;margin-bottom:6px}
