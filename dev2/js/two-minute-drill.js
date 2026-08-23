@@ -501,6 +501,11 @@
   const FINGER_LEFT_IDS = [1, 2, 3];
   const MOTION_SIGNAL_IDS = [11, 12];
   const BOOT_SIGNAL_ID = 26;
+  // Nathan: "you aren't adding Counter to the play signals on the back side
+  // of the card. Signal 18 is Counter. it comes in last, just like Boot" --
+  // same fix as play-calls.js's buildSignalSequence, mirrored here since
+  // this copy was made before that gap was noticed.
+  const COUNTER_SIGNAL_ID = 18;
 
   function randomFingerId(side, exclude) {
     const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
@@ -508,7 +513,7 @@
     return options[Math.floor(Math.random() * options.length)];
   }
 
-  function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn) {
+  function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, counterOn) {
     const wingFingerId = randomFingerId(wingSide);
     const dirFingerId = direction === wingSide
       ? randomFingerId(direction, wingFingerId)
@@ -533,8 +538,13 @@
       signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
     }
     signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
+    // Boot and Counter are mutually exclusive (normalizeCall above never
+    // sets both), so at most one of these two fires.
     if (bootOn) {
       signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
+    }
+    if (counterOn) {
+      signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
     }
     return signals;
   }
@@ -1080,7 +1090,7 @@
     state.currentCorrectCall = correctCall;
     const choices = generateChoices(correctCall);
     const io = correctCall.insideOutside || 'Outside';
-    const signals = buildSignalSequence(correctCall.playKey, correctCall.wingSide, correctCall.direction, io, correctCall.motionOn, correctCall.bootOn);
+    const signals = buildSignalSequence(correctCall.playKey, correctCall.wingSide, correctCall.direction, io, correctCall.motionOn, correctCall.bootOn, correctCall.counterOn);
 
     await playSignals(signals);
     if (!state.running) return;
@@ -1204,6 +1214,7 @@
     describeCall: describeCall,
     callKey: callKey,
     forceClockMs: function (ms) { state.clockMs = ms; },
+    buildSignalSequence: buildSignalSequence,
   };
 
   init();

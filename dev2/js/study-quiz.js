@@ -465,7 +465,13 @@ document.getElementById('headerLogo').addEventListener('click', ()=>{
     // admin account Coach Nate." Everyone else's 5-tap keeps doing exactly
     // what it always has -- straight to Dashboard, no PIN, no detour.
     const session = window.PlayerIdentity && window.PlayerIdentity.getSession();
-    if (session && session.name === 'Coach Nate' && window.openDrillPinGate) {
+    // Compare trimmed + case-insensitive rather than an exact literal
+    // match -- session.name is whatever text was typed at sign-in
+    // (player-identity.js), so a stray extra space or different casing
+    // would otherwise silently fall through to the Dashboard branch below
+    // with no visible error at all.
+    const isCoachNate = !!(session && session.name && session.name.trim().toLowerCase() === 'coach nate');
+    if (isCoachNate && window.openDrillPinGate) {
       window.openDrillPinGate();
     } else if(window.openCoachToolsTab) {
       window.openCoachToolsTab('dashboard');

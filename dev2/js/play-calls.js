@@ -584,6 +584,13 @@ const FINGER_LEFT_IDS = [1, 2, 3];   // 1, 3, 5 fingers -- all mean ODD = LEFT
 // dedicated card.
 const MOTION_SIGNAL_IDS = [11, 12];
 const BOOT_SIGNAL_ID = 26;
+// Nathan: "you aren't adding Counter to the play signals on the back side
+// of the card. Signal 18 is Counter. it comes in last, just like Boot" --
+// Counter (Option/Outside Zone only, see hasCounter) got its own toggle and
+// diagram variant when it shipped, but buildSignalSequence() below was
+// never updated to actually call it out, so the flip-card signal sequence
+// silently looked identical for Normal and Counter this whole time.
+const COUNTER_SIGNAL_ID = 18;
 
 // ---- Split formation (added alongside Wing, doesn't touch anything above) ----
 // Split's own touch/identity card, parallel to WING_TOUCH_ID. Real photo is
@@ -677,7 +684,7 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn) {
   if (formation === 'split') {
     return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
   }
@@ -716,9 +723,14 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }
   signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
-  // Boot is a modifier tacked on at the very end, after direction is set.
+  // Boot and Counter are both modifiers tacked on at the very end, after
+  // direction is set -- and mutually exclusive (see updateBootAvailability/
+  // updateCounterAvailability above), so at most one of these ever fires.
   if (bootOn) {
     signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
+  }
+  if (counterOn) {
+    signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
   }
   return signals;
 }
@@ -1907,7 +1919,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
