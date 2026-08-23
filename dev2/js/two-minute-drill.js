@@ -12,26 +12,46 @@
 
    Follow-up answers (AskUserQuestion):
    - Drive length: full realistic drive, ~75-80 yds from your own 25.
-   - Difficulty: full mix from play one (no easy->hard ramp, matches
-     real end-of-half chaos) -- PLUS: "bonus for multiple correct in
-     a row" (see STREAK below) and "big gain and get out of bounds"
-     (see BIG PLAY below, which also protects clock time).
+   - Difficulty: originally "full mix from play one" (no ramp) -- Nathan
+     later (2026-08-23) revised this to "easier to start and a little
+     harder as you go"; see difficultyTier/generateCorrectCall/
+     generateChoices for the ramp that replaced the old fixed-odds
+     design -- PLUS: "bonus for multiple correct in a row" (see STREAK
+     below) and "big gain and get out of bounds" (see BIG PLAY below,
+     which also protects clock time).
 
-   THIS IS A STANDALONE TEST PAGE, not wired into the live app's nav
-   yet ("create this in a standalone test environment that can be
-   added later"). It deliberately avoids the real login/Firebase auth
-   path so it's safe to try without touching production accounts --
-   it fetches data/plays.json directly (same public file the rest of
-   the app treats as the source of truth for shipped defaults) and,
-   for the real hand-signal photos, reads Firebase's public
-   dev2PlayData/cards.json the same way index.html's boot() does,
-   falling back to plain text signal cards if that's unreachable so
-   the drill still works with zero network dependencies. No results
-   are written to the cloud -- personal-best/longest-streak are kept
-   in localStorage only, scoped to this page, so testing this never
-   touches real player records. Folding this into the real app later
-   (own tab, real login gate, cloud stats) is a follow-up step once
-   Nathan's happy with how it plays.
+   2026-08-23 additions (Nathan): split-call routes (SEA/HOU/FLO/BOS) no
+   longer appear in the displayed/quizzed answer text -- "the routes are
+   given at the line independent of the play call" (see describeCall/
+   callKey/neighborSplitCalls); and a new "TW Sweep (TE counter)" toggle
+   was added alongside Boot/Counter on outside_zone/option, built
+   entirely in this file's own rendering layer (see buildTwSweepVariant)
+   without touching data/plays.json or the real coaching tool.
+
+   ORIGINALLY a standalone test page (two-minute-drill-test.html,
+   "create this in a standalone test environment that can be added
+   later"), now also loaded as part of the live app itself (Nathan,
+   2026-08-23: "I am ready to add this into the live app as a test.
+   press and hold the logo for 3 seconds launches it.") -- see
+   index.html's #twoMinDrillOverlay for the in-app markup and boot()'s
+   scripts array, and study-quiz.js's headerLogo long-press handler for
+   how it's opened. The standalone test page still exists too and keeps
+   working unchanged (same file, no login required there).
+
+   Its own data loading still fetches data/plays.json directly (same
+   public file the rest of the app treats as the source of truth for
+   shipped defaults) and, for the real hand-signal photos, reads
+   Firebase's public dev2PlayData/cards.json the same way index.html's
+   boot() does, falling back to plain text signal cards if that's
+   unreachable -- left as-is since it's harmless either standalone or
+   live-app-loaded (no naming collisions with the rest of the app; see
+   this file's own top-level IIFE wrapper). Personal-best TD count/
+   streak stay in localStorage only, same as before. The new team
+   leaderboard (Nathan: "this will also need a leaderboard... The
+   leaderboard for the game is only contained within the 2 minute
+   drill") is a separate addition -- see SECTION 6c below -- that DOES
+   write to the cloud, auto-saving every completed drive via the
+   already-signed-in session's identity (no manual name-entry step).
 
    Field-diagram rendering (renderCardDiagram/playCardAnimation and
    their helpers below) is copied near-verbatim from js/play-calls.js
@@ -154,11 +174,19 @@
   const NOBALL_COLOR = '#123a8c';
   const CIRCLE_R = 36;
 
-  function getVariant(playType, direction, insideOutside, readPosition, counterOn) {
+  function getVariant(playType, direction, insideOutside, readPosition, counterOn, twSweepOn) {
     let v = playType.directions[direction];
     if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
     if (playType.hasReadToggle) v = v[readPosition || 'A'];
-    if (playType.hasCounter) v = v[counterOn ? 'Counter' : 'Normal'];
+    if (playType.hasCounter) {
+      // TW Sweep reuses Counter's own variant data (see
+      // buildTwSweepVariant below) rather than having its own
+      // Normal/Counter/TWSweep slot in the data -- it's a two-minute-
+      // drill-only rendering construction, not a real data/plays.json
+      // variant.
+      if (twSweepOn) return buildTwSweepVariant(v['Counter']);
+      v = v[counterOn ? 'Counter' : 'Normal'];
+    }
     return v;
   }
 
@@ -167,10 +195,10 @@
   // easy diffing against the original). DATA is the module-level
   // object populated in SECTION 4 below.
   let DATA = null;
-  function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
+  function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, twSweepOn) {
     stage.innerHTML = '';
     const playType = DATA.playTypes.find(p => p.key === playKey);
-    const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn);
+    const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn, twSweepOn);
     const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
     let bootBallPath = null, bootFakePath = null;
@@ -386,10 +414,10 @@
 
   // ---- Play the animation for a call (copied from play-calls.js's
   // playCardAnimation, same reasoning as renderCardDiagram above) ----
-  async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
+  async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, twSweepOn) {
     if (isPlayingRef.value) return;
     isPlayingRef.value = true;
-    renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
+    renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, twSweepOn);
 
     const animMs = 1400 * speedMultiplier;
     const mainGroup = stage._mainGroup;
@@ -561,6 +589,42 @@
       Math.max(20, Math.min(vw - 20, x - ax + newAnchor[0])),
       Math.max(-390, Math.min(600, y - ay + newAnchor[1])),
     ]);
+  }
+
+  // Nathan: "Almost identical to counter, we need to add in a TW sweep
+  // (TE counter) option. Instead of the TE blocking and the 4 going
+  // across for the handoff, it's the TE just next to the wing that goes
+  // for the handoff while the 4 blocks." Built entirely in this file's
+  // own rendering layer -- NOT a change to data/plays.json/play-calls.js/
+  // edit-plays.js's shared schema -- by taking the SAME Counter variant
+  // (same eligible plays -- outside_zone/option -- and the same wing/
+  // direction legality rule as Counter, see normalizeCall) and swapping
+  // which jersey number (6=TE vs 4=wing) owns each of its two existing
+  // path shapes.
+  //
+  // Player 6 (TE) is always drawn at one fixed formation slot
+  // (DATA.formation['6']) no matter which way the play runs, while
+  // player 4 (wing) is drawn at a motion-aware anchor that
+  // renderCardDiagram already auto-repositions for any player===4 path
+  // -- so handing TE's old short block shape to player 4 "just works"
+  // via that existing mechanism, no changes needed here. TE has no such
+  // auto-anchor, so its new (formerly #4's) crossing shape is
+  // re-anchored here via the same reanchorRoute() helper Split uses to
+  // slide a route to wherever its owner actually lines up -- this also
+  // keeps a Left-direction play's long cross (which starts on the far
+  // side of the field from TE's fixed spot) safely on-screen instead of
+  // running off the edge of the diagram.
+  function buildTwSweepVariant(counterVariant) {
+    const tePath = counterVariant.paths.find(p => p.player === 6);
+    const wingPath = counterVariant.paths.find(p => p.player === 4);
+    if (!tePath || !wingPath) return counterVariant; // fail safe -- shouldn't happen for outside_zone/option
+    const newTePath = Object.assign({}, wingPath, {
+      player: 6,
+      points: reanchorRoute(wingPath.points, DATA.formation['6']),
+    });
+    const newWingPath = Object.assign({}, tePath, { player: 4 });
+    const otherPaths = counterVariant.paths.filter(p => p.player !== 4 && p.player !== 6);
+    return Object.assign({}, counterVariant, { paths: otherPaths.concat([newTePath, newWingPath]) });
   }
 
   function getSplitRoutePaths(splitSide, leftCall, rightCall) {
@@ -758,6 +822,14 @@
   // same fix as play-calls.js's buildSignalSequence, mirrored here since
   // this copy was made before that gap was noticed.
   const COUNTER_SIGNAL_ID = 18;
+  // Nathan: "Almost identical to counter, we need to add in a TW sweep
+  // (TE counter) option." Same "comes in last" placement as Boot/Counter
+  // above (see buildWingSignalSequence) since it's mutually exclusive
+  // with both. ID 19 is otherwise unused (18=Counter, 26=Boot, 28-31=
+  // Split-only) -- like any brand-new signal ID, it has no real
+  // coach-uploaded photo yet, so it gracefully falls back to a plain
+  // text card (see SIGNAL_CARDS/loadData) until one is added.
+  const TW_SWEEP_SIGNAL_ID = 19;
 
   function randomFingerId(side, exclude) {
     const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
@@ -770,10 +842,11 @@
   const SPLIT_TOUCH_ID = 31;
   const PASS_SIGNAL_IDS = [28, 29, 30];
   const SPLIT_ROUTE_CALLS = ['seattle', 'houston', 'florida', 'boston'];
-  // Nathan (on Play Calls, same idea reused here): "we abbreviate them on
-  // mobile view to SEA HOU FLO BOS" -- also doubles as the short label
-  // used in this drill's own (now-shortened) choice-button text.
-  const SPLIT_ROUTE_SHORT_LABELS = { seattle: 'SEA', houston: 'HOU', florida: 'FLO', boston: 'BOS' };
+  // Nathan: "the routes are given at the line independent of the play
+  // call... Answer options should never contain routes like Hou, Flo, Bos
+  // or Sea." -- routes are still randomized on the call object below (for
+  // the diagram animation) but are never abbreviated into displayed or
+  // quizzed text, so no short-label map is needed here anymore.
 
   // Split's signal order: Split -> Direction (split side) -> Play call ->
   // Direction (split side again) -> optional Pass. See play-calls.js's
@@ -805,7 +878,7 @@
     return signals;
   }
 
-  function buildWingSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, counterOn) {
+  function buildWingSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, counterOn, twSweepOn) {
     const wingFingerId = randomFingerId(wingSide);
     const dirFingerId = direction === wingSide
       ? randomFingerId(direction, wingFingerId)
@@ -830,13 +903,17 @@
       signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
     }
     signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
-    // Boot and Counter are mutually exclusive (normalizeCall above never
-    // sets both), so at most one of these two fires.
+    // Boot, Counter, and TW Sweep are mutually exclusive (normalizeCall
+    // above never sets more than one), so at most one of these three
+    // fires.
     if (bootOn) {
       signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
     }
     if (counterOn) {
       signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
+    }
+    if (twSweepOn) {
+      signals.push({ src: SIGNAL_CARDS[TW_SWEEP_SIGNAL_ID], label: 'TW Sweep' });
     }
     return signals;
   }
@@ -848,7 +925,7 @@
   function buildSignalSequenceForCall(call) {
     return call.formation === 'split'
       ? buildSplitSignalSequence(call.playKey, call.splitSide, call.insideOutside, call.passOn)
-      : buildWingSignalSequence(call.playKey, call.wingSide, call.direction, call.insideOutside, call.motionOn, call.bootOn, call.counterOn);
+      : buildWingSignalSequence(call.playKey, call.wingSide, call.direction, call.insideOutside, call.motionOn, call.bootOn, call.counterOn, call.twSweepOn);
   }
 
   // ================================================================
@@ -895,24 +972,34 @@
 
   // Normalizes a candidate call to respect every toggle's real
   // constraints (dropping fields that don't apply to this play, and
-  // forcing Boot/Counter off when the wing/dir/motion combo makes
-  // them illegal) -- used both when generating the correct answer and
-  // when generating each multiple-choice decoy, so nothing offered on
-  // screen is ever a combo the real Play Calls toggles couldn't
-  // actually produce. Dispatches to the Split-specific normalizer when
-  // the candidate is a Split call (see normalizeSplitCall below).
+  // forcing Boot/Counter/TW Sweep off when the wing/dir/motion combo
+  // makes them illegal) -- used both when generating the correct answer
+  // and when generating each multiple-choice decoy, so nothing offered
+  // on screen is ever a combo the real Play Calls toggles (plus this
+  // drill's own TW Sweep, see buildTwSweepVariant) could actually
+  // produce. Dispatches to the Split-specific normalizer when the
+  // candidate is a Split call (see normalizeSplitCall below).
   function normalizeCall(call) {
     if (call.formation === 'split') return normalizeSplitCall(call);
     const flags = playFlags(call.playKey);
     const out = {
       formation: 'wing',
       playKey: call.playKey, wingSide: call.wingSide, direction: call.direction,
-      motionOn: !!call.motionOn, bootOn: false, counterOn: false, insideOutside: null,
+      motionOn: !!call.motionOn, bootOn: false, counterOn: false, twSweepOn: false, insideOutside: null,
     };
     if (flags.hasInsideOutside) out.insideOutside = call.insideOutside === 'Inside' ? 'Inside' : 'Outside';
-    const eligibleForCounter = flags.hasCounter && effectiveWingSide(out) === out.direction;
-    if (call.counterOn && eligibleForCounter) {
+    // Nathan: TW Sweep is "almost identical to counter" -- it shares
+    // Counter's exact legality rule (only legal running to the wing's
+    // own side) and is mutually exclusive with both Counter and Boot.
+    // All three can never be true at once; Counter wins a tie over TW
+    // Sweep, which wins a tie over Boot, purely so a decoy mutation that
+    // ends up with more than one flag set still normalizes to something
+    // deterministic and legal.
+    const eligibleForCounterFamily = flags.hasCounter && effectiveWingSide(out) === out.direction;
+    if (call.counterOn && eligibleForCounterFamily) {
       out.counterOn = true;
+    } else if (call.twSweepOn && eligibleForCounterFamily) {
+      out.twSweepOn = true;
     } else if (call.bootOn && !flags.noBoot) {
       out.bootOn = true;
     }
@@ -949,7 +1036,11 @@
       if (call.insideOutside) parts.push(shortIO(call.insideOutside));
       parts.push(playLabel(call.playKey));
       if (call.passOn) parts.push('Pass');
-      parts.push(`L ${SPLIT_ROUTE_SHORT_LABELS[call.leftCall]} R ${SPLIT_ROUTE_SHORT_LABELS[call.rightCall]}`);
+      // Nathan: "the routes are given at the line independent of the play
+      // call... Answer options should never contain routes like Hou, Flo,
+      // Bos or Sea." -- leftCall/rightCall stay on the call object (used
+      // by renderSplitDiagram/playSplitAnimation for the diagram) but are
+      // deliberately left out of the displayed/quizzed text below.
       return parts.join(' ');
     }
     const parts = [`Wing ${shortSide(call.wingSide)}`];
@@ -959,13 +1050,17 @@
     parts.push(shortSide(call.direction));
     if (call.bootOn) parts.push('Bt');
     if (call.counterOn) parts.push('Ctr');
+    if (call.twSweepOn) parts.push('TW');
     return parts.join(' ');
   }
   function callKey(call) {
     if (call.formation === 'split') {
-      return ['split', call.playKey, call.splitSide, call.insideOutside, call.passOn, call.leftCall, call.rightCall].join('|');
+      // leftCall/rightCall (routes) are intentionally excluded -- they're
+      // never shown/quizzed, so two calls differing only by route are the
+      // same displayed answer and must dedupe as one choice.
+      return ['split', call.playKey, call.splitSide, call.insideOutside, call.passOn].join('|');
     }
-    return ['wing', call.playKey, call.wingSide, call.direction, call.motionOn, call.bootOn, call.counterOn, call.insideOutside].join('|');
+    return ['wing', call.playKey, call.wingSide, call.direction, call.motionOn, call.bootOn, call.counterOn, call.twSweepOn, call.insideOutside].join('|');
   }
 
   function randomSide() { return Math.random() < 0.5 ? 'Left' : 'Right'; }
@@ -975,9 +1070,36 @@
   // up about as often as Wing, not as a rare curveball.
   const SPLIT_FORMATION_CHANCE = 0.5;
 
-  // "Full mix from play one" (Nathan's answer) -- every play, every
-  // modifier, right from the first snap. No easy->hard ramp.
-  function generateCorrectCall() {
+  // Nathan: "Questions should be easier to start and a little harder as
+  // you go." Replaces the old "full mix from play one" design (every
+  // play, every modifier, right from the first snap, no ramp) with a
+  // gentle ramp keyed off how many rounds have already been played this
+  // drive (roundIndex -- 0 on the very first snap; callers pass
+  // state.correctCount + state.wrongCount, see runRound). Two things
+  // move together as the ramp advances, both driven by the same tier:
+  //   1) generateCorrectCall below scales down how often a correct call
+  //      stacks extra optional modifiers (Motion/Boot/Counter/Pass) --
+  //      fewer moving parts is an easier call to read off the signals.
+  //   2) generateChoices further down scales up how many of the 3
+  //      multiple-choice decoys are "close" single-attribute neighbors
+  //      of the correct call vs. clearly-different fresh calls -- close
+  //      decoys are what make a question hard to guess even when the
+  //      signals were read correctly.
+  // A missing/invalid roundIndex (e.g. a caller that doesn't track
+  // rounds, like the standalone test hooks) intentionally falls back to
+  // the MAX tier -- i.e. the original always-full-difficulty behavior --
+  // rather than silently defaulting to the easiest tier.
+  const DIFFICULTY_RAMP_ROUNDS_PER_TIER = 4;
+  const DIFFICULTY_RAMP_MAX_TIER = 3;
+  function difficultyTier(roundIndex) {
+    if (typeof roundIndex !== 'number' || !isFinite(roundIndex)) return DIFFICULTY_RAMP_MAX_TIER;
+    return Math.min(DIFFICULTY_RAMP_MAX_TIER, Math.floor(Math.max(0, roundIndex) / DIFFICULTY_RAMP_ROUNDS_PER_TIER));
+  }
+  function generateCorrectCall(roundIndex) {
+    const tier = difficultyTier(roundIndex);
+    // tier 0 -> 1/4 of the normal modifier odds, ramping up to 4/4 (the
+    // original, unscaled odds) by the max tier.
+    const rampFactor = (tier + 1) / (DIFFICULTY_RAMP_MAX_TIER + 1);
     const playKey = ELIGIBLE_PLAY_KEYS[Math.floor(Math.random() * ELIGIBLE_PLAY_KEYS.length)];
     const flags = playFlags(playKey);
     if (Math.random() < SPLIT_FORMATION_CHANCE) {
@@ -986,7 +1108,7 @@
         playKey: playKey,
         splitSide: randomSide(),
         insideOutside: flags.hasInsideOutside ? (Math.random() < 0.5 ? 'Inside' : 'Outside') : null,
-        passOn: Math.random() < 0.35,
+        passOn: Math.random() < 0.35 * rampFactor,
         leftCall: randomSplitRouteCall(),
         rightCall: randomSplitRouteCall(),
       });
@@ -996,13 +1118,15 @@
       playKey: playKey,
       wingSide: randomSide(),
       direction: randomSide(),
-      motionOn: Math.random() < 0.45,
+      motionOn: Math.random() < 0.45 * rampFactor,
       insideOutside: flags.hasInsideOutside ? (Math.random() < 0.5 ? 'Inside' : 'Outside') : null,
-      // Offer Counter about 1/3 of the time it's even legal, Boot
-      // about 1/3 of the time otherwise -- normalizeCall sorts out
-      // legality and the Boot/Counter exclusivity either way.
-      counterOn: flags.hasCounter && Math.random() < 0.35,
-      bootOn: !flags.noBoot && Math.random() < 0.35,
+      // Offer Counter/TW Sweep/Boot each about 1/3 of the time they're
+      // even legal -- normalizeCall sorts out legality and the three-way
+      // exclusivity either way. All three scaled down early in the ramp
+      // along with Motion/Pass above.
+      counterOn: flags.hasCounter && Math.random() < 0.35 * rampFactor,
+      twSweepOn: flags.hasCounter && Math.random() < 0.35 * rampFactor,
+      bootOn: !flags.noBoot && Math.random() < 0.35 * rampFactor,
     };
     return normalizeCall(raw);
   }
@@ -1022,10 +1146,11 @@
       candidates.push(normalizeCall(Object.assign({}, call, { insideOutside: call.insideOutside === 'Inside' ? 'Outside' : 'Inside' })));
     }
     if (!flags.noBoot) {
-      candidates.push(normalizeCall(Object.assign({}, call, { bootOn: !call.bootOn, counterOn: false })));
+      candidates.push(normalizeCall(Object.assign({}, call, { bootOn: !call.bootOn, counterOn: false, twSweepOn: false })));
     }
     if (flags.hasCounter) {
-      candidates.push(normalizeCall(Object.assign({}, call, { counterOn: !call.counterOn, bootOn: false })));
+      candidates.push(normalizeCall(Object.assign({}, call, { counterOn: !call.counterOn, bootOn: false, twSweepOn: false })));
+      candidates.push(normalizeCall(Object.assign({}, call, { twSweepOn: !call.twSweepOn, counterOn: false, bootOn: false })));
     }
     (SIBLING_PLAY_KEYS[call.playKey] || []).forEach(siblingKey => {
       const siblingFlags = playFlags(siblingKey);
@@ -1033,16 +1158,19 @@
         formation: 'wing',
         playKey: siblingKey, wingSide: call.wingSide, direction: call.direction, motionOn: call.motionOn,
         insideOutside: siblingFlags.hasInsideOutside ? (call.insideOutside || (Math.random() < 0.5 ? 'Inside' : 'Outside')) : null,
-        bootOn: call.bootOn, counterOn: call.counterOn,
+        bootOn: call.bootOn, counterOn: call.counterOn, twSweepOn: call.twSweepOn,
       }));
     });
     return candidates;
   }
 
   // Split's own "close to fool them" decoys: flip the split side, flip
-  // Pass, flip In/Out (Blast/Double Blast only), swap in each of the
-  // other 3 route calls one side at a time, plus the same sibling-play-key
-  // swaps Wing uses.
+  // Pass, flip In/Out (Blast/Double Blast only), plus the same
+  // sibling-play-key swaps Wing uses. Routes (leftCall/rightCall) are
+  // NOT varied here anymore -- they're called at the line independent of
+  // the play call and never appear in the displayed/quizzed text, so a
+  // route-only variant would be indistinguishable from the correct answer
+  // (see describeCall/callKey).
   function neighborSplitCalls(call) {
     const flags = playFlags(call.playKey);
     const candidates = [];
@@ -1051,12 +1179,6 @@
     if (flags.hasInsideOutside) {
       candidates.push(normalizeCall(Object.assign({}, call, { insideOutside: call.insideOutside === 'Inside' ? 'Outside' : 'Inside' })));
     }
-    SPLIT_ROUTE_CALLS.filter(r => r !== call.leftCall).forEach(r => {
-      candidates.push(normalizeCall(Object.assign({}, call, { leftCall: r })));
-    });
-    SPLIT_ROUTE_CALLS.filter(r => r !== call.rightCall).forEach(r => {
-      candidates.push(normalizeCall(Object.assign({}, call, { rightCall: r })));
-    });
     (SIBLING_PLAY_KEYS[call.playKey] || []).forEach(siblingKey => {
       const siblingFlags = playFlags(siblingKey);
       candidates.push(normalizeCall({
@@ -1069,8 +1191,13 @@
     return candidates;
   }
 
-  // Correct call + 3 legal, distinct, "close" decoys, shuffled.
-  function generateChoices(correctCall) {
+  // Correct call + 3 legal, distinct decoys, shuffled. How many of those
+  // 3 are "close" single-attribute neighbors (the confusable kind) vs.
+  // clearly-different fresh calls (the easy-to-rule-out kind) ramps up
+  // with roundIndex -- see difficultyTier/generateCorrectCall above for
+  // the shared ramp this is keyed off of.
+  function generateChoices(correctCall, roundIndex) {
+    const closeDecoyTarget = difficultyTier(roundIndex); // 0..DIFFICULTY_RAMP_MAX_TIER, i.e. 0..3
     const seen = new Set([callKey(correctCall)]);
     const pool = [];
     neighborCalls(correctCall).forEach(c => {
@@ -1081,11 +1208,16 @@
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
-    const decoys = pool.slice(0, 3);
-    // Fallback: if this play's flags don't yield enough distinct
-    // single-attribute neighbors (rare -- e.g. Option has few
-    // togglable extras), top up with fresh independent random calls
-    // instead of ever showing fewer than 4 options.
+    const decoys = pool.slice(0, closeDecoyTarget);
+    // Fallback: tops up any decoys the close-neighbor pool didn't supply,
+    // whether that's because this play's flags don't yield enough
+    // distinct single-attribute neighbors (rare -- e.g. Option has few
+    // togglable extras) or because the difficulty ramp above
+    // deliberately capped closeDecoyTarget below 3 -- either way we
+    // never show fewer than 4 options, and early-ramp rounds end up
+    // filled mostly (or entirely) with these clearly-different fresh
+    // calls instead of close neighbors, which is the "easier to start"
+    // half of the ramp.
     // Keep the fallback's fresh random calls in the SAME formation as the
     // correct answer -- a round only ever shows one formation's signal
     // touch card, so a Split correct answer can never legitimately be
@@ -1093,7 +1225,7 @@
     let guard = 0;
     while (decoys.length < 3 && guard < 40) {
       guard++;
-      let fresh = generateCorrectCall();
+      let fresh = generateCorrectCall(roundIndex);
       if (fresh.formation !== correctCall.formation) continue;
       const k = callKey(fresh);
       if (!seen.has(k)) { seen.add(k); decoys.push(fresh); }
@@ -1474,8 +1606,14 @@
   // SECTION 6: DOM wiring
   // ================================================================
   const el = {
+    twoMinDrillOverlay: document.getElementById('twoMinDrillOverlay'),
+    twoMinDrillCloseBtn: document.getElementById('twoMinDrillCloseBtn'),
     startScreen: document.getElementById('startScreen'),
     startBtn: document.getElementById('startBtn'),
+    twoMinLbOpenBtn: document.getElementById('twoMinLbOpenBtn'),
+    twoMinLbScreen: document.getElementById('twoMinLbScreen'),
+    twoMinLbList: document.getElementById('twoMinLbList'),
+    twoMinLbBackBtn: document.getElementById('twoMinLbBackBtn'),
     gameScreen: document.getElementById('gameScreen'),
     endScreen: document.getElementById('endScreen'),
     playAgainBtn: document.getElementById('playAgainBtn'),
@@ -1833,7 +1971,7 @@
         await playSplitAnimation(el.playDiagramSvg, call.splitSide, 1, isPlayingRef);
       } else {
         await playCardAnimation(el.playDiagramSvg, call.playKey, call.direction, call.wingSide, 1, isPlayingRef,
-          null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn);
+          null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn, call.twSweepOn);
       }
     } finally {
       state.animationPauseActive = false;
@@ -1845,9 +1983,14 @@
     el.playDiagramWrap.style.display = 'none';
     el.choicesGrid.innerHTML = '';
 
-    const correctCall = generateCorrectCall();
+    // Nathan: "Questions should be easier to start and a little harder as
+    // you go." roundIndex is 0 on the very first snap of the drive and
+    // climbs with every completed round (right or wrong) -- see
+    // difficultyTier/generateCorrectCall/generateChoices above.
+    const roundIndex = state.correctCount + state.wrongCount;
+    const correctCall = generateCorrectCall(roundIndex);
     state.currentCorrectCall = correctCall;
-    const choices = generateChoices(correctCall);
+    const choices = generateChoices(correctCall, roundIndex);
     const signals = buildSignalSequenceForCall(correctCall);
 
     await playSignals(signals);
@@ -1978,6 +2121,99 @@
     if (state.running) runRound();
   }
 
+  // ================================================================
+  // SECTION 6c: leaderboard -- Nathan: "this will also need a
+  // leaderboard... The leaderboard for the game is only contained within
+  // the 2 minute drill." Auto-saves every completed drive (no manual
+  // name-entry step, unlike the Quiz/Timed boards -- this already runs
+  // inside the signed-in app, so currentPlayerTag() has everything
+  // needed) to its own Firebase list, kept completely separate from the
+  // app's general #lbOverlay leaderboard used by Quiz/Timed Quiz/Play
+  // Calls Quiz. Reuses study-quiz.js's cloudPush/cloudFetch/
+  // currentPlayerTag/dedupeBestByName/splitByCoach/lbRowHtml/
+  // coachSectionHtml -- all top-level FUNCTION declarations in that
+  // file, which is guaranteed to load before this one (see boot()'s
+  // scripts array in index.html). Function declarations are hoisted and
+  // become real window properties, so they're safely readable here as
+  // plain identifiers.
+  //
+  // LEADERBOARD_MAX is deliberately NOT reused the same way, even though
+  // it's also declared top-level in study-quiz.js: unlike a function
+  // declaration, a plain `const` only becomes visible to a later
+  // <script> once its own declaration statement actually runs -- if
+  // study-quiz.js were ever to throw partway through its own top-level
+  // setup (verified directly: a stray throw before that line makes the
+  // const invisible here, while hoisted functions declared even later in
+  // the same file stay unaffected), this file would inherit that
+  // breakage for an unrelated reason. TWO_MIN_LB_MAX just duplicates the
+  // same value (20) locally instead, so the drill's leaderboard can't be
+  // taken down by something going wrong elsewhere in the app.
+  // ================================================================
+  const TWO_MIN_LB_PATH = 'twoMinDrillLeaderboard';
+  const TWO_MIN_LB_LOCAL_KEY = 'bengalsTwoMinDrillLeaderboard';
+  const TWO_MIN_LB_MAX = 20;
+
+  function getTwoMinLeaderboardLocal() {
+    try { const raw = localStorage.getItem(TWO_MIN_LB_LOCAL_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+  }
+  function saveTwoMinLeaderboardLocal(entry) {
+    const list = getTwoMinLeaderboardLocal();
+    list.push(entry);
+    list.sort(twoMinLbSortCompare);
+    try { localStorage.setItem(TWO_MIN_LB_LOCAL_KEY, JSON.stringify(list.slice(0, TWO_MIN_LB_MAX))); } catch (e) { /* localStorage unavailable -- fine, cloud save (if it succeeded) still stands */ }
+  }
+  // Best drive wins on touchdowns first, total yards as the tiebreak, best
+  // streak after that -- same order of importance the end-screen summary
+  // itself already lists these stats in.
+  function twoMinDrillIsBetter(a, b) {
+    if ((a.score || 0) !== (b.score || 0)) return (a.score || 0) > (b.score || 0);
+    if ((a.totalYards || 0) !== (b.totalYards || 0)) return (a.totalYards || 0) > (b.totalYards || 0);
+    return (a.bestStreak || 0) > (b.bestStreak || 0);
+  }
+  function twoMinLbSortCompare(a, b) {
+    return (b.score || 0) - (a.score || 0) || (b.totalYards || 0) - (a.totalYards || 0) || (b.bestStreak || 0) - (a.bestStreak || 0) || new Date(a.date) - new Date(b.date);
+  }
+  async function saveTwoMinDrillResult() {
+    // study-quiz.js's cloudPush/currentPlayerTag etc. are only loaded
+    // when this file runs as part of the live app (see
+    // boot()'s scripts array in index.html) -- the standalone
+    // two-minute-drill-test.html page never loads study-quiz.js at all,
+    // so this quietly no-ops there instead of throwing a ReferenceError
+    // out of endGame() and breaking the rest of the standalone page.
+    if (typeof currentPlayerTag !== 'function' || typeof cloudPush !== 'function') return;
+    const entry = Object.assign({
+      score: state.score,
+      totalYards: state.totalYards,
+      bestStreak: state.bestStreak,
+      date: new Date().toISOString(),
+    }, currentPlayerTag());
+    saveTwoMinLeaderboardLocal(entry);
+    await cloudPush(TWO_MIN_LB_PATH, entry);
+  }
+  async function fetchTwoMinDrillLeaderboardData() {
+    const cloudList = await cloudFetch(TWO_MIN_LB_PATH);
+    const offline = cloudList === null;
+    const raw = (offline ? getTwoMinLeaderboardLocal() : cloudList).slice();
+    const deduped = dedupeBestByName(raw, twoMinDrillIsBetter);
+    deduped.sort(twoMinLbSortCompare);
+    const { players, coaches } = splitByCoach(deduped);
+    return { players: players.slice(0, TWO_MIN_LB_MAX), coaches: coaches.slice(0, TWO_MIN_LB_MAX), offline: offline };
+  }
+  async function renderTwoMinDrillLeaderboard() {
+    const list = el.twoMinLbList;
+    if (!list) return;
+    list.innerHTML = '<div class="lbEmpty">Loading team drives…</div>';
+    const { players, coaches, offline } = await fetchTwoMinDrillLeaderboardData();
+    const scoreFn = e => `${e.score || 0} TD${(e.score || 0) === 1 ? '' : 's'} • ${e.totalYards || 0} yds`;
+    list.innerHTML = players.length === 0
+      ? '<div class="lbEmpty">No drives yet — finish a drill to be the first!</div>'
+      : players.map((e, i) => lbRowHtml(e, i, null, scoreFn(e))).join('');
+    list.innerHTML += coachSectionHtml(coaches, scoreFn);
+    if (offline) {
+      list.innerHTML += '<div class="lbOfflineNote">⚠️ Showing drives saved on this device only — could not reach the team server.</div>';
+    }
+  }
+
   function endGame() {
     if (!state.running) return;
     state.running = false;
@@ -2018,6 +2254,11 @@
       if (state.score > bestTds) localStorage.setItem('twoMinDrillBestTDs', String(state.score));
       if (state.bestStreak > bestStreak) localStorage.setItem('twoMinDrillBestStreak', String(state.bestStreak));
     } catch (e) { /* localStorage unavailable -- fine, just no persisted best */ }
+    // Nathan: "this will also need a leaderboard" -- auto-saved, no manual
+    // "enter your name" step (unlike Quiz/Timed Quiz), since this always
+    // runs inside an already-signed-in session. Fire-and-forget so a slow
+    // or failed cloud write never blocks the end screen from showing.
+    saveTwoMinDrillResult();
   }
 
   function startGame() {
@@ -2028,6 +2269,7 @@
       animationPauseActive: false, clockHoldForSelection: false, driveLog: [],
     });
     el.startScreen.style.display = 'none';
+    if (el.twoMinLbScreen) el.twoMinLbScreen.style.display = 'none';
     el.endScreen.style.display = 'none';
     el.gameScreen.style.display = '';
     updateHud();
@@ -2050,6 +2292,39 @@
   el.startBtn.addEventListener('click', startGame);
   el.playAgainBtn.addEventListener('click', startGame);
   if (el.timeoutBtn) el.timeoutBtn.addEventListener('click', callTimeout);
+
+  // Nathan: "make the entry screen cooler with 2 options, play and
+  // leaderboard" -- the Leaderboard button swaps the entry panel for the
+  // drill's own leaderboard screen (Back returns to the entry panel);
+  // neither ever touches the game screen itself.
+  if (el.twoMinLbOpenBtn) {
+    el.twoMinLbOpenBtn.addEventListener('click', () => {
+      el.startScreen.style.display = 'none';
+      if (el.twoMinLbScreen) el.twoMinLbScreen.style.display = '';
+      renderTwoMinDrillLeaderboard();
+    });
+  }
+  if (el.twoMinLbBackBtn) {
+    el.twoMinLbBackBtn.addEventListener('click', () => {
+      if (el.twoMinLbScreen) el.twoMinLbScreen.style.display = 'none';
+      el.startScreen.style.display = '';
+    });
+  }
+
+  // Nathan: "press and hold the logo for 3 seconds launches it" -- opened
+  // from study-quiz.js's headerLogo long-press handler via this global
+  // (the drill's own overlay div/game state live entirely in this file).
+  // Closing the overlay doesn't reset or pause an in-progress drive -- a
+  // coach who closes mid-drive and long-presses again later comes right
+  // back to it, same as any other minimized game.
+  window.openTwoMinDrillOverlay = function () {
+    if (el.twoMinDrillOverlay) el.twoMinDrillOverlay.classList.add('show');
+  };
+  if (el.twoMinDrillCloseBtn) {
+    el.twoMinDrillCloseBtn.addEventListener('click', () => {
+      if (el.twoMinDrillOverlay) el.twoMinDrillOverlay.classList.remove('show');
+    });
+  }
 
   // Exposes internals for automated testing (headless smoke tests) --
   // same spirit as window.__pcqTestHooks in play-calls-quiz.js.
@@ -2074,6 +2349,16 @@
     normalizeCall: normalizeCall,
     renderSplitDiagram: renderSplitDiagram,
     playSplitAnimation: playSplitAnimation,
+    twoMinDrillIsBetter: twoMinDrillIsBetter,
+    fetchTwoMinDrillLeaderboardData: fetchTwoMinDrillLeaderboardData,
+    renderTwoMinDrillLeaderboard: renderTwoMinDrillLeaderboard,
+    saveTwoMinDrillResult: saveTwoMinDrillResult,
+    difficultyTier: difficultyTier,
+    getVariant: getVariant,
+    buildTwSweepVariant: buildTwSweepVariant,
+    renderCardDiagram: renderCardDiagram,
+    playCardAnimation: playCardAnimation,
+    neighborCalls: neighborCalls,
   };
 
   init();
