@@ -1954,10 +1954,20 @@ function buildCard(combo) {
   // Direction is #4's side AFTER motion runs, not his pre-motion Wing
   // spot. With Motion off those are the same side, so nothing here changes
   // for the no-motion case.
+  //
+  // Nathan: "on outside zone - we can either do boot or counter, not
+  // both." Boot and Counter live in separate slots (unlike Read, which
+  // shares Counter's slot) so nothing stopped both being flipped on at
+  // once before this -- Option never hit it in practice (noBoot leaves its
+  // Boot slot empty), but Outside Zone has both. Boot swapping who's
+  // carrying and Counter swapping #4 onto his own separate route don't
+  // make sense stacked, so turning one on forces the other off (see
+  // updateBootAvailability just below, which mirrors this in the other
+  // direction).
   function updateCounterAvailability() {
     if (!counterToggle) return;
     const effectiveWingSide = motionOn ? (wingSide === 'Left' ? 'Right' : 'Left') : wingSide;
-    const eligible = effectiveWingSide === direction;
+    const eligible = effectiveWingSide === direction && !bootOn;
     const btn = counterToggle.querySelector('.switch-toggle');
     if (!eligible) {
       if (counterOn) {
@@ -1974,8 +1984,30 @@ function buildCard(combo) {
     }
   }
 
+  // Mirrors updateCounterAvailability above, in the other direction: Boot
+  // locks off (and grey out) while Counter is on. No wing/dir concept
+  // applies to Boot itself, so this is a straight one-condition check.
+  function updateBootAvailability() {
+    if (!bootToggle) return;
+    const btn = bootToggle.querySelector('.switch-toggle');
+    if (counterOn) {
+      if (bootOn) {
+        bootOn = false;
+        if (btn) btn.setAttribute('aria-pressed', 'false');
+      }
+      if (btn) btn.disabled = true;
+      bootToggle.style.opacity = '0.35';
+      bootToggle.style.pointerEvents = 'none';
+    } else {
+      if (btn) btn.disabled = false;
+      bootToggle.style.opacity = '';
+      bootToggle.style.pointerEvents = '';
+    }
+  }
+
   function onComboChanged() {
     updateCounterAvailability();
+    updateBootAvailability();
     selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
