@@ -349,6 +349,11 @@
           : `  Your best: ${result.bestScore} / ${result.bestMaxScore} pts.`;
       }
       refreshBestLine();
+      // recordQuizResult() fires its own analytics/pcqResults write
+      // fire-and-forget (doesn't await it internally), so give it a beat
+      // to actually land before celebrateNewBadges() re-reads that same
+      // path to compute badges -- best-effort either way, see there.
+      setTimeout(() => { if (window.celebrateNewBadges) window.celebrateNewBadges(); }, 700);
     }
   }
 

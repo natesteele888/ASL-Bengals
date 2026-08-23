@@ -1242,6 +1242,28 @@
   </div>
 </div>
 
+<!-- Nathan: "success sound can play when you have received an badge. It
+     should show the badge on the screen with the title, congrats! and
+     make the sound when it pops up." Different moment than
+     badgesIntroOverlay above (that's a one-time retrospective tour of
+     every badge already on file) -- this fires the instant a badge is
+     FRESHLY crossed, one at a time, right after a quiz/timed quiz/play
+     quiz result gets recorded. Reuses the same .lbCardCool/.lbHeroHeader
+     hero-card look the leaderboard rank-up card uses, just with its own
+     icon bounce (see .badgeCongratsIcon in css/styles.css) so the badge
+     itself feels like the moment. See js/study-quiz.js's
+     celebrateNewBadges()/showBadgeCongrats(). -->
+<div class="lbOverlay" id="badgeCongratsOverlay">
+  <div class="lbCard lbCardCool" style="max-width:340px;">
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy badgeCongratsIcon" id="badgeCongratsIcon">🎖️</div>
+      <h3>Congrats!</h3>
+      <div class="lbSub" id="badgeCongratsLabel"></div>
+    </div>
+    <button class="navBtn" id="badgeCongratsOkBtn" style="width:calc(100% - 36px);margin:14px 18px 18px;">Awesome! 🎉</button>
+  </div>
+</div>
+
 <!-- Nathan: "Do a daily pop up notification to the coaches on how the team
      is doing with the app and top performers from the previous day." Fired
      by js/coachtools-dashboard.js's maybeShowCoachDailyDigest() the first
@@ -1542,6 +1564,7 @@
 <audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
 <audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
 <audio id="bgMusic" preload="auto" loop src="assets/audio/bg-music.mp3"></audio>
+<audio id="badgeSuccessSound" preload="auto" src="assets/audio/badge-success.mp3"></audio>
 
 
 <script>

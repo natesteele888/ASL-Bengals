@@ -1159,6 +1159,71 @@ function showBadgesIntro(name, badges){
   if(okBtn) okBtn.onclick = closeAndClear;
   if(closeBtn) closeBtn.onclick = closeAndClear;
 }
+
+// Nathan: "success sound can play when you have received an badge. It
+// should show the badge on the screen with the title, congrats! and make
+// the sound when it pops up." -- one badge at a time, resolves once the
+// player taps past it so a multi-badge moment (e.g. hitting a streak
+// tier AND a dedication tier in the same round) shows each in turn
+// instead of overlapping.
+function showBadgeCongrats(badge){
+  return new Promise(resolve => {
+    const overlay = document.getElementById('badgeCongratsOverlay');
+    const iconEl = document.getElementById('badgeCongratsIcon');
+    const labelEl = document.getElementById('badgeCongratsLabel');
+    const okBtn = document.getElementById('badgeCongratsOkBtn');
+    if(!overlay || !iconEl || !labelEl || !okBtn){ resolve(); return; }
+    iconEl.textContent = badge.icon;
+    labelEl.textContent = badge.label;
+    // Restart the pop-in animation even if it's still mid-play from a
+    // badge shown a moment ago (same "force a reflow" trick as
+    // two-minute-drill.js's signal-card fallback).
+    iconEl.style.animation = 'none';
+    void iconEl.offsetWidth;
+    iconEl.style.animation = '';
+    overlay.classList.add('show');
+    playSound(document.getElementById('badgeSuccessSound'));
+    function onOk(){
+      okBtn.removeEventListener('click', onOk);
+      overlay.classList.remove('show');
+      resolve();
+    }
+    okBtn.addEventListener('click', onOk);
+  });
+}
+// Nathan: "make sure they are aware of the badges when they log in" already
+// covers badges earned BEFORE this feature existed (badgesIntroOverlay,
+// retroactive, once ever) and "the ongoing dot" on My Stats covers badges
+// earned since then but not yet opened-and-seen. This is the third piece:
+// the moment a badge is FRESHLY crossed, celebrated right then instead of
+// only being discoverable later. Reuses the exact same
+// getSeenBadgeLabels/markAllEarnedBadgesSeen bookkeeping those other two
+// features already maintain, so a badge only ever gets this celebration
+// once -- call it right after a quiz/timed quiz/play quiz result is
+// recorded (see study-quiz.js's sigFinishQuiz/timedFinishQuiz and
+// play-calls-quiz.js's finishQuiz).
+window.celebrateNewBadges = async function(){
+  try {
+    const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
+    if(!session || !session.name || isCoachEntryName(session.name)) return;
+    const [ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
+      window.PlayerIdentity.getPlayerRecord(session.playerId),
+      cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+    ]);
+    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
+    const seen = getSeenBadgeLabels(session.playerId, session.name);
+    const freshlyEarned = badges.filter(b => b.earned && seen.indexOf(b.label) === -1);
+    if(!freshlyEarned.length){ refreshMyStatsBadgeDot(session.playerId, session.name, badges); return; }
+    // Mark ALL currently-earned badges seen up front (not just the fresh
+    // ones) -- same as the intro/dot logic elsewhere, so nothing left
+    // over from this same check re-fires the next time it runs.
+    markAllEarnedBadgesSeen(session.playerId, session.name, badges);
+    refreshMyStatsBadgeDot(session.playerId, session.name, badges);
+    for (const badge of freshlyEarned) {
+      await showBadgeCongrats(badge);
+    }
+  } catch(e){ /* best-effort -- badge celebration should never break the app */ }
+};
 // Called once a name/session is known (player-identity.js's gate() wrapper,
 // same hook point as refreshWhatsNewBadge/maybeShowCoachDailyDigest etc.).
 window.maybeShowBadgesIntro = async function(){
@@ -1673,7 +1738,11 @@ function sigFinishQuiz(){
     reviewRow.style.display = sigMissedCards.length ? 'flex' : 'none';
     document.getElementById('reviewMissedBtn').textContent = `📖 Review Missed (${sigMissedCards.length})`;
     logHistory({ date: new Date().toISOString(), mode: 'standard', score: sigScore, total: sigDeck.length, bestStreak: sigBestStreakThisRun });
-    cloudPush('analytics/standardResults', Object.assign({ score: sigScore, total: sigDeck.length, mistakes: sigDeck.length-sigScore, bestStreak: sigBestStreakThisRun, date: new Date().toISOString() }, currentPlayerTag()));
+    // celebrateNewBadges() re-reads analytics/standardResults to compute
+    // badges, so it has to wait for this push to actually land first --
+    // chained rather than awaited since sigFinishQuiz isn't async.
+    cloudPush('analytics/standardResults', Object.assign({ score: sigScore, total: sigDeck.length, mistakes: sigDeck.length-sigScore, bestStreak: sigBestStreakThisRun, date: new Date().toISOString() }, currentPlayerTag()))
+      .then(() => window.celebrateNewBadges && window.celebrateNewBadges());
   }
 }
 document.getElementById('sigRestartBtn').addEventListener('click', sigBuildQuiz);
@@ -1864,7 +1933,8 @@ function timedFinishQuiz(){
   timedDoneText.textContent = `Final time: ${formatClock(finalMs)}  •  ${timedMistakes} mistake${timedMistakes===1?'':'s'}` +
     (isNewBest ? `  —  🏆 New best time on this device!` : `  •  Best on this device: ${formatClock(getBestTimeEver())}`);
   logHistory({ date: new Date().toISOString(), mode: 'timed', timeMs: finalMs, mistakes: timedMistakes });
-  cloudPush('analytics/timedResults', Object.assign({ timeMs: finalMs, mistakes: timedMistakes, date: new Date().toISOString() }, currentPlayerTag()));
+  cloudPush('analytics/timedResults', Object.assign({ timeMs: finalMs, mistakes: timedMistakes, date: new Date().toISOString() }, currentPlayerTag()))
+    .then(() => window.celebrateNewBadges && window.celebrateNewBadges());
 }
 document.getElementById('timedRestartBtn').addEventListener('click', timedBuildQuiz);
 timedStartOverlay.addEventListener('click', timedStartRun);
