@@ -991,6 +991,13 @@
     roundActive: false,
     currentCorrectCall: null,
     timeoutsLeft: TIMEOUTS_PER_GAME,
+    // Nathan: "it shouldn't run the clock when it plays back the play
+    // diagram" -- unlike clockPausedUntil (a fixed future timestamp, used
+    // for timeouts/big-play stoppages of a known length), the diagram
+    // playback's length isn't known ahead of time, so it gets its own
+    // open-ended pause flag: set true right before playGainAnimation
+    // starts, false right after it resolves (see runRound).
+    animationPauseActive: false,
   };
 
   function randRange(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
@@ -1113,8 +1120,13 @@
   }
 
   const TOUCHDOWN_HORN_DELAY_MS = 600;
-  const CROWD_NOISE_AMBIENT_VOLUME = 0.35;
-  const CROWD_NOISE_DUCKED_VOLUME = 0.12;
+  // Nathan: "the main crowd noise is too loud to begin" -- was 0.35, which
+  // fought with the signal-calling/play-by-play focus of the drill; kept
+  // well above CROWD_NOISE_DUCKED_VOLUME so the touchdown duck (see
+  // playTouchdownSfx) is still audibly a step down, not just a rounding
+  // difference.
+  const CROWD_NOISE_AMBIENT_VOLUME = 0.16;
+  const CROWD_NOISE_DUCKED_VOLUME = 0.08;
   // How long the "other crowd" (the excited cheer burst) plays before the
   // ambient crowd-noise bed comes back up to its normal level -- matches
   // crowd-cheer.mp3's own length plus a little breathing room.
@@ -1201,7 +1213,7 @@
       const now = performance.now();
       const delta = now - last;
       last = now;
-      if (now < state.clockPausedUntil) { updateHud(); return; }
+      if (now < state.clockPausedUntil || state.animationPauseActive) { updateHud(); return; }
       state.clockMs -= delta;
       if (state.clockMs <= 0) {
         state.clockMs = 0;
@@ -1366,8 +1378,18 @@
   async function playGainAnimation(call) {
     el.playDiagramWrap.style.display = 'block';
     const isPlayingRef = { value: false };
-    await playCardAnimation(el.playDiagramSvg, call.playKey, call.direction, call.wingSide, 1, isPlayingRef,
-      null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn);
+    // Nathan: "it shouldn't run the clock when it plays back the play
+    // diagram" -- pause for the whole duration of the diagram animation
+    // (see animationPauseActive in the clock tick above), not just the
+    // visible banner text, so the drill clock only ever burns real
+    // decision time, never watch-the-replay time.
+    state.animationPauseActive = true;
+    try {
+      await playCardAnimation(el.playDiagramSvg, call.playKey, call.direction, call.wingSide, 1, isPlayingRef,
+        null, '4x4', call.insideOutside, call.motionOn, call.bootOn, 'A', call.counterOn);
+    } finally {
+      state.animationPauseActive = false;
+    }
   }
 
   async function runRound() {
@@ -1408,13 +1430,15 @@
       if (gain.clockPauseMs) state.clockPausedUntil = performance.now() + gain.clockPauseMs;
 
       await playGainAnimation(correctCall);
-      // The clock keeps ticking in the background through all of the
-      // above (that's the whole "2 minute drill" point) -- it can hit
-      // 0 and trigger endGame() mid-animation. Once that's happened,
-      // nothing from this in-flight round should touch state or the
-      // HUD any further, or a touchdown/gain resolving a beat late
-      // could increment the score (and repaint the live HUD) AFTER
-      // the end screen already rendered its now-stale summary.
+      // The clock is paused for the play-diagram replay itself (see
+      // animationPauseActive), but it was still running up through the
+      // pick, and a timeout/big-play stoppage from clockPausedUntil could
+      // have already expired mid-animation, so it can still have hit 0 and
+      // triggered endGame() before this line. Once that's happened,
+      // nothing from this in-flight round should touch state or the HUD
+      // any further, or a touchdown/gain resolving a beat late could
+      // increment the score (and repaint the live HUD) AFTER the end
+      // screen already rendered its now-stale summary.
       if (!state.running) return;
 
       const scored = state.fieldPos >= 100;
@@ -1485,6 +1509,7 @@
       clockMs: CLOCK_START_MS, clockPausedUntil: 0, running: true, fieldPos: START_FIELD_POS,
       score: 0, streak: 0, bestStreak: 0, correctCount: 0, wrongCount: 0, totalYards: 0,
       roundActive: false, currentCorrectCall: null, timeoutsLeft: TIMEOUTS_PER_GAME,
+      animationPauseActive: false,
     });
     el.startScreen.style.display = 'none';
     el.endScreen.style.display = 'none';

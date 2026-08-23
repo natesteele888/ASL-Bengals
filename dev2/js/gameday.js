@@ -82,6 +82,15 @@
     return `${h}:${min} ${ap}`;
   }
 
+  // Nathan: "instead of using the circle logos, use the PNG images exactly
+  // as they are on the schedule page" -- the .hasLogo class here already
+  // matched .scheduleTeamBadge's own has-logo/no-logo split; only
+  // css/styles.css's .gameDayTeamLogo.hasLogo rule needed to change (circle
+  // + object-fit:cover -> transparent rounded-square + object-fit:contain,
+  // same as .scheduleTeamBadge.hasLogo) for a real uploaded PNG to render
+  // uncropped here exactly like it does on the Schedule page. The no-logo
+  // fallback below keeps its colored-circle-with-initials look, matching
+  // .scheduleTeamBadge's own default (non-.hasLogo) treatment.
   function opponentBadgeHtml(name, opponentLogos) {
     const key = normalizeOpponentKey(name);
     const logo = (opponentLogos && opponentLogos[key]) || BUNDLED_LOGOS[key] || null;
@@ -103,7 +112,11 @@
     const timesEl = document.getElementById('gameDayTimes');
     if (badgeEl) badgeEl.innerHTML = opponentBadgeHtml(game.opponent, opponentLogos);
     if (nameEl) nameEl.textContent = game.opponent || 'TBD';
-    if (vsEl) vsEl.textContent = game.homeAway === 'Away' ? '@' : 'VS';
+    // Nathan: "already assumed it's at the 2nd logo" -- dropped the old
+    // '@' (Away)/'VS' (Home) split; always just 'VS' now, since which side
+    // is the opponent is already conveyed by logo order (Bengals first,
+    // opponent second) rather than needing this label to also carry it.
+    if (vsEl) vsEl.textContent = 'VS';
     if (timesEl) {
       const parts = [];
       if (game.arriveTime) parts.push(`Arrive ${to12h(game.arriveTime)}`);

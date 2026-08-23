@@ -370,11 +370,22 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   animation:gameDaySplashRise .5s ease-out}
 @keyframes gameDaySplashRise{0%{opacity:0;transform:translateY(24px)}100%{opacity:1;transform:translateY(0)}}
 .gameDayMatchup{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px}
-.gameDayTeamLogo{width:64px;height:64px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;
-  background:#fff;border:3px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.4);flex-shrink:0;
-  color:#fff;font-weight:900;font-size:20px}
-.gameDayTeamLogo.hasLogo{background:#fff}
-.gameDayTeamLogo img{width:100%;height:100%;object-fit:cover}
+/* Nathan: "instead of using the circle logos, use the PNG images exactly
+   as they are on the schedule page with a VS in between" -- was a 64px
+   white-backed circle (object-fit:cover, i.e. cropped to fill the circle).
+   Swapped to the same treatment as .scheduleTeamBadge.hasLogo on the
+   Schedule page's own game hero: transparent, rounded-square, object-fit
+   contain so the PNG shows uncropped exactly as authored. The no-logo
+   fallback (colored circle w/ initials, built by gameday.js) keeps the
+   original circle shape -- only .hasLogo drops it, same split as
+   .scheduleTeamBadge vs .scheduleTeamBadge.hasLogo. Sized up from the old
+   64px to 84px (matches .scheduleDetailHero .scheduleTeamBadge) since the
+   splash's hero context has more room than the compact schedule row. */
+.gameDayTeamLogo{width:84px;height:84px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  background:var(--bengal-orange);box-shadow:0 4px 14px rgba(0,0,0,.4);flex-shrink:0;
+  color:#fff;font-weight:900;font-size:24px}
+.gameDayTeamLogo.hasLogo{border-radius:10px;background:transparent;box-shadow:none}
+.gameDayTeamLogo img{width:100%;height:100%;object-fit:contain;display:block}
 .gameDayVs{font-size:15px;font-weight:900;color:var(--bengal-orange);letter-spacing:.05em;text-shadow:0 2px 6px rgba(0,0,0,.7)}
 .gameDayOpponentName{font-size:20px;font-weight:900;margin-bottom:10px;text-shadow:0 2px 8px rgba(0,0,0,.7)}
 .gameDayTimes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px}

@@ -67,13 +67,18 @@
     font-size: 10px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; z-index: 4; }
 
   /* ---- signal display ---- */
+  /* Nathan: "the signals need to be bigger so it's easier to see" -- bumped
+     the stage's min-height and the signal image's own max dimensions
+     (was max-height:180px inside a 210px-tall stage); #signalImg no longer
+     caps width at all, since max-width:100% + width:auto lets it grow to
+     fill the wider/taller stage instead of staying capped small. */
   .twoMinSignalStage { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px; margin-bottom: 12px; min-height: 210px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    padding: 14px; margin-bottom: 12px; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   #getReadyEl { display: none; align-items: center; justify-content: center; font-size: 20px; font-weight: 900;
     color: var(--bengal-orange); letter-spacing: .04em; }
-  #signalImg { max-width: 100%; max-height: 180px; border-radius: 10px; }
-  #signalTextCard { display: none; font-size: 26px; font-weight: 900; text-align: center; color: var(--ink);
-    padding: 30px 16px; }
+  #signalImg { width: auto; max-width: 100%; height: auto; max-height: 280px; border-radius: 10px; }
+  #signalTextCard { display: none; font-size: 34px; font-weight: 900; text-align: center; color: var(--ink);
+    padding: 40px 16px; }
   .twoMinProgress { display: flex; gap: 5px; margin-top: 10px; }
   .twoMinProgress .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
   .twoMinProgress .dot.done { background: var(--bengal-orange); }
