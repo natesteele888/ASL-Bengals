@@ -969,6 +969,14 @@
   const CLOCK_START_MS = 2 * 60 * 1000;
   const PENALTY_YARDS = 5;
 
+  // Nathan: "thats also incorporate 2 timeouts that you can take." -- real
+  // football semantics: calling a timeout stops the game clock so you get
+  // a breather. Doesn't touch the signal sequence or the current call,
+  // just buys clock time -- usable any time the drive is running, not just
+  // mid-round, same as real football.
+  const TIMEOUTS_PER_GAME = 2;
+  const TIMEOUT_PAUSE_MS = 10000;
+
   const state = {
     clockMs: CLOCK_START_MS,
     clockPausedUntil: 0,
@@ -982,6 +990,7 @@
     totalYards: 0,
     roundActive: false,
     currentCorrectCall: null,
+    timeoutsLeft: TIMEOUTS_PER_GAME,
   };
 
   function randRange(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
@@ -1052,6 +1061,8 @@
     hudFieldPos: document.getElementById('hudFieldPos'),
     fieldMarker: document.getElementById('fieldMarker'),
     fieldMarkerLabel: document.getElementById('fieldMarkerLabel'),
+    timeoutBtn: document.getElementById('timeoutBtn'),
+    timeoutCount: document.getElementById('timeoutCount'),
     getReadyEl: document.getElementById('getReadyEl'),
     signalImg: document.getElementById('signalImg'),
     signalTextCard: document.getElementById('signalTextCard'),
@@ -1083,6 +1094,24 @@
     const pct = Math.max(0, Math.min(100, state.fieldPos));
     el.fieldMarker.style.left = `${pct}%`;
     el.fieldMarkerLabel.textContent = `${Math.round(state.fieldPos)}`;
+    if (el.timeoutBtn) {
+      el.timeoutCount.textContent = state.timeoutsLeft;
+      el.timeoutBtn.disabled = !state.running || state.timeoutsLeft <= 0;
+    }
+  }
+
+  // Nathan: "2 timeouts that you can take" -- pauses the master clock the
+  // same way an out-of-bounds big play does (see resolveGain's
+  // clockPauseMs), just player-triggered instead of luck-triggered.
+  // Usable any time the drive is running; Math.max so calling one while an
+  // existing pause (e.g. a big play) still has more time left never
+  // shortens it.
+  function callTimeout() {
+    if (!state.running || state.timeoutsLeft <= 0) return;
+    state.timeoutsLeft--;
+    state.clockPausedUntil = Math.max(state.clockPausedUntil, performance.now() + TIMEOUT_PAUSE_MS);
+    updateHud();
+    showBanner('⏱️ TIMEOUT!', 'timeout', 1100);
   }
 
   let clockTimer = null;
@@ -1107,9 +1136,58 @@
     if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
   }
 
+  // Nathan: "Graphics for the completions should be cooler looking and
+  // more dynamic." -- reads this as the celebration banners (GAIN!,
+  // BREAKS FREE!, TOUCHDOWN!), since those are what fire on every
+  // completed/correct call. Layered three things on top of the existing
+  // punch-scale banner: a radial "impact ring" burst behind it (CSS, see
+  // .twoMinBanner::before), a screen-shake + pulsing glow on the bigger
+  // moments (CSS, see the .big/.touchdown animation rules), and a real
+  // particle burst (below) radiating out from the banner -- fired for any
+  // positive outcome, skipped for the false-start/timeout banners so
+  // nothing celebratory shows on a miss.
+  const BURST_CONFIG = {
+    good: { count: 10, colors: ['#35a24a', '#8be89a', '#c9f7c9'], distance: 70, chars: ['🏈'] },
+    big: { count: 18, colors: ['#ffd54f', '#f9a825', '#fff3c4'], distance: 120, chars: ['🏈', '⚡'] },
+    touchdown: { count: 30, colors: ['#ffb347', '#ff7a00', '#ffe08a', '#fff'], distance: 160, chars: ['🏈', '⭐'] },
+  };
+  function spawnBurst(kind) {
+    const cfg = BURST_CONFIG[kind];
+    if (!cfg || !el.resultBanner) return;
+    const rect = el.resultBanner.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    for (let i = 0; i < cfg.count; i++) {
+      const p = document.createElement('div');
+      p.className = 'twoMinSpark';
+      p.textContent = cfg.chars[i % cfg.chars.length];
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      p.style.color = cfg.colors[i % cfg.colors.length];
+      document.body.appendChild(p);
+      const angle = (Math.PI * 2 * i) / cfg.count + (Math.random() - 0.5) * 0.5;
+      const dist = cfg.distance * (0.55 + Math.random() * 0.6);
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const spin = (Math.random() > 0.5 ? 1 : -1) * (180 + Math.random() * 360);
+      let anim;
+      try {
+        anim = p.animate([
+          { transform: 'translate(-50%, -50%) rotate(0deg) scale(1)', opacity: 1 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${spin}deg) scale(.35)`, opacity: 0 },
+        ], { duration: 650 + Math.random() * 350, easing: 'cubic-bezier(.2,.6,.3,1)' });
+      } catch (e) { /* Web Animations API unavailable -- just skip the burst, no crash */ }
+      if (anim) anim.onfinish = () => p.remove();
+      else p.remove();
+    }
+  }
+
   function showBanner(text, cls, holdMs) {
     el.resultBanner.textContent = text;
     el.resultBanner.className = 'twoMinBanner show ' + cls;
+    if (cls.indexOf('bad') === -1 && cls.indexOf('timeout') === -1) {
+      spawnBurst(cls.indexOf('touchdown') !== -1 ? 'touchdown' : (cls.indexOf('big') !== -1 ? 'big' : 'good'));
+    }
     return wait(holdMs).then(() => {
       el.resultBanner.className = 'twoMinBanner';
     });
@@ -1323,7 +1401,7 @@
     Object.assign(state, {
       clockMs: CLOCK_START_MS, clockPausedUntil: 0, running: true, fieldPos: START_FIELD_POS,
       score: 0, streak: 0, bestStreak: 0, correctCount: 0, wrongCount: 0, totalYards: 0,
-      roundActive: false, currentCorrectCall: null,
+      roundActive: false, currentCorrectCall: null, timeoutsLeft: TIMEOUTS_PER_GAME,
     });
     el.startScreen.style.display = 'none';
     el.endScreen.style.display = 'none';
@@ -1346,6 +1424,7 @@
 
   el.startBtn.addEventListener('click', startGame);
   el.playAgainBtn.addEventListener('click', startGame);
+  if (el.timeoutBtn) el.timeoutBtn.addEventListener('click', callTimeout);
 
   // Exposes internals for automated testing (headless smoke tests) --
   // same spirit as window.__pcqTestHooks in play-calls-quiz.js.

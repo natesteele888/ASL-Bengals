@@ -49,6 +49,11 @@
   #hudClock.urgent { color: #e0201a; animation: twoMinPulse 1s infinite; }
   #hudStreak { color: var(--bengal-orange); min-width: 20px; text-align: center; }
   @keyframes twoMinPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .twoMinTimeoutBtn { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px;
+    font-weight: 800; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .twoMinTimeoutBtn:active:not(:disabled) { transform: scale(.95); }
+  .twoMinTimeoutBtn:disabled { opacity: .4; cursor: default; }
+  .twoMinTimeoutBtn #timeoutCount { color: var(--bengal-orange); }
 
   /* ---- field strip ---- */
   .twoMinFieldOuter { position: relative; height: 46px; border-radius: 8px; overflow: hidden; margin-bottom: 14px;
@@ -93,12 +98,41 @@
     font-size: 30px; font-weight: 900; text-align: center; padding: 18px 26px; border-radius: 16px;
     color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 10px 40px rgba(0,0,0,.5);
     transition: opacity .15s ease, transform .15s ease; max-width: 90vw; }
-  .twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .4s ease; }
-  .twoMinBanner.good { background: linear-gradient(135deg, #2e7d32, #1b5e20); }
-  .twoMinBanner.good.big { background: linear-gradient(135deg, #f9a825, #e65100); font-size: 34px; }
-  .twoMinBanner.bad { background: linear-gradient(135deg, #c62828, #7a1f1f); }
-  .twoMinBanner.touchdown { background: linear-gradient(135deg, var(--bengal-orange), #b3410a); font-size: 42px; }
+  /* Radial "impact ring" that bursts out from behind the banner text --
+     see .show::before below for the animation that actually fires it. */
+  .twoMinBanner::before { content: ''; position: absolute; inset: -30px; border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0%, transparent 68%); opacity: 0; z-index: -1; }
+  .twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .45s cubic-bezier(.2,1.7,.4,1); }
+  .twoMinBanner.show::before { animation: twoMinBannerRing .65s ease-out; }
+  .twoMinBanner.good { background: linear-gradient(135deg, #3fb454, #1b5e20 65%, #0d3d13); color: #eafff0; }
+  .twoMinBanner.good::before { color: #3fb454; }
+  .twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 34px; }
+  .twoMinBanner.good.big::before { color: #f9a825; }
+  .twoMinBanner.show.good.big { animation: twoMinBannerPunch .5s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .5s ease .18s; }
+  .twoMinBanner.bad { background: linear-gradient(135deg, #e5433d, #c62828 55%, #7a1f1f); }
+  .twoMinBanner.bad::before { color: #c62828; }
+  .twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 26px; }
+  .twoMinBanner.timeout::before { color: #4fc3f7; }
+  .twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 42px; }
+  .twoMinBanner.touchdown::before { color: var(--bengal-orange); }
+  .twoMinBanner.show.touchdown { animation: twoMinBannerPunch .55s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .6s ease .2s, twoMinBannerGlow 1.3s ease-in-out .5s infinite; }
   @keyframes twoMinBannerPunch { 0% { transform: translate(-50%, -50%) scale(.5); } 60% { transform: translate(-50%, -50%) scale(1.12); } 100% { transform: translate(-50%, -50%) scale(1); } }
+  @keyframes twoMinBannerRing { 0% { opacity: .55; transform: scale(.25); } 100% { opacity: 0; transform: scale(1.6); } }
+  @keyframes twoMinBannerShake {
+    0%, 100% { margin-left: 0; }
+    20% { margin-left: -6px; } 40% { margin-left: 5px; } 60% { margin-left: -4px; } 80% { margin-left: 3px; }
+  }
+  @keyframes twoMinBannerGlow {
+    0%, 100% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 0 rgba(255,140,0,0); }
+    50% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 34px 10px rgba(255,150,20,.55); }
+  }
+
+  /* Particle burst spawned by js/two-minute-drill.js's spawnBurst() on
+     every positive result (gain / big play / touchdown) -- fixed-position
+     elements animated purely via the Web Animations API, self-removing on
+     finish, so this rule only needs to cover their starting look. */
+  .twoMinSpark { position: fixed; z-index: 499; font-size: 18px; line-height: 1; pointer-events: none;
+    transform: translate(-50%, -50%); text-shadow: 0 0 6px currentColor; }
 </style>
 </head>
 <body>
@@ -120,6 +154,7 @@
       <div id="hudFieldPos">Ball on your 25</div>
       <div id="hudScore">TDs: 0</div>
       <div id="hudStreak"></div>
+      <button class="twoMinTimeoutBtn" id="timeoutBtn" type="button">⏸️ Timeout <span id="timeoutCount">2</span></button>
     </div>
 
     <div class="twoMinFieldOuter" id="fieldOuter">
