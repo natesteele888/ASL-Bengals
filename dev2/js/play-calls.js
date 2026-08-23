@@ -516,10 +516,22 @@ function buildEndCapEl(endType, color, width) {
 }
 function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl) {
   return new Promise(async resolve => {
-    if (delayMs) await wait(delayMs);
+    // Hide immediately, BEFORE the delay -- not after. renderCardDiagram
+    // just drew every path fully solid (that's the static, non-animated
+    // view); if a path's own reveal doesn't start until delayMs from now
+    // (an authored p.delayMs, or a "Ball Starts Here" split segment's
+    // later startFrac), it would otherwise sit there fully visible for
+    // that entire wait, THEN blank out and redraw once its turn comes.
+    // Nathan: "it needs to run the blue segment first, then the red -- it
+    // just started him on the red route while the blue route ran" -- the
+    // red half's delay itself was correct, nothing was hiding it in the
+    // meantime.
     const len = pathEl.getTotalLength();
     pathEl.style.strokeDasharray = `${len} ${len}`;
     pathEl.style.strokeDashoffset = `${len}`;
+    if (arrowEl) arrowEl.style.opacity = '0';
+    if (delayMs) await wait(delayMs);
+    if (arrowEl) arrowEl.style.opacity = '1';
     const start = performance.now();
     function frame(now) {
       const t = Math.min(1, (now - start) / durationMs);
