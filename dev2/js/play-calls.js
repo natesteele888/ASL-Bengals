@@ -1936,7 +1936,35 @@ function buildCard(combo) {
   }
   function stopSignalSequence() { if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; } }
 
+  // Nathan: "you can only run counter if you are running to the wing
+  // side. So if it's Wing Left, Option Right, you can't do a counter. So
+  // only make the counter an option when Wing and Dir are the same side."
+  // Counter pulls #4 out of the backfield opposite the play's real
+  // direction -- that only works starting from behind the direction the
+  // play actually goes, i.e. wing and direction have to match. Rather than
+  // just silently ignoring an on-toggle in a now-illegal combo, force it
+  // off and grey out the switch so it's clear why it's unavailable.
+  function updateCounterAvailability() {
+    if (!counterToggle) return;
+    const eligible = wingSide === direction;
+    const btn = counterToggle.querySelector('.switch-toggle');
+    if (!eligible) {
+      if (counterOn) {
+        counterOn = false;
+        if (btn) btn.setAttribute('aria-pressed', 'false');
+      }
+      if (btn) btn.disabled = true;
+      counterToggle.style.opacity = '0.35';
+      counterToggle.style.pointerEvents = 'none';
+    } else {
+      if (btn) btn.disabled = false;
+      counterToggle.style.opacity = '';
+      counterToggle.style.pointerEvents = '';
+    }
+  }
+
   function onComboChanged() {
+    updateCounterAvailability();
     selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
