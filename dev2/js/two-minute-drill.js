@@ -1072,7 +1072,87 @@
     playDiagramWrap: document.getElementById('playDiagramWrap'),
     playDiagramSvg: document.getElementById('playDiagramSvg'),
     loadingNote: document.getElementById('loadingNote'),
+    sndWhistle: document.getElementById('drillWhistleSound'),
+    sndFalseStartCrowd: document.getElementById('drillFalseStartCrowdSound'),
+    sndTouchdownHorn: document.getElementById('drillTouchdownHornSound'),
+    sndCrowdCheer: document.getElementById('drillCrowdCheerSound'),
+    sndCrowdNoise: document.getElementById('drillCrowdNoiseSound'),
   };
+
+  // ================================================================
+  // SECTION 6b: sound effects
+  // Nathan: "have it do the police whistle with the crowd disappointed
+  // sound right after it" (false start) + "have the crowd noise start
+  // playing and after .6 seconds, play the Touchdown sound. Crowdnoise can
+  // be used in the background throughout, then switch to the other crowd"
+  // (touchdown). All of this is scoped to this drill only, not the whole
+  // app -- separate <audio> elements from the study-quiz correct/wrong/
+  // bgMusic ones (see two-minute-drill-test.html), same
+  // play-from-the-start-every-time pattern as study-quiz.js's playSound().
+  // ================================================================
+  function playSfx(elAudio, opts) {
+    if (!elAudio) return;
+    try {
+      elAudio.currentTime = 0;
+      if (opts && typeof opts.volume === 'number') elAudio.volume = opts.volume;
+      elAudio.play().catch(() => { /* autoplay blocked -- fine, just silent */ });
+    } catch (e) { /* ignore -- sound is a nice-to-have, never worth breaking the drill over */ }
+  }
+
+  // Nathan: "have it do the police whistle with the crowd disappointed
+  // sound right after it." Chained off the whistle's own 'ended' event
+  // (rather than a fixed setTimeout) so it stays in sync even if the clip
+  // ever gets swapped for a different-length one.
+  function playFalseStartSfx() {
+    const whistle = el.sndWhistle;
+    const crowd = el.sndFalseStartCrowd;
+    if (!whistle) { playSfx(crowd); return; }
+    const onEnded = () => { whistle.removeEventListener('ended', onEnded); playSfx(crowd); };
+    whistle.addEventListener('ended', onEnded);
+    playSfx(whistle);
+  }
+
+  const TOUCHDOWN_HORN_DELAY_MS = 600;
+  const CROWD_NOISE_AMBIENT_VOLUME = 0.35;
+  const CROWD_NOISE_DUCKED_VOLUME = 0.12;
+  // How long the "other crowd" (the excited cheer burst) plays before the
+  // ambient crowd-noise bed comes back up to its normal level -- matches
+  // crowd-cheer.mp3's own length plus a little breathing room.
+  const CROWD_DUCK_MS = 4600;
+  let crowdDuckTimer = null;
+  function playTouchdownSfx() {
+    if (crowdDuckTimer) { clearTimeout(crowdDuckTimer); crowdDuckTimer = null; }
+    // "the crowd noise start playing" -- the excited crowd (the OTHER
+    // crowd track, distinct from the calm ambient one already looping)
+    // kicks in right at the score.
+    playSfx(el.sndCrowdCheer);
+    if (el.sndCrowdNoise && !el.sndCrowdNoise.paused) el.sndCrowdNoise.volume = CROWD_NOISE_DUCKED_VOLUME;
+    setTimeout(() => playSfx(el.sndTouchdownHorn), TOUCHDOWN_HORN_DELAY_MS);
+    crowdDuckTimer = setTimeout(() => {
+      crowdDuckTimer = null;
+      if (el.sndCrowdNoise && !el.sndCrowdNoise.paused) el.sndCrowdNoise.volume = CROWD_NOISE_AMBIENT_VOLUME;
+    }, CROWD_DUCK_MS);
+  }
+
+  // Ambient bed for the whole drive -- Nathan: "Crowdnoise can be used in
+  // the background throughout." Started quiet on kickoff, stopped when the
+  // drive ends. The clip (~2:26) comfortably outlasts one drive (2:00) so
+  // it never needs to actually loop.
+  function startAmbientCrowd() {
+    const a = el.sndCrowdNoise;
+    if (!a) return;
+    try {
+      a.currentTime = 0;
+      a.volume = CROWD_NOISE_AMBIENT_VOLUME;
+      a.play().catch(() => {});
+    } catch (e) { /* ignore */ }
+  }
+  function stopAmbientCrowd() {
+    if (crowdDuckTimer) { clearTimeout(crowdDuckTimer); crowdDuckTimer = null; }
+    const a = el.sndCrowdNoise;
+    if (!a) return;
+    try { a.pause(); } catch (e) { /* ignore */ }
+  }
 
   function fmtClock(ms) {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -1351,6 +1431,7 @@
       if (scored) {
         state.score++;
         updateHud();
+        playTouchdownSfx();
         await showBanner('🏈 TOUCHDOWN!', 'touchdown', 2000);
         if (!state.running) return;
         state.fieldPos = START_FIELD_POS;
@@ -1361,6 +1442,7 @@
       state.wrongCount++;
       state.fieldPos = Math.max(1, state.fieldPos - PENALTY_YARDS);
       updateHud();
+      playFalseStartSfx();
       await showBanner(`FALSE START! -${PENALTY_YARDS} YDS`, 'bad', 1400);
       if (!state.running) return;
     }
@@ -1373,6 +1455,7 @@
     if (!state.running) return;
     state.running = false;
     stopClock();
+    stopAmbientCrowd();
     // The clock can hit 0 while a result banner is still mid-hold
     // (its own wait(holdMs) hasn't resolved yet) -- without this it
     // stays visible, floating over the end screen until that timer
@@ -1408,6 +1491,7 @@
     el.gameScreen.style.display = '';
     updateHud();
     startClock();
+    startAmbientCrowd();
     runRound();
   }
 

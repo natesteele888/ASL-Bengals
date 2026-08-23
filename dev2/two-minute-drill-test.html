@@ -186,6 +186,22 @@
 <div class="twoMinBanner" id="resultBanner"></div>
 
 <!--
+  Nathan: "have it do the police whistle with the crowd disappointed sound
+  right after it" (false start) + "have the crowd noise start playing and
+  after .6 seconds, play the Touchdown sound. Crowdnoise can be used in the
+  background throughout, then switch to the other crowd" (touchdown) --
+  scoped to this drill (separate from study-quiz.js's correct/wrong/
+  bgMusic sounds elsewhere in the app). Sequencing lives in
+  js/two-minute-drill.js's playFalseStartSfx()/playTouchdownSfx()/
+  startAmbientCrowd().
+-->
+<audio id="drillWhistleSound" preload="auto" src="assets/audio/false-start-whistle.mp3"></audio>
+<audio id="drillFalseStartCrowdSound" preload="auto" src="assets/audio/false-start-crowd.mp3"></audio>
+<audio id="drillTouchdownHornSound" preload="auto" src="assets/audio/touchdown-horn.mp3"></audio>
+<audio id="drillCrowdCheerSound" preload="auto" src="assets/audio/crowd-cheer.mp3"></audio>
+<audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
+
+<!--
   Nathan: "it cant say the name, that gives it away, just the image of the
   signal" -- the text-card fallback (js/two-minute-drill.js's playSignals)
   was only ever a graceful degrade for when the real signal photos can't
