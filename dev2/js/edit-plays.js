@@ -1759,10 +1759,36 @@ function render() {
 window.initEditPlays = function() {
   playSelect.value = playKey;
   updateReadPosVisibility();
-  render();
+  // Nathan: "the paths for double blast, inside zone, all of them changed"
+  // -- they hadn't; this used to call render() immediately with whatever
+  // un-customized shipped defaults window.DATA started with, then swap in
+  // the coach's real saved edits and re-render once
+  // loadSavedPlaysFromCloud() resolved. Normally that round-trip is fast
+  // enough not to notice, but on a slow connection it left several seconds
+  // of every play looking wrong (or looking like a stranger's edits, e.g.
+  // after Nathan had an old tab open) before quietly correcting itself.
+  // Skip that misleading first paint entirely: show a plain loading state
+  // and only draw a play once the real cloud check has actually finished,
+  // success or failure either way (loadSavedPlaysFromCloud() catches its
+  // own network errors internally and still resolves, so this .then()
+  // always runs).
+  showEditPlaysLoading();
   loadSavedPlaysFromCloud().then(() => {
     updateReadPosVisibility();
     render();
   });
 };
+
+// Blank, non-misleading placeholder shown for the brief window between
+// entering Edit Plays and loadSavedPlaysFromCloud() resolving -- see
+// window.initEditPlays above. Uses the same viewBox/background render()
+// itself sets up so nothing jumps when the real render() replaces it.
+function showEditPlaysLoading() {
+  const [vw, vh] = DATA.viewBox;
+  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  stage.innerHTML = '';
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:'#ffffff'}));
+  stage.appendChild(svgEl('text', {x:vw/2, y:vh/2, 'font-size':32, 'font-weight':700,
+    'text-anchor':'middle', fill:'#999999'})).textContent = 'Loading your saved plays…';
+}
 })();

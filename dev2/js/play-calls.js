@@ -200,6 +200,31 @@ function normalizePlayData(playTypes) {
         }
       });
     }
+    // Nathan: "I can't add points on the 4's path" -- player 4's Counter
+    // route (Option and Outside Zone, both directions) used to be a
+    // blocking assignment (isBlocking:true, "tap a defender" in the UI)
+    // because that was the only shape that variant had ever shipped with;
+    // it's since been converted to a real editable route in data/plays.json
+    // so a coach can actually draw #4's path. Same "cloud always wins"
+    // problem as everything else in this function: a coach's own Firebase
+    // snapshot saved before that conversion still has the OLD isBlocking
+    // shape for that one path, which silently overrides the fix forever.
+    // Nobody could have chosen isBlocking:true here on purpose -- the UI
+    // never offered anything else for this path before today -- so any
+    // lingering isBlocking:true on player 4's Counter path is unambiguously
+    // stale, and gets replaced with whatever ships in code today.
+    if (pt.key === 'option' || pt.key === 'outside_zone') {
+      ['Left', 'Right'].forEach(dirKey => {
+        const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
+        if (!counterVariant || !counterVariant.paths) return;
+        const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
+        if (idx === -1) return;
+        const shippedDir = SHIPPED_PLAY_TYPES_BY_KEY[pt.key] && SHIPPED_PLAY_TYPES_BY_KEY[pt.key].directions[dirKey];
+        const shippedCounter = shippedDir && (shippedDir.Counter || shippedDir);
+        const shippedP4 = shippedCounter && shippedCounter.paths && shippedCounter.paths.find(p => p.player === 4 && !p.isBlocking);
+        if (shippedP4) counterVariant.paths[idx] = JSON.parse(JSON.stringify(shippedP4));
+      });
+    }
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
       const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
       variants.forEach(variant => {
