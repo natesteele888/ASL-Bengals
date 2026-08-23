@@ -892,6 +892,32 @@
   </div>
 </div>
 
+<!--
+  Nathan: "give access to this by clicking the logo 5 times and doing the
+  6103 pin so I can test on the live app. this would only appear under the
+  admin account Coach Nate." -- the 5-tap logo gesture already exists (see
+  study-quiz.js's headerLogo click handler, which normally jumps straight
+  to Coach Tools > Dashboard). When the signed-in coach is specifically
+  Coach Nate, that same 5-tap now shows this PIN prompt FIRST instead --
+  the correct PIN opens the 2 Minute Drill prototype (still the standalone
+  test page, not folded into the tab UI yet); anything else (wrong PIN,
+  Cancel, or any coach other than Coach Nate) falls straight through to
+  the normal Dashboard behavior, completely unchanged for every other
+  coach account.
+-->
+<div id="drillPinGate" class="pcInfoOverlay">
+  <div class="pcInfoCard" style="max-width:300px;">
+    <div class="pcInfoHeader">🏈 2 Minute Drill</div>
+    <div class="pcInfoBody">
+      <p>Coach Nate admin test -- enter the PIN to open the prototype.</p>
+    </div>
+    <input type="password" inputmode="numeric" id="drillPinInput" placeholder="PIN" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <div id="drillPinError" style="color:#e0201a;font-size:12px;font-weight:700;min-height:16px;margin-bottom:6px;"></div>
+    <button id="drillPinSubmitBtn" class="pcInfoCloseBtn">Open Drill</button>
+    <button id="drillPinDashboardBtn" class="pcInfoCloseBtn" style="background:#666;margin-top:6px;">Open Coach Dashboard Instead</button>
+  </div>
+</div>
+
 <div id="playCallsInfoOverlay" class="pcInfoOverlay">
   <div class="pcInfoCard pcTutorialCard">
     <div id="pcTutorialSteps">
@@ -1577,7 +1603,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260823j';
+  const BUILD_V = '20260823k';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
