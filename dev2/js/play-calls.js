@@ -201,28 +201,38 @@ function normalizePlayData(playTypes) {
       });
     }
     // Nathan: "I can't add points on the 4's path" -- player 4's Counter
-    // route (Option and Outside Zone, both directions) used to be a
-    // blocking assignment (isBlocking:true, "tap a defender" in the UI)
-    // because that was the only shape that variant had ever shipped with;
-    // it's since been converted to a real editable route in data/plays.json
-    // so a coach can actually draw #4's path. Same "cloud always wins"
-    // problem as everything else in this function: a coach's own Firebase
-    // snapshot saved before that conversion still has the OLD isBlocking
-    // shape for that one path, which silently overrides the fix forever.
-    // Nobody could have chosen isBlocking:true here on purpose -- the UI
-    // never offered anything else for this path before today -- so any
-    // lingering isBlocking:true on player 4's Counter path is unambiguously
-    // stale, and gets replaced with whatever ships in code today.
+    // route (Option and Outside Zone, both directions) was auto-grafted
+    // (just above) as a byte-for-byte clone of Normal's player 4, which in
+    // Normal is a genuine, intentional blocking assignment (isBlocking:true,
+    // "tap a defender" in the UI, aimed via crossPoints/sameSidePoints
+    // relative to wherever #4 lines up) -- correct for Normal, but Counter
+    // needs #4 to actually carry the ball on a real drawable route instead,
+    // which the UI never offered before now.
+    //
+    // IMPORTANT: this can't be repaired by looking up "the shipped
+    // default" (SHIPPED_PLAY_TYPES_BY_KEY, captured from window.DATA,
+    // which itself came from Firebase's dev2PlayData/plays.json) --
+    // that node is only ever updated by a coach manually clicking "Admin:
+    // Sync Shipped Defaults to Cloud", which most coaches (reasonably)
+    // never do, so it still has this exact same stale blocking shape and
+    // the lookup would silently find nothing to repair with. The 4 correct
+    // routes are hardcoded below instead (matching data/plays.json), so
+    // this fix works immediately for every coach regardless of whether
+    // that admin button has ever been pressed.
     if (pt.key === 'option' || pt.key === 'outside_zone') {
+      const REPAIRED_COUNTER_P4_POINTS = {
+        'option|Left': [[360, 269], [480, 360], [520, 322], [650, 230]],
+        'option|Right': [[1251, 269], [1131, 360], [1091, 322], [961, 230]],
+        'outside_zone|Left': [[360, 269], [520, 340], [700, 309], [900, 220]],
+        'outside_zone|Right': [[1251, 269], [1091, 340], [911, 309], [711, 220]],
+      };
       ['Left', 'Right'].forEach(dirKey => {
         const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
         if (!counterVariant || !counterVariant.paths) return;
         const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
         if (idx === -1) return;
-        const shippedDir = SHIPPED_PLAY_TYPES_BY_KEY[pt.key] && SHIPPED_PLAY_TYPES_BY_KEY[pt.key].directions[dirKey];
-        const shippedCounter = shippedDir && (shippedDir.Counter || shippedDir);
-        const shippedP4 = shippedCounter && shippedCounter.paths && shippedCounter.paths.find(p => p.player === 4 && !p.isBlocking);
-        if (shippedP4) counterVariant.paths[idx] = JSON.parse(JSON.stringify(shippedP4));
+        const points = REPAIRED_COUNTER_P4_POINTS[`${pt.key}|${dirKey}`];
+        if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
       });
     }
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
