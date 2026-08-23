@@ -892,32 +892,6 @@
   </div>
 </div>
 
-<!--
-  Nathan: "give access to this by clicking the logo 5 times and doing the
-  6103 pin so I can test on the live app. this would only appear under the
-  admin account Coach Nate." -- the 5-tap logo gesture already exists (see
-  study-quiz.js's headerLogo click handler, which normally jumps straight
-  to Coach Tools > Dashboard). When the signed-in coach is specifically
-  Coach Nate, that same 5-tap now shows this PIN prompt FIRST instead --
-  the correct PIN opens the 2 Minute Drill prototype (still the standalone
-  test page, not folded into the tab UI yet); anything else (wrong PIN,
-  Cancel, or any coach other than Coach Nate) falls straight through to
-  the normal Dashboard behavior, completely unchanged for every other
-  coach account.
--->
-<div id="drillPinGate" class="pcInfoOverlay">
-  <div class="pcInfoCard" style="max-width:300px;">
-    <div class="pcInfoHeader">🏈 2 Minute Drill</div>
-    <div class="pcInfoBody">
-      <p>Coach Nate admin test -- enter the PIN to open the prototype.</p>
-    </div>
-    <input type="password" inputmode="numeric" id="drillPinInput" placeholder="PIN" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
-    <div id="drillPinError" style="color:#e0201a;font-size:12px;font-weight:700;min-height:16px;margin-bottom:6px;"></div>
-    <button id="drillPinSubmitBtn" class="pcInfoCloseBtn">Open Drill</button>
-    <button id="drillPinDashboardBtn" class="pcInfoCloseBtn" style="background:#666;margin-top:6px;">Open Coach Dashboard Instead</button>
-  </div>
-</div>
-
 <div id="playCallsInfoOverlay" class="pcInfoOverlay">
   <div class="pcInfoCard pcTutorialCard">
     <div id="pcTutorialSteps">
@@ -1587,6 +1561,112 @@
   </div>
 </div>
 
+<!--
+  2 MINUTE DRILL -- in-app overlay (Nathan, 2026-08-23): "this will also
+  need a leaderboard. I am ready to add this into the live app as a test.
+  press and hold the logo for 3 seconds launches it." Ported from the
+  standalone two-minute-drill-test.html prototype into a real full-screen
+  overlay (same position:fixed;inset:0 pattern as .gameDaySplashOverlay/
+  .cancelNoticeOverlay) -- see js/two-minute-drill.js for all the game
+  logic plus the new leaderboard save/fetch/render functions, and the
+  press-and-hold gesture wiring in study-quiz.js's headerLogo block. The
+  old 5-tap "Coach Nate" PIN backdoor was removed per Nathan: "remove the
+  5 tap back door, make it 3 second hold for all logins" -- this opens for
+  every signed-in player now, no PIN, no account restriction.
+-->
+<div class="twoMinDrillOverlay" id="twoMinDrillOverlay">
+<div class="twoMinWrap">
+  <button class="lbXClose" id="twoMinDrillCloseBtn" aria-label="Close">&times;</button>
+  <div class="twoMinHeader">
+    <h1>🏈 2 Minute Drill</h1>
+  </div>
+  <div class="twoMinLoadingNote" id="loadingNote"></div>
+
+  <div class="twoMinPanel twoMinEntryPanel" id="startScreen">
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏈</div>
+      <h3>Ready to run it back?</h3>
+      <div class="lbSub">Read the signal. Beat the clock. Drive for the score.</div>
+    </div>
+    <div class="twoMinEntryBody">
+      <p>You're shown a coach's hand signals for a play call. Pick the right call from 4 close options before the clock runs out. Get it right and watch the play develop -- get it wrong and it's a false start, 5 yards back. String correct calls together for bonus yardage, break one outside for extra yards <em>and</em> a clock stoppage, and drive 75 yards for a touchdown. New drive starts if you've still got time left.</p>
+      <div class="twoMinEntryBtnRow">
+        <button class="twoMinBigBtn" id="startBtn" disabled>▶ Play</button>
+        <button class="twoMinBigBtn twoMinBigBtnAlt" id="twoMinLbOpenBtn" type="button">🏆 Leaderboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="twoMinPanel" id="twoMinLbScreen" style="display:none;padding:0;">
+    <div class="lbCardCool" style="max-width:none;">
+      <div class="lbHeroHeader">
+        <div class="lbHeroTrophy">🏆</div>
+        <h3>2 Minute Drill Leaderboard</h3>
+        <div class="lbSub">Ranked by touchdowns, then total yards</div>
+      </div>
+      <div class="lbList" id="twoMinLbList"></div>
+      <button class="twoMinBigBtn" id="twoMinLbBackBtn" type="button">← Back</button>
+    </div>
+  </div>
+
+  <div id="gameScreen" style="display:none;">
+    <div class="twoMinHud">
+      <div id="hudClock">2:00</div>
+      <div id="hudFieldPos">Ball on your 25</div>
+      <div id="hudScore">TDs: 0</div>
+      <div id="hudStreak"></div>
+      <button class="twoMinTimeoutBtn" id="timeoutBtn" type="button">⏸️ Timeout <span id="timeoutCount">2</span></button>
+    </div>
+
+    <div class="twoMinFieldOuter" id="fieldOuter">
+      <div class="twoMinFieldMarker" id="fieldMarker"></div>
+      <div class="twoMinFieldMarkerLabel" id="fieldMarkerLabel"></div>
+    </div>
+
+    <div class="twoMinSignalStage">
+      <div id="getReadyEl">GET READY…</div>
+      <img id="signalImg" style="display:none;" alt="signal">
+      <div id="signalTextCard"></div>
+      <div class="twoMinProgress" id="signalProgress"></div>
+    </div>
+
+    <div class="twoMinChoices" id="choicesGrid"></div>
+
+    <div id="playDiagramWrap">
+      <svg id="playDiagramSvg" viewBox="0 0 100 100"></svg>
+    </div>
+  </div>
+
+  <div class="twoMinPanel" id="endScreen" style="display:none;">
+    <h2 style="margin-top:0;">⏱️ Time's Up!</h2>
+    <div id="endSummary"></div>
+    <div id="driveRecapWrap">
+      <div class="twoMinRecapTitle">Drive Recap</div>
+      <div id="driveRecap"></div>
+    </div>
+    <button class="twoMinBigBtn" id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+
+<div class="twoMinBanner" id="resultBanner"></div>
+
+<!--
+  Nathan: "have it do the police whistle with the crowd disappointed sound
+  right after it" (false start) + "have the crowd noise start playing and
+  after .6 seconds, play the Touchdown sound. Crowdnoise can be used in the
+  background throughout, then switch to the other crowd" (touchdown) --
+  scoped to this drill (separate from study-quiz.js's correct/wrong/
+  bgMusic sounds elsewhere in the app). Sequencing lives in
+  js/two-minute-drill.js's playFalseStartSfx()/playTouchdownSfx()/
+  startAmbientCrowd().
+-->
+<audio id="drillWhistleSound" preload="auto" src="assets/audio/false-start-whistle.mp3"></audio>
+<audio id="drillFalseStartCrowdSound" preload="auto" src="assets/audio/false-start-crowd.mp3"></audio>
+<audio id="drillTouchdownHornSound" preload="auto" src="assets/audio/touchdown-horn.mp3"></audio>
+<audio id="drillCrowdCheerSound" preload="auto" src="assets/audio/crowd-cheer.mp3"></audio>
+<audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
+</div>
+
 <audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
 <audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
 <audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
@@ -1653,7 +1733,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260823s';
+  const BUILD_V = '20260823u';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1717,7 +1797,7 @@ if (window.ResizeObserver) {
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }
