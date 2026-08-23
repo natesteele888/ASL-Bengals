@@ -1944,9 +1944,20 @@ function buildCard(combo) {
   // play actually goes, i.e. wing and direction have to match. Rather than
   // just silently ignoring an on-toggle in a now-illegal combo, force it
   // off and grey out the switch so it's clear why it's unavailable.
+  //
+  // Nathan (follow-up): "If you add the motion on wing left option left,
+  // then it moves the wing across, so it cancels [counter] -- but if you
+  // set a motion of wing left option right, the wing would motion to the
+  // correct side to counter correctly." Motion always sends #4 to
+  // whichever side is OPPOSITE his Wing spot before the snap (see the
+  // Motion handling in playCardAnimation) -- so what actually has to match
+  // Direction is #4's side AFTER motion runs, not his pre-motion Wing
+  // spot. With Motion off those are the same side, so nothing here changes
+  // for the no-motion case.
   function updateCounterAvailability() {
     if (!counterToggle) return;
-    const eligible = wingSide === direction;
+    const effectiveWingSide = motionOn ? (wingSide === 'Left' ? 'Right' : 'Left') : wingSide;
+    const eligible = effectiveWingSide === direction;
     const btn = counterToggle.querySelector('.switch-toggle');
     if (!eligible) {
       if (counterOn) {
