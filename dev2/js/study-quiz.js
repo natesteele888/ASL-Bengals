@@ -460,8 +460,58 @@ document.getElementById('headerLogo').addEventListener('click', ()=>{
   if(_logoTapCount >= 5){
     _logoTapCount = 0;
     clearTimeout(_logoTapTimer);
-    if(window.openCoachToolsTab) window.openCoachToolsTab('dashboard');
+    // Nathan: "give access to [the 2 Minute Drill] by clicking the logo 5
+    // times and doing the 6103 pin... this would only appear under the
+    // admin account Coach Nate." Everyone else's 5-tap keeps doing exactly
+    // what it always has -- straight to Dashboard, no PIN, no detour.
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession();
+    if (session && session.name === 'Coach Nate' && window.openDrillPinGate) {
+      window.openDrillPinGate();
+    } else if(window.openCoachToolsTab) {
+      window.openCoachToolsTab('dashboard');
+    }
   }
+});
+
+// ---- 2 Minute Drill PIN gate (Coach Nate only -- see the 5-tap handler
+// just above). Same password-gate pattern as Play Calls' pcGate (play-
+// calls.js) and Edit Plays: hash the typed PIN and compare, never store
+// or compare the plaintext. This is deliberately separate from the real
+// coach login/Coach Tools approval -- it's an extra, narrower lock so the
+// still-prototype drill doesn't show up for every approved coach, only
+// this one admin account, while it's being tested.
+const DRILL_PIN_HASH = 'a598a622f48075f13c88c0f051e4e8051bb9d8f695c581c8a3300a882f6673ab'; // sha256("6103")
+window.openDrillPinGate = function(){
+  const gate = document.getElementById('drillPinGate');
+  if (!gate) return;
+  document.getElementById('drillPinError').textContent = '';
+  document.getElementById('drillPinInput').value = '';
+  gate.classList.add('show');
+  document.getElementById('drillPinInput').focus();
+};
+function closeDrillPinGate(){
+  const gate = document.getElementById('drillPinGate');
+  if (gate) gate.classList.remove('show');
+}
+async function attemptDrillPinUnlock(){
+  const input = document.getElementById('drillPinInput');
+  const hash = window.sha256Hex ? await window.sha256Hex(input.value) : null;
+  if (hash === DRILL_PIN_HASH) {
+    closeDrillPinGate();
+    window.location.href = 'two-minute-drill-test.html';
+  } else {
+    document.getElementById('drillPinError').textContent = 'Incorrect PIN.';
+    input.value = '';
+    input.focus();
+  }
+}
+document.getElementById('drillPinSubmitBtn').addEventListener('click', attemptDrillPinUnlock);
+document.getElementById('drillPinInput').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') attemptDrillPinUnlock();
+});
+document.getElementById('drillPinDashboardBtn').addEventListener('click', () => {
+  closeDrillPinGate();
+  if (window.openCoachToolsTab) window.openCoachToolsTab('dashboard');
 });
 
 function getLeaderboard(){

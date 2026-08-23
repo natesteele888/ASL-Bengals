@@ -702,13 +702,173 @@
   }
 
   // ================================================================
-  // SECTION 4: DATA loading (no login, no auth -- see file header)
+  // SECTION 4: DATA loading (no login required to OPEN this page -- see
+  // file header -- but Nathan: "wire it in now" -- once open, it still
+  // pulls the coach's real saved play edits from the same Firebase project
+  // the main app uses, same as Play Calls does, so the drill shows the
+  // actual routes a coach has drawn instead of always the generic shipped
+  // defaults.)
   // ================================================================
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+
+  // Mirrors play-calls.js's normalizePlayData() repair pipeline (see that
+  // file for the full rationale on each piece) -- copied near-verbatim
+  // rather than depending on play-calls.js having loaded first, since this
+  // page is fully standalone. Unlike play-calls.js, where window.DATA is
+  // already populated by index.html before play-calls.js even runs, this
+  // standalone page has no guarantee anything has populated DATA until the
+  // data/plays.json fetch below resolves -- so these snapshot tables are
+  // filled in at the top of loadData(), right after that fetch, instead of
+  // at module-load time.
+  let SHIPPED_PLAY_FLAGS = {};
+  let SHIPPED_PLAY_TYPES_BY_KEY = {};
+  let SHIPPED_DUAL_SIDE_BLOCKS = {};
+
+  function repairStaleDirectionOrientation(pt) {
+    if (!pt.directions || !pt.directions.Left || !pt.directions.Right) return;
+    const isDirectionPath = (p) => p.player === 1 || p.player === 2 || p.player === 3 || p.optionLine;
+    function swapVariant(leftVariant, rightVariant) {
+      const leftMatches = (leftVariant.paths || []).filter(isDirectionPath);
+      const rightMatches = (rightVariant.paths || []).filter(isDirectionPath);
+      leftMatches.forEach(lp => {
+        const key = lp.player != null ? lp.player : 'optionLine';
+        const rp = rightMatches.find(r => (r.player != null ? r.player : 'optionLine') === key);
+        if (!rp) return;
+        const tmp = lp.points;
+        lp.points = rp.points;
+        rp.points = tmp;
+      });
+    }
+    if (pt.directions.Left.paths) {
+      swapVariant(pt.directions.Left, pt.directions.Right);
+    } else {
+      Object.keys(pt.directions.Left).forEach(subKey => {
+        const lv = pt.directions.Left[subKey];
+        const rv = pt.directions.Right[subKey];
+        if (lv && rv) swapVariant(lv, rv);
+      });
+    }
+  }
+
+  function normalizePlayData(playTypes) {
+    playTypes = playTypes || [];
+    const presentKeys = new Set(playTypes.map(pt => pt.key));
+    Object.keys(SHIPPED_PLAY_TYPES_BY_KEY).forEach(key => {
+      if (!presentKeys.has(key)) {
+        playTypes.push(JSON.parse(JSON.stringify(SHIPPED_PLAY_TYPES_BY_KEY[key])));
+      }
+    });
+    playTypes.forEach(pt => {
+      if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
+      const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
+      if (shippedFlags && shippedFlags.directionFixed && !pt.directionFixed) {
+        repairStaleDirectionOrientation(pt);
+      }
+      if (shippedFlags) Object.assign(pt, shippedFlags);
+      if (pt.hasCounter && pt.directions) {
+        ['Left', 'Right'].forEach(dirKey => {
+          const dv = pt.directions[dirKey];
+          if (dv && dv.paths) {
+            pt.directions[dirKey] = { Normal: dv, Counter: JSON.parse(JSON.stringify(dv)) };
+          }
+        });
+      }
+      if (pt.key === 'option' || pt.key === 'outside_zone') {
+        const REPAIRED_COUNTER_P4_POINTS = {
+          'option|Left': [[360, 269], [480, 360], [520, 322], [650, 230]],
+          'option|Right': [[1251, 269], [1131, 360], [1091, 322], [961, 230]],
+          'outside_zone|Left': [[360, 269], [520, 340], [700, 309], [900, 220]],
+          'outside_zone|Right': [[1251, 269], [1091, 340], [911, 309], [711, 220]],
+        };
+        ['Left', 'Right'].forEach(dirKey => {
+          const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
+          if (!counterVariant || !counterVariant.paths) return;
+          const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
+          if (idx === -1) return;
+          const points = REPAIRED_COUNTER_P4_POINTS[`${pt.key}|${dirKey}`];
+          if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
+        });
+      }
+      Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
+        const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
+        variants.forEach(variant => {
+          if (!variant) return;
+          if (variant.readKeyId === undefined) variant.readKeyId = null;
+          (variant.paths || []).forEach(p => {
+            if (p.player === undefined) p.player = null;
+            if (!p.dualSideBlock) {
+              const shipped = SHIPPED_DUAL_SIDE_BLOCKS[`${pt.key}|${dirKey}|${p.player}`];
+              if (shipped) Object.assign(p, shipped);
+            }
+          });
+        });
+      });
+    });
+    return playTypes.filter(pt => pt.key !== 'boot');
+  }
+
   async function loadData() {
     const plays = await (await fetch('data/plays.json')).json();
     DATA = plays;
+
+    // Snapshot shipped flags/full play objects/dualSideBlock capability from
+    // the shipped data we JUST loaded, before any cloud playEdits.json data
+    // (fetched next) has a chance to replace DATA.playTypes -- same
+    // ordering play-calls.js relies on, see normalizePlayData above.
+    (DATA.playTypes || []).forEach(pt => {
+      SHIPPED_PLAY_FLAGS[pt.key] = {
+        noBoot: !!pt.noBoot,
+        hasReadToggle: !!pt.hasReadToggle,
+        hasInsideOutside: !!pt.hasInsideOutside,
+        directionFixed: !!pt.directionFixed,
+        hasCounter: !!pt.hasCounter,
+      };
+      SHIPPED_PLAY_TYPES_BY_KEY[pt.key] = pt;
+      Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
+        const variants = dirVal.paths ? [dirVal] : Object.values(dirVal);
+        variants.forEach(variant => {
+          (variant && variant.paths || []).forEach(p => {
+            if (!p.dualSideBlock) return;
+            SHIPPED_DUAL_SIDE_BLOCKS[`${pt.key}|${dirKey}|${p.player}`] = {
+              dualSideBlock: true,
+              sameSidePoints: p.sameSidePoints,
+              crossPoints: p.crossPoints,
+              sameSidePoints4x4: p.sameSidePoints4x4,
+              crossPoints4x4: p.crossPoints4x4,
+            };
+          });
+        });
+      });
+    });
+
+    // Nathan: "the preview play I saw had the generic path instead of the
+    // showing the latest saved play edits" -- pull the coach's real saved
+    // edits (the same playEdits.json a coach's "Save to Cloud" in Edit
+    // Plays writes) and repair/normalize them exactly like Play Calls does,
+    // so the drill shows the SAME routes a coach is actually running. Uses
+    // window.firebaseAuthed if this page happens to have it (matching the
+    // rest of the app's read pattern), but falls straight through to a
+    // plain fetch otherwise -- either way, any failure here just leaves
+    // DATA.playTypes as the shipped defaults already loaded above, so the
+    // drill still works fine with generic routes.
     try {
-      const res = await fetch('https://aslbengals-default-rtdb.firebaseio.com/dev2PlayData/cards.json');
+      const editsUrl = (typeof window.firebaseAuthed === 'function')
+        ? await window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`)
+        : `${FIREBASE_DB_URL}/playEdits.json`;
+      const res = await fetch(editsUrl);
+      if (res.ok) {
+        const saved = await res.json();
+        if (saved) {
+          DATA.playTypes = normalizePlayData(saved);
+        }
+      }
+    } catch (e) {
+      // No network / Firebase unreachable / no saved edits yet -- generic
+      // shipped routes are already in DATA, so the drill still works.
+    }
+
+    try {
+      const res = await fetch(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`);
       if (res.ok) {
         const cards = await res.json();
         if (Array.isArray(cards)) {
