@@ -986,23 +986,49 @@
 
   function randRange(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
 
+  // Nathan: "faster you pick the better your gain" -- pickElapsedMs is the
+  // time from when choices actually became visible/clickable (end of the
+  // first signal pass, see runRound) to the moment the player clicked an
+  // answer. Answer inside SPEED_BONUS_INSTANT_MS for the full bonus, at or
+  // past SPEED_BONUS_ZERO_MS for none, linear in between.
+  const SPEED_BONUS_MAX_YARDS = 10;
+  const SPEED_BONUS_INSTANT_MS = 800;
+  const SPEED_BONUS_ZERO_MS = 6000;
+  function speedBonusYards(pickElapsedMs) {
+    if (typeof pickElapsedMs !== 'number' || !isFinite(pickElapsedMs)) return 0;
+    if (pickElapsedMs <= SPEED_BONUS_INSTANT_MS) return SPEED_BONUS_MAX_YARDS;
+    if (pickElapsedMs >= SPEED_BONUS_ZERO_MS) return 0;
+    const t = 1 - (pickElapsedMs - SPEED_BONUS_INSTANT_MS) / (SPEED_BONUS_ZERO_MS - SPEED_BONUS_INSTANT_MS);
+    return Math.round(t * SPEED_BONUS_MAX_YARDS);
+  }
+
+  // Nathan: "if it's say 4 in a row correct, out of bounds, the clock
+  // should stop" -- read as: once the streak actually reaches this many,
+  // the big-play/out-of-bounds/clock-stop result is guaranteed rather than
+  // just increasingly likely. Below this streak it's still the existing
+  // gradually-ramping probability. (state.streak is already incremented
+  // for this play by the time resolveGain runs -- see runRound.)
+  const STREAK_GUARANTEED_BIG_PLAY = 4;
+
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" + "bonus for multiple correct in a row" + "big gain
   // and get out of bounds" (all from Nathan) combined into one result:
-  function resolveGain(call) {
+  function resolveGain(call, pickElapsedMs) {
     const isPass = PASSING_PLAY_KEYS.includes(call.playKey);
     const base = isPass ? randRange(11, 22) : randRange(4, 9);
     const streakBonus = Math.min(state.streak * 2, 16); // streak counted AFTER this play increments it, see below
+    const speedBonus = speedBonusYards(pickElapsedMs);
     const bigPlayChance = (isPass ? 0.22 : 0.12) + Math.min(state.streak * 0.02, 0.15);
-    const bigPlay = Math.random() < bigPlayChance;
+    const bigPlay = state.streak >= STREAK_GUARANTEED_BIG_PLAY || Math.random() < bigPlayChance;
     const bigYards = bigPlay ? randRange(15, 35) : 0;
     return {
       isPass: isPass,
       baseYards: base,
       streakBonus: streakBonus,
+      speedBonus: speedBonus,
       bigPlay: bigPlay,
       bigYards: bigYards,
-      totalYards: base + streakBonus + bigYards,
+      totalYards: base + streakBonus + speedBonus + bigYards,
       // Out of bounds "stops the clock" -- implemented as a brief
       // window where the master countdown just doesn't tick, rather
       // than literally adding time back (see tickClock below).
@@ -1089,17 +1115,42 @@
     });
   }
 
-  const GET_READY_MS = 900;
-  const BASE_STEP_MS = 900, EXTRA_MS_PER_SIGNAL = 100;
+  // Nathan: "lets make sure it matches the speed rules of the timed quiz."
+  // Same constants/pacing formula as play-calls-quiz.js's playSequence().
+  const GET_READY_MS = 1300;
+  const BASE_STEP_MS = 950, EXTRA_MS_PER_SIGNAL = 120, MAX_LOOPS = 2;
 
+  // Tracks the in-flight signal-display timer so a new round (or an early
+  // answer) can stop a still-running background loop before it keeps
+  // touching el.signalImg/el.signalTextCard on top of whatever comes next.
+  let signalTimer = null;
+  function stopSignalSequence() {
+    if (signalTimer) { clearTimeout(signalTimer); signalTimer = null; }
+  }
+
+  // Nathan: "lets do the signals 2 times through. options visible after 1
+  // time through. faster you pick the better your gain." -- unlike the
+  // timed quiz (which reveals only after both passes), this resolves once
+  // the FIRST pass finishes so choices can appear while the signal display
+  // keeps cycling through its second pass in the background -- that
+  // background loop is what a player who wants a second look can watch
+  // while still answering as fast as they're comfortable with. Call
+  // stopSignalSequence() once the round has an answer (or ends) to halt it.
   function playSignals(signals) {
     return new Promise(resolve => {
+      stopSignalSequence();
       el.signalProgress.innerHTML = '';
+      if (!signals.length) { resolve(); return; }
       signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; el.signalProgress.appendChild(d); });
       const stepMs = BASE_STEP_MS + Math.max(0, signals.length - 4) * EXTRA_MS_PER_SIGNAL;
-      let i = 0;
+      let i = 0, loopCount = 0, revealed = false;
       function showStep() {
-        if (i >= signals.length) { resolve(); return; }
+        if (i >= signals.length) {
+          i = 0;
+          loopCount++;
+          if (!revealed) { revealed = true; resolve(); }
+          if (loopCount >= MAX_LOOPS) { signalTimer = null; return; }
+        }
         const sig = signals[i];
         // Nathan: "it cant say the name, that gives it away, just the
         // image of the signal" -- sig.label (e.g. "Wing Location: Left",
@@ -1123,10 +1174,10 @@
         }
         [...el.signalProgress.children].forEach((d, idx) => d.classList.toggle('done', idx <= i));
         i++;
-        setTimeout(showStep, stepMs);
+        signalTimer = setTimeout(showStep, stepMs);
       }
       el.getReadyEl.style.display = 'flex';
-      setTimeout(() => { el.getReadyEl.style.display = 'none'; showStep(); }, GET_READY_MS);
+      signalTimer = setTimeout(() => { el.getReadyEl.style.display = 'none'; showStep(); }, GET_READY_MS);
     });
   }
 
@@ -1173,17 +1224,27 @@
     const signals = buildSignalSequence(correctCall.playKey, correctCall.wingSide, correctCall.direction, io, correctCall.motionOn, correctCall.bootOn, correctCall.counterOn);
 
     await playSignals(signals);
-    if (!state.running) return;
+    if (!state.running) { stopSignalSequence(); return; }
 
+    // Nathan: "faster you pick the better your gain" -- the clock for the
+    // speed bonus starts the instant choices are actually visible/
+    // clickable (end of the first signal pass), not when the round began,
+    // so warm-up time and signal-playback time never count against the
+    // player. The signal display itself keeps looping through its second
+    // pass in the background (see playSignals) until stopSignalSequence()
+    // below, once an answer is in.
+    const pickStartMs = performance.now();
     const isCorrectPromise = renderChoices(choices, correctCall);
     const isCorrect = await isCorrectPromise;
+    stopSignalSequence();
     if (!state.running) return;
+    const pickElapsedMs = performance.now() - pickStartMs;
 
     if (isCorrect) {
       state.streak++;
       state.bestStreak = Math.max(state.bestStreak, state.streak);
       state.correctCount++;
-      const gain = resolveGain(correctCall);
+      const gain = resolveGain(correctCall, pickElapsedMs);
       state.totalYards += gain.totalYards;
       state.fieldPos += gain.totalYards;
       if (gain.clockPauseMs) state.clockPausedUntil = performance.now() + gain.clockPauseMs;
@@ -1295,6 +1356,8 @@
     callKey: callKey,
     forceClockMs: function (ms) { state.clockMs = ms; },
     buildSignalSequence: buildSignalSequence,
+    resolveGain: resolveGain,
+    speedBonusYards: speedBonusYards,
   };
 
   init();
