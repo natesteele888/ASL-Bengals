@@ -472,11 +472,21 @@ saveCloudBtn.addEventListener('click', async () => {
 // warning). This button does the exact same fetch+PUT from inside the app
 // itself instead -- a normal click, no console needed -- using whichever
 // coach is logged in right now's own already-authenticated session.
+//
+// Originally this read data/plays.json over the network (same-origin
+// fetch), but this repo's GitHub Pages deploy doesn't publish the data/
+// folder as a static asset -- confirmed live: manifest.json and js/*.js
+// at other paths deploy fine, data/plays.json 404s. So instead it reads
+// window.SHIPPED_PLAYS_JSON, a byte-for-byte copy of data/plays.json
+// embedded directly in js/shipped-defaults.js (a real script, deploys
+// like any other .js file). See that file's own header comment: it must
+// be regenerated any time data/plays.json changes, or this button will
+// push stale data.
 if (syncDefaultsBtn) {
   syncDefaultsBtn.addEventListener('click', async () => {
     const ok = confirm(
       'This overwrites the SHIPPED DEFAULTS in the cloud (dev2PlayData/plays.json) ' +
-      'with whatever data/plays.json is in the build currently deployed at this URL.\n\n' +
+      'with the play data baked into this build (js/shipped-defaults.js).\n\n' +
       'It does NOT touch anything saved via "Save to Cloud" -- that stays exactly as-is.\n\n' +
       'Only run this right after a deploy that changes the play data itself (a new toggle, ' +
       'a new play, restructured routes) -- not as a routine save. Continue?'
@@ -484,10 +494,8 @@ if (syncDefaultsBtn) {
     if (!ok) return;
     syncDefaultsBtn.textContent = 'Syncing…';
     try {
-      const shippedPlays = await fetch('data/plays.json').then(r => {
-        if (!r.ok) throw new Error(`Could not fetch this build's data/plays.json (HTTP ${r.status})`);
-        return r.json();
-      });
+      const shippedPlays = window.SHIPPED_PLAYS_JSON;
+      if (!shippedPlays) throw new Error('js/shipped-defaults.js did not load -- refresh the page and try again');
       const url = await window.firebaseAuthed(`${FIREBASE_URL}/dev2PlayData/plays.json`);
       const res = await fetch(url, {
         method: 'PUT',
