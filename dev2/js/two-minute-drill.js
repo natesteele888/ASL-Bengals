@@ -817,8 +817,36 @@
     return playTypes.filter(pt => pt.key !== 'boot');
   }
 
+  // Nathan: "the Start Drive button is not selectable" (after adding the
+  // playEdits.json/cards.json cloud fetches above) -- a try/catch only
+  // protects against a fetch that cleanly REJECTS (bad network, CORS
+  // failure, connection refused), but does nothing for one that just hangs
+  // and never settles at all, which real sideline wifi/cell connections can
+  // do. Since loadData() awaits each fetch in sequence, a single hung
+  // request anywhere in it means the whole function -- and the "Start
+  // Drive" button, gated on it in init() below -- never resolves, forever,
+  // with no error shown. Every fetch in loadData() now races against this
+  // timeout so the button always ends up in a real state (enabled with
+  // whatever data DID load in time) within a few seconds, never stuck.
+  const FETCH_TIMEOUT_MS = 6000;
+  function fetchWithTimeout(url, opts) {
+    return Promise.race([
+      fetch(url, opts),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out fetching ' + url)), FETCH_TIMEOUT_MS)),
+    ]);
+  }
+
   async function loadData() {
-    const plays = await (await fetch('data/plays.json')).json();
+    let plays;
+    try {
+      plays = await (await fetchWithTimeout('data/plays.json')).json();
+    } catch (e) {
+      // This one's NOT optional -- there's no play data at all without it --
+      // so surface it clearly instead of leaving init()'s generic catch to
+      // guess, and re-throw so init() still shows the loading note as an
+      // error and leaves Start Drive correctly disabled (nothing to play).
+      throw new Error('Could not load data/plays.json (' + e.message + ')');
+    }
     DATA = plays;
 
     // Snapshot shipped flags/full play objects/dualSideBlock capability from
@@ -865,7 +893,7 @@
       const editsUrl = (typeof window.firebaseAuthed === 'function')
         ? await window.firebaseAuthed(`${FIREBASE_DB_URL}/playEdits.json`)
         : `${FIREBASE_DB_URL}/playEdits.json`;
-      const res = await fetch(editsUrl);
+      const res = await fetchWithTimeout(editsUrl);
       if (res.ok) {
         const saved = await res.json();
         if (saved) {
@@ -878,7 +906,7 @@
     }
 
     try {
-      const res = await fetch(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`);
+      const res = await fetchWithTimeout(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`);
       if (res.ok) {
         const cards = await res.json();
         if (Array.isArray(cards)) {
@@ -1199,7 +1227,7 @@
       el.loadingNote.textContent = '';
       el.startBtn.disabled = false;
     } catch (e) {
-      el.loadingNote.textContent = 'Could not load data/plays.json -- check the file exists next to this page.';
+      el.loadingNote.textContent = e.message + ' -- check your connection and reload.';
     }
   }
 
