@@ -943,9 +943,26 @@
   const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" -- Option Pass is the only real drop-back pass among
-  // these 7 plays (Split's Pass toggle is a separate formation this
-  // v1 doesn't include yet -- see the note at the end of this file).
+  // these 7 plays on Wing (Split's independent Pass toggle, checked via
+  // call.passOn in resolveGain, is the other passing path -- see
+  // SPLIT_PASS_CHANCE below).
   const PASSING_PLAY_KEYS = ['option_pass'];
+  // Nathan (2026-08-24): "We also need more passing calls to move the
+  // ball such as option pass, or split formation with a pass at the
+  // end." A plain uniform pick over the 7 keys above gives Option Pass
+  // only a 1-in-7 (~14%) shot at being the base play -- weighting it 2x
+  // here roughly doubles that to ~25% without crowding out run-play
+  // variety entirely. (SPLIT_PASS_CHANCE further down is the other half
+  // of this -- Split's independent "pass at the end" toggle.)
+  const ELIGIBLE_PLAY_WEIGHTS = { option_pass: 2 };
+  function pickWeightedPlayKey() {
+    const pool = [];
+    ELIGIBLE_PLAY_KEYS.forEach(key => {
+      const weight = ELIGIBLE_PLAY_WEIGHTS[key] || 1;
+      for (let i = 0; i < weight; i++) pool.push(key);
+    });
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   // Near-miss play-type swaps for decoy generation -- conceptually
   // adjacent calls a coach could plausibly mix up (same family: two
   // zone runs, two blast variants, Option's run vs its play-action
@@ -1024,16 +1041,19 @@
   }
 
   function shortSide(side) { return side === 'Left' ? 'L' : 'R'; }
-  function shortIO(io) { return io === 'Inside' ? 'In' : 'Out'; }
 
-  // Nathan: "Do shorten play calls" -- abbreviates every modifier word
-  // (Wing/Motion/Boot/Counter/Inside/Outside, and both formations' L/R
-  // sides) instead of spelling them out, so a 4-choice grid of these
-  // reads at a glance instead of wrapping across 3 lines each.
+  // Nathan originally wanted every modifier word abbreviated here (Mo/Bt/
+  // Ctr/In/Out) so a 4-choice grid would read at a glance instead of
+  // wrapping across 3 lines each -- but later (2026-08-24) reversed that:
+  // "Don't abbreviate the answers like 'mo' for motion, it isn't
+  // obvious." Modifier words are spelled out in full below now (Motion/
+  // Inside/Outside/Boot/Counter/TW Sweep); only the Left/Right side
+  // letters stay abbreviated (L/R is a standard, unambiguous football
+  // shorthand Nathan never flagged, unlike the word fragments).
   function describeCall(call) {
     if (call.formation === 'split') {
       const parts = [`Split ${shortSide(call.splitSide)}`];
-      if (call.insideOutside) parts.push(shortIO(call.insideOutside));
+      if (call.insideOutside) parts.push(call.insideOutside);
       parts.push(playLabel(call.playKey));
       if (call.passOn) parts.push('Pass');
       // Nathan: "the routes are given at the line independent of the play
@@ -1044,13 +1064,13 @@
       return parts.join(' ');
     }
     const parts = [`Wing ${shortSide(call.wingSide)}`];
-    if (call.motionOn) parts.push('Mo');
-    if (call.insideOutside) parts.push(shortIO(call.insideOutside));
+    if (call.motionOn) parts.push('Motion');
+    if (call.insideOutside) parts.push(call.insideOutside);
     parts.push(playLabel(call.playKey));
     parts.push(shortSide(call.direction));
-    if (call.bootOn) parts.push('Bt');
-    if (call.counterOn) parts.push('Ctr');
-    if (call.twSweepOn) parts.push('TW');
+    if (call.bootOn) parts.push('Boot');
+    if (call.counterOn) parts.push('Counter');
+    if (call.twSweepOn) parts.push('TW Sweep');
     return parts.join(' ');
   }
   function callKey(call) {
@@ -1069,6 +1089,12 @@
   // Nathan: "we will run a lot of split on 2 minute drill" -- Split comes
   // up about as often as Wing, not as a rare curveball.
   const SPLIT_FORMATION_CHANCE = 0.5;
+  // Nathan (2026-08-24): "We also need more passing calls to move the
+  // ball such as option pass, or split formation with a pass at the
+  // end." Bumped from the original 0.35 -- combined with
+  // ELIGIBLE_PLAY_WEIGHTS' extra weight on Option Pass above, this is
+  // the "split formation with a pass at the end" half of that ask.
+  const SPLIT_PASS_CHANCE = 0.5;
 
   // Nathan: "Questions should be easier to start and a little harder as
   // you go." Replaces the old "full mix from play one" design (every
@@ -1100,7 +1126,7 @@
     // tier 0 -> 1/4 of the normal modifier odds, ramping up to 4/4 (the
     // original, unscaled odds) by the max tier.
     const rampFactor = (tier + 1) / (DIFFICULTY_RAMP_MAX_TIER + 1);
-    const playKey = ELIGIBLE_PLAY_KEYS[Math.floor(Math.random() * ELIGIBLE_PLAY_KEYS.length)];
+    const playKey = pickWeightedPlayKey();
     const flags = playFlags(playKey);
     if (Math.random() < SPLIT_FORMATION_CHANCE) {
       return normalizeCall({
@@ -1108,7 +1134,7 @@
         playKey: playKey,
         splitSide: randomSide(),
         insideOutside: flags.hasInsideOutside ? (Math.random() < 0.5 ? 'Inside' : 'Outside') : null,
-        passOn: Math.random() < 0.35 * rampFactor,
+        passOn: Math.random() < SPLIT_PASS_CHANCE * rampFactor,
         leftCall: randomSplitRouteCall(),
         rightCall: randomSplitRouteCall(),
       });
@@ -1570,11 +1596,20 @@
   }
 
   // Nathan: "if it's say 4 in a row correct, out of bounds, the clock
-  // should stop" -- read as: once the streak actually reaches this many,
+  // should stop" -- read as: the FIRST time the streak reaches this many,
   // the big-play/out-of-bounds/clock-stop result is guaranteed rather than
-  // just increasingly likely. Below this streak it's still the existing
-  // gradually-ramping probability. (state.streak is already incremented
-  // for this play by the time resolveGain runs -- see runRound.)
+  // just increasingly likely, as a one-time reward for hitting the hot
+  // streak. Nathan (2026-08-24) then flagged the original always-"streak
+  // >= 4" version as a real bug: "we can't go giving us consecutive 40+
+  // yard plays because they got 5 or 6 in a row" -- since streak only
+  // resets on a wrong answer, ">= 4" was guaranteeing a huge gain on
+  // EVERY play once a player got hot, compounding without limit for the
+  // rest of the drive. Changed to "=== 4" (exactly the play that crosses
+  // the threshold) so it fires once per streak, not every play after.
+  // Every other play still gets the existing gradually-ramping
+  // probability below, which stays somewhat elevated with a long streak
+  // but is never a guarantee again until the streak resets and re-earns
+  // it.
   const STREAK_GUARANTEED_BIG_PLAY = 4;
 
   // "Passing plays which are more difficult to call out will gain you
@@ -1589,7 +1624,7 @@
     const streakBonus = Math.min(state.streak * 2, 16); // streak counted AFTER this play increments it, see below
     const speedBonus = speedBonusYards(pickElapsedMs);
     const bigPlayChance = (isPass ? 0.22 : 0.12) + Math.min(state.streak * 0.02, 0.15);
-    const bigPlay = state.streak >= STREAK_GUARANTEED_BIG_PLAY || Math.random() < bigPlayChance;
+    const bigPlay = state.streak === STREAK_GUARANTEED_BIG_PLAY || Math.random() < bigPlayChance;
     const bigYards = bigPlay ? randRange(15, 35) : 0;
     return {
       isPass: isPass,

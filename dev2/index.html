@@ -4,7 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide</title>
-<link rel="stylesheet" href="css/styles.css?v=20260822l">
+<!-- IMPORTANT: this ?v= is a SEPARATE, hand-maintained version string from
+     BUILD_V further down this file -- it's a plain <link> tag parsed before
+     any JS runs (so it can't just read window.BUILD_V), which is exactly
+     why it silently drifted out of sync for a while: css/styles.css kept
+     getting edited (most recently to add the 2 Minute Drill overlay's
+     .twoMinDrillOverlay display:none/position:fixed rules) without this
+     bump, so a browser that had already cached the old stylesheet kept
+     applying pre-overlay CSS to the new overlay markup -- no display:none,
+     no position:fixed -- which rendered it as a plain inline block at
+     wherever it sits in the DOM instead of a hidden full-screen overlay
+     (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
+     the bottom of the Schedule page). Bump this by hand every time
+     css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
+<link rel="stylesheet" href="css/styles.css?v=20260823u">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">

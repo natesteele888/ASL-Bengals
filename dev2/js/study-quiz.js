@@ -442,82 +442,30 @@ function logQuizStart(kind){
 }
 
 /* ============================================================
-   COACH DASHBOARD SHORTCUT -- Nathan: "I think we could move everything
-   from the 5 button tap coach stats to a dashboard in Coach Tools." The
-   full Coach Stats view now lives in js/coachtools-dashboard.js as a real
-   Coach Tools tab (window.initCoachToolsDashboard) -- Coach Tools is
-   already hidden from everyone but an approved coach, so the old PIN gate
-   here was a redundant second lock and was dropped. The 5-tap gesture on
-   the header logo is kept as a muscle-memory shortcut, but now just jumps
-   straight to that tab instead of opening its own overlay.
+   2 MINUTE DRILL LAUNCH -- Nathan (2026-08-24): "should only be
+   accessible through the 5 clicks of the logo" -- replaces two earlier
+   designs in one move: the 3-second press-and-hold gesture this used to
+   be ("press and hold the logo for 3 seconds launches it... remove the
+   5 tap back door, make it 3 second hold for all logins") is gone, and
+   the 5-tap gesture's older job (jumping to Coach Tools > Dashboard --
+   see the removed COACH DASHBOARD SHORTCUT comment this replaced) is
+   gone too, since Coach Tools is already its own top-level nav tab now
+   and doesn't need a logo-tap muscle-memory shortcut anymore. 5 taps on
+   the header logo is now the ONE way to open the drill, no PIN, no
+   account check, same as the long-press it replaces.
    ============================================================ */
 let _logoTapCount = 0;
 let _logoTapTimer = null;
-document.getElementById('headerLogo').addEventListener('click', ()=>{
+const headerLogoEl = document.getElementById('headerLogo');
+headerLogoEl.addEventListener('click', ()=>{
   _logoTapCount++;
   clearTimeout(_logoTapTimer);
   _logoTapTimer = setTimeout(()=>{ _logoTapCount = 0; }, 3000);
   if(_logoTapCount >= 5){
     _logoTapCount = 0;
     clearTimeout(_logoTapTimer);
-    // Nathan: "give access to [the 2 Minute Drill] by clicking the logo 5
-    // times and doing the 6103 pin... this would only appear under the
-    // admin account Coach Nate." Everyone else's 5-tap keeps doing exactly
-    // what it always has -- straight to Dashboard, no PIN, no detour.
-    const session = window.PlayerIdentity && window.PlayerIdentity.getSession();
-    // Compare trimmed + case-insensitive rather than an exact literal
-    // match -- session.name is whatever text was typed at sign-in
-    // (player-identity.js), so a stray extra space or different casing
-    // would otherwise silently fall through to the Dashboard branch below
-    // with no visible error at all.
-    const isCoachNate = !!(session && session.name && session.name.trim().toLowerCase() === 'coach nate');
-    if (isCoachNate && window.openDrillPinGate) {
-      window.openDrillPinGate();
-    } else if(window.openCoachToolsTab) {
-      window.openCoachToolsTab('dashboard');
-    }
+    if(window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay();
   }
-});
-
-// ---- 2 Minute Drill PIN gate (Coach Nate only -- see the 5-tap handler
-// just above). Same password-gate pattern as Play Calls' pcGate (play-
-// calls.js) and Edit Plays: hash the typed PIN and compare, never store
-// or compare the plaintext. This is deliberately separate from the real
-// coach login/Coach Tools approval -- it's an extra, narrower lock so the
-// still-prototype drill doesn't show up for every approved coach, only
-// this one admin account, while it's being tested.
-const DRILL_PIN_HASH = 'a598a622f48075f13c88c0f051e4e8051bb9d8f695c581c8a3300a882f6673ab'; // sha256("6103")
-window.openDrillPinGate = function(){
-  const gate = document.getElementById('drillPinGate');
-  if (!gate) return;
-  document.getElementById('drillPinError').textContent = '';
-  document.getElementById('drillPinInput').value = '';
-  gate.classList.add('show');
-  document.getElementById('drillPinInput').focus();
-};
-function closeDrillPinGate(){
-  const gate = document.getElementById('drillPinGate');
-  if (gate) gate.classList.remove('show');
-}
-async function attemptDrillPinUnlock(){
-  const input = document.getElementById('drillPinInput');
-  const hash = window.sha256Hex ? await window.sha256Hex(input.value) : null;
-  if (hash === DRILL_PIN_HASH) {
-    closeDrillPinGate();
-    window.location.href = 'two-minute-drill-test.html';
-  } else {
-    document.getElementById('drillPinError').textContent = 'Incorrect PIN.';
-    input.value = '';
-    input.focus();
-  }
-}
-document.getElementById('drillPinSubmitBtn').addEventListener('click', attemptDrillPinUnlock);
-document.getElementById('drillPinInput').addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter') attemptDrillPinUnlock();
-});
-document.getElementById('drillPinDashboardBtn').addEventListener('click', () => {
-  closeDrillPinGate();
-  if (window.openCoachToolsTab) window.openCoachToolsTab('dashboard');
 });
 
 function getLeaderboard(){
