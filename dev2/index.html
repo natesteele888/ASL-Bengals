@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260823u">
+<link rel="stylesheet" href="css/styles.css?v=20260823v">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -48,7 +48,21 @@
   // without service worker support.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function(){
-      navigator.serviceWorker.register('sw.js').catch(function(e){
+      navigator.serviceWorker.register('sw.js').then(function(reg){
+        // Nathan (2026-08-24): "it started happening 2 commits ago -- 2
+        // minute drill appears everywhere as kids are signing in." Root
+        // cause was css/styles.css's hand-maintained ?v= cache-buster
+        // going stale across multiple pushes (see the comment on that
+        // <link> tag) -- but the browser also only checks whether sw.js
+        // itself changed on its own internal schedule (frequently
+        // throttled to roughly once a day), so a player's device that
+        // already had the app open, or hadn't reloaded recently, could
+        // keep serving an old cached shell for a long time even after a
+        // fix goes live. This explicitly nudges that check to happen
+        // right now, on every fresh page load, instead of waiting on the
+        // browser's own timer -- cheap and harmless if nothing changed.
+        reg.update().catch(function(){});
+      }).catch(function(e){
         console.error('Service worker registration failed:', e);
       });
     });
@@ -1746,7 +1760,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260823u';
+  const BUILD_V = '20260823v';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
