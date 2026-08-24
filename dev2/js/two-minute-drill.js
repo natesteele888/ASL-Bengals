@@ -1414,6 +1414,30 @@
           if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
         });
       }
+      // Same "stale auto-grafted clone" repair as #4 above, one level
+      // deeper for Blast -- see play-calls.js's matching block for the
+      // full rationale (Nathan: "I can't edit the TE path").
+      if (pt.key === 'blast') {
+        const REPAIRED_COUNTER_TE_POINTS = {
+          'Left|Outside': { player: 5, points: [[462, 204], [724, 438], [634.5, 155]] },
+          'Left|Inside': { player: 5, points: [[462, 204], [724, 438], [703.1, 155]] },
+          'Right|Outside': { player: 6, points: [[1149, 204], [888, 438], [976.5, 155]] },
+          'Right|Inside': { player: 6, points: [[1149, 204], [888, 438], [908.3, 155]] },
+        };
+        ['Left', 'Right'].forEach(dirKey => {
+          const dv = pt.directions && pt.directions[dirKey];
+          if (!dv) return;
+          ['Outside', 'Inside'].forEach(ioKey => {
+            const counterVariant = dv[ioKey] && dv[ioKey].Counter;
+            if (!counterVariant || !counterVariant.paths) return;
+            const repair = REPAIRED_COUNTER_TE_POINTS[`${dirKey}|${ioKey}`];
+            if (!repair) return;
+            const idx = counterVariant.paths.findIndex(p => p.player === repair.player && p.isBlocking);
+            if (idx === -1) return;
+            counterVariant.paths[idx] = { player: repair.player, ball: true, width: 9, points: JSON.parse(JSON.stringify(repair.points)) };
+          });
+        });
+      }
       Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
         const variants = collectLeafVariants(dirVal);
         variants.forEach(variant => {
