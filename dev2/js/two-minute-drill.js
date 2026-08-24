@@ -2353,11 +2353,25 @@
   // coach who closes mid-drive and long-presses again later comes right
   // back to it, same as any other minimized game.
   window.openTwoMinDrillOverlay = function () {
-    if (el.twoMinDrillOverlay) el.twoMinDrillOverlay.classList.add('show');
+    if (el.twoMinDrillOverlay) {
+      el.twoMinDrillOverlay.classList.add('show');
+      // Nathan (2026-08-24): "every single page has 2 minute drill at the
+      // bottom... remove it immediately" -- belt-and-suspenders alongside
+      // the 'show' class. Set the inline style directly too, since a
+      // stale/slow-to-update css/styles.css can otherwise leave
+      // .twoMinDrillOverlay.show with no display rule to actually apply
+      // (see the inline style="display:none" on the element itself in
+      // index.html for the other half of this fix -- it no longer depends
+      // on the external stylesheet at all).
+      el.twoMinDrillOverlay.style.display = 'block';
+    }
   };
   if (el.twoMinDrillCloseBtn) {
     el.twoMinDrillCloseBtn.addEventListener('click', () => {
-      if (el.twoMinDrillOverlay) el.twoMinDrillOverlay.classList.remove('show');
+      if (el.twoMinDrillOverlay) {
+        el.twoMinDrillOverlay.classList.remove('show');
+        el.twoMinDrillOverlay.style.display = 'none';
+      }
     });
   }
 
