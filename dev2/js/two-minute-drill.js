@@ -1074,6 +1074,17 @@
       const parts = [`Split ${shortSide(call.splitSide)}`];
       if (call.insideOutside) parts.push(call.insideOutside);
       parts.push(playLabel(call.playKey));
+      // Nathan: "many of the answers didn't include a final play call
+      // direction" -- this branch used to stop right after the play name,
+      // unlike play-calls.js's own title bar for the same Split combo,
+      // which always repeats the direction at the end ("Split Side IS the
+      // run direction... the final direction word is always appended too,
+      // and it always matches splitSide", see onComboChanged). Since Split
+      // comes up in about half of all drill rounds (SPLIT_FORMATION_CHANCE),
+      // every one of those answer choices/recap lines was silently missing
+      // its final direction while every Wing-formation one (below) already
+      // had it -- matching play-calls.js's convention exactly now.
+      parts.push(shortSide(call.splitSide));
       if (call.passOn) parts.push('Pass');
       // Nathan: "the routes are given at the line independent of the play
       // call... Answer options should never contain routes like Hou, Flo,
