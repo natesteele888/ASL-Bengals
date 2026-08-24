@@ -91,6 +91,34 @@
     for (const direction of ['Left', 'Right']) {
       yield { direction, io: def.io, rp: def.rp, boot: false, motion: true, label: `${direction} • Motion` };
     }
+
+    // Nathan: "make sure if a coach prints the play calls, it's reflective
+    // to the options we have in the play calls" -- Counter (option/
+    // outside_zone/blast, see hasCounter) is a real, coach-callable toggle
+    // in the live app (counterGroup/counterToggle in index.html, wired up
+    // in play-calls.js's onComboChanged), same as Boot/Motion above, but
+    // this generator never yielded a Counter row for any play, so the
+    // printed Sideline Playbook was silently missing every Counter diagram
+    // -- including the newly-built Blast Counter TE path. Counter is
+    // Wing-only in the live app (play-calls.js hides counterToggle whenever
+    // isSplit is true), so splitVariantList below deliberately has no
+    // matching Counter dimension -- this is not an oversight there.
+    // For a play that ALSO has In/Out (blast), Counter is layered on top of
+    // both In and Out variants, mirroring the base hasIo loop above, since
+    // a coach can toggle Counter independently of In/Out on that play.
+    if (playType.hasCounter) {
+      for (const direction of ['Left', 'Right']) {
+        if (hasIo) {
+          for (const io of ['Inside', 'Outside']) {
+            yield { direction, io, rp: null, boot: false, motion: false, counter: true, label: `${direction} • ${io} • Counter` };
+          }
+        } else if (forcedIo) {
+          yield { direction, io: forcedIo, rp: null, boot: false, motion: false, counter: true, label: `${direction} • Counter` };
+        } else {
+          yield { direction, io: null, rp: null, boot: false, motion: false, counter: true, label: `${direction} • Counter` };
+        }
+      }
+    }
   }
 
   function* splitVariantList(families) {
@@ -300,7 +328,7 @@
       const variants = [...variantList(pt)];
       drawSectionHeader(fam.label, fam.color);
       await drawRows(variants, fam.color, (v) => {
-        window.renderCardDiagram(stage, fam.key, v.direction, v.direction, null, '4x4', v.io, v.motion, v.boot, v.rp);
+        window.renderCardDiagram(stage, fam.key, v.direction, v.direction, null, '4x4', v.io, v.motion, v.boot, v.rp, v.counter);
       });
       y += SECTION_GAP;
     }

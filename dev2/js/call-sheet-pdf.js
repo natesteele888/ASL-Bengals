@@ -27,6 +27,15 @@
     motion: '#1baf7a', motionTint: '#e6f7f0',
     boot: '#e34948', bootTint: '#fdecec',
     pass: '#2a78d6', passTint: '#e9f1fb',
+    // Nathan: "make sure if a coach prints the play calls, it's reflective
+    // to the options we have in the play calls" -- Counter (Option/Outside
+    // Zone/Blast, see hasCounter in data/plays.json) is a real, coach-
+    // callable toggle in the live app (counterToggle in index.html) but
+    // this chart never mentioned it anywhere. Given its own color (distinct
+    // from Boot's red, since the two are mutually exclusive per-call and
+    // shouldn't read as the same option) so the legend dot and the play-chip
+    // badge below both key off one consistent color.
+    counter: '#6b3fa0', counterTint: '#efe7f7',
   };
 
   // Coach's chosen call-order (matches the app's own play grid, and keeps
@@ -257,17 +266,18 @@
     legendDot(MARGIN, ly, COLOR.motion, 'Motion');
     legendDot(MARGIN + 72, ly, COLOR.boot, 'Boot');
     legendDot(MARGIN + 134, ly, COLOR.pass, 'Pass');
+    legendDot(MARGIN + 196, ly, COLOR.counter, 'Counter');
     // Unicode dash glyphs (┈) aren't in jsPDF's built-in Helvetica metrics
     // and print as "%" -- draw an actual short dashed line instead.
     doc.setDrawColor(COLOR.muted);
     doc.setLineWidth(1.4);
     doc.setLineDashPattern([2, 1.6], 0);
-    doc.line(MARGIN + 192, ly - 2.5, MARGIN + 210, ly - 2.5);
+    doc.line(MARGIN + 258, ly - 2.5, MARGIN + 276, ly - 2.5);
     doc.setLineDashPattern([], 0);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(COLOR.muted);
-    doc.text('dashed = optional', MARGIN + 216, ly);
+    doc.text('dashed = optional', MARGIN + 282, ly);
 
     // Nathan: "For Blast and Double Blast -- it can either be inside or
     // outside. If just Double Blast is shown, it's inside. If they want it
@@ -287,6 +297,22 @@
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(COLOR.muted);
     doc.text('Inside by default — call "Outside Zone" right before it for the Outside variant (e.g. "Outside Zone, Blast").', MARGIN + 8, ly);
+
+    // Nathan: "make sure if a coach prints the play calls, it's reflective
+    // to the options we have in the play calls" -- same "*" note pattern
+    // as Inside/Outside just above, but for the purple "C" tag drawn on
+    // play chips below (see playGrid's hasCounter block). Counter only
+    // ever shows in the Wing band (play-calls.js hides counterToggle
+    // whenever isSplit is true), so the Split grid below intentionally has
+    // no "C" tags -- not an oversight.
+    ly += 13;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.6);
+    doc.setTextColor(COLOR.counter);
+    doc.text('C', MARGIN, ly);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(COLOR.muted);
+    doc.text('Counter available (Wing side only) — never call it together with Boot on the same play.', MARGIN + 8, ly);
 
     // ---- Shared column layout for the Wing & Split bands (fixed widths
     // so every box lines up vertically between the two bands -- Split has
@@ -419,6 +445,30 @@
           } else {
             doc.line(mcx - 3, mcy - 3, mcx + 3, mcy + 3);
             doc.line(mcx - 3, mcy + 3, mcx + 3, mcy - 3);
+          }
+
+          // Nathan: "make sure if a coach prints the play calls, it's
+          // reflective to the options we have in the play calls" -- Counter
+          // is real and callable for this play (see hasCounter, matches the
+          // "C" legend note above) but nothing on this chart said so before.
+          // Drawn bottom-LEFT (mirrored from the Boot check/X badge's
+          // top-right) rather than stacked under it -- both badges protrude
+          // slightly outside their own chip on purpose (see the Boot badge's
+          // ty = cy - 5 just above), and a second right-side badge directly
+          // under it would have collided with the NEXT row's Boot badge
+          // (which protrudes upward into that same gap). Left side has
+          // nothing else drawn, so there's no collision there.
+          // Just a presence marker, not a yes/no like Boot's check/X --
+          // there's no "Counter not allowed" state worth flagging here.
+          if (p.hasCounter) {
+            const ctw = 18, cth = 11;
+            const ctx = cx - 5, cty = cy + chipH - cth + 5;
+            doc.setFillColor(COLOR.counter);
+            doc.roundedRect(ctx, cty, ctw, cth, 5, 5, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            doc.setTextColor('#ffffff');
+            doc.text('C', ctx + ctw / 2, cty + cth / 2 + 2.4, { align: 'center' });
           }
         }
       });
