@@ -72,53 +72,273 @@ window.SHIPPED_PLAYS_JSON = {
   },
   "split": {
     "Right": {
-      "5": [463, 204],
-      "6": [1512, 204],
-      "4": [185, 269],
-      "2": [1362, 289],
-      "1": [809, 438],
-      "3": [638, 438]
+      "1": [
+        809,
+        438
+      ],
+      "2": [
+        1362,
+        289
+      ],
+      "3": [
+        638,
+        438
+      ],
+      "4": [
+        185,
+        269
+      ],
+      "5": [
+        463,
+        204
+      ],
+      "6": [
+        1512,
+        204
+      ]
     },
     "Left": {
-      "5": [98, 204],
-      "6": [1147, 204],
-      "3": [248, 269],
-      "4": [1415, 289],
-      "1": [809, 438],
-      "2": [985, 438]
+      "1": [
+        809,
+        438
+      ],
+      "2": [
+        985,
+        438
+      ],
+      "3": [
+        248,
+        269
+      ],
+      "4": [
+        1415,
+        289
+      ],
+      "5": [
+        98,
+        204
+      ],
+      "6": [
+        1147,
+        204
+      ]
     }
   },
   "splitRoutes": {
     "Right": {
       "wide": {
         "player": 6,
-        "seattle": [[1512, 204], [1515, 60], [1252, -61]],
-        "houston": [[1512, 204], [1518, -206]],
-        "florida": [[1512, 204], [1352, 338], [1195, 236]],
-        "boston": [[1512, 204], [1314, 94], [1496, 85]]
+        "seattle": [
+          [
+            1512,
+            204
+          ],
+          [
+            1515,
+            60
+          ],
+          [
+            1252,
+            -61
+          ]
+        ],
+        "houston": [
+          [
+            1512,
+            204
+          ],
+          [
+            1518,
+            -206
+          ]
+        ],
+        "florida": [
+          [
+            1512,
+            204
+          ],
+          [
+            1352,
+            338
+          ],
+          [
+            1195,
+            236
+          ]
+        ],
+        "boston": [
+          [
+            1512,
+            204
+          ],
+          [
+            1314,
+            94
+          ],
+          [
+            1496,
+            85
+          ]
+        ]
       },
       "flex": {
         "player": 2,
-        "seattle": [[1362, 289], [1523, 108], [1580, 139]],
-        "houston": [[1362, 289], [1362, 119], [1318, 103]],
-        "florida": [[1362, 289], [1370, -118]],
-        "boston": [[1362, 289], [1128, 137]]
+        "seattle": [
+          [
+            1362,
+            289
+          ],
+          [
+            1523,
+            108
+          ],
+          [
+            1580,
+            139
+          ]
+        ],
+        "houston": [
+          [
+            1362,
+            289
+          ],
+          [
+            1362,
+            119
+          ],
+          [
+            1318,
+            103
+          ]
+        ],
+        "florida": [
+          [
+            1362,
+            289
+          ],
+          [
+            1370,
+            -118
+          ]
+        ],
+        "boston": [
+          [
+            1362,
+            289
+          ],
+          [
+            1128,
+            137
+          ]
+        ]
       }
     },
     "Left": {
       "wide": {
         "player": 5,
-        "seattle": [[98, 204], [94, 45], [352, -60]],
-        "houston": [[98, 204], [94, -204]],
-        "florida": [[98, 204], [418, 237], [259, -145]],
-        "boston": [[98, 204], [296, 94], [114, 85]]
+        "seattle": [
+          [
+            98,
+            204
+          ],
+          [
+            94,
+            45
+          ],
+          [
+            352,
+            -60
+          ]
+        ],
+        "houston": [
+          [
+            98,
+            204
+          ],
+          [
+            94,
+            -204
+          ]
+        ],
+        "florida": [
+          [
+            98,
+            204
+          ],
+          [
+            418,
+            237
+          ],
+          [
+            259,
+            -145
+          ]
+        ],
+        "boston": [
+          [
+            98,
+            204
+          ],
+          [
+            296,
+            94
+          ],
+          [
+            114,
+            85
+          ]
+        ]
       },
       "flex": {
         "player": 3,
-        "seattle": [[248, 269], [88, 122], [20, 122]],
-        "houston": [[248, 269], [248, 95], [304, 75]],
-        "florida": [[248, 269], [243, -138]],
-        "boston": [[248, 269], [482, 117]]
+        "seattle": [
+          [
+            248,
+            269
+          ],
+          [
+            88,
+            122
+          ],
+          [
+            20,
+            122
+          ]
+        ],
+        "houston": [
+          [
+            248,
+            269
+          ],
+          [
+            248,
+            95
+          ],
+          [
+            304,
+            75
+          ]
+        ],
+        "florida": [
+          [
+            248,
+            269
+          ],
+          [
+            243,
+            -138
+          ]
+        ],
+        "boston": [
+          [
+            248,
+            269
+          ],
+          [
+            482,
+            117
+          ]
+        ]
       }
     }
   },
@@ -4231,10 +4451,46 @@ window.SHIPPED_PLAYS_JSON = {
                   ]
                 ],
                 "dualSideBlock": true,
-                "sameSidePoints": [[462, 204], [586.2, 2.4]],
-                "crossPoints": [[462, 204], [181.2, 101.4]],
-                "sameSidePoints4x4": [[462, 204], [496.2, 2.4]],
-                "crossPoints4x4": [[462, 204], [181.2, 101.4]],
+                "sameSidePoints": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    586.2,
+                    2.4
+                  ]
+                ],
+                "crossPoints": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    181.2,
+                    101.4
+                  ]
+                ],
+                "sameSidePoints4x4": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    496.2,
+                    2.4
+                  ]
+                ],
+                "crossPoints4x4": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    181.2,
+                    101.4
+                  ]
+                ],
                 "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
               },
               {
@@ -4743,10 +4999,46 @@ window.SHIPPED_PLAYS_JSON = {
                   ]
                 ],
                 "dualSideBlock": true,
-                "sameSidePoints": [[462, 204], [586.2, 2.4]],
-                "crossPoints": [[462, 204], [181.2, 101.4]],
-                "sameSidePoints4x4": [[462, 204], [496.2, 2.4]],
-                "crossPoints4x4": [[462, 204], [181.2, 101.4]],
+                "sameSidePoints": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    586.2,
+                    2.4
+                  ]
+                ],
+                "crossPoints": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    181.2,
+                    101.4
+                  ]
+                ],
+                "sameSidePoints4x4": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    496.2,
+                    2.4
+                  ]
+                ],
+                "crossPoints4x4": [
+                  [
+                    462,
+                    204
+                  ],
+                  [
+                    181.2,
+                    101.4
+                  ]
+                ],
                 "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
               },
               {
@@ -5394,10 +5686,46 @@ window.SHIPPED_PLAYS_JSON = {
                   ]
                 ],
                 "dualSideBlock": true,
-                "sameSidePoints": [[1149, 204], [1023.9, 2.4]],
-                "crossPoints": [[1149, 204], [1428.9, 101.4]],
-                "sameSidePoints4x4": [[1149, 204], [1104.9, 2.4]],
-                "crossPoints4x4": [[1149, 204], [1428.9, 101.4]],
+                "sameSidePoints": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1023.9,
+                    2.4
+                  ]
+                ],
+                "crossPoints": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1428.9,
+                    101.4
+                  ]
+                ],
+                "sameSidePoints4x4": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1104.9,
+                    2.4
+                  ]
+                ],
+                "crossPoints4x4": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1428.9,
+                    101.4
+                  ]
+                ],
                 "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
               },
               {
@@ -5906,10 +6234,46 @@ window.SHIPPED_PLAYS_JSON = {
                   ]
                 ],
                 "dualSideBlock": true,
-                "sameSidePoints": [[1149, 204], [1023.9, 2.4]],
-                "crossPoints": [[1149, 204], [1428.9, 101.4]],
-                "sameSidePoints4x4": [[1149, 204], [1104.9, 2.4]],
-                "crossPoints4x4": [[1149, 204], [1428.9, 101.4]],
+                "sameSidePoints": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1023.9,
+                    2.4
+                  ]
+                ],
+                "crossPoints": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1428.9,
+                    101.4
+                  ]
+                ],
+                "sameSidePoints4x4": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1104.9,
+                    2.4
+                  ]
+                ],
+                "crossPoints4x4": [
+                  [
+                    1149,
+                    204
+                  ],
+                  [
+                    1428.9,
+                    101.4
+                  ]
+                ],
                 "crossNote": "Reads the LB stacked behind the DE -- blocks him if he's there, otherwise works out to the CB"
               },
               {
@@ -6044,1990 +6408,3952 @@ window.SHIPPED_PLAYS_JSON = {
       "directions": {
         "Left": {
           "Outside": {
-            "defense": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  600,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -20
-                ],
-                "label": "LB",
-                "id": "MLB",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1010,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  650,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              },
-              {
-                "pos": [
-                  960,
-                  -190
-                ],
-                "label": "S",
-                "id": "SS",
-                "extra": true
-              }
-            ],
-            "readKeyId": null,
-            "paths": [
-              {
-                "player": 3,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    638,
-                    438
+            "Normal": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    638,
-                    200
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    619,
-                    70
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
                     600,
                     -20
-                  ]
-                ],
-                "lineThenCurve": true
-              },
-              {
-                "player": 2,
-                "ball": true,
-                "width": 9,
-                "points": [
-                  [
-                    985,
-                    438
                   ],
-                  [
-                    793,
-                    355
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
                   ],
-                  [
-                    634.5,
-                    155
-                  ]
-                ]
-              },
-              {
-                "player": 1,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    809,
-                    438
-                  ],
-                  [
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
                     1010,
-                    400
+                    -20
                   ],
-                  [
-                    1160,
-                    280
-                  ]
-                ]
-              },
-              {
-                "player": 5,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    462,
-                    204
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    462,
-                    204
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    577,
-                    204
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
                   ],
-                  [
-                    450.1,
-                    119.39999999999999
-                  ]
-                ],
-                "id": "LT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    577,
-                    204
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
                   ],
-                  [
-                    507.7,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    692,
-                    204
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      638,
+                      438
+                    ],
+                    [
+                      638,
+                      200
+                    ],
+                    [
+                      619,
+                      70
+                    ],
+                    [
+                      600,
+                      -20
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 2,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      985,
+                      438
+                    ],
+                    [
+                      793,
+                      355
+                    ],
+                    [
+                      634.5,
+                      155
+                    ]
                   ]
-                ],
-                "id": "LG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      809,
+                      438
+                    ],
+                    [
+                      1010,
+                      400
+                    ],
+                    [
+                      1160,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    806,
-                    144
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "C",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    890.6,
-                    2.4000000000000057
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    921,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "RG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    921,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1035,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
                   ],
-                  [
-                    1131,
-                    143
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "RT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1035,
-                    204
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    1093.5,
-                    2.4000000000000057
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 6,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1149,
-                    204
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1149,
-                    204
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": 4,
-                "ball": false,
-                "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
-                  [
-                    0,
-                    0
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    156,
-                    -188
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
-                    156,
-                    -188
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            },
+            "Counter": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1010,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      638,
+                      438
+                    ],
+                    [
+                      638,
+                      200
+                    ],
+                    [
+                      619,
+                      70
+                    ],
+                    [
+                      600,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      985,
+                      438
+                    ],
+                    [
+                      793,
+                      355
+                    ],
+                    [
+                      634.5,
+                      155
+                    ]
                   ]
-                ]
-              }
-            ],
-            "defense4x4": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  500,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB1",
-                "extra": true
-              },
-              {
-                "pos": [
-                  700,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB2",
-                "extra": true
-              },
-              {
-                "pos": [
-                  900,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB3",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1100,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB4",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              }
-            ]
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      809,
+                      438
+                    ],
+                    [
+                      1010,
+                      400
+                    ],
+                    [
+                      1160,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
+                  ],
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
+                  ],
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
+                  ],
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      724,
+                      438
+                    ],
+                    [
+                      634.5,
+                      155
+                    ]
+                  ]
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            }
           },
           "Inside": {
-            "defense": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  600,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -20
-                ],
-                "label": "LB",
-                "id": "MLB",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1010,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  650,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              },
-              {
-                "pos": [
-                  960,
-                  -190
-                ],
-                "label": "S",
-                "id": "SS",
-                "extra": true
-              }
-            ],
-            "readKeyId": null,
-            "paths": [
-              {
-                "player": 3,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    638,
-                    438
+            "Normal": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    638,
-                    200
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    619,
-                    70
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
                     600,
                     -20
-                  ]
-                ],
-                "lineThenCurve": true
-              },
-              {
-                "player": 2,
-                "ball": true,
-                "width": 9,
-                "points": [
-                  [
-                    985,
-                    438
                   ],
-                  [
-                    793,
-                    355
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
                   ],
-                  [
-                    703.1,
-                    155
-                  ]
-                ]
-              },
-              {
-                "player": 1,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    809,
-                    438
-                  ],
-                  [
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
                     1010,
-                    400
+                    -20
                   ],
-                  [
-                    1160,
-                    280
-                  ]
-                ]
-              },
-              {
-                "player": 5,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    462,
-                    204
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    462,
-                    204
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    577,
-                    204
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
                   ],
-                  [
-                    450.1,
-                    119.39999999999999
-                  ]
-                ],
-                "id": "LT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    577,
-                    204
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
                   ],
-                  [
-                    507.7,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    692,
-                    204
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      638,
+                      438
+                    ],
+                    [
+                      638,
+                      200
+                    ],
+                    [
+                      619,
+                      70
+                    ],
+                    [
+                      600,
+                      -20
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 2,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      985,
+                      438
+                    ],
+                    [
+                      793,
+                      355
+                    ],
+                    [
+                      703.1,
+                      155
+                    ]
                   ]
-                ],
-                "id": "LG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      809,
+                      438
+                    ],
+                    [
+                      1010,
+                      400
+                    ],
+                    [
+                      1160,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    806,
-                    144
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "C",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    890.6,
-                    2.4000000000000057
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    921,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "RG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    921,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1035,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
                   ],
-                  [
-                    1131,
-                    143
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "RT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1035,
-                    204
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    1093.5,
-                    2.4000000000000057
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 6,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1149,
-                    204
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1149,
-                    204
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": 4,
-                "ball": false,
-                "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
-                  [
-                    0,
-                    0
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    156,
-                    -188
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
-                    156,
-                    -188
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            },
+            "Counter": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1010,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      638,
+                      438
+                    ],
+                    [
+                      638,
+                      200
+                    ],
+                    [
+                      619,
+                      70
+                    ],
+                    [
+                      600,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      985,
+                      438
+                    ],
+                    [
+                      793,
+                      355
+                    ],
+                    [
+                      703.1,
+                      155
+                    ]
                   ]
-                ]
-              }
-            ],
-            "defense4x4": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  500,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB1",
-                "extra": true
-              },
-              {
-                "pos": [
-                  700,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB2",
-                "extra": true
-              },
-              {
-                "pos": [
-                  900,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB3",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1100,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB4",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              }
-            ]
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      809,
+                      438
+                    ],
+                    [
+                      1010,
+                      400
+                    ],
+                    [
+                      1160,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
+                  ],
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
+                  ],
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
+                  ],
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      724,
+                      438
+                    ],
+                    [
+                      703.1,
+                      155
+                    ]
+                  ]
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            }
           }
         },
         "Right": {
           "Outside": {
-            "defense": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  600,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -20
-                ],
-                "label": "LB",
-                "id": "MLB",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1011,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  650,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              },
-              {
-                "pos": [
-                  960,
-                  -190
-                ],
-                "label": "S",
-                "id": "SS",
-                "extra": true
-              }
-            ],
-            "readKeyId": null,
-            "paths": [
-              {
-                "player": 2,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    973,
-                    438
+            "Normal": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    973,
-                    200
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    992,
-                    70
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
                     1011,
                     -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      973,
+                      438
+                    ],
+                    [
+                      973,
+                      200
+                    ],
+                    [
+                      992,
+                      70
+                    ],
+                    [
+                      1011,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 3,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      626,
+                      438
+                    ],
+                    [
+                      818,
+                      355
+                    ],
+                    [
+                      976.5,
+                      155
+                    ]
                   ]
-                ],
-                "lineThenCurve": true
-              },
-              {
-                "player": 3,
-                "ball": true,
-                "width": 9,
-                "points": [
-                  [
-                    626,
-                    438
-                  ],
-                  [
-                    818,
-                    355
-                  ],
-                  [
-                    976.5,
-                    155
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      802,
+                      438
+                    ],
+                    [
+                      601,
+                      400
+                    ],
+                    [
+                      451,
+                      280
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 1,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    802,
-                    438
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    601,
-                    400
-                  ],
-                  [
-                    451,
-                    280
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 5,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    462,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    462,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    577,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
                   ],
-                  [
-                    450.1,
-                    119.39999999999999
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "LT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    577,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    507.7,
-                    2.4000000000000057
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "LG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    806,
-                    144
-                  ]
-                ],
-                "id": "C",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    806,
-                    204
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    890.6,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    921,
-                    204
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
                   ]
-                ],
-                "id": "RG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    921,
-                    204
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1035,
-                    204
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    1131,
-                    143
-                  ]
-                ],
-                "id": "RT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1035,
-                    204
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
-                    1093.5,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": 6,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1149,
-                    204
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1149,
-                    204
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": 4,
-                "ball": false,
-                "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
                   ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
                   ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            },
+            "Counter": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1011,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      973,
+                      438
+                    ],
+                    [
+                      973,
+                      200
+                    ],
+                    [
+                      992,
+                      70
+                    ],
+                    [
+                      1011,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      626,
+                      438
+                    ],
+                    [
+                      818,
+                      355
+                    ],
+                    [
+                      976.5,
+                      155
+                    ]
                   ]
-                ]
-              }
-            ],
-            "defense4x4": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  500,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB1",
-                "extra": true
-              },
-              {
-                "pos": [
-                  700,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB2",
-                "extra": true
-              },
-              {
-                "pos": [
-                  900,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB3",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1100,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB4",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              }
-            ]
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      802,
+                      438
+                    ],
+                    [
+                      601,
+                      400
+                    ],
+                    [
+                      451,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
+                  ],
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
+                  ],
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
+                  ],
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
+                  ],
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
+                  ]
+                },
+                {
+                  "player": 6,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      888,
+                      438
+                    ],
+                    [
+                      976.5,
+                      155
+                    ]
+                  ]
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            }
           },
           "Inside": {
-            "defense": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  600,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -20
-                ],
-                "label": "LB",
-                "id": "MLB",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1011,
-                  -20
-                ],
-                "label": "LB",
-                "id": "OLB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  650,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              },
-              {
-                "pos": [
-                  960,
-                  -190
-                ],
-                "label": "S",
-                "id": "SS",
-                "extra": true
-              }
-            ],
-            "readKeyId": null,
-            "paths": [
-              {
-                "player": 2,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    973,
-                    438
+            "Normal": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    973,
-                    200
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    992,
-                    70
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
                     1011,
                     -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      973,
+                      438
+                    ],
+                    [
+                      973,
+                      200
+                    ],
+                    [
+                      992,
+                      70
+                    ],
+                    [
+                      1011,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 3,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      626,
+                      438
+                    ],
+                    [
+                      818,
+                      355
+                    ],
+                    [
+                      908.3,
+                      155
+                    ]
                   ]
-                ],
-                "lineThenCurve": true
-              },
-              {
-                "player": 3,
-                "ball": true,
-                "width": 9,
-                "points": [
-                  [
-                    626,
-                    438
-                  ],
-                  [
-                    818,
-                    355
-                  ],
-                  [
-                    908.3,
-                    155
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      802,
+                      438
+                    ],
+                    [
+                      601,
+                      400
+                    ],
+                    [
+                      451,
+                      280
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 1,
-                "ball": false,
-                "width": 9,
-                "points": [
-                  [
-                    802,
-                    438
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    601,
-                    400
-                  ],
-                  [
-                    451,
-                    280
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": 5,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    462,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    462,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    438.6,
-                    119.39999999999999
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    577,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
                   ],
-                  [
-                    450.1,
-                    119.39999999999999
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "LT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    577,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    507.7,
-                    2.4000000000000057
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
                   ]
-                ],
-                "id": "LG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    692,
-                    204
+                },
+                {
+                  "player": 6,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ],
-                  [
-                    665,
-                    119.39999999999999
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      1179.6,
+                      119.39999999999999
+                    ]
                   ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    806,
-                    204
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    806,
-                    144
-                  ]
-                ],
-                "id": "C",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    806,
-                    204
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
                   ],
-                  [
-                    890.6,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    921,
-                    204
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
                   ]
-                ],
-                "id": "RG",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    921,
-                    204
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
                   ],
-                  [
-                    946.2,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": null,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1035,
-                    204
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
                   ],
-                  [
-                    1131,
-                    143
-                  ]
-                ],
-                "id": "RT",
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1035,
-                    204
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
                   ],
-                  [
-                    1093.5,
-                    2.4000000000000057
-                  ]
-                ]
-              },
-              {
-                "player": 6,
-                "ball": false,
-                "width": 7,
-                "points": [
-                  [
-                    1149,
-                    204
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ],
-                "isBlocking": true,
-                "points4x4": [
-                  [
-                    1149,
-                    204
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
                   ],
-                  [
-                    1179.6,
-                    119.39999999999999
-                  ]
-                ]
-              },
-              {
-                "player": 4,
-                "ball": false,
-                "width": 7,
-                "blockRelative": true,
-                "isBlocking": true,
-                "sameSidePoints": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "crossPoints": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
                   ],
-                  [
-                    156,
-                    -188
-                  ]
-                ],
-                "sameSidePoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
                   ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
-                  ]
-                ],
-                "crossPoints4x4": [
-                  [
-                    0,
-                    0
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
                   ],
-                  [
-                    135.8499999999999,
-                    -116.35000000000002
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            },
+            "Counter": {
+              "defense": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    600,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "MLB",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1011,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "OLB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    650,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    960,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "SS",
+                  "extra": true
+                }
+              ],
+              "readKeyId": null,
+              "paths": [
+                {
+                  "player": 2,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      973,
+                      438
+                    ],
+                    [
+                      973,
+                      200
+                    ],
+                    [
+                      992,
+                      70
+                    ],
+                    [
+                      1011,
+                      -20
+                    ]
+                  ],
+                  "lineThenCurve": true
+                },
+                {
+                  "player": 3,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      626,
+                      438
+                    ],
+                    [
+                      818,
+                      355
+                    ],
+                    [
+                      908.3,
+                      155
+                    ]
                   ]
-                ]
-              }
-            ],
-            "defense4x4": [
-              {
-                "pos": [
-                  436,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_L"
-              },
-              {
-                "pos": [
-                  662,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_L"
-              },
-              {
-                "pos": [
-                  949,
-                  110
-                ],
-                "label": "DT",
-                "id": "DT_R"
-              },
-              {
-                "pos": [
-                  1183,
-                  110
-                ],
-                "label": "DE",
-                "id": "DE_R"
-              },
-              {
-                "pos": [
-                  500,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB1",
-                "extra": true
-              },
-              {
-                "pos": [
-                  700,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB2",
-                "extra": true
-              },
-              {
-                "pos": [
-                  900,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB3",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1100,
-                  -20
-                ],
-                "label": "LB",
-                "id": "LB4",
-                "extra": true
-              },
-              {
-                "pos": [
-                  150,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_L",
-                "extra": true
-              },
-              {
-                "pos": [
-                  1460,
-                  90
-                ],
-                "label": "CB",
-                "id": "CB_R",
-                "extra": true
-              },
-              {
-                "pos": [
-                  805,
-                  -190
-                ],
-                "label": "S",
-                "id": "FS",
-                "extra": true
-              }
-            ]
+                },
+                {
+                  "player": 1,
+                  "ball": false,
+                  "width": 9,
+                  "points": [
+                    [
+                      802,
+                      438
+                    ],
+                    [
+                      601,
+                      400
+                    ],
+                    [
+                      451,
+                      280
+                    ]
+                  ]
+                },
+                {
+                  "player": 5,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
+                  ],
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      462,
+                      204
+                    ],
+                    [
+                      438.6,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      450.1,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      577,
+                      204
+                    ],
+                    [
+                      507.7,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "LG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      692,
+                      204
+                    ],
+                    [
+                      665,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      806,
+                      144
+                    ]
+                  ],
+                  "id": "C",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      806,
+                      204
+                    ],
+                    [
+                      890.6,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ],
+                  "id": "RG",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      921,
+                      204
+                    ],
+                    [
+                      946.2,
+                      119.39999999999999
+                    ]
+                  ]
+                },
+                {
+                  "player": null,
+                  "ball": false,
+                  "width": 7,
+                  "points": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1131,
+                      143
+                    ]
+                  ],
+                  "id": "RT",
+                  "isBlocking": true,
+                  "points4x4": [
+                    [
+                      1035,
+                      204
+                    ],
+                    [
+                      1093.5,
+                      2.4000000000000057
+                    ]
+                  ]
+                },
+                {
+                  "player": 4,
+                  "ball": false,
+                  "width": 7,
+                  "blockRelative": true,
+                  "isBlocking": true,
+                  "sameSidePoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "crossPoints": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      156,
+                      -188
+                    ]
+                  ],
+                  "sameSidePoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
+                  ],
+                  "crossPoints4x4": [
+                    [
+                      0,
+                      0
+                    ],
+                    [
+                      135.8499999999999,
+                      -116.35000000000002
+                    ]
+                  ]
+                },
+                {
+                  "player": 6,
+                  "ball": true,
+                  "width": 9,
+                  "points": [
+                    [
+                      1149,
+                      204
+                    ],
+                    [
+                      888,
+                      438
+                    ],
+                    [
+                      908.3,
+                      155
+                    ]
+                  ]
+                }
+              ],
+              "defense4x4": [
+                {
+                  "pos": [
+                    436,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_L"
+                },
+                {
+                  "pos": [
+                    662,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_L"
+                },
+                {
+                  "pos": [
+                    949,
+                    110
+                  ],
+                  "label": "DT",
+                  "id": "DT_R"
+                },
+                {
+                  "pos": [
+                    1183,
+                    110
+                  ],
+                  "label": "DE",
+                  "id": "DE_R"
+                },
+                {
+                  "pos": [
+                    500,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB1",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    700,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB2",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    900,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB3",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1100,
+                    -20
+                  ],
+                  "label": "LB",
+                  "id": "LB4",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    150,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_L",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    1460,
+                    90
+                  ],
+                  "label": "CB",
+                  "id": "CB_R",
+                  "extra": true
+                },
+                {
+                  "pos": [
+                    805,
+                    -190
+                  ],
+                  "label": "S",
+                  "id": "FS",
+                  "extra": true
+                }
+              ]
+            }
           }
         }
       },
-      "hasInsideOutside": true
+      "hasInsideOutside": true,
+      "hasCounter": true,
+      "counterAwayFromWing": true
     },
     {
       "key": "double_blast",

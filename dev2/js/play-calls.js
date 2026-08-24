@@ -33,6 +33,13 @@ const SHIPPED_PLAY_FLAGS = {};
     // real stored sub-variant under each direction (Normal/Counter),
     // authored in Edit Plays, not a runtime swap. See getVariant below.
     hasCounter: !!pt.hasCounter,
+    // Nathan (2026-08-24): Blast's own Counter (the TE takes the handoff
+    // instead of #4 cutting back) has the OPPOSITE legality rule from
+    // Option/Outside Zone's: the ball has to run AWAY from wherever #4 is,
+    // not toward him -- see updateCounterAvailability below, which branches
+    // on this flag instead of assuming every hasCounter play uses the same
+    // same-side rule.
+    counterAwayFromWing: !!pt.counterAwayFromWing,
   };
 });
 
@@ -96,6 +103,21 @@ function repairStaleDirectionOrientation(pt) {
   }
 }
 
+// A direction node can be nested one OR two levels deep before you reach an
+// actual {defense,paths,...} variant -- just hasCounter (Option/Outside
+// Zone: direction -> {Normal,Counter}), just hasInsideOutside (most other
+// plays: direction -> {Outside,Inside}), both at once (Blast, since its own
+// Counter shipped: direction -> {Outside,Inside} -> {Normal,Counter}), or
+// neither (a plain direction -> {defense,paths,...}). Recursing until a
+// node actually has .paths, instead of assuming a fixed nesting depth,
+// means this keeps working the next time some other play stacks a second
+// toggle the way Blast just did.
+function collectLeafVariants(node) {
+  if (!node) return [];
+  if (node.paths) return [node];
+  return Object.values(node).flatMap(collectLeafVariants);
+}
+
 // Same problem, one level deeper: a path can gain a brand-new BLOCKING
 // CAPABILITY (like the Option play's playside TE splitting into a same-
 // side/cross-side target instead of always blocking the backside DE) --
@@ -110,7 +132,7 @@ function repairStaleDirectionOrientation(pt) {
 const SHIPPED_DUAL_SIDE_BLOCKS = {};
 (window.DATA.playTypes || []).forEach(pt => {
   Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
-    const variants = dirVal.paths ? [dirVal] : Object.values(dirVal);
+    const variants = collectLeafVariants(dirVal);
     variants.forEach(variant => {
       (variant && variant.paths || []).forEach(p => {
         if (!p.dualSideBlock) return;
@@ -197,6 +219,20 @@ function normalizePlayData(playTypes) {
         const dv = pt.directions[dirKey];
         if (dv && dv.paths) {
           pt.directions[dirKey] = { Normal: dv, Counter: JSON.parse(JSON.stringify(dv)) };
+        } else if (dv && pt.hasInsideOutside) {
+          // Blast is the first play to combine hasInsideOutside with
+          // hasCounter -- its direction node isn't {defense,paths,...}
+          // directly, it's {Outside:{...}, Inside:{...}}, so Normal/Counter
+          // has to nest one level deeper, under each In/Out sub-variant,
+          // not directly under the direction like Option/Outside Zone
+          // above. Same graft, same "never touches an already-nested
+          // sub-variant" guard, just at the right depth for this shape.
+          ['Outside', 'Inside'].forEach(ioKey => {
+            const iov = dv[ioKey];
+            if (iov && iov.paths) {
+              dv[ioKey] = { Normal: iov, Counter: JSON.parse(JSON.stringify(iov)) };
+            }
+          });
         }
       });
     }
@@ -236,7 +272,7 @@ function normalizePlayData(playTypes) {
       });
     }
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
-      const variants = (dirVal.paths) ? [dirVal] : Object.values(dirVal);
+      const variants = collectLeafVariants(dirVal);
       variants.forEach(variant => {
         if (!variant) return;
         if (variant.readKeyId === undefined) variant.readKeyId = null;
@@ -570,7 +606,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1979,7 +2015,17 @@ function buildCard(combo) {
   function updateCounterAvailability() {
     if (!counterToggle) return;
     const effectiveWingSide = motionOn ? (wingSide === 'Left' ? 'Right' : 'Left') : wingSide;
-    const eligible = effectiveWingSide === direction && !bootOn;
+    // Nathan (2026-08-24), on Blast's own Counter (the TE takes the
+    // handoff instead of #4 cutting back): "the ball has to be run away
+    // from the 4. If the 4 is set to be in motion on the play, motioning
+    // to the correct side, then the counter should be an option to turn
+    // on." That's the OPPOSITE of Option/Outside Zone's rule just above
+    // (wing and direction must match) -- combo.counterAwayFromWing flips
+    // the comparison for any play that opts into it instead of assuming
+    // every hasCounter play wants the same-side rule.
+    const eligible = combo.counterAwayFromWing
+      ? (effectiveWingSide !== direction && !bootOn)
+      : (effectiveWingSide === direction && !bootOn);
     const btn = counterToggle.querySelector('.switch-toggle');
     if (!eligible) {
       if (counterOn) {

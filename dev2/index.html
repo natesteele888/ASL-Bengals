@@ -1609,15 +1609,27 @@
   cache-busted css/styles.css (see that <link> tag's own comment above)
   instead of here in index.html. A device that hasn't yet picked up the
   latest css/styles.css?v= can render this markup as a plain inline block
-  no matter how many times the CSS file itself gets fixed. Belt-and-
-  suspenders fix: an inline style="display:none" ships the hidden state
-  as part of index.html itself now, governed by the SAME BUILD_V/
-  CACHE_NAME versioning as the JS -- it can no longer depend on
-  css/styles.css loading, loading in time, or being fresh at all. See the
-  matching style.display toggles in openTwoMinDrillOverlay() and the
-  close-button handler in js/two-minute-drill.js.
+  no matter how many times the CSS file itself gets fixed.
+
+  Follow-up from Nathan the same day: "if I tap 5 times it adds it to the
+  bottom of the pages and not opened as its open experience like it
+  should" -- the first round of this fix only inlined display:none/block,
+  which stopped the un-hidden-block problem but a device still on stale
+  CSS would then open the drill as a plain in-flow block instead of the
+  full-screen modal it's supposed to be, because position:fixed/inset/
+  z-index/overflow/background all still lived ONLY in css/styles.css too.
+  Fix: every property that makes this render as a proper full-screen
+  overlay (not just whether it's visible) is now inlined here directly,
+  permanently -- not toggled, always present -- so the drill's entire
+  "open experience" no longer depends on css/styles.css loading, loading
+  in time, or being fresh at all. Only display: none/block still toggles
+  (see openTwoMinDrillOverlay() and the close-button handler in
+  js/two-minute-drill.js) to open/close it; #f4f2ee below is a literal
+  copy of the --paper CSS variable's current value, hardcoded rather than
+  referenced, so this doesn't even depend on :root's custom properties
+  being loaded.
 -->
-<div class="twoMinDrillOverlay" id="twoMinDrillOverlay" style="display:none;">
+<div class="twoMinDrillOverlay" id="twoMinDrillOverlay" style="display:none; position:fixed; inset:0; z-index:1900; overflow-y:auto; background:#f4f2ee;">
 <div class="twoMinWrap">
   <button class="lbXClose" id="twoMinDrillCloseBtn" aria-label="Close">&times;</button>
   <div class="twoMinHeader">
@@ -1776,7 +1788,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824a';
+  const BUILD_V = '20260824b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

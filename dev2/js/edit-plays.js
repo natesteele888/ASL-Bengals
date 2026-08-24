@@ -354,8 +354,13 @@ function sanitizeBlockingDistances(playTypes) {
       // a THIRD kind of sub-variant (hasCounter's Normal/Counter) that
       // hardcoded chain didn't know about -- Object.values() here reaches
       // whatever sub-variant keys actually exist, regardless of which flag
-      // put them there.
-      const variants = dirData.paths ? [dirData] : Object.values(dirData).filter(Boolean);
+      // put them there. Only went one level deep though, which silently
+      // stopped sanitizing Blast's blocking the moment it stacked a SECOND
+      // sub-variant on top of its existing hasInsideOutside (Outside/Inside
+      // -> Normal/Counter, once Blast got its own Counter 2026-08-24) --
+      // recursing via play-calls.js's collectLeafVariants (global, shared)
+      // instead of a fixed-depth unwrap fixes that and any future stack.
+      const variants = collectLeafVariants(dirData);
       variants.forEach(variant => {
         (variant.paths || []).forEach(p => {
           if (!p.isBlocking) return;
