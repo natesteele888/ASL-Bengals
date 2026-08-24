@@ -1417,10 +1417,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     position: relative;
   }
 #editPlaysMode .diagram-card svg { width: 100%; height: auto; display: block; }
-#editPlaysMode .corner-control {
+#editPlaysMode .corner-controls-stack {
     position: absolute;
     top: 12px;
     right: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    z-index: 5;
+  }
+#editPlaysMode .corner-control {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1428,7 +1435,6 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     border: 1px solid #ddd;
     border-radius: 6px;
     padding: 3px 6px;
-    z-index: 5;
   }
 #editPlaysMode .corner-control label {
     font-size: 9px;
@@ -2037,4 +2043,147 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playerCardGamesTable td.playerCardGameOpp { text-align: left; font-weight: 700; }
 .playerCardGamesTable td.playerCardDash { color: var(--muted); }
 [data-theme="dark"] .playerCardGamesTable td { border-color: var(--line); color: var(--ink); }
+
+/* ===== 2 Minute Drill -- in-app overlay (Nathan, 2026-08-23): "press and
+   hold the logo for 3 seconds launches it." Ported from the standalone
+   two-minute-drill-test.html prototype's own <style> block into a real
+   full-screen overlay, same position:fixed;inset:0 pattern as
+   .gameDaySplashOverlay/.cancelNoticeOverlay. See js/two-minute-drill.js
+   for the game logic and index.html for the markup. ===== */
+.twoMinDrillOverlay { position: fixed; inset: 0; z-index: 1900; display: none; overflow-y: auto; background: var(--paper); }
+.twoMinDrillOverlay.show { display: block; }
+.twoMinWrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
+.twoMinHeader { text-align: center; margin-bottom: 6px; padding-right: 30px; }
+.twoMinHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+.twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
+
+/* ---- start / end screens ---- */
+.twoMinPanel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 18px; text-align: center; }
+.twoMinPanel p { font-size: 14px; line-height: 1.5; color: var(--ink); opacity: .85; }
+.twoMinBigBtn { display: inline-block; margin-top: 10px; padding: 14px 28px; border: none; border-radius: 12px;
+  background: var(--bengal-orange); color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; }
+.twoMinBigBtn:disabled { opacity: .5; cursor: default; }
+.twoMinBigBtn:active:not(:disabled) { transform: scale(.97); }
+.twoMinEndStat { font-size: 15px; margin: 6px 0; }
+/* Nathan: "At the end of the game, have a drive recap." -- a scrollable
+   play-by-play list under the summary stats, one row per resolved round
+   (gain/touchdown/false start/delay of game), oldest first. */
+#driveRecapWrap { text-align: left; margin: 16px 0 6px; }
+.twoMinRecapTitle { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 6px; }
+#driveRecap { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); }
+.twoMinRecapRow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px;
+  font-size: 13px; border-bottom: 1px solid var(--line); }
+.twoMinRecapRow:last-child { border-bottom: none; }
+.twoMinRecapRow .recapPlay { color: var(--ink); flex: 1; }
+.twoMinRecapRow .recapResult { font-weight: 800; white-space: nowrap; }
+.twoMinRecapRow.gain .recapResult { color: #1e7c34; }
+.twoMinRecapRow.touchdown .recapResult { color: var(--bengal-orange); }
+.twoMinRecapRow.penalty .recapResult { color: #c62828; }
+
+/* Nathan: "make the entry screen cooler with 2 options, play and
+   leaderboard" -- reuses the .lbHeroHeader/.lbHeroTrophy gradient-hero
+   chrome the rest of the app already uses for celebration/leaderboard
+   popups, instead of the old plain single "Start Drive" button. */
+.twoMinEntryPanel { padding: 0; overflow: hidden; }
+.twoMinEntryPanel .lbHeroHeader { margin-bottom: 0; }
+.twoMinEntryBody { padding: 18px; }
+.twoMinEntryBtnRow { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.twoMinEntryBtnRow .twoMinBigBtn { flex: 1 1 130px; margin-top: 0; }
+.twoMinBigBtnAlt { background: linear-gradient(160deg, #ffb703 0%, #b8540a 100%); color: #2a1400; }
+
+/* ---- HUD ---- */
+.twoMinHud { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-weight: 800; font-size: 14px; flex-wrap: wrap; }
+.twoMinHud > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+#hudClock { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--ink); }
+#hudClock.urgent { color: #e0201a; animation: twoMinPulse 1s infinite; }
+#hudStreak { color: var(--bengal-orange); min-width: 20px; text-align: center; }
+@keyframes twoMinPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.twoMinTimeoutBtn { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px;
+  font-weight: 800; font-size: 13px; color: var(--ink); cursor: pointer; }
+.twoMinTimeoutBtn:active:not(:disabled) { transform: scale(.95); }
+.twoMinTimeoutBtn:disabled { opacity: .4; cursor: default; }
+.twoMinTimeoutBtn #timeoutCount { color: var(--bengal-orange); }
+
+/* ---- field strip ---- */
+.twoMinFieldOuter { position: relative; height: 46px; border-radius: 8px; overflow: hidden; margin-bottom: 14px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.32) 0 1px, transparent 1px 10%),
+    linear-gradient(90deg, #7a1f1f 0 4%, #245c2e 4% 96%, #7a1f1f 96% 100%);
+  border: 2px solid #111; }
+.twoMinFieldMarker { position: absolute; top: 50%; width: 20px; height: 20px; margin-left: -10px; margin-top: -10px;
+  border-radius: 50%; background: #7a4a24; border: 2px solid #f4e9dc; transition: left .5s ease; z-index: 3; }
+.twoMinFieldMarkerLabel { position: absolute; top: 50%; margin-top: -9px; transform: translateX(-50%);
+  font-size: 10px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; z-index: 4; }
+
+/* ---- signal display ---- */
+.twoMinSignalStage { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin-bottom: 12px; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#getReadyEl { display: none; align-items: center; justify-content: center; font-size: 20px; font-weight: 900;
+  color: var(--bengal-orange); letter-spacing: .04em; }
+#signalImg { width: auto; max-width: 100%; height: auto; max-height: 280px; border-radius: 10px; }
+#signalTextCard { display: none; font-size: 34px; font-weight: 900; text-align: center; color: var(--ink);
+  padding: 40px 16px; }
+.twoMinProgress { display: flex; gap: 5px; margin-top: 10px; }
+.twoMinProgress .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.twoMinProgress .dot.done { background: var(--bengal-orange); }
+
+/* ---- multiple choice ---- */
+.twoMinChoices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+@media (max-width: 480px) { .twoMinChoices { grid-template-columns: 1fr; } }
+.twoMinChoiceBtn { padding: 12px 10px; font-size: 13px; font-weight: 700; border-radius: 10px; border: 2px solid var(--line);
+  background: var(--card); color: var(--ink); cursor: pointer; text-align: center; line-height: 1.3; }
+.twoMinChoiceBtn:active:not(:disabled) { transform: scale(.97); }
+.twoMinChoiceBtn:disabled { cursor: default; }
+.twoMinChoiceBtn.picked-correct, .twoMinChoiceBtn.reveal-correct { background: #1e5c2a; border-color: #2e7d32; color: #fff; }
+.twoMinChoiceBtn.picked-wrong { background: #6b1f1f; border-color: #c62828; color: #fff; }
+
+/* ---- play diagram ---- */
+#playDiagramWrap { display: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 8px; margin-bottom: 12px; }
+#playDiagramSvg { width: 100%; height: auto; display: block; }
+
+/* ---- big bold result banner (raised above the overlay's own
+   z-index:1900 -- was 500 on the standalone page, which had nothing else
+   on top of it to worry about) ---- */
+.twoMinBanner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%) scale(.7); z-index: 1950;
+  font-size: 30px; font-weight: 900; text-align: center; padding: 18px 26px; border-radius: 16px;
+  color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  transition: opacity .15s ease, transform .15s ease; max-width: 90vw; }
+.twoMinBanner::before { content: ''; position: absolute; inset: -30px; border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0%, transparent 68%); opacity: 0; z-index: -1; }
+.twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .45s cubic-bezier(.2,1.7,.4,1); }
+.twoMinBanner.show::before { animation: twoMinBannerRing .65s ease-out; }
+.twoMinBanner.good { background: linear-gradient(135deg, #3fb454, #1b5e20 65%, #0d3d13); color: #eafff0; }
+.twoMinBanner.good::before { color: #3fb454; }
+.twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 34px; }
+.twoMinBanner.good.big::before { color: #f9a825; }
+.twoMinBanner.show.good.big { animation: twoMinBannerPunch .5s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .5s ease .18s; }
+.twoMinBanner.bad { background: linear-gradient(135deg, #e5433d, #c62828 55%, #7a1f1f); }
+.twoMinBanner.bad::before { color: #c62828; }
+.twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 26px; }
+.twoMinBanner.timeout::before { color: #4fc3f7; }
+.twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 42px; }
+.twoMinBanner.touchdown::before { color: var(--bengal-orange); }
+.twoMinBanner.show.touchdown { animation: twoMinBannerPunch .55s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .6s ease .2s, twoMinBannerGlow 1.3s ease-in-out .5s infinite; }
+@keyframes twoMinBannerPunch { 0% { transform: translate(-50%, -50%) scale(.5); } 60% { transform: translate(-50%, -50%) scale(1.12); } 100% { transform: translate(-50%, -50%) scale(1); } }
+@keyframes twoMinBannerRing { 0% { opacity: .55; transform: scale(.25); } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes twoMinBannerShake {
+  0%, 100% { margin-left: 0; }
+  20% { margin-left: -6px; } 40% { margin-left: 5px; } 60% { margin-left: -4px; } 80% { margin-left: 3px; }
+}
+@keyframes twoMinBannerGlow {
+  0%, 100% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 0 rgba(255,140,0,0); }
+  50% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 34px 10px rgba(255,150,20,.55); }
+}
+
+/* Particle burst spawned by js/two-minute-drill.js's spawnBurst() on every
+   positive result (gain / big play / touchdown) -- fixed-position elements
+   animated purely via the Web Animations API, self-removing on finish, so
+   this rule only needs to cover their starting look. z-index raised to sit
+   just under the result banner, same reasoning as .twoMinBanner above. */
+.twoMinSpark { position: fixed; z-index: 1949; font-size: 18px; line-height: 1; pointer-events: none;
+  transform: translate(-50%, -50%); text-shadow: 0 0 6px currentColor; }
 

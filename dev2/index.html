@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824a">
+<link rel="stylesheet" href="css/styles.css?v=20260824c">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -819,40 +819,59 @@
 </div>
 
 <div class="diagram-card">
-  <div class="corner-control" id="readPosGroup" style="display:none;">
-    <label>Read</label>
-    <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
-      <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
+  <!-- Nathan: "the blast Counter toggle and it's in/out toggle are
+       overlapping so I can't edit the in/out variants." Each of these
+       three .corner-control groups used to be the ONLY one visible at a
+       time for any given play (Read A/B, In/Out, and Counter never
+       overlapped before), so they were all independently pinned to the
+       same fixed top-right spot via CSS (position:absolute; top; right)
+       and just quietly stacked on top of each other whenever more than
+       one happened to show. Blast is the first play with BOTH
+       hasInsideOutside and hasCounter, so In/Out and Counter now show at
+       the same time and sat directly on top of each other, unclickable.
+       This wrapper is the one absolutely-positioned corner box now; the
+       three groups inside it are laid out in normal (non-absolute) flow
+       via css/styles.css's #editPlaysMode .corner-controls-stack, so
+       whichever ones are actually visible (display:none/flex is still
+       toggled exactly as before, in updateReadPosVisibility()) stack
+       vertically instead of overlapping -- works the same whether one,
+       two, or all three show at once. -->
+  <div class="corner-controls-stack">
+    <div class="corner-control" id="readPosGroup" style="display:none;">
+      <label>Read</label>
+      <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
+        <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
+      </div>
+    </div>
+    <div class="corner-control" id="insideOutsideGroup" style="display:none;">
+      <label>In/Out</label>
+      <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
+        <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
+      </div>
+      <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
+    </div>
+    <!-- Nathan: "Both Option and Outside Zone need a new toggle for
+         Counter... added to the end of the play call like boot." Unlike
+         Boot (a live ball-carrier swap, no new geometry), Counter needs a
+         real different route for #4's sweep, so it's authored here as its
+         own stored sub-variant (Normal/Counter) per direction -- same
+         pattern as Read A/B and In/Out above, gated on hasCounter in
+         data/plays.json (Option, Outside Zone only). See
+         js/edit-plays.js's counterVariant/getPlayVariant. -->
+    <div class="corner-control" id="counterGroup" style="display:none;">
+      <label>Counter</label>
+      <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
+        <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
+      </div>
     </div>
   </div>
-  <div class="corner-control" id="insideOutsideGroup" style="display:none;">
-    <label>In/Out</label>
-    <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
-      <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
-    </div>
-    <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
-  </div>
-  <!-- Nathan: "Both Option and Outside Zone need a new toggle for
-       Counter... added to the end of the play call like boot." Unlike
-       Boot (a live ball-carrier swap, no new geometry), Counter needs a
-       real different route for #4's sweep, so it's authored here as its
-       own stored sub-variant (Normal/Counter) per direction -- same
-       pattern as Read A/B and In/Out above, gated on hasCounter in
-       data/plays.json (Option, Outside Zone only). See
-       js/edit-plays.js's counterVariant/getPlayVariant. -->
-  <div class="corner-control" id="counterGroup" style="display:none;">
-    <label>Counter</label>
-    <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
-      <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
-    </div>
-  </div>
-  
+
   <div class="edit-toolbar" id="editToolbar" style="display:none;">
     <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
     <button id="addPointBtn">+ Add Point to End</button>
@@ -1788,7 +1807,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824c';
+  const BUILD_V = '20260824d';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
