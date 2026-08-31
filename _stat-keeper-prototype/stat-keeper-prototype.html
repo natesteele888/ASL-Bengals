@@ -1013,7 +1013,7 @@
           if (p.result==='Complete'){ oppPassComp++; oppPassYds += Number(p.yards||0); }
         }
         if (p.result !== 'Complete' && p.incReason === 'Broken Up' && p.pbuBy){
-          const d = defExtra[p.pbuBy] || (defExtra[p.pbuBy] = {name:p.pbuBy, int:0, pbu:0, sack:0, td:0});
+          const d = defExtra[p.pbuBy] || (defExtra[p.pbuBy] = {name:p.pbuBy, int:0, pbu:0, sack:0, fum:0, td:0});
           d.pbu++;
         }
       }
@@ -1058,7 +1058,7 @@
         });
       }
       if (p.type==='defextra' && p.player){
-        const d = defExtra[p.player] || (defExtra[p.player] = {name:p.player, int:0, pbu:0, sack:0, td:0});
+        const d = defExtra[p.player] || (defExtra[p.player] = {name:p.player, int:0, pbu:0, sack:0, fum:0, td:0});
         if (p.extraType==='INT') d.int++;
         else if (p.extraType==='PBU') d.pbu++;
         else if (p.extraType==='Sack') d.sack++;
@@ -1069,6 +1069,11 @@
         turnoverNotes.push((p.toType||'Turnover') + ' — lost by ' + (p.lostBy||'?') +
           (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td ? ' · TD return' : '') +
           (p.note ? ' ('+p.note+')' : ''));
+        // Nathan: "add fumbles recovered along with yards per carry."
+        if (p.toType === 'Fumble' && p.recoveredBy){
+          const d = defExtra[p.recoveredBy] || (defExtra[p.recoveredBy] = {name:p.recoveredBy, int:0, pbu:0, sack:0, fum:0, td:0});
+          d.fum++;
+        }
       }
       if (p.type==='score'){
         if (p.scoreKind==='PAT Good') scoring.patGood++;
@@ -1090,7 +1095,10 @@
 
     return {
       game: gameLabel.value || 'Untitled game',
-      rushing: Object.values(rushing), passing: Object.values(passing), receiving: Object.values(receiving),
+      rushing: Object.values(rushing).map(function(r){
+        return Object.assign({}, r, { ypc: r.att ? Math.round(r.yds / r.att * 10) / 10 : null });
+      }),
+      passing: Object.values(passing), receiving: Object.values(receiving),
       kickoffs: Object.values(kickoffs), tackles: Object.values(tackles), defExtra: Object.values(defExtra),
       turnovers: turnoverNotes,
       scoring: scoring,
@@ -1150,14 +1158,14 @@
       html += '<div class="statSectionTitle">Opponent Passing (allowed)</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppPassing.comp+'/'+s.oppPassing.att+' for '+s.oppPassing.yds+' yds</div>';
     }
-    html += statTable('Rushing', s.rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'},{key:'fd',label:'1st'}]);
+    html += statTable('Rushing', s.rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'},{key:'fd',label:'1st'}]);
     html += statTable('Passing', s.passing, [{key:'comp',label:'Comp'},{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Receiving', s.receiving, [{key:'rec',label:'Rec'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Kickoff Returns', s.kickoffs, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Punting', s.punting, [{key:'punts',label:'Punts'},{key:'avgGross',label:'Avg Gross'},{key:'avgNet',label:'Avg Net'},{key:'touchback',label:'TB'},{key:'fairCatch',label:'FC'},{key:'downed',label:'Dwn'},{key:'returned',label:'Ret Agnst'},{key:'muffed',label:'Muff'}]);
     html += statTable('Punt Returns', s.puntReturns, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Tackles', s.tackles, [{key:'solo',label:'Solo'},{key:'ast',label:'Ast'}]);
-    html += statTable('Defensive Extras', s.defExtra, [{key:'int',label:'INT'},{key:'pbu',label:'PBU'},{key:'sack',label:'Sack'},{key:'td',label:'TD'}]);
+    html += statTable('Defensive Extras', s.defExtra, [{key:'int',label:'INT'},{key:'pbu',label:'PBU'},{key:'sack',label:'Sack'},{key:'fum',label:'FR'},{key:'td',label:'TD'}]);
     html += statTable('Penalties (Us, by player)', s.penalties, [{key:'count',label:'#'},{key:'yds',label:'Yds'}]);
     if (s.turnovers.length){
       html += '<div class="statSectionTitle">Turnovers</div>' +
@@ -1190,14 +1198,14 @@
       rows.forEach(r => txt += '  ' + fmt(r) + '\n');
       txt += '\n';
     }
-    section('Rushing', s.rushing, r=>r.name+': '+r.att+' att, '+r.yds+' yds, '+r.td+' TD');
+    section('Rushing', s.rushing, r=>r.name+': '+r.att+' att, '+r.yds+' yds ('+(r.ypc==null?'—':r.ypc)+' ypc), '+r.td+' TD');
     section('Passing', s.passing, r=>r.name+': '+r.comp+'/'+r.att+', '+r.yds+' yds, '+r.td+' TD');
     section('Receiving', s.receiving, r=>r.name+': '+r.rec+' rec, '+r.yds+' yds, '+r.td+' TD');
     section('Kickoff Returns', s.kickoffs, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds');
     section('Punting', s.punting, r=>r.name+': '+r.punts+' punts, '+(r.avgGross!=null?r.avgGross:'-')+' avg gross, '+(r.avgNet!=null?r.avgNet:'-')+' avg net (TB '+r.touchback+', FC '+r.fairCatch+', downed '+r.downed+', returned against '+r.returned+', muffed '+r.muffed+')');
     section('Punt Returns', s.puntReturns, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds, '+r.td+' TD');
     section('Tackles', s.tackles, r=>r.name+': '+r.solo+' solo, '+r.ast+' ast');
-    section('Defensive Extras', s.defExtra, r=>r.name+': '+r.int+' INT, '+r.pbu+' PBU, '+r.sack+' sack');
+    section('Defensive Extras', s.defExtra, r=>r.name+': '+r.int+' INT, '+r.pbu+' PBU, '+r.sack+' sack, '+r.fum+' FR');
     section('Penalties (Us, by player)', s.penalties, r=>r.name+': '+r.count+' for '+r.yds+' yds');
     if (s.turnovers.length){ txt += 'TURNOVERS\n'; s.turnovers.forEach(t=>txt+='  '+t+'\n'); }
     try {
@@ -1401,7 +1409,7 @@
     }
     function ensureDefExtraRow(num){
       let row = ss.defExtra.find(r => String(r.num) === String(num));
-      if (!row){ row = { num, int:0, pbu:0, sacks:0, td:false }; ss.defExtra.push(row); }
+      if (!row){ row = { num, int:0, pbu:0, sacks:0, fum:0, td:false }; ss.defExtra.push(row); }
       return row;
     }
     function ensurePuntingRow(num){
@@ -1501,6 +1509,17 @@
       if (p.type === 'turnover'){
         ss.turnovers.push({ desc: (p.toType||'Turnover') + ' -- lost by ' + (p.lostBy||'?') +
           (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td ? ' (TD return)' : '') + (p.note ? ' ('+p.note+')' : '') });
+        // Nathan: "add fumbles recovered along with yards per carry" --
+        // same "name a player, credit them" pattern already used for
+        // pbuBy on a broken-up pass.
+        if (p.toType === 'Fumble' && p.recoveredBy){
+          const num = numFor(p.recoveredBy);
+          if (num != null){
+            const row = ensureDefExtraRow(num);
+            row.fum += 1;
+            if (p.td) row.td = true;
+          }
+        }
       }
       if (p.type === 'score'){
         if (p.scoreKind==='PAT Good') ss.scoring.patGood += 1;

@@ -39,12 +39,18 @@
     { key: 'koYds', label: 'KO Yds' },
     { key: 'td', label: 'TD' },
     { key: 'passTd', label: 'Pass TD' },
+    // ypc (yards/carry) is a ratio, not a raw total -- computeGamePlayerStats
+    // and this file's own season-totals loop below both compute it as a
+    // final step (rushYds/rushAtt) rather than storing it play-by-play, so
+    // it's already a plain number by the time this table reads it.
+    { key: 'ypc', label: 'YPC' },
   ];
   const DEFENSE_CATS = [
     { key: 'tackles', label: 'Tackles' },
     { key: 'sacks', label: 'Sacks' },
     { key: 'int', label: 'INT' },
     { key: 'pbu', label: 'PBU' },
+    { key: 'fum', label: 'FR' },
   ];
   // Positions that lead with defensive categories on their own profile --
   // everyone still sees every category, this just decides display order.
@@ -143,7 +149,7 @@
   }
 
   function blankTotals() {
-    return { rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, sacks: 0, int: 0, pbu: 0, td: 0, passTd: 0, games: 0 };
+    return { rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, sacks: 0, int: 0, pbu: 0, td: 0, passTd: 0, rushAtt: 0, fum: 0, ypc: 0, games: 0 };
   }
 
   function statCell(hasGames, value) {
@@ -183,9 +189,14 @@
       const hasAny = ALL_CATS.some(c => (rec[c.key] || 0) > 0);
       if (!hasAny) return;
       totals.games += 1;
-      ALL_CATS.forEach(c => { totals[c.key] += rec[c.key] || 0; });
+      // ypc is a ratio (rushYds/rushAtt) -- summing each game's ypc here
+      // would average-of-averages, which is wrong. It's recomputed below
+      // from the career-summed rushYds/rushAtt once every game is in.
+      ALL_CATS.forEach(c => { if (c.key === 'ypc') return; totals[c.key] += rec[c.key] || 0; });
+      totals.rushAtt += rec.rushAtt || 0;
       recentGames.push({ game: g, rec });
     });
+    totals.ypc = totals.rushAtt > 0 ? totals.rushYds / totals.rushAtt : 0;
 
     const catsOrder = DEFENSE_FIRST_POSITIONS.includes(position) ? DEFENSE_CATS.concat(OFFENSE_CATS) : OFFENSE_CATS.concat(DEFENSE_CATS);
     const hasGames = totals.games > 0;

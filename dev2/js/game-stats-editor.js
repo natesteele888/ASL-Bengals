@@ -462,14 +462,14 @@
       }
       const table = document.createElement('table');
       table.className = 'statsTable' + (readOnly ? '' : ' statsTableEdit');
-      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>INT</th><th>PBU</th><th>Sacks</th><th>TD</th>${readOnly ? '' : '<th></th>'}</tr></thead>`;
+      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>INT</th><th>PBU</th><th>Sacks</th><th>FR</th><th>TD</th>${readOnly ? '' : '<th></th>'}</tr></thead>`;
       const tbody = document.createElement('tbody');
       rows.forEach((r, i) => {
         const tr = document.createElement('tr');
         const numTd = document.createElement('td'); numTd.textContent = r.num; numTd.className = 'statsIdentityCell';
         const nameTd = document.createElement('td'); nameTd.textContent = rosterNameDisplay(r.num) || '—'; nameTd.className = 'statsIdentityCell';
         tr.appendChild(numTd); tr.appendChild(nameTd);
-        ['int', 'pbu', 'sacks'].forEach(field => {
+        ['int', 'pbu', 'sacks', 'fum'].forEach(field => {
           const td = document.createElement('td');
           if (readOnly) {
             td.textContent = r[field] || 0;
@@ -518,7 +518,7 @@
         addRowBtn.type = 'button'; addRowBtn.className = 'lbLinkBtn'; addRowBtn.textContent = '+ Add Player Row';
         addRowBtn.addEventListener('click', () => {
           if (!sel.value) return;
-          rows.push({ num: sel.value, int: 0, pbu: 0, sacks: 0, td: false });
+          rows.push({ num: sel.value, int: 0, pbu: 0, sacks: 0, fum: 0, td: false });
           rerender();
         });
         pickWrap.appendChild(sel); pickWrap.appendChild(addRowBtn);

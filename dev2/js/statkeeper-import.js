@@ -105,7 +105,7 @@
     }
     function ensureDefExtraRow(num) {
       let row = ss.defExtra.find(r => String(r.num) === String(num));
-      if (!row) { row = { num: num, int: 0, pbu: 0, sacks: 0, td: false }; ss.defExtra.push(row); }
+      if (!row) { row = { num: num, int: 0, pbu: 0, sacks: 0, fum: 0, td: false }; ss.defExtra.push(row); }
       return row;
     }
     function ensurePuntingRow(num) {
@@ -234,6 +234,18 @@
             (p.recoveredBy ? ', recovered by ' + p.recoveredBy : '') + (p.td ? ' (TD return)' : '') +
             (p.note ? ' (' + p.note + ')' : ''),
         });
+        // Nathan: "add fumbles recovered along with yards per carry."
+        // Credits a structured, countable stat alongside the free-text
+        // note above -- same "name a player, credit them" pattern already
+        // used for pbuBy on a broken-up pass.
+        if (p.toType === 'Fumble' && p.recoveredBy) {
+          const num = numFor(p.recoveredBy);
+          if (num != null) {
+            const row = ensureDefExtraRow(num);
+            row.fum += 1;
+            if (p.td) row.td = true;
+          }
+        }
       }
 
       if (p.type === 'score') {

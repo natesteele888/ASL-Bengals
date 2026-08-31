@@ -40,10 +40,17 @@
     // a single play against two players' "touchdowns" totals.
     { key: 'td', label: 'Touchdowns' },
     { key: 'passTd', label: 'Passing Touchdowns' },
+    // Nathan: "add yards per carry to the stats." ypc is a real, plain
+    // number by the time anything here reads it -- gamePlayerStats() and
+    // seasonAggregate() both compute it as a final step (rushYds/rushAtt)
+    // rather than storing it as a per-play value, specifically so this
+    // generic sort/filter/sum code never has to know it's a ratio.
+    { key: 'ypc', label: 'Yards / Carry' },
     { key: 'tackles', label: 'Tackles' },
     { key: 'sacks', label: 'Sacks' },
     { key: 'int', label: 'Interceptions' },
     { key: 'pbu', label: 'Pass Breakups' },
+    { key: 'fum', label: 'Fumble Recoveries' },
   ];
 
   let games = [];
@@ -89,7 +96,7 @@
     const ss = window.normalizeGameStatSheet(statSheet);
     const byNum = {};
     function ensure(num, name) {
-      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0 };
+      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, rushAtt: 0, fum: 0, ypc: 0 };
       if (name && !byNum[num].name) byNum[num].name = name;
       return byNum[num];
     }
@@ -109,6 +116,10 @@
         // for whoever actually carried/caught/returned it into the end zone.
         if (sectionKey === 'passing') rec.passTd += tdCount;
         else rec.td += tdCount;
+        // Nathan: "add yards per carry to the stats" -- every rushing
+        // attempt counts toward rushAtt (unlike passing, there's no
+        // complete/incomplete split to skip), used below to compute ypc.
+        if (sectionKey === 'rushing') rec.rushAtt += (row.attempts || []).length;
       });
     });
     (ss.tackles || []).forEach(row => {
@@ -122,8 +133,10 @@
       rec.int += Number(row.int) || 0;
       rec.pbu += Number(row.pbu) || 0;
       rec.sacks += Number(row.sacks) || 0;
+      rec.fum += Number(row.fum) || 0;
       if (row.td) rec.td += 1;
     });
+    Object.values(byNum).forEach(rec => { rec.ypc = rec.rushAtt > 0 ? rec.rushYds / rec.rushAtt : 0; });
     return byNum;
   }
   // Shared with js/player-profile.js so a player's profile page computes
@@ -139,13 +152,18 @@
       playedGames.push(g);
       const perGame = gamePlayerStats(g.statSheet);
       Object.values(perGame).forEach(rec => {
-        if (!byNum[rec.num]) byNum[rec.num] = { num: rec.num, name: rec.name, rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, games: 0 };
+        if (!byNum[rec.num]) byNum[rec.num] = { num: rec.num, name: rec.name, rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, rushAtt: 0, fum: 0, ypc: 0, games: 0 };
         const agg = byNum[rec.num];
         if (rec.name && !agg.name) agg.name = rec.name;
-        CATS.forEach(c => { agg[c.key] += rec[c.key] || 0; });
+        // ypc is a ratio (rushYds/rushAtt) -- summing each game's ypc here
+        // would average-of-averages, which is wrong. It's recomputed below
+        // from the season-summed rushYds/rushAtt once every game is in.
+        CATS.forEach(c => { if (c.key === 'ypc') return; agg[c.key] += rec[c.key] || 0; });
+        agg.rushAtt += rec.rushAtt || 0;
         agg.games += 1;
       });
     });
+    Object.values(byNum).forEach(agg => { agg.ypc = agg.rushAtt > 0 ? agg.rushYds / agg.rushAtt : 0; });
     return { byNum, playedGames };
   }
 

@@ -236,6 +236,16 @@
     return 'T';
   }
 
+  // Shared one-liner ("Bengals defeated/fell to/tied X 20-14") used both by
+  // buildGameHighlightsText's stat-based recap below and by
+  // buildGameRecapText's no-stats-yet fallback, so a completed game without
+  // a box score entered still gets a real score line instead of nothing.
+  function scoreLineFor(game) {
+    const result = resultFor(game);
+    if (!result) return '';
+    return `The Bengals ${result === 'W' ? 'defeated' : result === 'L' ? 'fell to' : 'tied'} ${game.opponent || 'their opponent'} ${game.ourScore}-${game.oppScore}.`;
+  }
+
   // Nathan: "Once an event date has passed don't show it as upcoming... it
   // should be a running calendar and date should be reflective of the
   // dates. Only keep the upcoming badge there until the event time has
@@ -428,7 +438,6 @@
     if (!game || !window.computeGamePlayerStats || !window.normalizeGameStatSheet || !window.gameStatSheetHasAnything) return '';
     const norm = window.normalizeGameStatSheet(game.statSheet);
     if (!window.gameStatSheetHasAnything(norm)) return '';
-    const result = resultFor(game);
     const perPlayer = Object.values(window.computeGamePlayerStats(game.statSheet));
     // Plain text, not HTML -- this feeds a textarea's .value, so no
     // escapeHtml() here (that's for innerHTML destinations elsewhere in
@@ -436,13 +445,7 @@
     // sitting in the write-up text instead of real characters).
     const playerName = p => `#${p.num}${p.name ? ' ' + p.name : ''}`;
 
-    // result is null unless both scores are present AND numeric (see
-    // resultFor above) -- gating on it here too, rather than a separate
-    // presence check, avoids ever printing a "tied 0-0"-style line off a
-    // non-numeric score value like "TBD".
-    const scoreLine = result
-      ? `The Bengals ${result === 'W' ? 'defeated' : result === 'L' ? 'fell to' : 'tied'} ${game.opponent || 'their opponent'} ${game.ourScore}-${game.oppScore}.`
-      : '';
+    const scoreLine = scoreLineFor(game);
 
     const scorers = perPlayer.filter(p => p.td > 0).sort((a, b) => b.td - a.td);
     const passers = perPlayer.filter(p => p.passTd > 0).sort((a, b) => b.passTd - a.passTd);
@@ -471,6 +474,20 @@
     const defenseLine = defenseParts.length ? defenseParts.join('; ') + '.' : '';
 
     return [scoreLine, tdLine, standoutLine, defenseLine].filter(Boolean).join(' ');
+  }
+
+  // Nathan: "When a game is complete, let's make sure it changes from a game
+  // preview writeup to a game recap write up." Feeds the same top-of-page
+  // box renderGamePreview() fills in -- buildGamePreviewText before the
+  // game, this after. Prefers the full stats-based recap from
+  // buildGameHighlightsText above; if no box score has been entered yet
+  // under Coach Tools > Stats, buildGameHighlightsText returns '' entirely
+  // (it bails before ever building a score line), so this falls back to
+  // just the final score via scoreLineFor rather than showing nothing for
+  // a game that's clearly over.
+  function buildGameRecapText(game) {
+    if (!game || !resultFor(game)) return '';
+    return buildGameHighlightsText(game) || scoreLineFor(game);
   }
 
   // ---- Head-to-Head (Nathan, from the Apple Sports "Team Stats" screenshot:
@@ -623,10 +640,18 @@
 
   function renderGamePreview() {
     const wrap = document.getElementById('schedGamePreviewWrap');
+    const titleEl = document.getElementById('schedGamePreviewTitle');
     const textEl = document.getElementById('schedGamePreviewText');
     if (!wrap || !textEl || !current) return;
-    const text = buildGamePreviewText(current, games);
+    // Nathan: "When a game is complete, let's make sure it changes from a
+    // game preview writeup to a game recap write up." Previously this box
+    // always showed buildGamePreviewText, even for games long since final --
+    // it never checked resultFor at all. Now a completed game (score
+    // entered) swaps in the auto-generated recap instead.
+    const isFinal = !!resultFor(current);
+    const text = isFinal ? buildGameRecapText(current) : buildGamePreviewText(current, games);
     wrap.style.display = text ? '' : 'none';
+    if (titleEl) titleEl.textContent = isFinal ? '📰 Game Recap' : '📰 Game Preview';
     textEl.textContent = text;
   }
 
@@ -914,6 +939,10 @@
     const showEditForm = approved && editMode;
     editControls.style.display = showEditForm ? '' : 'none';
     if (deleteBtn) deleteBtn.style.display = games.some(g => g.id === current.id) ? '' : 'none';
+    // Drives the "Game Preview" -> "Game Recap" fine-print copy below;
+    // renderGamePreview() (called after this innerHTML is set) does the
+    // same check to swap the actual box title/text.
+    const gameIsFinal = !!resultFor(current);
 
     // Arrive/Warm-up sit on the hero's top line (context info, unique to
     // this hero); kickoff time moves into the center with the date, same
@@ -962,7 +991,7 @@
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
-          <div class="thisweekKeysTitle">📰 Game Preview</div>
+          <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
@@ -990,7 +1019,7 @@
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
-        <div class="scheduleFinePrint">Game Preview is auto-generated from this game's Schedule info.</div>`;
+        <div class="scheduleFinePrint">${gameIsFinal ? "Game Recap is auto-generated from this game's stats (Coach Tools &gt; Stats)." : "Game Preview is auto-generated from this game's Schedule info."}</div>`;
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
       wireAddToCalendar();
@@ -1077,7 +1106,7 @@
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
       <div style="margin-bottom:4px;"><button type="button" class="lbLinkBtn" id="schedFillHighlightsBtn">✨ Fill from Stats</button></div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>
-      <div class="scheduleFinePrint">Game Preview is auto-generated -- updates once you save.</div>`;
+      <div class="scheduleFinePrint">${gameIsFinal ? 'Game Recap is auto-generated -- updates once you save.' : 'Game Preview is auto-generated -- updates once you save.'}</div>`;
 
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedDate').value = current.date || '';
