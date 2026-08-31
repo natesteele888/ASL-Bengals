@@ -265,9 +265,18 @@
   // from every completed game -- shown the same on every card/hero rather
   // than a snapshot of "record entering this specific game," which would
   // need per-game history snapshots we don't keep.
+  // Nathan: "Any scrimmage or jamboree results are preseason games and
+  // should not count towards the teams regular season standings." Scrimmage
+  // and Jamboree are practice-style tune-up games (see GAME_TYPES above),
+  // so they're excluded here even though they still show scores/W-L badges
+  // on their own game card elsewhere in this file -- this is specifically
+  // the season *record* tally.
+  function countsTowardRecord(g) {
+    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree';
+  }
   function bengalsRecord(list) {
     let w = 0, l = 0, t = 0;
-    (list || []).forEach(g => {
+    (list || []).filter(countsTowardRecord).forEach(g => {
       const r = resultFor(g);
       if (r === 'W') w++; else if (r === 'L') l++; else if (r === 'T') t++;
     });
@@ -403,6 +412,65 @@
     const avgLine = avgParts.length ? ` The Bengals are averaging ${avgParts.join(' and ')} per game this season.` : '';
 
     return `${leaderLines.join(' ')}${avgLine}`.trim();
+  }
+
+  // Nathan: "make an AI write up of some of the game highlights based on
+  // what happened. This should be what shows in the Game results section
+  // when a game is complete." Same "no backend" reasoning as
+  // buildGamePreviewText above -- this composes a recap from the real
+  // per-player stats (js/coachtools-stats.js's shared
+  // computeGamePlayerStats, the exact same aggregator the leaderboard and
+  // player profiles use) instead of calling a hosted model. Unlike the
+  // preview, this feeds the coach-editable Game Write-Up field via a "Fill
+  // from Stats" button rather than auto-displaying, since a recap is
+  // something a coach will want to personalize afterward.
+  function buildGameHighlightsText(game) {
+    if (!game || !window.computeGamePlayerStats || !window.normalizeGameStatSheet || !window.gameStatSheetHasAnything) return '';
+    const norm = window.normalizeGameStatSheet(game.statSheet);
+    if (!window.gameStatSheetHasAnything(norm)) return '';
+    const result = resultFor(game);
+    const perPlayer = Object.values(window.computeGamePlayerStats(game.statSheet));
+    // Plain text, not HTML -- this feeds a textarea's .value, so no
+    // escapeHtml() here (that's for innerHTML destinations elsewhere in
+    // this file; escaping here would leave literal "&#39;"-style entities
+    // sitting in the write-up text instead of real characters).
+    const playerName = p => `#${p.num}${p.name ? ' ' + p.name : ''}`;
+
+    // result is null unless both scores are present AND numeric (see
+    // resultFor above) -- gating on it here too, rather than a separate
+    // presence check, avoids ever printing a "tied 0-0"-style line off a
+    // non-numeric score value like "TBD".
+    const scoreLine = result
+      ? `The Bengals ${result === 'W' ? 'defeated' : result === 'L' ? 'fell to' : 'tied'} ${game.opponent || 'their opponent'} ${game.ourScore}-${game.oppScore}.`
+      : '';
+
+    const scorers = perPlayer.filter(p => p.td > 0).sort((a, b) => b.td - a.td);
+    const passers = perPlayer.filter(p => p.passTd > 0).sort((a, b) => b.passTd - a.passTd);
+    const tdParts = [];
+    scorers.forEach(p => tdParts.push(`${playerName(p)} scored ${p.td > 1 ? p.td + ' touchdowns' : 'a touchdown'}`));
+    passers.forEach(p => tdParts.push(`${playerName(p)} threw ${p.passTd > 1 ? p.passTd + ' touchdown passes' : 'a touchdown pass'}`));
+    const tdLine = tdParts.length ? tdParts.join('; ') + '.' : '';
+
+    const yardCats = [
+      { key: 'rushYds', label: 'rushing yards' },
+      { key: 'passYds', label: 'passing yards' },
+      { key: 'recYds', label: 'receiving yards' },
+    ];
+    const standoutParts = [];
+    yardCats.forEach(c => {
+      const leader = perPlayer.filter(p => p[c.key] > 0).sort((a, b) => b[c.key] - a[c.key])[0];
+      if (leader) standoutParts.push(`${playerName(leader)} led the team with ${formatNum(leader[c.key])} ${c.label}`);
+    });
+    const standoutLine = standoutParts.length ? standoutParts.join('; ') + '.' : '';
+
+    const defenseParts = [];
+    const tackleLeader = perPlayer.filter(p => p.tackles > 0).sort((a, b) => b.tackles - a.tackles)[0];
+    if (tackleLeader) defenseParts.push(`${playerName(tackleLeader)} led the defense with ${formatNum(tackleLeader.tackles)} tackles`);
+    perPlayer.filter(p => p.int > 0).forEach(p => defenseParts.push(`${playerName(p)} had ${p.int > 1 ? p.int + ' interceptions' : 'an interception'}`));
+    perPlayer.filter(p => p.sacks > 0).forEach(p => defenseParts.push(`${playerName(p)} had ${p.sacks > 1 ? p.sacks + ' sacks' : 'a sack'}`));
+    const defenseLine = defenseParts.length ? defenseParts.join('; ') + '.' : '';
+
+    return [scoreLine, tdLine, standoutLine, defenseLine].filter(Boolean).join(' ');
   }
 
   // ---- Head-to-Head (Nathan, from the Apple Sports "Team Stats" screenshot:
@@ -1007,6 +1075,7 @@
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div id="gameCancelSection"></div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
+      <div style="margin-bottom:4px;"><button type="button" class="lbLinkBtn" id="schedFillHighlightsBtn">✨ Fill from Stats</button></div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>
       <div class="scheduleFinePrint">Game Preview is auto-generated -- updates once you save.</div>`;
 
@@ -1024,6 +1093,16 @@
     renderInjuryEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
+    const fillHighlightsBtn = document.getElementById('schedFillHighlightsBtn');
+    if (fillHighlightsBtn) {
+      fillHighlightsBtn.addEventListener('click', () => {
+        const highlights = buildGameHighlightsText(current);
+        if (!highlights) { alert('No stats entered for this game yet -- add them under Coach Tools > Stats first.'); return; }
+        const ta = document.getElementById('schedWriteup');
+        if (ta.value.trim() && !confirm('Replace the current write-up with a stats-based draft? You can still edit it after.')) return;
+        ta.value = highlights;
+      });
+    }
     document.getElementById('schedInfoUrl').value = current.infoUrl || '';
 
     function renderFieldPhotoPreview() {

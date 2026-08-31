@@ -154,9 +154,15 @@
   }
   // Same record math as js/schedule.js's bengalsRecord() -- duplicated
   // locally rather than reaching into that file's closure.
+  // Same record math as js/schedule.js's bengalsRecord() -- including the
+  // Scrimmage/Jamboree exclusion (Nathan: those are preseason and shouldn't
+  // count toward the regular season record).
+  function countsTowardRecord(g) {
+    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree';
+  }
   function bengalsRecord(list) {
     let w = 0, l = 0, t = 0;
-    (list || []).forEach(g => {
+    (list || []).filter(countsTowardRecord).forEach(g => {
       const r = resultFor(g);
       if (r === 'W') w++; else if (r === 'L') l++; else if (r === 'T') t++;
     });

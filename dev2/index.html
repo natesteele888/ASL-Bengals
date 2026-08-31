@@ -521,6 +521,15 @@
     <div id="coachingStaffWrap" style="max-width:600px;margin:0 auto;"></div>
   </div>
 
+  <!-- ---- Depth Chart: Madden-style position groups, +/- reorders depth
+       within a position only (doesn't touch the master roster above). See
+       js/depth-chart.js. ---- -->
+  <div id="coachDepthChartPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📋 Depth Chart</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Set who's starting and who's backing them up at each spot. This only reorders depth -- it doesn't add or remove anyone from the Team Roster.</div>
+    <div id="depthChartBody" style="max-width:900px;margin:0 auto;"></div>
+  </div>
+
   <!-- ---- Drive Scripts ---- -->
   <div id="coachDriveScriptsPanel" class="coachToolsPanel" style="display:none;">
     <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
@@ -608,6 +617,23 @@
       <div class="lbSub" id="filmVaultCount" style="text-align:center;margin-bottom:10px;"></div>
       <div id="filmVaultList"><div class="lbEmpty">Loading…</div></div>
     </div>
+  </div>
+
+  <!-- ---- How To: plain-language walkthroughs for the device-level stuff
+       that isn't really a "play calls" question -- adding a second family
+       member's login on a shared phone, installing this as a home-screen
+       app, etc. Nathan: "Develop a how to section in the coaching tools...
+       walkthrough explanations of how to do things such as add another
+       login to your device, save the app as an app on your phone home
+       screen." Same accordion shell (see css/styles.css's .accordion-item)
+       Play Calls already uses -- tap a question to expand its steps, one
+       open at a time. Built once and left alone after that (see
+       js/coachtools-howto.js) so re-opening this tab doesn't collapse
+       whatever a coach already had expanded. ---- -->
+  <div id="coachHowToPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">❓ How To</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Step-by-step walkthroughs for common device/account questions -- tap a question to expand it.</div>
+    <div id="coachHowToList" style="max-width:600px;margin:0 auto;"></div>
   </div>
 </div>
 
@@ -1807,7 +1833,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824f';
+  const BUILD_V = '20260824g';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1871,7 +1897,7 @@ if (window.ResizeObserver) {
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

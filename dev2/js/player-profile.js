@@ -37,6 +37,8 @@
     { key: 'rushYds', label: 'Rush Yds' },
     { key: 'recYds', label: 'Rec Yds' },
     { key: 'koYds', label: 'KO Yds' },
+    { key: 'td', label: 'TD' },
+    { key: 'passTd', label: 'Pass TD' },
   ];
   const DEFENSE_CATS = [
     { key: 'tackles', label: 'Tackles' },
@@ -141,7 +143,7 @@
   }
 
   function blankTotals() {
-    return { rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, sacks: 0, int: 0, pbu: 0, games: 0 };
+    return { rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, sacks: 0, int: 0, pbu: 0, td: 0, passTd: 0, games: 0 };
   }
 
   function statCell(hasGames, value) {

@@ -33,13 +33,46 @@
   window.gameStatAttemptSections = ATTEMPT_SECTIONS;
   window.runDirections = RUN_DIRECTIONS;
 
+  // Nathan: "I need these stats to load into the live season" -- Stat Keeper
+  // (a standalone prototype) tracks several categories the live app never
+  // had a place for: penalties, punts/punt returns, PAT/2pt/safety scoring,
+  // forced punts, and opponent passing allowed. Added here so a game record
+  // can hold them; js/statkeeper-import.js is what actually fills them in.
   function blankStatSheet() {
-    return { roster: [], rushing: [], passing: [], receiving: [], kickoffs: [], tackles: [], defExtra: [], turnovers: [] };
+    return {
+      roster: [], rushing: [], passing: [], receiving: [], kickoffs: [], tackles: [], defExtra: [], turnovers: [],
+      penalties: [], punts: [], puntReturns: [],
+      scoring: { patGood: 0, patNoGood: 0, twoPtGood: 0, twoPtNoGood: 0, safety: 0 },
+      penaltyTotals: { us: { count: 0, yds: 0 }, opponent: { count: 0, yds: 0 } },
+      onside: { us: 0, opponent: 0 },
+      oppPassing: { att: 0, comp: 0, yds: 0 },
+      forcedPunts: 0,
+    };
   }
+  // Array fields get replaced wholesale if missing/malformed (matches the
+  // original behavior); object/number fields get filled in key-by-key so a
+  // partially-old record (missing only the newer fields) doesn't lose
+  // whatever it already had.
   function normalizeStatSheet(s) {
     const blank = blankStatSheet();
     if (!s || typeof s !== 'object') return blank;
-    Object.keys(blank).forEach(k => { if (!Array.isArray(s[k])) s[k] = blank[k]; });
+    Object.keys(blank).forEach(k => {
+      const def = blank[k];
+      if (Array.isArray(def)) {
+        if (!Array.isArray(s[k])) s[k] = def;
+      } else if (typeof def === 'number') {
+        if (typeof s[k] !== 'number') s[k] = def;
+      } else if (def && typeof def === 'object') {
+        if (!s[k] || typeof s[k] !== 'object') s[k] = JSON.parse(JSON.stringify(def));
+        else Object.keys(def).forEach(k2 => {
+          if (def[k2] && typeof def[k2] === 'object') {
+            if (!s[k][k2] || typeof s[k][k2] !== 'object') s[k][k2] = JSON.parse(JSON.stringify(def[k2]));
+          } else if (s[k][k2] === undefined) {
+            s[k][k2] = def[k2];
+          }
+        });
+      }
+    });
     return s;
   }
   window.blankGameStatSheet = blankStatSheet;
@@ -84,22 +117,56 @@
       const p = (ss.roster || []).find(r => String(r.num) === String(num));
       return p ? p.name : '';
     }
+    // Flags an EXISTING row whose number is shared by more than one
+    // roster player -- e.g. an already-imported row from before the
+    // Jaiden L / Dean A jersey-number collision was caught. The row can't
+    // say for certain which of them it belongs to, so this just makes
+    // that visible instead of silently showing whichever one happens to
+    // match first.
+    function rosterNameDisplay(num) {
+      const name = rosterName(num);
+      const key = num === null || num === undefined ? '' : String(num);
+      const count = (ss.roster || []).filter(r => String(r.num === null || r.num === undefined ? '' : r.num) === key).length;
+      if (count > 1) return `${name || '(unknown)'} ⚠️ shared #${num || '(no #)'} -- could be a different player`;
+      return name;
+    }
     function sectionHeading(text) {
       const h = document.createElement('div');
       h.className = 'statsGroupHeading';
       h.textContent = text;
       return h;
     }
+    // Nathan: "The stats mistakenly have Jaiden L with the receiving
+    // yards. Dean A had the 16 yards." Root cause: every stat row is keyed
+    // by jersey NUMBER, but several roster players legitimately have no
+    // number yet -- so two blank-number players (or, in principle, two
+    // players who were accidentally given the same real number) collapse
+    // onto the exact same row, and whichever one happens to come first in
+    // the roster "wins" the display name. There's no safe way to add a
+    // stat row for a player whose number collides with someone else's --
+    // the row itself couldn't tell them apart afterward -- so those
+    // options are disabled here rather than just warned about, same fix
+    // applied to the Stat Keeper import/push translators.
     function pickerSelect(placeholder) {
       const sel = document.createElement('select');
       sel.className = 'statsRosterPicker';
+      const numCounts = {};
+      (ss.roster || []).forEach(p => {
+        const key = p.num === null || p.num === undefined ? '' : String(p.num);
+        numCounts[key] = (numCounts[key] || 0) + 1;
+      });
       const opt0 = document.createElement('option');
       opt0.value = ''; opt0.textContent = placeholder;
       sel.appendChild(opt0);
       (ss.roster || []).forEach(p => {
+        const key = p.num === null || p.num === undefined ? '' : String(p.num);
+        const ambiguous = (numCounts[key] || 0) > 1;
         const opt = document.createElement('option');
         opt.value = p.num;
-        opt.textContent = `#${p.num} ${p.name}`;
+        opt.textContent = ambiguous
+          ? `#${p.num || '(no #)'} ${p.name} — fix jersey # first (shared with another player)`
+          : `#${p.num} ${p.name}`;
+        if (ambiguous) opt.disabled = true;
         sel.appendChild(opt);
       });
       return sel;
@@ -195,7 +262,7 @@
 
         const label = document.createElement('div');
         label.className = 'attemptRowLabel';
-        label.textContent = `#${rowData.num}${rosterName(rowData.num) ? ' ' + rosterName(rowData.num) : ''}`;
+        label.textContent = `#${rowData.num}${rosterName(rowData.num) ? ' ' + rosterNameDisplay(rowData.num) : ''}`;
         rowEl.appendChild(label);
 
         const boxesWrap = document.createElement('div');
@@ -214,6 +281,20 @@
           if (!readOnly && cfg.allowFD) {
             cell.title = (cell.title ? cell.title + ' — ' : '') + 'Tap to mark/unmark 1st down';
             cell.addEventListener('click', () => { a.fd = !a.fd; rerender(); });
+          }
+          // Touchdown badge -- separate tap target (stops propagation so it
+          // doesn't also toggle 1st down) since Stat Keeper imports carry a
+          // per-play td flag and a coach entering stats by hand should be
+          // able to mark one too.
+          if (a.td || !readOnly) {
+            const tdTag = document.createElement('span');
+            tdTag.className = 'attemptBoxTdTag' + (a.td ? ' on' : '');
+            tdTag.textContent = 'TD';
+            tdTag.title = 'Tap to mark/unmark touchdown';
+            if (!readOnly) {
+              tdTag.addEventListener('click', (e) => { e.stopPropagation(); a.td = !a.td; rerender(); });
+            }
+            cell.appendChild(tdTag);
           }
           boxesWrap.appendChild(cell);
         });
@@ -310,7 +391,7 @@
         rowEl.className = 'attemptRow';
         const label = document.createElement('div');
         label.className = 'attemptRowLabel';
-        label.textContent = `#${rowData.num}${rosterName(rowData.num) ? ' ' + rosterName(rowData.num) : ''}`;
+        label.textContent = `#${rowData.num}${rosterName(rowData.num) ? ' ' + rosterNameDisplay(rowData.num) : ''}`;
         rowEl.appendChild(label);
 
         const boxesWrap = document.createElement('div');
@@ -381,12 +462,12 @@
       }
       const table = document.createElement('table');
       table.className = 'statsTable' + (readOnly ? '' : ' statsTableEdit');
-      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>INT</th><th>PBU</th><th>Sacks</th>${readOnly ? '' : '<th></th>'}</tr></thead>`;
+      table.innerHTML = `<thead><tr><th>#</th><th>Name</th><th>INT</th><th>PBU</th><th>Sacks</th><th>TD</th>${readOnly ? '' : '<th></th>'}</tr></thead>`;
       const tbody = document.createElement('tbody');
       rows.forEach((r, i) => {
         const tr = document.createElement('tr');
         const numTd = document.createElement('td'); numTd.textContent = r.num; numTd.className = 'statsIdentityCell';
-        const nameTd = document.createElement('td'); nameTd.textContent = rosterName(r.num) || '—'; nameTd.className = 'statsIdentityCell';
+        const nameTd = document.createElement('td'); nameTd.textContent = rosterNameDisplay(r.num) || '—'; nameTd.className = 'statsIdentityCell';
         tr.appendChild(numTd); tr.appendChild(nameTd);
         ['int', 'pbu', 'sacks'].forEach(field => {
           const td = document.createElement('td');
@@ -400,6 +481,22 @@
           }
           tr.appendChild(td);
         });
+        // Touchdown (e.g. a defensive/special-teams score off this INT/fumble)
+        // -- same clickable-tag pattern as the attempt-grid TD toggle, since
+        // there's no native checkbox styling elsewhere in this file.
+        const tdCell = document.createElement('td');
+        tdCell.style.position = 'relative'; // .attemptBoxTdTag is absolutely positioned
+        if (r.td || !readOnly) {
+          const tdTag = document.createElement('span');
+          tdTag.className = 'attemptBoxTdTag' + (r.td ? ' on' : '');
+          tdTag.textContent = 'TD';
+          tdTag.title = 'Tap to mark/unmark touchdown';
+          if (!readOnly) {
+            tdTag.addEventListener('click', () => { r.td = !r.td; rerender(); });
+          }
+          tdCell.appendChild(tdTag);
+        }
+        tr.appendChild(tdCell);
         if (!readOnly) {
           const rmTd = document.createElement('td');
           const rmBtn = document.createElement('button');
@@ -421,7 +518,7 @@
         addRowBtn.type = 'button'; addRowBtn.className = 'lbLinkBtn'; addRowBtn.textContent = '+ Add Player Row';
         addRowBtn.addEventListener('click', () => {
           if (!sel.value) return;
-          rows.push({ num: sel.value, int: 0, pbu: 0, sacks: 0 });
+          rows.push({ num: sel.value, int: 0, pbu: 0, sacks: 0, td: false });
           rerender();
         });
         pickWrap.appendChild(sel); pickWrap.appendChild(addRowBtn);

@@ -33,6 +33,13 @@
     { key: 'passYds', label: 'Passing Yards' },
     { key: 'recYds', label: 'Receiving Yards' },
     { key: 'koYds', label: 'Kickoff Yards' },
+    // Nathan: "touchdowns as their own flag" -- `td` is every TD a player
+    // personally scored (rushing/receiving/kickoff-return/defensive
+    // return); `passTd` is kept separate since a passing score credits the
+    // QB, not the ball carrier, so lumping them together would double-count
+    // a single play against two players' "touchdowns" totals.
+    { key: 'td', label: 'Touchdowns' },
+    { key: 'passTd', label: 'Passing Touchdowns' },
     { key: 'tackles', label: 'Tackles' },
     { key: 'sacks', label: 'Sacks' },
     { key: 'int', label: 'Interceptions' },
@@ -82,7 +89,7 @@
     const ss = window.normalizeGameStatSheet(statSheet);
     const byNum = {};
     function ensure(num, name) {
-      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0 };
+      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0 };
       if (name && !byNum[num].name) byNum[num].name = name;
       return byNum[num];
     }
@@ -91,11 +98,17 @@
     Object.keys(yardFields).forEach(sectionKey => {
       (ss[sectionKey] || []).forEach(row => {
         const rec = ensure(row.num);
-        const total = (row.attempts || []).reduce((sum, a) => {
-          if (sectionKey === 'passing' && !a.comp) return sum;
-          return sum + (Number(a.yds) || 0);
-        }, 0);
+        let total = 0, tdCount = 0;
+        (row.attempts || []).forEach(a => {
+          if (sectionKey === 'passing' && !a.comp) return;
+          total += Number(a.yds) || 0;
+          if (a.td) tdCount++;
+        });
         rec[yardFields[sectionKey]] += total;
+        // A passing TD credits the QB under passTd, not td -- td is reserved
+        // for whoever actually carried/caught/returned it into the end zone.
+        if (sectionKey === 'passing') rec.passTd += tdCount;
+        else rec.td += tdCount;
       });
     });
     (ss.tackles || []).forEach(row => {
@@ -109,6 +122,7 @@
       rec.int += Number(row.int) || 0;
       rec.pbu += Number(row.pbu) || 0;
       rec.sacks += Number(row.sacks) || 0;
+      if (row.td) rec.td += 1;
     });
     return byNum;
   }
@@ -125,7 +139,7 @@
       playedGames.push(g);
       const perGame = gamePlayerStats(g.statSheet);
       Object.values(perGame).forEach(rec => {
-        if (!byNum[rec.num]) byNum[rec.num] = { num: rec.num, name: rec.name, rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, games: 0 };
+        if (!byNum[rec.num]) byNum[rec.num] = { num: rec.num, name: rec.name, rushYds: 0, passYds: 0, recYds: 0, koYds: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, games: 0 };
         const agg = byNum[rec.num];
         if (rec.name && !agg.name) agg.name = rec.name;
         CATS.forEach(c => { agg[c.key] += rec[c.key] || 0; });
@@ -279,6 +293,53 @@
       return;
     }
     game.statSheet = window.normalizeGameStatSheet(game.statSheet);
+
+    // Nathan: "I want to use the stats as they are written [in Stat Keeper]
+    // to write into the player profiles and attached to the game." Reads a
+    // Stat Keeper "Download Game Log" export (js/statkeeper-import.js does
+    // the actual play-by-play -> statSheet translation) and REPLACES this
+    // game's statSheet entirely (confirmed choice -- simpler and more
+    // predictable than trying to merge with any manually-entered stats
+    // already on this game). Drops the coach into the same editor below to
+    // review/adjust before Save actually writes it -- import alone never
+    // touches schedule.json.
+    if (window.translateStatKeeperExport) {
+      const importRow = document.createElement('div');
+      importRow.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;';
+      const importBtn = document.createElement('button');
+      importBtn.type = 'button'; importBtn.className = 'lbLinkBtn';
+      importBtn.textContent = '⬆ Import from Stat Keeper';
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file'; fileInput.accept = 'application/json,.json'; fileInput.style.display = 'none';
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        fileInput.value = '';
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          let exportData;
+          try { exportData = JSON.parse(reader.result); } catch (e) { alert('That file isn\'t valid JSON -- make sure it\'s a Stat Keeper "Download Game Log" export.'); return; }
+          if (!exportData || !Array.isArray(exportData.plays)) { alert('That doesn\'t look like a Stat Keeper game log export (no plays[] found).'); return; }
+          if (!window.getTeamRosterCached || !window.isTeamRosterLoaded || !window.isTeamRosterLoaded()) { alert('Team roster hasn\'t loaded yet -- wait a moment and try again.'); return; }
+          const hasExisting = window.gameStatSheetHasAnything && window.gameStatSheetHasAnything(game.statSheet);
+          if (hasExisting && !confirm('This game already has stats entered. Importing will REPLACE all of them with the Stat Keeper log. Continue?')) return;
+          const result = window.translateStatKeeperExport(exportData, window.getTeamRosterCached());
+          game.statSheet = result.statSheet;
+          renderEnterStats();
+          if (result.warnings.length) {
+            setStatus('Imported with ' + result.warnings.length + ' warning' + (result.warnings.length === 1 ? '' : 's') + ' -- see below. Nothing is saved yet; review then hit Save.');
+            alert('Imported, but a few things need a look:\n\n' + result.warnings.join('\n'));
+          } else {
+            setStatus('Imported from Stat Keeper. Nothing is saved yet -- review below, then hit Save.');
+          }
+        };
+        reader.readAsText(file);
+      });
+      importRow.appendChild(importBtn);
+      importRow.appendChild(fileInput);
+      wrap.appendChild(importRow);
+    }
 
     const editorWrap = document.createElement('div');
     editorWrap.id = 'coachStatsEditorWrap';

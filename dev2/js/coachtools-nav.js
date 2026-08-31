@@ -17,6 +17,11 @@
       window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap'));
       window.initCoachingStaff && window.initCoachingStaff(document.getElementById('coachingStaffWrap'));
     } },
+    // Nathan: "create another tab under coaching tools for Depth Chart...
+    // name and number with + or - to add or remove guys" (from a Madden
+    // Lineup screenshot) -- js/depth-chart.js. +/- reorders each position's
+    // depth list only; it doesn't touch the master roster above.
+    { key: 'depthchart', label: '📋 Depth Chart', panel: 'coachDepthChartPanel', init: () => window.initDepthChart && window.initDepthChart() },
     { key: 'drivescripts', label: '🧢 Drive Scripts', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
     // Nathan: "make it so any drone videos added are in a Film Vault tab in
     // Coaches Tools - they should be categorized by alphabetical order since
@@ -34,6 +39,11 @@
     // and have a new pill called settings with that and other toggles to
     // turn on and off visibility to groups."
     { key: 'settings', label: '⚙️ Settings', panel: 'coachSettingsPanel', init: () => window.initCoachToolsSettings && window.initCoachToolsSettings() },
+    // Nathan: "Develop a how to section in the coaching tools... walkthrough
+    // explanations of how to do things such as add another login to your
+    // device, save the app as an app on your phone home screen." See
+    // js/coachtools-howto.js.
+    { key: 'howto', label: '❓ How To', panel: 'coachHowToPanel', init: () => window.initCoachToolsHowTo && window.initCoachToolsHowTo() },
   ];
 
   let activeTab = 'resources';
