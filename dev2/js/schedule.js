@@ -505,6 +505,18 @@
     const perPlayer = window.computeGamePlayerStats(game.statSheet);
     return Object.values(perPlayer).reduce((s, r) => s + (r.rushYds || 0) + (r.passYds || 0), 0);
   }
+  // Nathan: "Show stats like first downs." Same derived-from-statSheet
+  // pattern as Total Yards above -- the fd toggle per rushing/passing/
+  // receiving attempt (game-stats-editor.js) already existed, it just
+  // wasn't summed into anything until coachtools-stats.js's
+  // gamePlayerStats() started tracking it per player (rec.fd). Opponent's
+  // side is a manual number (schedOppFirstDowns) same as oppYards, since we
+  // have no play-by-play on them.
+  function ourFirstDownsFor(game) {
+    if (!game || !game.statSheet || !window.computeGamePlayerStats) return 0;
+    const perPlayer = window.computeGamePlayerStats(game.statSheet);
+    return Object.values(perPlayer).reduce((s, r) => s + (r.fd || 0), 0);
+  }
   function h2hBarHtml(label, us, them, oppName) {
     const total = us + them;
     const usPct = total > 0 ? Math.round((us / total) * 100) : 50;
@@ -528,10 +540,13 @@
     if (!resultFor(current)) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     const ourYards = ourTotalYardsFor(current);
     const oppYards = Number(current.oppYards) || 0;
+    const ourFD = ourFirstDownsFor(current);
+    const oppFD = Number(current.oppFirstDowns) || 0;
     const ourTOs = current.ourTurnovers === '' || current.ourTurnovers == null ? null : Number(current.ourTurnovers);
     const oppTOs = current.oppTurnovers === '' || current.oppTurnovers == null ? null : Number(current.oppTurnovers);
     const bars = [];
     if (ourYards > 0 || oppYards > 0) bars.push(h2hBarHtml('Total Yards', ourYards, oppYards, current.opponent));
+    if (ourFD > 0 || oppFD > 0) bars.push(h2hBarHtml('First Downs', ourFD, oppFD, current.opponent));
     if (ourTOs != null || oppTOs != null) bars.push(h2hBarHtml('Turnovers', ourTOs || 0, oppTOs || 0, current.opponent));
     if (!bars.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     wrap.style.display = '';
@@ -942,7 +957,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', injuryReport: [], gameFootage: [] };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -964,6 +979,9 @@
     current.oppYards = current.oppYards === undefined ? '' : current.oppYards;
     current.ourTurnovers = current.ourTurnovers === undefined ? '' : current.ourTurnovers;
     current.oppTurnovers = current.oppTurnovers === undefined ? '' : current.oppTurnovers;
+    // Nathan: "Show stats like first downs." Same "older saved games predate
+    // this field" backfill as oppYards/ourTurnovers/oppTurnovers above.
+    current.oppFirstDowns = current.oppFirstDowns === undefined ? '' : current.oppFirstDowns;
     // Nathan: "Injury Report section that coaches can add in guys to it
     // with a write-in for status." Lives on the game itself (like Scouting
     // Report) since it's inherently about who's available for THIS game.
@@ -1154,11 +1172,14 @@
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <span class="lbSub" style="margin:0;">Their total yards:</span>
         <input type="number" id="schedOppYards" placeholder="Yds" style="width:70px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <span class="lbSub" style="margin:0 0 0 6px;">Their first downs:</span>
+        <input type="number" id="schedOppFirstDowns" placeholder="FD" style="width:56px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span class="lbSub" style="margin:0 0 0 6px;">Turnovers -- us:</span>
         <input type="number" id="schedOurTurnovers" placeholder="Us" style="width:56px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
         <span class="lbSub" style="margin:0;">them:</span>
         <input type="number" id="schedOppTurnovers" placeholder="Them" style="width:56px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
       </div>
+      <div class="lbSub" style="margin:-8px 0 12px;">Our first downs/total yards are figured automatically from Coach Tools &gt; Stats -- no need to enter them here.</div>
       <div class="lbSectionHeader" style="margin-top:6px;">🩹 Injury Report</div>
       <div class="lbSub" style="margin:2px 0 8px;">Who's banged up entering this game -- visible to the whole team.</div>
       <div id="schedInjuryWrap" style="margin-bottom:8px;"></div>
@@ -1184,6 +1205,7 @@
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
     document.getElementById('schedOppYards').value = current.oppYards === null || current.oppYards === undefined ? '' : current.oppYards;
+    document.getElementById('schedOppFirstDowns').value = current.oppFirstDowns === null || current.oppFirstDowns === undefined ? '' : current.oppFirstDowns;
     document.getElementById('schedOurTurnovers').value = current.ourTurnovers === null || current.ourTurnovers === undefined ? '' : current.ourTurnovers;
     document.getElementById('schedOppTurnovers').value = current.oppTurnovers === null || current.oppTurnovers === undefined ? '' : current.oppTurnovers;
     renderInjuryEditor();
@@ -1402,9 +1424,11 @@
     current.ourScore = ourScoreRaw === '' ? '' : Number(ourScoreRaw);
     current.oppScore = oppScoreRaw === '' ? '' : Number(oppScoreRaw);
     const oppYardsRaw = document.getElementById('schedOppYards').value.trim();
+    const oppFirstDownsRaw = document.getElementById('schedOppFirstDowns').value.trim();
     const ourTOsRaw = document.getElementById('schedOurTurnovers').value.trim();
     const oppTOsRaw = document.getElementById('schedOppTurnovers').value.trim();
     current.oppYards = oppYardsRaw === '' ? '' : Number(oppYardsRaw);
+    current.oppFirstDowns = oppFirstDownsRaw === '' ? '' : Number(oppFirstDownsRaw);
     current.ourTurnovers = ourTOsRaw === '' ? '' : Number(ourTOsRaw);
     current.oppTurnovers = oppTOsRaw === '' ? '' : Number(oppTOsRaw);
     current.writeup = document.getElementById('schedWriteup').value.trim();

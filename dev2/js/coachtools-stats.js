@@ -101,7 +101,7 @@
     const ss = window.normalizeGameStatSheet(statSheet);
     const byNum = {};
     function ensure(num, name) {
-      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, rushAtt: 0, fum: 0, ypc: 0 };
+      if (!byNum[num]) byNum[num] = { num, name: name || '', rushYds: 0, passYds: 0, recYds: 0, koYds: 0, solo: 0, assist: 0, tackles: 0, int: 0, pbu: 0, sacks: 0, td: 0, passTd: 0, rushAtt: 0, fum: 0, ypc: 0, fd: 0 };
       if (name && !byNum[num].name) byNum[num].name = name;
       return byNum[num];
     }
@@ -115,6 +115,12 @@
           if (sectionKey === 'passing' && !a.comp) return;
           total += Number(a.yds) || 0;
           if (a.td) tdCount++;
+          // Nathan: "Show stats like first downs." The fd toggle per attempt
+          // (game-stats-editor.js) already existed for tendencies but was
+          // never summed anywhere -- kickoffs are excluded since that
+          // section never offers the FD toggle in the editor (allowFD:
+          // false there), same exclusion this loop already makes for TD.
+          if (a.fd && sectionKey !== 'kickoffs') rec.fd += 1;
         });
         rec[yardFields[sectionKey]] += total;
         // A passing TD credits the QB under passTd, not td -- td is reserved
