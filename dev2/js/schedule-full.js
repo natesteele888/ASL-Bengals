@@ -59,11 +59,15 @@
       location: g.location || '',
       infoUrl: g.infoUrl || '',
     }));
+    // Nathan: "add another type of practice to the schedule which is Walk
+    // Through." Same title/sub/badge treatment as Film Night got when it
+    // was added -- see practices.js's TYPES/badgeClassFor for the source of
+    // truth this mirrors.
     const practiceEntries = practices.map(p => ({
       kind: 'practice', id: p.id, date: p.date || '',
       time: p.time || '',
-      title: p.type === 'film' ? '🎬 Film Night' : '🏃 Practice',
-      sub: p.type === 'film' ? 'Film Night' : 'Practice',
+      title: p.type === 'film' ? '🎬 Film Night' : p.type === 'walkthrough' ? '🚶 Walk Through' : '🏃 Practice',
+      sub: p.type === 'film' ? 'Film Night' : p.type === 'walkthrough' ? 'Walk Through' : 'Practice',
       location: p.location || '',
     }));
     return gameEntries.concat(practiceEntries).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
@@ -77,8 +81,8 @@
       description: [g.arriveTime ? `Arrive by ${to12h(g.arriveTime)}` : '', g.warmupTime ? `Warm-up ${to12h(g.warmupTime)}` : ''].filter(Boolean).join(' • '),
     }));
     const practiceEvents = practices.filter(p => p.date).map(p => ({
-      uid: p.id, date: p.date, time: p.time || '', durationMinutes: minutesBetween(p.time, p.endTime) || 105,
-      title: p.type === 'film' ? 'ASL Bengals Film Night' : 'ASL Bengals Practice',
+      uid: p.id, date: p.date, time: p.time || '', durationMinutes: minutesBetween(p.time, p.endTime) || (p.type === 'walkthrough' ? 60 : 105),
+      title: p.type === 'film' ? 'ASL Bengals Film Night' : p.type === 'walkthrough' ? 'ASL Bengals Walk Through' : 'ASL Bengals Practice',
       location: p.location || '',
       description: p.notes || '',
     }));
@@ -101,7 +105,7 @@
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'practiceRow';
-      const badgeClass = e.kind === 'game' ? 'game' : (e.title.indexOf('Film') !== -1 ? 'film' : 'practice');
+      const badgeClass = e.kind === 'game' ? 'game' : (e.title.indexOf('Film') !== -1 ? 'film' : e.title.indexOf('Walk Through') !== -1 ? 'walkthrough' : 'practice');
       const weatherId = `fullSchedWeather-${e.kind}-${e.id}`;
       row.innerHTML = `
         <span class="practiceTypeBadge ${badgeClass}">${escapeHtml(e.sub)}</span>

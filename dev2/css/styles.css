@@ -1927,6 +1927,10 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .practiceTypeBadge.practice { background: var(--bengal-orange); color: #fff; }
 .practiceTypeBadge.film { background: #4a5fc9; color: #fff; }
 .practiceTypeBadge.game { background: #1c6fc0; color: #fff; }
+/* Nathan: "add another type of practice to the schedule which is Walk
+   Through." Distinct color from Practice (orange)/Film Night (blue-purple)/
+   Game (blue) so the badge is glanceable in the list. */
+.practiceTypeBadge.walkthrough { background: #2e9e5b; color: #fff; }
 /* Nathan: "let's add the weather to the right side of the practice
    cards." Badge + date/time + (optional) weather chip share one row now,
    with the weather pushed to the far right via margin-left:auto on

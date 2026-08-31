@@ -235,8 +235,13 @@
     gameEntries.sort((a, b) => a.d - b.d);
     practiceEntries.sort((a, b) => a.d - b.d);
 
-    const practiceCount = practiceEntries.filter(e => e.p.type !== 'film').length;
-    const filmCount = practiceEntries.length - practiceCount;
+    // Nathan: "add another type of practice to the schedule which is Walk
+    // Through." Counted separately from plain Practice, same as Film Night
+    // already was, so the Week Ahead stat cards/hype line don't lump a
+    // walkthrough in as a regular practice.
+    const filmCount = practiceEntries.filter(e => e.p.type === 'film').length;
+    const walkthroughCount = practiceEntries.filter(e => e.p.type === 'walkthrough').length;
+    const practiceCount = practiceEntries.length - filmCount - walkthroughCount;
 
     return {
       hasAny: !!(gameEntries.length || practiceEntries.length),
@@ -245,6 +250,7 @@
       practiceEntries,
       practiceCount,
       filmCount,
+      walkthroughCount,
       weekStart: start, // this week's Monday -- used to pick a stable-per-week hype closer, see weekAheadHypeLine
     };
   }
@@ -293,12 +299,17 @@
   // .practiceRowTop, .practiceTypeBadge) -- clicking jumps to that
   // practice's own detail page via window.openPracticeDetail.
   function weekAheadPracticeCardHtml(d, p) {
-    const isFilm = p.type === 'film';
+    // Nathan: "add another type of practice to the schedule which is Walk
+    // Through." Same badge class/label practices.js's badgeClassFor/TYPES
+    // use, so this card matches the one you'd see on the actual Practices
+    // tab for the same entry.
+    const badgeClass = p.type === 'film' ? 'film' : p.type === 'walkthrough' ? 'walkthrough' : 'practice';
+    const badgeLabel = p.type === 'film' ? '🎬 Film Night' : p.type === 'walkthrough' ? '🚶 Walk Through' : '🏃 Practice';
     const timeStr = p.time ? (p.endTime ? `${to12h(p.time)} - ${to12h(p.endTime)}` : to12h(p.time)) : '';
     return `
       <button type="button" class="practiceRow" data-open-practice="${escapeHtml(p.id)}" style="margin-bottom:8px;">
         <div class="practiceRowTop">
-          <span class="practiceTypeBadge ${isFilm ? 'film' : 'practice'}">${isFilm ? '🎬 Film Night' : '🏃 Practice'}</span>
+          <span class="practiceTypeBadge ${badgeClass}">${badgeLabel}</span>
           <span class="practiceRowDateTime">${weekAheadCardDate(d)}${timeStr ? ' • ' + escapeHtml(timeStr) : ''}</span>
         </div>
         ${p.location ? `<span class="practiceRowLoc">📍 ${escapeHtml(p.location)}</span>` : ''}
@@ -346,6 +357,7 @@
       const practiceParts = [];
       if (data.practiceCount) practiceParts.push(`${data.practiceCount} practice${data.practiceCount === 1 ? '' : 's'}`);
       if (data.filmCount) practiceParts.push(`${data.filmCount} film night${data.filmCount === 1 ? '' : 's'}`);
+      if (data.walkthroughCount) practiceParts.push(`${data.walkthroughCount} walk-through${data.walkthroughCount === 1 ? '' : 's'}`);
       return `No game this week, but ${joinList(practiceParts)} on the schedule to get sharper for the next one. ${closer}`;
     }
     const isSeasonOpener = !data.record;
@@ -377,6 +389,7 @@
     if (data.gameEntries.length) statCards.push(weekAheadStatCardHtml(data.gameEntries.length, data.gameEntries.length === 1 ? 'Game' : 'Games'));
     if (data.practiceCount) statCards.push(weekAheadStatCardHtml(data.practiceCount, data.practiceCount === 1 ? 'Practice' : 'Practices'));
     if (data.filmCount) statCards.push(weekAheadStatCardHtml(data.filmCount, data.filmCount === 1 ? 'Film Night' : 'Film Nights'));
+    if (data.walkthroughCount) statCards.push(weekAheadStatCardHtml(data.walkthroughCount, data.walkthroughCount === 1 ? 'Walk Through' : 'Walk Throughs'));
 
     const gamesHtml = data.gameEntries.map(({ d, g }) => weekAheadGameCardHtml(d, g, data.record)).join('');
     const practicesHtml = data.practiceEntries.map(({ d, p }) => weekAheadPracticeCardHtml(d, p)).join('');

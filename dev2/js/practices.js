@@ -23,10 +23,23 @@
 (function () {
 
   const PRACTICES_URL = `${FIREBASE_DB_URL}/practices.json`;
+  // Nathan: "We also need to add another type of practice to the schedule
+  // which is Walk Through. This is a 1 hour event for the day before a
+  // game." See applyWalkthroughDefaults() below for the actual
+  // day-before-game / typical-time logic this new type triggers.
   const TYPES = [
     { key: 'practice', label: '🏃 Practice' },
     { key: 'film', label: '🎬 Film Night' },
+    { key: 'walkthrough', label: '🚶 Walk Through' },
   ];
+  // Nathan: "Cleats, practice jersey, helmet required" -- there's no
+  // structured gear-checklist field anywhere in this app (Notes has always
+  // been the one free-text spot for "what to bring"), so rather than invent
+  // a whole new field/schema just for this, a fresh Walk Through's Notes
+  // just gets pre-filled with this text (only when Notes is still empty --
+  // see applyWalkthroughDefaults) the same way a coach would type it
+  // themselves, and remains fully editable/removable from there.
+  const WALKTHROUGH_DEFAULT_NOTES = 'Cleats, practice jersey, and helmet required.';
   // Index matches Date.getDay() (0 = Sunday) -- Nathan: "I need an option
   // to repeat or set practice for multiple days."
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -69,6 +82,13 @@
   }
   function typeInfo(type) {
     return TYPES.find(t => t.key === type) || TYPES[0];
+  }
+  // CSS badge color class -- one branch per TYPES entry (see
+  // .practiceTypeBadge.walkthrough in css/styles.css). Kept as its own
+  // lookup rather than inlining a three-way ternary at each of the two call
+  // sites below, so a future 4th type only needs one line changed here.
+  function badgeClassFor(type) {
+    return type === 'film' ? 'film' : type === 'walkthrough' ? 'walkthrough' : 'practice';
   }
   // Nathan: "need an end time for practice too." Both fields are the same
   // native <input type="time"> "HH:MM" shape, so a plain string compare
@@ -190,7 +210,7 @@
         : '';
       row.innerHTML = `
         <div class="practiceRowTop">
-          <span class="practiceTypeBadge ${p.type === 'film' ? 'film' : 'practice'}">${info.label}</span>
+          <span class="practiceTypeBadge ${badgeClassFor(p.type)}">${info.label}</span>
           <span class="practiceRowDateTime">${fmtDate(p.date)}${p.time ? ' • ' + escapeHtml(timeRangeLabel(p.time, p.endTime)) : ''}</span>
           <span class="practiceRowRight">
             ${droneBadgeHtml}
@@ -249,7 +269,7 @@
       // now -- see the editMode comment up top) ----
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="practiceEditToggleBtn">✏️ Edit</button></div>` : ''}
-        <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${current.type === 'film' ? 'film' : 'practice'}">${info.label}</span></div>
+        <div style="text-align:center;margin-bottom:10px;"><span class="practiceTypeBadge ${badgeClassFor(current.type)}">${info.label}</span></div>
         <div class="lbSectionHeader" style="text-align:center;">${fmtDate(current.date)}${current.time ? ' • ' + escapeHtml(timeRangeLabel(current.time, current.endTime)) : ''}</div>
         <div class="lbSub" style="margin:4px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div id="practiceCancelSection"></div>
@@ -314,7 +334,12 @@
       chip.type = 'button';
       chip.className = 'gameplanChip' + (current.type === t.key ? ' active' : '');
       chip.textContent = t.label;
-      chip.addEventListener('click', () => { current.type = t.key; renderDetail(); });
+      chip.addEventListener('click', () => {
+        const switchingToWalkthrough = t.key === 'walkthrough' && current.type !== 'walkthrough';
+        current.type = t.key;
+        if (switchingToWalkthrough) applyWalkthroughDefaults();
+        renderDetail();
+      });
       typeGrid.appendChild(chip);
     });
 
@@ -409,14 +434,83 @@
     btn.addEventListener('click', () => {
       if (!current.date) { alert('Add a date first.'); return; }
       if (!window.buildICS || !window.downloadICS) return;
+      // Nathan: "This is a 1 hour event" -- only matters as a fallback when
+      // no end time is set at all; minutesBetween(current.time,
+      // current.endTime) already reflects the real gap once both are filled
+      // (which applyWalkthroughDefaults' 09:00-10:00/5:30-6:30 pairs do).
+      const durationFallback = current.type === 'walkthrough' ? 60 : 105;
+      const icsTitle = current.type === 'film' ? 'ASL Bengals Film Night' : current.type === 'walkthrough' ? 'ASL Bengals Walk Through' : 'ASL Bengals Practice';
+      const icsFileTag = current.type === 'film' ? 'Film_Night' : current.type === 'walkthrough' ? 'Walk_Through' : 'Practice';
       const ics = window.buildICS([{
-        uid: current.id, date: current.date, time: current.time || '', durationMinutes: minutesBetween(current.time, current.endTime) || 105,
-        title: current.type === 'film' ? 'ASL Bengals Film Night' : 'ASL Bengals Practice',
+        uid: current.id, date: current.date, time: current.time || '', durationMinutes: minutesBetween(current.time, current.endTime) || durationFallback,
+        title: icsTitle,
         location: current.location || '',
         description: current.notes || '',
       }]);
-      window.downloadICS(`ASL_Bengals_${current.type === 'film' ? 'Film_Night' : 'Practice'}_${current.date}.ics`, ics);
+      window.downloadICS(`ASL_Bengals_${icsFileTag}_${current.date}.ics`, ics);
     });
+  }
+
+  // Nathan: "If the game is on Sunday, the walkthrough is Saturday morning
+  // at 9am. If the game is Saturday, the walk through is 530-630 on Friday
+  // night. We can set that but it's typically the options." Local-date math
+  // throughout (no UTC), same care schedule.js's fmtDate/practices.js's
+  // datesInRange already take to avoid off-by-one-day timezone shifts.
+  function todayLocalDateStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function dayBeforeStr(dateStr) {
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return '';
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  // Date.getDay(): 0 = Sunday, 6 = Saturday.
+  function weekdayOf(dateStr) {
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+  }
+
+  // Fires whenever a practice's type is switched to Walk Through (new or
+  // already-saved entries alike -- see the TYPES chip handler below). Only
+  // ever fills fields that are still blank, so flipping an existing
+  // practice to Walk Through (or flipping it back and forth while deciding)
+  // never clobbers anything a coach already typed. Looks at the *nearest
+  // upcoming game* (schedule.js's own games array, shared via
+  // window.getGamesCached/ensureGamesLoaded rather than a private copy) to
+  // decide which of the two typical patterns applies; anything other than a
+  // Sat/Sun game has no "typical" slot, so date/time are left for the coach
+  // to set by hand rather than guessing.
+  function applyWalkthroughDefaults() {
+    if (!current) return;
+    if (!current.notes) current.notes = WALKTHROUGH_DEFAULT_NOTES;
+    const forId = current.id;
+    const applyFromGames = (games) => {
+      if (!current || current.id !== forId || current.type !== 'walkthrough') return;
+      if (current.date) return; // coach already picked a date -- don't move it
+      const today = todayLocalDateStr();
+      const upcoming = (games || [])
+        .filter(g => g.date && g.date >= today)
+        .sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (!upcoming) return;
+      const wd = weekdayOf(upcoming.date);
+      if (wd === 0) { // game Sunday -> walkthrough Saturday 9-10am
+        current.date = dayBeforeStr(upcoming.date);
+        if (!current.time) { current.time = '09:00'; current.endTime = '10:00'; }
+      } else if (wd === 6) { // game Saturday -> walkthrough Friday 5:30-6:30pm
+        current.date = dayBeforeStr(upcoming.date);
+        if (!current.time) { current.time = '17:30'; current.endTime = '18:30'; }
+      }
+      if (current.type === 'walkthrough') renderDetail();
+    };
+    if (window.getGamesCached && window.getGamesCached().length) {
+      applyFromGames(window.getGamesCached());
+    } else if (window.ensureGamesLoaded) {
+      window.ensureGamesLoaded().then(applyFromGames);
+    }
   }
 
   // Every date between start/end (inclusive) whose weekday is in

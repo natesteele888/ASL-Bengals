@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824c">
+<link rel="stylesheet" href="css/styles.css?v=20260824d">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -691,7 +691,7 @@
     <div id="practicesListWrap" style="max-width:560px;margin:0 auto;">
       <div id="practicesList"></div>
       <div id="practicesAddWrap" style="display:none;">
-        <button class="navBtn" id="practicesNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Practice / Film Night</button>
+        <button class="navBtn" id="practicesNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Practice / Film Night / Walk Through</button>
       </div>
       <div id="practicesCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
     </div>
@@ -1833,7 +1833,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824h';
+  const BUILD_V = '20260824i';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
