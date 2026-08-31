@@ -689,6 +689,7 @@
        either way) -- see js/practices.js. -->
   <div id="schedulePracticesPanel" style="display:none;">
     <div id="practicesListWrap" style="max-width:560px;margin:0 auto;">
+      <div class="gameplanPickerGrid" id="practicesWeekToggleGrid" style="margin-bottom:10px;"></div>
       <div id="practicesList"></div>
       <div id="practicesAddWrap" style="display:none;">
         <button class="navBtn" id="practicesNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Practice / Film Night / Walk Through</button>
@@ -1833,7 +1834,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824j';
+  const BUILD_V = '20260824k';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

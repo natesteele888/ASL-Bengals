@@ -58,6 +58,13 @@
   // still open straight into the edit form since there's nothing to
   // preview yet.
   let editMode = false;
+  // Nathan: "I also don't want old practices to be confused with the new
+  // practices. Would like maybe a weekly view that updates to the current
+  // week." Defaults to This Week (Monday-Sunday, recomputed fresh off
+  // today's real date every render -- see currentWeekRange -- so it always
+  // tracks the real current week with no stored/stale state); a coach can
+  // still flip to All to see the full history/future, same list either way.
+  let weekViewFilter = 'week'; // 'week' | 'all'
 
   function genId() {
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -167,23 +174,54 @@
     });
   }
 
+  // Nathan: "I also don't want old practices to be confused with the new
+  // practices. Would like maybe a weekly view that updates to the current
+  // week." Same This Week/All chip-toggle look as the Practice/Film/Walk
+  // Through type picker elsewhere in this file.
+  function renderWeekToggle() {
+    const grid = document.getElementById('practicesWeekToggleGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    [['week', 'This Week'], ['all', 'All']].forEach(([key, label]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'gameplanChip' + (weekViewFilter === key ? ' active' : '');
+      chip.textContent = label;
+      chip.addEventListener('click', () => { weekViewFilter = key; renderList(); });
+      grid.appendChild(chip);
+    });
+  }
+
   // ---- List view ----
   function renderList() {
     const listEl = document.getElementById('practicesList');
     const addWrap = document.getElementById('practicesAddWrap');
+    const toggleGrid = document.getElementById('practicesWeekToggleGrid');
     if (!listEl) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     if (addWrap) addWrap.style.display = approved ? '' : 'none';
 
     listEl.innerHTML = '';
     if (!items.length) {
+      if (toggleGrid) toggleGrid.style.display = 'none';
       const empty = document.createElement('div');
       empty.className = 'lbEmpty';
       empty.textContent = approved ? 'No practices or film nights scheduled yet -- add one below.' : 'No practices or film nights scheduled yet.';
       listEl.appendChild(empty);
       return;
     }
-    items.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || '')).forEach(p => {
+    if (toggleGrid) { toggleGrid.style.display = ''; renderWeekToggle(); }
+
+    const range = currentWeekRange();
+    const visible = weekViewFilter === 'week' ? items.filter(p => p.date && p.date >= range.start && p.date <= range.end) : items;
+    if (!visible.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'Nothing scheduled this week -- switch to "All" above to see everything, or add one below.';
+      listEl.appendChild(empty);
+      return;
+    }
+    visible.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || '')).forEach(p => {
       const info = typeInfo(p.type);
       const row = document.createElement('button');
       row.type = 'button';
@@ -472,6 +510,20 @@
     const parts = dateStr.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) return null;
     return new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+  }
+  // Monday-Sunday window containing today -- same "week starts Monday"
+  // convention js/thisweek.js's Week Ahead card already uses, reimplemented
+  // locally rather than reaching into that file's private function (same
+  // house rule this file's header comment already states for schedule.js).
+  // Recomputed fresh (off `new Date()`) every call, so "this week" always
+  // tracks the real current week with nothing stored/stale.
+  function currentWeekRange() {
+    const today = new Date();
+    const mondayOffset = (today.getDay() + 6) % 7; // days since most recent Monday
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { start: fmt(start), end: fmt(end) };
   }
 
   // Fires whenever a practice's type is switched to Walk Through (new or

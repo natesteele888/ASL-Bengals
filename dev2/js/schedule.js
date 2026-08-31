@@ -739,6 +739,61 @@
       </div>`).join('')}</div>`;
   }
 
+  // Nathan: "Need an option to add game Footage to the games on the app...
+  // They live in my google drive, I can link the video in the drive." Just
+  // a title + link per clip (e.g. "Q1", "Full Game") -- visible to everyone
+  // (players/parents included, same as Scouting Report/Game Write-Up above)
+  // in the read-only view; only approved coaches get the add/remove editor.
+  // Nathan also asked for a "simple version" of casting to a TV: opening
+  // this same link on whatever device you want (a tablet, a smart TV's
+  // browser) already gets you that, via Google Drive's own player -- no
+  // separate cast button needed here.
+  function gameFootageReadOnlyHtml(game) {
+    const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
+    if (!clips.length) return '<span class="lbEmpty" style="padding:0;">No footage linked yet.</span>';
+    return `<div style="display:flex;flex-direction:column;gap:6px;">${clips.map(c => `
+      <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>`).join('')}</div>`;
+  }
+
+  // Coach edit list -- mutates current.gameFootage in place and re-renders
+  // just this block, same pattern as renderInjuryEditor above.
+  function renderGameFootageEditor() {
+    const wrap = document.getElementById('schedFootageWrap');
+    if (!wrap || !current) return;
+    const clips = current.gameFootage;
+    wrap.innerHTML = '';
+    if (!clips.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'No footage linked yet -- add a Google Drive (or other) link below.';
+      wrap.appendChild(empty);
+    }
+    clips.forEach((clip, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text'; titleInput.placeholder = 'Title (e.g. "Q1" or "Full Game")'; titleInput.value = clip.title || '';
+      titleInput.style.cssText = 'flex:1 1 140px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;';
+      titleInput.addEventListener('input', () => { clip.title = titleInput.value; });
+      row.appendChild(titleInput);
+      const urlInput = document.createElement('input');
+      urlInput.type = 'text'; urlInput.placeholder = 'Google Drive (or other) video link'; urlInput.value = clip.url || '';
+      urlInput.style.cssText = 'flex:2 1 200px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;';
+      urlInput.addEventListener('input', () => { clip.url = urlInput.value.trim(); });
+      row.appendChild(urlInput);
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'statsRmBtnSmall'; rm.textContent = '✕';
+      rm.addEventListener('click', () => { clips.splice(i, 1); renderGameFootageEditor(); });
+      row.appendChild(rm);
+      wrap.appendChild(row);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'lbLinkBtn'; addBtn.style.marginTop = '4px';
+    addBtn.textContent = '+ Add Footage Link';
+    addBtn.addEventListener('click', () => { clips.push({ id: genId(), title: '', url: '' }); renderGameFootageEditor(); });
+    wrap.appendChild(addBtn);
+  }
+
   function fmtDate(dateStr) {
     if (!dateStr) return 'Date TBD';
     // date input value is 'YYYY-MM-DD' -- parse as local, not UTC, so the
@@ -887,7 +942,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', injuryReport: [] };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', injuryReport: [], gameFootage: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -913,6 +968,13 @@
     // with a write-in for status." Lives on the game itself (like Scouting
     // Report) since it's inherently about who's available for THIS game.
     current.injuryReport = Array.isArray(current.injuryReport) ? current.injuryReport : [];
+    // Nathan: "Need an option to add game Footage to the games on the app."
+    // No paid Firebase Storage plan and full games run 700MB+ per quarter,
+    // so (unlike js/drone-footage.js's base64-in-database practice clips)
+    // this only ever stores a link to wherever the actual video already
+    // lives (Nathan's Google Drive) -- see gameFootageReadOnlyHtml/
+    // renderGameFootageEditor below.
+    current.gameFootage = Array.isArray(current.gameFootage) ? current.gameFootage : [];
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
@@ -1019,6 +1081,8 @@
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
+        <div class="lbSectionHeader" style="margin-top:16px;">🎥 Game Footage</div>
+        ${gameFootageReadOnlyHtml(current)}
         <div class="scheduleFinePrint">${gameIsFinal ? "Game Recap is auto-generated from this game's stats (Coach Tools &gt; Stats)." : "Game Preview is auto-generated from this game's Schedule info."}</div>`;
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
@@ -1106,6 +1170,9 @@
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
       <div style="margin-bottom:4px;"><button type="button" class="lbLinkBtn" id="schedFillHighlightsBtn">✨ Fill from Stats</button></div>
       <textarea id="schedWriteup" placeholder="How the game went…" style="width:100%;min-height:90px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;"></textarea>
+      <div class="lbSectionHeader" style="margin-top:16px;">🎥 Game Footage</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Link to wherever the footage already lives (Google Drive, Hudl, YouTube, etc.) -- visible to the whole team. To "cast" it, just open the link on whatever screen you want (a tablet or a smart TV's browser); most video players (Drive included) already have their own cast button once the video is open.</div>
+      <div id="schedFootageWrap" style="margin-bottom:8px;"></div>
       <div class="scheduleFinePrint">${gameIsFinal ? 'Game Recap is auto-generated -- updates once you save.' : 'Game Preview is auto-generated -- updates once you save.'}</div>`;
 
     document.getElementById('schedOpponent').value = current.opponent || '';
@@ -1120,6 +1187,7 @@
     document.getElementById('schedOurTurnovers').value = current.ourTurnovers === null || current.ourTurnovers === undefined ? '' : current.ourTurnovers;
     document.getElementById('schedOppTurnovers').value = current.oppTurnovers === null || current.oppTurnovers === undefined ? '' : current.oppTurnovers;
     renderInjuryEditor();
+    renderGameFootageEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
     const fillHighlightsBtn = document.getElementById('schedFillHighlightsBtn');
