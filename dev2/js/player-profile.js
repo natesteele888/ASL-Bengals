@@ -35,6 +35,11 @@
   const OFFENSE_CATS = [
     { key: 'passYds', label: 'Pass Yds' },
     { key: 'rushYds', label: 'Rush Yds' },
+    // Nathan: "we are missing attempts for rushing yards which will allow
+    // us to show yards per carry" -- rushAtt was already tracked/summed
+    // for ypc's sake (see totals.rushAtt below), just never shown as its
+    // own column here.
+    { key: 'rushAtt', label: 'Rush Att' },
     { key: 'recYds', label: 'Rec Yds' },
     { key: 'koYds', label: 'KO Yds' },
     { key: 'td', label: 'TD' },
@@ -192,7 +197,10 @@
       // ypc is a ratio (rushYds/rushAtt) -- summing each game's ypc here
       // would average-of-averages, which is wrong. It's recomputed below
       // from the career-summed rushYds/rushAtt once every game is in.
-      ALL_CATS.forEach(c => { if (c.key === 'ypc') return; totals[c.key] += rec[c.key] || 0; });
+      // rushAtt is skipped here too and added once below instead -- now
+      // that it's its own ALL_CATS entry, summing it in both places would
+      // double it.
+      ALL_CATS.forEach(c => { if (c.key === 'ypc' || c.key === 'rushAtt') return; totals[c.key] += rec[c.key] || 0; });
       totals.rushAtt += rec.rushAtt || 0;
       recentGames.push({ game: g, rec });
     });

@@ -30,6 +30,11 @@
 
   const CATS = [
     { key: 'rushYds', label: 'Rushing Yards' },
+    // Nathan: "we are missing attempts for rushing yards which will allow
+    // us to show yards per carry" -- rushAtt (row.attempts.length, see
+    // gamePlayerStats below) was already being tracked/summed for ypc's
+    // sake, just never surfaced as its own visible/sortable category here.
+    { key: 'rushAtt', label: 'Rushing Attempts' },
     { key: 'passYds', label: 'Passing Yards' },
     { key: 'recYds', label: 'Receiving Yards' },
     { key: 'koYds', label: 'Kickoff Yards' },
@@ -158,7 +163,10 @@
         // ypc is a ratio (rushYds/rushAtt) -- summing each game's ypc here
         // would average-of-averages, which is wrong. It's recomputed below
         // from the season-summed rushYds/rushAtt once every game is in.
-        CATS.forEach(c => { if (c.key === 'ypc') return; agg[c.key] += rec[c.key] || 0; });
+        // rushAtt itself is skipped here too and added once below instead --
+        // now that it's a CATS entry in its own right, summing it in both
+        // places would double it.
+        CATS.forEach(c => { if (c.key === 'ypc' || c.key === 'rushAtt') return; agg[c.key] += rec[c.key] || 0; });
         agg.rushAtt += rec.rushAtt || 0;
         agg.games += 1;
       });
@@ -324,6 +332,24 @@
     if (window.translateStatKeeperExport) {
       const importRow = document.createElement('div');
       importRow.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;';
+      // Nathan: "add a link within the coaching tools to open the STAT
+      // creator web app" -- the standalone live play-by-play logger
+      // (dev2/stat-keeper.html, a copy of the tool that used to only live
+      // at repo-root _stat-keeper-prototype/) a coach/parent uses on the
+      // sideline during the game; its "Download Game Log" export is what
+      // the Import button just below reads. Opens in a new tab so this
+      // Coach Tools session (and whatever's already typed into the editor
+      // below) stays put. Still labeled a prototype in its own banner --
+      // it also has its own "push straight to live stats" option gated
+      // behind the real coach code, as an alternative to the download ->
+      // import round trip.
+      const openBtn = document.createElement('a');
+      openBtn.href = 'stat-keeper.html';
+      openBtn.target = '_blank';
+      openBtn.rel = 'noopener';
+      openBtn.className = 'lbLinkBtn';
+      openBtn.textContent = '🧮 Open Stat Keeper (prototype)';
+      importRow.appendChild(openBtn);
       const importBtn = document.createElement('button');
       importBtn.type = 'button'; importBtn.className = 'lbLinkBtn';
       importBtn.textContent = '⬆ Import from Stat Keeper';

@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Stat Keeper — Standalone Prototype</title>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0e1116; --panel2:#141821; --console:#10141b;
+    --line:#232a36; --line-bright:#39445a;
+    --cyan:#28e0e0; --cyan-dim:#0a3a3a;
+    --orange:#f15a24; --orange-dim:#4a2210;
+    --text:#eef2f6; --dim:#7c8798; --dim2:#4d5566;
+    --red:#ff4d4d; --green:#3ddc84; --blue:#4aa3ff; --yellow:#ffd23d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%;background:
+    radial-gradient(1200px 600px at 50% -10%, #14202a 0%, var(--bg) 60%);
+    color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif}
+  .proto-banner{background:#241405;color:#ffb066;font-size:11px;font-weight:700;
+    text-align:center;padding:5px 10px;letter-spacing:.03em;border-bottom:1px solid #4a2c0a}
+  header{padding:12px 16px 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  header .brand{font-size:16px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+  header .brand span{color:var(--cyan)}
+  header p{margin:0;font-size:11px;color:var(--dim)}
+  .wrap{max-width:820px;margin:0 auto;padding:8px 12px 60px}
+
+  .gameBar{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;margin-bottom:12px;flex-wrap:wrap}
+  .gameBar input[type=text]{background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  .gameBar label{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;
+    font-weight:700;margin-right:4px}
+
+  .scoreboard{text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:8px 12px;margin-bottom:12px;font-size:18px;font-weight:900;letter-spacing:.03em;color:var(--text)}
+  .scoreCheckRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .scoreCheckRow label{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;
+    font-weight:700}
+  .scoreCheckRow input[type=number]{width:64px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  .scoreCheckResult{font-size:12.5px;font-weight:700}
+  .scoreCheckResult.match{color:#3ecf5f}
+  .scoreCheckResult.mismatch{color:#ff5566}
+
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:9px;padding:9px 13px;font-size:12.5px;font-weight:700;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;justify-content:center}
+  .btn:active{transform:scale(.96)}
+  .btn.primary{background:var(--orange);border-color:var(--orange);color:#fff}
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--red);border-color:#4a2323}
+  .btn.small{padding:6px 10px;font-size:11.5px}
+
+  .entryPanel{background:linear-gradient(180deg,var(--console),#0b0e13);border:1px solid var(--line-bright);
+    border-radius:14px;padding:12px;margin-bottom:14px}
+  .entryPanel h2{margin:0 0 10px;font-size:11px;font-weight:800;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.06em}
+
+  .typeGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+  @media (min-width:520px){ .typeGrid{grid-template-columns:repeat(6,1fr);} }
+  .typeBtn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 4px;font-size:11.5px;font-weight:800;color:var(--dim);cursor:pointer;text-align:center}
+  .typeBtn.active{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan);
+    box-shadow:0 0 0 1px var(--cyan) inset}
+
+  .fieldRow{margin-bottom:12px}
+  .fieldRow label{display:block;font-size:10px;color:var(--dim);margin-bottom:6px;
+    text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+  .playerGrid{display:flex;flex-wrap:wrap;gap:6px}
+  .playerChip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;
+    font-size:12.5px;cursor:pointer;user-select:none;background:#0a0c10;color:var(--dim);font-weight:700}
+  .playerChip .num{color:var(--dim2);font-weight:800;margin-right:4px}
+  .playerChip.selected{background:var(--orange);border-color:var(--orange);color:#fff}
+  .playerChip.selected .num{color:#ffe0cc}
+  .playerChip.selected2{background:var(--blue);border-color:var(--blue);color:#fff}
+
+  .chipRow2{display:flex;gap:6px;flex-wrap:wrap}
+  .optChip{border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;
+    cursor:pointer;background:#0a0c10;color:var(--dim);font-weight:700}
+  .optChip.active{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan)}
+
+  .yardRow{display:flex;align-items:center;gap:8px}
+  .yardRow input[type=number]{width:80px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:15px;font-family:inherit;text-align:center}
+  .stepBtn{width:34px;height:34px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);font-size:16px;font-weight:800;cursor:pointer}
+
+  .toggleRow{display:flex;gap:10px;flex-wrap:wrap}
+  .toggleChip{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);
+    border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;background:#0a0c10}
+  .toggleChip.on{background:var(--orange-dim);border-color:var(--orange);color:#ffb37a}
+
+  textarea.noteInput{width:100%;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;font-size:13px;font-family:inherit;min-height:44px;resize:vertical}
+
+  .logPlayBtn{width:100%;padding:14px;font-size:15px;border-radius:12px;margin-top:4px}
+
+  section.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px;margin-bottom:12px}
+  section.panel h2{margin:0 0 8px;font-size:11px;font-weight:800;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between}
+
+  .playLogItem{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:6px}
+  .playLogItem .desc{font-size:12.5px}
+  .playLogItem .tag{font-size:9.5px;color:var(--cyan);text-transform:uppercase;font-weight:800;
+    letter-spacing:.04em;margin-right:6px}
+  .emptyState{color:var(--dim);font-size:12px;text-align:center;padding:14px 0}
+
+  table.statTable{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px}
+  table.statTable th{text-align:left;color:var(--dim2);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.04em;padding:0 6px 6px;border-bottom:1px solid var(--line)}
+  table.statTable td{padding:6px;border-bottom:1px solid #1a1f29}
+  table.statTable td.num{text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace}
+  .statSectionTitle{font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;
+    letter-spacing:.05em;margin:12px 0 6px}
+  .statSectionTitle:first-child{margin-top:0}
+
+  .exportRow{display:flex;gap:8px;flex-wrap:wrap}
+
+  .sideToggle{display:flex;gap:6px;margin-bottom:12px}
+  .sideBtn{flex:1;text-align:center;padding:10px 6px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--dim);font-size:12.5px;font-weight:800;cursor:pointer;letter-spacing:.03em}
+  .sideBtn.active.off{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 0 1px var(--cyan) inset}
+  .sideBtn.active.def{background:var(--orange-dim);border-color:var(--orange);color:#ffb37a;box-shadow:0 0 0 1px var(--orange) inset}
+
+  .hotRow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+  .hotRow .hotLbl{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin-right:2px}
+  .playerChip.hot{background:#2a1608;border-color:var(--orange);color:#ffb37a}
+  .playerChip.hot.selected{background:var(--orange);color:#fff}
+
+  .writeInRow{margin-top:6px}
+  .writeInRow input{width:100%;background:#0a0c10;color:var(--text);border:1px dashed var(--line-bright);
+    border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
+  .writeInRow input::placeholder{color:var(--dim2)}
+
+  input.plainText{width:100%;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+
+  .quarterMarker{text-align:center;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--dim2);
+    padding:7px 0;margin:6px 0;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;gap:8px}
+  .quarterMarker .qDelBtn{background:none;border:none;color:var(--dim2);font-size:12px;cursor:pointer;padding:0}
+
+  .playLogItem .tag.side-offense{color:var(--cyan)}
+  .playLogItem .tag.side-defense{color:var(--orange)}
+
+  .insertPosRow{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .insertPosRow label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+  .insertPosRow select{flex:1 1 200px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:7px 8px;font-size:12px;font-family:inherit}
+
+  footer.note{font-size:11px;color:var(--dim2);text-align:center;padding:16px 10px 0;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="proto-banner">STANDALONE PROTOTYPE — not connected to the live ASL Bengals app or database. Roster is a one-time snapshot, not live-synced.</div>
+
+<header>
+  <div class="brand">STAT<span>KEEPER</span></div>
+  <p>quick play-by-play logger — compiles into the same stat categories the live app already uses</p>
+</header>
+
+<div class="wrap">
+
+  <div class="gameBar">
+    <label>Game</label>
+    <input type="text" id="gameLabel" placeholder="e.g. vs. Charlton/Dudley, 8/30">
+    <select class="btn small ghost" id="endQuarterSel" style="margin-left:auto" title="Pick whichever quarter just ended — you can jump ahead if you missed one"></select>
+    <button class="btn small primary" id="finishGameBtn">🏁 Finish Game</button>
+    <button class="btn small ghost" id="resetGameBtn">Start New Game</button>
+  </div>
+
+  <div class="scoreboard" id="scoreboardBox">US 0 — 0 OPP</div>
+
+  <div class="entryPanel">
+    <h2>Log a Play</h2>
+    <div class="sideToggle" id="sideToggle">
+      <div class="sideBtn off" data-side="offense">🏈 OFFENSE</div>
+      <div class="sideBtn def" data-side="defense">🛡️ DEFENSE</div>
+    </div>
+    <div class="typeGrid" id="typeGrid"></div>
+
+    <div id="fieldsArea"></div>
+
+    <button class="btn primary logPlayBtn" id="logPlayBtn">✅ Log Play</button>
+  </div>
+
+  <section class="panel">
+    <h2>Play Log <span id="playCount" style="color:var(--cyan)">0 plays</span></h2>
+    <div class="insertPosRow">
+      <label>New entry happened right after (in game time)</label>
+      <select id="insertPosSel"></select>
+    </div>
+    <div id="playLogList"><div class="emptyState">No plays logged yet.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Final Score Check</h2>
+    <div class="scoreCheckRow">
+      <label>Actual final — Us</label>
+      <input type="number" id="finalScoreUs" min="0" placeholder="—">
+      <label>Opponent</label>
+      <input type="number" id="finalScoreOpp" min="0" placeholder="—">
+    </div>
+    <div id="scoreCheckResult" class="scoreCheckResult"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Game Totals <span id="exportHint" style="font-weight:400;color:var(--dim2);font-size:10px">matches the live statSheet shape</span></h2>
+    <div id="statsArea"></div>
+    <div class="exportRow">
+      <button class="btn small" id="copyTextBtn">📋 Copy Text Summary</button>
+      <button class="btn small" id="downloadJsonBtn">⬇ Download statSheet.json</button>
+      <button class="btn small" id="downloadGameLogBtn">⬇ Download Game Log (for Coach Tools import)</button>
+      <button class="btn small primary" id="pushLiveBtn">🚀 Push to Live Stats</button>
+    </div>
+    <div id="pushLiveStatus" style="margin-top:6px;font-size:11px;color:var(--dim2);"></div>
+  </section>
+
+  <footer class="note">
+    Roster pulled from the live team roster (teamRoster.json) as a one-time snapshot for this prototype — not live-synced.<br>
+    Field shape mirrors the live app's <code>statSheet</code> (rushing / passing / receiving / kickoffs / tackles / defExtra / turnovers) so a real integration later is a data hookup, not a redesign.
+  </footer>
+</div>
+
+<script>
+(function(){
+  // Pulled from the live team roster (teamRoster.json) as a one-time snapshot for
+  // this prototype — not a live sync. Full name incl. last initial kept as stored,
+  // since multiple players share a first name (two Wyatts).
+  // Nathan (2026-08-31): "updated all jersey numbers in roster" -- every
+  // player who previously had a blank number (Jaiden L, Dean A, Bryce P,
+  // Dylan, Wyatt M) now has a real, unique one. That blank-number overlap
+  // was the exact root cause of the Jaiden L / Dean A stat mixup, so this
+  // refresh also matters for translatePlaysForLive's jersey-number
+  // collision check above to actually resolve (it can only detect/skip a
+  // collision, not know who a blank number "really" belongs to).
+  const ROSTER = [
+    {num:'76', name:'Desmond S', pos:''},
+    {num:'7', name:'Henry G', pos:''},
+    {num:'6', name:'Jacob W', pos:'TE'},
+    {num:'49', name:'Emmett B', pos:''},
+    {num:'44', name:'Jaxson P', pos:''},
+    {num:'77', name:'Jagger L', pos:''},
+    {num:'65', name:'Jaxon R', pos:''},
+    {num:'86', name:'Caden', pos:''},
+    {num:'8', name:'Connor', pos:''},
+    {num:'66', name:'Jaiden L', pos:''},
+    {num:'11', name:'Dean A', pos:''},
+    {num:'80', name:'Wyatt B', pos:''},
+    {num:'51', name:'Sonny L', pos:'QB'},
+    {num:'99', name:'Rocco D', pos:''},
+    {num:'98', name:'Bryce P', pos:''},
+    {num:'5', name:'Will J', pos:'RB'},
+    {num:'87', name:'James J', pos:'RB'},
+    {num:'9', name:'Dylan', pos:''},
+    {num:'53', name:'Wyatt M', pos:''},
+    {num:'33', name:'Braden', pos:''},
+    {num:'27', name:'Timmy S', pos:''},
+  ];
+
+  // Snapshot of the real playbook's named plays (dev2/data/plays.json
+  // playTypes), for the optional "Play Called" tag on run/pass plays.
+  // Nathan: "add the option of adding a play call to a play so we know
+  // what we called or ran (sometimes they are different) - sometimes you
+  // can see the play call, sometimes you cant" — hence the "Other / Not
+  // Sure" fallback with a free-text write-in alongside the real names.
+  const PLAYBOOK = ['Inside Zone','Outside Zone','Option','Blast','Double Blast','Option Pass','Sweep'];
+
+  const fieldsArea = document.getElementById('fieldsArea');
+  const typeGrid = document.getElementById('typeGrid');
+  const sideToggle = document.getElementById('sideToggle');
+  const endQuarterSel = document.getElementById('endQuarterSel');
+  const playLogList = document.getElementById('playLogList');
+  const insertPosSel = document.getElementById('insertPosSel');
+  const playCount = document.getElementById('playCount');
+  const statsArea = document.getElementById('statsArea');
+  const gameLabel = document.getElementById('gameLabel');
+
+  // Which play types are offered under each side-of-ball tab. 'turnover' can happen
+  // either way (offense fumbles it away, defense forces/recovers it), so it shows on both.
+  const TYPE_DEFS = {
+    run:      {label:'🏃 Run',        sides:['offense']},
+    pass:     {label:'🎯 Pass',       sides:['offense','defense']},
+    kick:     {label:'🦵 Kick Ret.',  sides:['offense']},
+    punt:     {label:'🦶 Punt',       sides:['offense','defense']},
+    tackle:   {label:'💥 Tackle',     sides:['defense']},
+    defextra: {label:'🛡️ Def Extra', sides:['defense']},
+    turnover: {label:'🔄 Turnover',   sides:['offense','defense']},
+    score:    {label:'🏆 Score',      sides:['offense','defense']},
+    penalty:  {label:'🚩 Penalty',    sides:['offense','defense']},
+  };
+
+  let currentType = 'run';
+  let currentSide = 'offense';
+  try { currentSide = localStorage.getItem('statKeeperProtoSide') || 'offense'; } catch(e){}
+  let currentQuarter = 1;
+  try { currentQuarter = parseInt(localStorage.getItem('statKeeperProtoQuarter')||'1', 10) || 1; } catch(e){}
+
+  let plays = [];
+  try { plays = JSON.parse(localStorage.getItem('statKeeperProtoPlays')||'[]'); } catch(e){}
+  try { gameLabel.value = localStorage.getItem('statKeeperProtoGameLabel') || ''; } catch(e){}
+  gameLabel.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoGameLabel', gameLabel.value); }catch(e){} });
+
+  // Nathan: "would be nice to have a score verification through the
+  // STATKEEPER" -- the running score is computed ONLY from explicit
+  // team-tagged 'score' plays (Touchdown/PAT/2PT/Safety), not inferred from
+  // td flags scattered across run/pass/kick/punt/etc. Several of those play
+  // types don't cleanly say which team scored (e.g. a kickoff return has no
+  // Us/Opponent tag at all), so inferring from them risks a silently wrong
+  // scoreboard -- exactly the opposite of what "verification" is for. This
+  // means logging a Score entry for every touchdown too (not just PAT/2PT),
+  // which is a small habit change but keeps the scoreboard trustworthy.
+  const scoreboardBox = document.getElementById('scoreboardBox');
+  const finalScoreUs = document.getElementById('finalScoreUs');
+  const finalScoreOpp = document.getElementById('finalScoreOpp');
+  const scoreCheckResult = document.getElementById('scoreCheckResult');
+  try { finalScoreUs.value = localStorage.getItem('statKeeperProtoFinalUs') || ''; } catch(e){}
+  try { finalScoreOpp.value = localStorage.getItem('statKeeperProtoFinalOpp') || ''; } catch(e){}
+  finalScoreUs.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoFinalUs', finalScoreUs.value); }catch(e){} updateScoreboard(); });
+  finalScoreOpp.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoFinalOpp', finalScoreOpp.value); }catch(e){} updateScoreboard(); });
+
+  // Touchdowns are read straight off the scoring play's own td flag (run/
+  // pass/kick/punt/defextra) using the exact same team logic describePlay()
+  // uses for each of those types -- so marking "🏆 Touchdown" on the play
+  // itself is enough, no separate log entry needed. Only PAT/2PT/Safety
+  // still need their own 'score' entry, since there's no other play type
+  // that represents them. (Turnover-return TDs aren't team-tagged in this
+  // schema -- see the turnover type's fields -- so they're not counted here;
+  // log a 'score' entry by hand if a scoop-and-score happens.)
+  function computeRunningScore(){
+    let us = 0, opp = 0;
+    plays.forEach(function(p){
+      if (p.type === 'score'){
+        const forUs = p.scoreTeam !== 'Opponent';
+        let pts = 0;
+        if (p.scoreKind === 'PAT Good') pts = 1;
+        else if (p.scoreKind === '2PT Good') pts = 2;
+        else if (p.scoreKind === 'Safety') pts = 2;
+        if (forUs) us += pts; else opp += pts;
+        return;
+      }
+      if (!p.td) return;
+      if (p.type === 'run'){ us += 6; }
+      else if (p.type === 'pass'){ if (p.passTeam !== 'Opponent') us += 6; else opp += 6; }
+      else if (p.type === 'kick' && !p.onside){ us += 6; } // kick return type is always us returning
+      else if (p.type === 'punt'){ if (p.puntTeam !== 'Opponent') opp += 6; else us += 6; } // TD on our punt = their return; TD on their punt = our return
+      else if (p.type === 'defextra'){ us += 6; }
+    });
+    return { us: us, opp: opp };
+  }
+
+  function updateScoreboard(){
+    const score = computeRunningScore();
+    scoreboardBox.textContent = 'US ' + score.us + ' — ' + score.opp + ' OPP';
+    const actualUs = finalScoreUs.value === '' ? null : Number(finalScoreUs.value);
+    const actualOpp = finalScoreOpp.value === '' ? null : Number(finalScoreOpp.value);
+    if (actualUs == null && actualOpp == null){
+      scoreCheckResult.textContent = 'From your play log so far: US ' + score.us + ' — ' + score.opp + ' OPP. Enter the actual final above to check it against your log.';
+      scoreCheckResult.className = 'scoreCheckResult';
+      return;
+    }
+    const usOk = actualUs == null || actualUs === score.us;
+    const oppOk = actualOpp == null || actualOpp === score.opp;
+    if (usOk && oppOk){
+      scoreCheckResult.textContent = '✅ Matches your play log (US ' + score.us + ' — ' + score.opp + ' OPP).';
+      scoreCheckResult.className = 'scoreCheckResult match';
+    } else {
+      scoreCheckResult.textContent = '⚠️ Doesn\'t match — your log has US ' + score.us + ' — ' + score.opp + ' OPP. ' +
+        'Check for a missing/extra 🏆 Touchdown toggle on a play, or a missing PAT/2PT/Safety Score entry (turnover-return TDs aren\'t auto-counted — log those as a Score entry).';
+      scoreCheckResult.className = 'scoreCheckResult mismatch';
+    }
+  }
+
+  function quarterLabel(n){ return n <= 4 ? ('Q'+n) : ('OT'+(n-4)); }
+
+  // Reviewing tape after the fact means a play or quarter marker sometimes gets
+  // noticed late — this lets a new entry land at the right spot in the log
+  // instead of always jumping to the top as "most recent."
+  let insertAfterId = null; // null = add as most recent (default, old behavior)
+
+  function shortDesc(p){
+    const d = p.type === 'quarterEnd' ? ('🚩 END OF ' + quarterLabel(p.quarter)) : describePlay(p);
+    return d.length > 60 ? d.slice(0, 57) + '…' : d;
+  }
+
+  function populateInsertPosSel(){
+    const prev = insertAfterId;
+    insertPosSel.innerHTML = '';
+    const topOpt = document.createElement('option');
+    topOpt.value = '';
+    topOpt.textContent = '— Nothing (this is the most recent play) —';
+    insertPosSel.appendChild(topOpt);
+    plays.forEach(function(p){
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = shortDesc(p);
+      insertPosSel.appendChild(opt);
+    });
+    if (prev && plays.some(function(p){ return p.id === prev; })){
+      insertPosSel.value = prev;
+      insertAfterId = prev;
+    } else {
+      insertPosSel.value = '';
+      insertAfterId = null;
+    }
+  }
+  insertPosSel.addEventListener('change', function(){ insertAfterId = insertPosSel.value || null; });
+
+  // Inserts a new play/marker at the chosen anchor point instead of always
+  // unshifting to the top; chains the anchor forward so adding several missed
+  // plays back-to-back lands them in the right chronological order.
+  // The log is newest-first, so an entry that happened AFTER the anchor in
+  // game time needs to land at the anchor's own index (pushing the anchor
+  // and everything older down), not one slot past it.
+  function insertPlay(entry){
+    if (insertAfterId){
+      const idx = plays.findIndex(function(p){ return p.id === insertAfterId; });
+      if (idx !== -1){
+        plays.splice(idx, 0, entry);
+        insertAfterId = entry.id;
+        return;
+      }
+    }
+    plays.unshift(entry);
+  }
+  // A dropdown rather than a single auto-advancing button — lets you jump
+  // straight to "End of Q4" even if you forgot to tap "End of Q3" earlier,
+  // instead of being stuck logging quarters strictly in sequence.
+  function populateEndQuarterSel(){
+    endQuarterSel.innerHTML = '';
+    for (let n = 1; n <= 6; n++){
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = '🚩 End ' + quarterLabel(n);
+      if (n === currentQuarter) opt.selected = true;
+      endQuarterSel.appendChild(opt);
+    }
+  }
+
+  function updateSideUI(){
+    sideToggle.querySelectorAll('.sideBtn').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-side') === currentSide);
+    });
+  }
+
+  function renderTypeGrid(){
+    const available = Object.keys(TYPE_DEFS).filter(function(k){ return TYPE_DEFS[k].sides.indexOf(currentSide) !== -1; });
+    if (available.indexOf(currentType) === -1) currentType = available[0];
+    typeGrid.innerHTML = '';
+    available.forEach(function(key){
+      const btn = document.createElement('div');
+      btn.className = 'typeBtn' + (key === currentType ? ' active' : '');
+      btn.setAttribute('data-type', key);
+      btn.textContent = TYPE_DEFS[key].label;
+      typeGrid.appendChild(btn);
+    });
+  }
+
+  sideToggle.addEventListener('click', function(e){
+    const btn = e.target.closest('.sideBtn'); if (!btn) return;
+    currentSide = btn.getAttribute('data-side');
+    try{ localStorage.setItem('statKeeperProtoSide', currentSide); }catch(e){}
+    updateSideUI();
+    renderTypeGrid();
+    resetDraft();
+  });
+
+  // Ranks players by tackle involvement so far this game (solo=1, assist=0.5) — used to
+  // surface the 3 "hot" quick-pick tacklers instead of scrolling the full roster every time.
+  function topTacklers(n){
+    const counts = {};
+    plays.forEach(function(p){
+      if (p.type !== 'tackle' && p.type !== 'punt') return;
+      if (p.tackler) counts[p.tackler] = (counts[p.tackler]||0) + 1;
+      asList(p.assist).forEach(function(name){ counts[name] = (counts[name]||0) + 0.5; });
+    });
+    return Object.keys(counts).sort(function(a,b){ return counts[b]-counts[a]; }).slice(0, n || 3);
+  }
+
+  // ---- Draft state for the entry currently being built ----
+  let draft = {};
+  function resetDraft(){ draft = {}; renderFields(); }
+
+  typeGrid.addEventListener('click', function(e){
+    const btn = e.target.closest('.typeBtn'); if (!btn) return;
+    currentType = btn.getAttribute('data-type');
+    document.querySelectorAll('.typeBtn').forEach(b=>b.classList.toggle('active', b===btn));
+    resetDraft();
+  });
+
+  // Normalizes a field that may hold a single name (string) or several
+  // (array, for multi-select fields like gang-tackle assists) into an array.
+  function asList(v){
+    if (Array.isArray(v)) return v.filter(Boolean);
+    return v ? [v] : [];
+  }
+
+  function playerChips(fieldKey, opts){
+    opts = opts || {};
+    const multi = !!opts.multi;
+    const wrap = document.createElement('div');
+    wrap.className = 'playerGrid';
+    ROSTER.forEach(function(p){
+      const chip = document.createElement('div');
+      chip.className = 'playerChip';
+      chip.innerHTML = (p.num ? '<span class="num">#'+p.num+'</span>' : '')+p.name;
+      const isSelected = multi ? asList(draft[fieldKey]).includes(p.name) : draft[fieldKey] === p.name;
+      if (isSelected) chip.classList.add('selected');
+      chip.addEventListener('click', function(){
+        if (multi){
+          const list = asList(draft[fieldKey]);
+          const idx = list.indexOf(p.name);
+          if (idx === -1) list.push(p.name); else list.splice(idx, 1);
+          draft[fieldKey] = list;
+        } else {
+          draft[fieldKey] = (draft[fieldKey] === p.name) ? null : p.name;
+        }
+        renderFields();
+      });
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  }
+
+  // Wraps playerChips() with an optional "hot" quick-pick row (e.g. top 3 tacklers so
+  // far) and a write-in text field, for subs or anyone not on the roster snapshot.
+  function playerPicker(fieldKey, opts){
+    opts = opts || {};
+    const multi = !!opts.multi;
+    const wrap = document.createElement('div');
+
+    if (multi){
+      const list = asList(draft[fieldKey]);
+      if (list.length){
+        const chosenRow = document.createElement('div'); chosenRow.className = 'hotRow';
+        const lbl = document.createElement('span'); lbl.className = 'hotLbl'; lbl.textContent = 'Selected:';
+        chosenRow.appendChild(lbl);
+        list.forEach(function(name){
+          const chip = document.createElement('div');
+          chip.className = 'playerChip selected';
+          chip.textContent = name + ' ✕';
+          chip.addEventListener('click', function(){
+            draft[fieldKey] = asList(draft[fieldKey]).filter(function(n){ return n !== name; });
+            renderFields();
+          });
+          chosenRow.appendChild(chip);
+        });
+        wrap.appendChild(chosenRow);
+      }
+    }
+
+    if (opts.hotFn){
+      const hot = opts.hotFn();
+      if (hot.length){
+        const hotRow = document.createElement('div'); hotRow.className = 'hotRow';
+        const lbl = document.createElement('span'); lbl.className = 'hotLbl'; lbl.textContent = '🔥 Hot:';
+        hotRow.appendChild(lbl);
+        hot.forEach(function(name){
+          const isSelected = multi ? asList(draft[fieldKey]).includes(name) : draft[fieldKey] === name;
+          const chip = document.createElement('div');
+          chip.className = 'playerChip hot' + (isSelected ? ' selected' : '');
+          chip.textContent = name;
+          chip.addEventListener('click', function(){
+            if (multi){
+              const list = asList(draft[fieldKey]);
+              const idx = list.indexOf(name);
+              if (idx === -1) list.push(name); else list.splice(idx, 1);
+              draft[fieldKey] = list;
+            } else {
+              draft[fieldKey] = (draft[fieldKey] === name) ? null : name;
+            }
+            renderFields();
+          });
+          hotRow.appendChild(chip);
+        });
+        wrap.appendChild(hotRow);
+      }
+    }
+
+    wrap.appendChild(playerChips(fieldKey, {multi: multi}));
+
+    const writeRow = document.createElement('div'); writeRow.className = 'writeInRow';
+    const input = document.createElement('input');
+    input.type = 'text';
+    if (multi){
+      input.placeholder = '✏️ Write in a name and press Enter to add…';
+      function commitMulti(){
+        const val = input.value.trim();
+        if (!val) return;
+        const list = asList(draft[fieldKey]);
+        if (!list.includes(val)) list.push(val);
+        draft[fieldKey] = list;
+        input.value = '';
+        renderFields();
+      }
+      input.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); commitMulti(); } });
+      input.addEventListener('blur', commitMulti);
+    } else {
+      input.placeholder = '✏️ Write in a name (sub, not on roster)…';
+      const onRoster = ROSTER.some(function(p){ return p.name === draft[fieldKey]; });
+      input.value = (draft[fieldKey] && !onRoster) ? draft[fieldKey] : '';
+      input.addEventListener('input', function(){ draft[fieldKey] = input.value.trim() || null; });
+      input.addEventListener('blur', function(){ renderFields(); });
+    }
+    writeRow.appendChild(input);
+    wrap.appendChild(writeRow);
+
+    return wrap;
+  }
+
+  function fieldBlock(labelText, el){
+    const row = document.createElement('div'); row.className='fieldRow';
+    const lab = document.createElement('label'); lab.textContent = labelText;
+    row.appendChild(lab); row.appendChild(el);
+    return row;
+  }
+
+  function yardStepper(key, defaultVal, suffixText){
+    if (draft[key] == null) draft[key] = defaultVal || 0;
+    const wrap = document.createElement('div'); wrap.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className='stepBtn'; minus.textContent='−';
+    const input = document.createElement('input'); input.type='number'; input.value = draft[key];
+    const plus = document.createElement('div'); plus.className='stepBtn'; plus.textContent='+';
+    minus.addEventListener('click', ()=>{ draft[key] = Number(input.value||0) - 1; input.value = draft[key]; });
+    plus.addEventListener('click', ()=>{ draft[key] = Number(input.value||0) + 1; input.value = draft[key]; });
+    input.addEventListener('input', ()=>{ draft[key] = Number(input.value||0); });
+    wrap.appendChild(minus); wrap.appendChild(input); wrap.appendChild(plus);
+    const suffix = document.createElement('span'); suffix.style.color='var(--dim)'; suffix.style.fontSize='12px'; suffix.textContent=suffixText||'yards';
+    wrap.appendChild(suffix);
+    return wrap;
+  }
+
+  // Absolute field position on a 0–100 scale (0 = your own goal line, 100 =
+  // the opponent's), so two spots can be compared to get real net yardage —
+  // a bare "downed at" spot with no anchor can't tell you distance on its own.
+  function absoluteSpot(side, yard){
+    if (!side || yard === '' || yard == null) return null;
+    const y = Number(yard);
+    if (isNaN(y)) return null;
+    return side === 'OWN' ? y : (100 - y);
+  }
+  function spotLabel(side, yard){
+    if (!side || yard === '' || yard == null) return '';
+    return side + ' ' + yard;
+  }
+  // Side chips + a yard-line stepper, combined into one compact control.
+  function spotPicker(sideKey, yardKey, defaultYard){
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    wrap.appendChild(optChips(sideKey, ['OWN','OPP']));
+    wrap.appendChild(yardStepper(yardKey, defaultYard, 'yard line'));
+    return wrap;
+  }
+
+  function textInput(key, placeholder){
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'plainText';
+    input.placeholder = placeholder || '';
+    input.value = draft[key] || '';
+    input.addEventListener('input', function(){ draft[key] = input.value; });
+    return input;
+  }
+
+  function chipToggle(key, label){
+    const chip = document.createElement('div');
+    chip.className = 'toggleChip' + (draft[key] ? ' on' : '');
+    chip.textContent = (draft[key] ? '✓ ' : '') + label;
+    chip.addEventListener('click', function(){ draft[key] = !draft[key]; renderFields(); });
+    return chip;
+  }
+
+  function optChips(key, options){
+    const wrap = document.createElement('div'); wrap.className = 'chipRow2';
+    options.forEach(function(opt){
+      const c = document.createElement('div');
+      c.className = 'optChip' + (draft[key]===opt ? ' active' : '');
+      c.textContent = opt;
+      c.addEventListener('click', function(){ draft[key] = opt; renderFields(); });
+      wrap.appendChild(c);
+    });
+    return wrap;
+  }
+
+  // "Play Called" is separate from what actually happened (a Sweep call can
+  // turn into a broken-play scramble) — chips for the real playbook, plus a
+  // write-in for when the call isn't in the book or you couldn't tell.
+  function playCallField(){
+    const wrap = document.createElement('div');
+    wrap.appendChild(optChips('playCall', PLAYBOOK.concat(['Other / Not Sure'])));
+    if (draft.playCall === 'Other / Not Sure'){
+      wrap.appendChild(textInput('playCallOther', 'Type the call if known, or leave blank'));
+    }
+    return wrap;
+  }
+
+  function renderFields(){
+    fieldsArea.innerHTML = '';
+    if (currentType === 'run'){
+      fieldsArea.appendChild(fieldBlock('Ball Carrier', playerPicker('carrier')));
+      fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+      fieldsArea.appendChild(fieldBlock('Yards Gained', yardStepper('yards', 0)));
+      fieldsArea.appendChild(fieldBlock('Direction', optChips('dir', ['Left','Middle','Right'])));
+      const toggles = document.createElement('div'); toggles.className='toggleRow';
+      toggles.appendChild(chipToggle('firstDown','1st Down'));
+      toggles.appendChild(chipToggle('td','🏆 Touchdown'));
+      fieldsArea.appendChild(fieldBlock('', toggles));
+    }
+    else if (currentType === 'pass'){
+      // Defaults to whichever tab you're logging from — Offense usually means
+      // we're throwing, Defense usually means we're defending their pass.
+      if (draft.passTeam == null) draft.passTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
+      const isUsPass = draft.passTeam !== 'Opponent';
+      fieldsArea.appendChild(fieldBlock('Passing Team', optChips('passTeam', ['Us','Opponent'])));
+      if (isUsPass){
+        fieldsArea.appendChild(fieldBlock('Passer', playerPicker('passer')));
+        fieldsArea.appendChild(fieldBlock('Target', playerPicker('target')));
+        fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+      } else {
+        fieldsArea.appendChild(fieldBlock('Opponent Passer (optional)', textInput('oppPasser', "Opponent's QB, if known")));
+        fieldsArea.appendChild(fieldBlock('Opponent Target (optional)', textInput('oppTarget', "Opponent's receiver, if known")));
+      }
+      fieldsArea.appendChild(fieldBlock('Result', optChips('result', ['Complete','Incomplete'])));
+      if (draft.result === 'Complete'){
+        fieldsArea.appendChild(fieldBlock('Yards Gained', yardStepper('yards', 0)));
+        const toggles = document.createElement('div'); toggles.className='toggleRow';
+        toggles.appendChild(chipToggle('firstDown', isUsPass ? '1st Down' : 'Opponent 1st Down'));
+        toggles.appendChild(chipToggle('td','🏆 Touchdown'));
+        fieldsArea.appendChild(fieldBlock('', toggles));
+      } else if (draft.result === 'Incomplete'){
+        fieldsArea.appendChild(fieldBlock('Reason (optional)', optChips('incReason', ['Dropped','Overthrown','Underthrown','Broken Up','Threw It Away','Other'])));
+        if (draft.incReason === 'Broken Up'){
+          fieldsArea.appendChild(fieldBlock('Broken Up By (optional)', playerPicker('pbuBy')));
+        }
+      }
+    }
+    else if (currentType === 'kick'){
+      fieldsArea.appendChild(fieldBlock('', chipToggle('onside','⚡ Onside Kick')));
+      if (draft.onside){
+        fieldsArea.appendChild(fieldBlock('Recovered By', optChips('recoveredByTeam', ['Us','Opponent'])));
+        fieldsArea.appendChild(fieldBlock('Recovery Player (optional)', playerPicker('recoverPlayer')));
+        if (draft.recoveredByTeam === 'Us'){
+          fieldsArea.appendChild(fieldBlock('Returner (if any)', playerPicker('returner')));
+          fieldsArea.appendChild(fieldBlock('Return Yards', yardStepper('yards', 0)));
+        }
+      } else {
+        fieldsArea.appendChild(fieldBlock('Returner', playerPicker('returner')));
+        fieldsArea.appendChild(fieldBlock('Return Yards', yardStepper('yards', 0)));
+        fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown')));
+      }
+    }
+    else if (currentType === 'punt'){
+      // Defaults to whichever tab you're logging from — Offense usually means
+      // we're punting, Defense usually means we just forced one.
+      if (draft.puntTeam == null) draft.puntTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
+      const isUs = draft.puntTeam !== 'Opponent';
+      fieldsArea.appendChild(fieldBlock('Punting Team', optChips('puntTeam', ['Us','Opponent'])));
+      if (isUs){
+        fieldsArea.appendChild(fieldBlock('Punter', playerPicker('punter')));
+      } else {
+        fieldsArea.appendChild(fieldBlock('Opponent Punter (optional)', textInput('oppPunter', "Opponent's punter, if known")));
+      }
+      fieldsArea.appendChild(fieldBlock('Punted From (spot)', spotPicker('startSide', 'startYard', 35)));
+      fieldsArea.appendChild(fieldBlock('Result', optChips('puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned'])));
+      if (draft.puntResult === 'Returned'){
+        if (isUs){
+          fieldsArea.appendChild(fieldBlock('Returner (optional, opponent)', textInput('oppReturner', "Opponent's returner, if known")));
+        } else {
+          fieldsArea.appendChild(fieldBlock('Returner', playerPicker('returner')));
+        }
+        fieldsArea.appendChild(fieldBlock('Caught At (spot)', spotPicker('catchSide', 'catchYard', 40)));
+        fieldsArea.appendChild(fieldBlock('Brought Ball To (final spot)', spotPicker('endSide', 'endYard', 45)));
+        if (isUs){
+          fieldsArea.appendChild(fieldBlock('Tackled By (solo)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
+          fieldsArea.appendChild(fieldBlock('Assist (optional, select all who assisted)', playerPicker('assist', {multi:true, hotFn: function(){ return topTacklers(3); }})));
+        } else {
+          fieldsArea.appendChild(fieldBlock('Tackled By (optional, opponent)', textInput('oppTackler', "Opponent's tackler, if known")));
+        }
+        fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
+      } else {
+        fieldsArea.appendChild(fieldBlock('Ball Spot (optional)', spotPicker('endSide', 'endYard', 20)));
+      }
+    }
+    else if (currentType === 'tackle'){
+      fieldsArea.appendChild(fieldBlock('Tackler (solo)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
+      fieldsArea.appendChild(fieldBlock('Assist (optional, select all who assisted)', playerPicker('assist', {multi:true, hotFn: function(){ return topTacklers(3); }})));
+    }
+    else if (currentType === 'defextra'){
+      fieldsArea.appendChild(fieldBlock('Player', playerPicker('player')));
+      fieldsArea.appendChild(fieldBlock('Type', optChips('extraType', ['INT','PBU','Sack'])));
+      fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
+    }
+    else if (currentType === 'turnover'){
+      fieldsArea.appendChild(fieldBlock('Type', optChips('toType', ['Fumble','Interception'])));
+      fieldsArea.appendChild(fieldBlock('Lost By (offense)', playerPicker('lostBy')));
+      fieldsArea.appendChild(fieldBlock('Recovered By (defense, optional)', playerPicker('recoveredBy')));
+      fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
+      const note = document.createElement('textarea'); note.className='noteInput';
+      note.placeholder = 'Quick note (optional) — e.g. "strip sack, 2nd quarter"';
+      note.value = draft.note || '';
+      note.addEventListener('input', ()=>{ draft.note = note.value; });
+      fieldsArea.appendChild(fieldBlock('Note', note));
+    }
+    else if (currentType === 'score'){
+      fieldsArea.appendChild(fieldBlock('Kind', optChips('scoreKind', ['PAT Good','PAT No Good','2PT Good','2PT No Good','Safety'])));
+      fieldsArea.appendChild(fieldBlock('Team', optChips('scoreTeam', ['Us','Opponent'])));
+      fieldsArea.appendChild(fieldBlock('Player (optional)', playerPicker('scorePlayer')));
+    }
+    else if (currentType === 'penalty'){
+      fieldsArea.appendChild(fieldBlock('Penalty On', optChips('penTeam', ['Us','Opponent'])));
+      fieldsArea.appendChild(fieldBlock('Penalty', optChips('penType', ['Holding','False Start','Offsides','Delay of Game',
+        'Pass Interference','Facemask','Unsportsmanlike Conduct','Illegal Block','Other'])));
+      if (draft.penType === 'Other'){
+        fieldsArea.appendChild(fieldBlock('Describe', textInput('penOther', 'Describe the penalty…')));
+      }
+      fieldsArea.appendChild(fieldBlock('Yards', yardStepper('penYards', 5)));
+      fieldsArea.appendChild(fieldBlock('Player (optional)', playerPicker('penPlayer')));
+      const toggles = document.createElement('div'); toggles.className='toggleRow';
+      toggles.appendChild(chipToggle('declined','Declined'));
+      toggles.appendChild(chipToggle('firstDown','Automatic 1st Down'));
+      fieldsArea.appendChild(fieldBlock('', toggles));
+    }
+  }
+
+  function playCallTxt(p){
+    if (!p.playCall) return '';
+    const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
+    return ' [Called: ' + name + ']';
+  }
+
+  function describePlay(p){
+    if (p.type==='run') return (p.td?'🏆 ':'') + 'Run — ' + (p.carrier||'?') + ', ' + p.yards + ' yds' +
+      (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + playCallTxt(p);
+    if (p.type==='pass'){
+      const isUsPass = p.passTeam !== 'Opponent';
+      const passerTxt = isUsPass ? (p.passer||'?') : ('Opponent' + (p.oppPasser ? ' ('+p.oppPasser+')' : ''));
+      const targetTxt = isUsPass ? (p.target||'?') : (p.oppTarget || 'opponent');
+      const prefix = isUsPass ? '' : '🛡️ ';
+      if (p.result==='Incomplete'){
+        let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + playCallTxt(p);
+      }
+      return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + playCallTxt(p);
+    }
+    if (p.type==='kick'){
+      if (p.onside){
+        let base = '⚡ Onside Kick — recovered by ' + (p.recoveredByTeam||'?') + (p.recoverPlayer ? ' ('+p.recoverPlayer+')' : '');
+        if (p.recoveredByTeam==='Us' && p.returner) base += ', ' + p.returner + ' brought it ' + (p.yards||0) + ' yds';
+        return base;
+      }
+      return (p.td?'🏆 ':'') + 'Kick Return — ' + (p.returner||'?') + ', ' + p.yards + ' yds' + (p.td?' · TD':'');
+    }
+    if (p.type==='punt'){
+      const isUs = p.puntTeam !== 'Opponent';
+      const fromTxt = spotLabel(p.startSide, p.startYard);
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const toTxt = spotLabel(p.endSide, p.endYard);
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      // "net" is always our field-position swing (positive = good for us) regardless of
+      // who punted, since it's just start vs. final spot. But puntDist/retYds describe an
+      // actual direction of travel, and whoever is running the ball after the catch is
+      // moving the OPPOSITE way on our OWN→OPP scale from whoever kicked it — so which
+      // spot gets subtracted from which has to flip depending on who punted.
+      const net = (startAbs != null && endAbs != null) ? (endAbs - startAbs) : null;
+      const puntDist = (startAbs != null && catchAbs != null) ? (isUs ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
+      let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss + (fromTxt ? ', from '+fromTxt : '');
+      if (p.puntResult === 'Returned'){
+        if (isUs){
+          const puntAssists = asList(p.assist);
+          const tackleTxt = p.tackler ? ' · tackled by '+p.tackler+(puntAssists.length?' + '+puntAssists.join(' + ')+' (assist)':'') : '';
+          base += ', returned by ' + (p.oppReturner || 'opponent');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += (toTxt ? ' to '+toTxt : '') + tackleTxt;
+        } else {
+          base += ', returned by ' + (p.returner||'?');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += (toTxt ? ' to '+toTxt : '') + (p.oppTackler ? ' · tackled by '+p.oppTackler : '');
+        }
+        if (p.td) base += ' · 🏆 TD';
+        if (puntDist != null) base += ' · '+puntDist+' yd punt';
+        if (retYds != null) base += ' · '+retYds+' return yds';
+      } else {
+        base += ' (' + (p.puntResult||'?') + ')' + (toTxt ? ' at '+toTxt : '');
+      }
+      if (net != null) base += ' · net ' + net + ' yds';
+      return base;
+    }
+    if (p.type==='tackle'){
+      const assists = asList(p.assist);
+      return 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
+    }
+    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
+    if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
+      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '');
+    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '');
+    if (p.type==='penalty'){
+      const penName = (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty');
+      const ydsTxt = p.declined ? 'declined' : (p.penYards||0)+' yds';
+      return '🚩 ' + penName + ' on ' + (p.penTeam||'?') + (p.penPlayer ? ' ('+p.penPlayer+')' : '') +
+        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '');
+    }
+    return 'Play';
+  }
+
+  document.getElementById('logPlayBtn').addEventListener('click', function(){
+    const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
+    insertPlay(entry);
+    persist();
+    renderLog();
+    renderStats();
+    resetDraft();
+  });
+
+  endQuarterSel.addEventListener('change', function(){
+    const n = parseInt(endQuarterSel.value, 10);
+    if (!n) return;
+    insertPlay({type:'quarterEnd', id:'q_'+Date.now(), quarter: n});
+    currentQuarter = n + 1;
+    try{ localStorage.setItem('statKeeperProtoQuarter', String(currentQuarter)); }catch(e){}
+    persist();
+    renderLog();
+    populateEndQuarterSel();
+  });
+
+  function persist(){ try{ localStorage.setItem('statKeeperProtoPlays', JSON.stringify(plays)); }catch(e){} }
+  function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+  function renderLog(){
+    const realPlays = plays.filter(function(p){ return p.type !== 'quarterEnd'; });
+    playCount.textContent = realPlays.length + (realPlays.length===1 ? ' play' : ' plays');
+    updateScoreboard();
+    if (!plays.length){ playLogList.innerHTML = '<div class="emptyState">No plays logged yet.</div>'; populateInsertPosSel(); return; }
+    playLogList.innerHTML = plays.map(function(p){
+      if (p.type === 'quarterEnd'){
+        return '<div class="quarterMarker" data-id="'+p.id+'">— END OF '+quarterLabel(p.quarter)+' — '+
+          '<button class="qDelBtn" title="Remove marker">✕</button></div>';
+      }
+      const sideTag = p.side ? '<span class="tag side-'+p.side+'">'+(p.side==='offense'?'OFF':'DEF')+'</span>' : '';
+      return '<div class="playLogItem" data-id="'+p.id+'">'+
+        '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+escapeHtml(describePlay(p))+'</div>'+
+        '<button class="btn small danger delBtn">Delete</button></div>';
+    }).join('');
+    playLogList.querySelectorAll('.delBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        const id = btn.closest('.playLogItem').getAttribute('data-id');
+        plays = plays.filter(p=>p.id!==id);
+        persist(); renderLog(); renderStats();
+      });
+    });
+    playLogList.querySelectorAll('.qDelBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        const id = btn.closest('.quarterMarker').getAttribute('data-id');
+        plays = plays.filter(p=>p.id!==id);
+        persist(); renderLog();
+      });
+    });
+    populateInsertPosSel();
+  }
+
+  document.getElementById('resetGameBtn').addEventListener('click', function(){
+    if (!confirm('Start a new game? This clears the current play log (make sure you\'ve exported it first).')) return;
+    plays = [];
+    currentQuarter = 1;
+    try{ localStorage.setItem('statKeeperProtoQuarter', '1'); }catch(e){}
+    finalScoreUs.value = ''; finalScoreOpp.value = '';
+    try{ localStorage.removeItem('statKeeperProtoFinalUs'); localStorage.removeItem('statKeeperProtoFinalOpp'); }catch(e){}
+    persist(); renderLog(); renderStats(); populateEndQuarterSel();
+  });
+
+  // ---- Compile plays into the same shape as the live app's statSheet ----
+  // (plus snap counts and a scoring summary, which are additive extras beyond the
+  // live app's current statSheet fields — flagged in the exported JSON, not hidden.)
+  function compileStatSheet(){
+    const rushing = {}, passing = {}, receiving = {}, kickoffs = {}, tackles = {}, defExtra = {}, penalties = {}, punting = {}, puntReturns = {};
+    const turnoverNotes = [];
+    const scoring = { touchdowns:0, patGood:0, patNoGood:0, twoPtGood:0, twoPtNoGood:0, safety:0 };
+    let offSnaps = 0, defSnaps = 0;
+    let penCountUs = 0, penYardsUs = 0, penCountOpp = 0, penYardsOpp = 0;
+    let onsideUs = 0, onsideOpp = 0;
+    let forcedPunts = 0;
+    let oppPassAtt = 0, oppPassComp = 0, oppPassYds = 0;
+
+    plays.forEach(function(p){
+      if (p.type === 'quarterEnd') return;
+      if (p.side === 'offense') offSnaps++;
+      else if (p.side === 'defense') defSnaps++;
+
+      if (p.type==='run' && p.carrier){
+        const r = rushing[p.carrier] || (rushing[p.carrier] = {name:p.carrier, att:0, yds:0, td:0, fd:0});
+        r.att++; r.yds += Number(p.yards||0); if (p.td){ r.td++; scoring.touchdowns++; } if (p.firstDown) r.fd++;
+      }
+      if (p.type==='pass'){
+        const isUsPass = p.passTeam !== 'Opponent';
+        if (isUsPass && p.passer){
+          const pa = passing[p.passer] || (passing[p.passer] = {name:p.passer, att:0, comp:0, yds:0, td:0});
+          pa.att++;
+          if (p.result==='Complete'){
+            pa.comp++; pa.yds += Number(p.yards||0);
+            if (p.td){ pa.td++; scoring.touchdowns++; }
+            if (p.target){
+              const rc = receiving[p.target] || (receiving[p.target] = {name:p.target, rec:0, yds:0, td:0});
+              rc.rec++; rc.yds += Number(p.yards||0); if (p.td) rc.td++;
+            }
+          }
+        } else if (!isUsPass){
+          oppPassAtt++;
+          if (p.result==='Complete'){ oppPassComp++; oppPassYds += Number(p.yards||0); }
+        }
+        if (p.result !== 'Complete' && p.incReason === 'Broken Up' && p.pbuBy){
+          const d = defExtra[p.pbuBy] || (defExtra[p.pbuBy] = {name:p.pbuBy, int:0, pbu:0, sack:0, fum:0, td:0});
+          d.pbu++;
+        }
+      }
+      if (p.type==='kick'){
+        if (p.onside){
+          if (p.recoveredByTeam === 'Opponent') onsideOpp++; else onsideUs++;
+        }
+        if (p.returner){
+          const k = kickoffs[p.returner] || (kickoffs[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
+          k.ret++; k.yds += Number(p.yards||0); if (p.td){ k.td++; scoring.touchdowns++; }
+        }
+      }
+      if (p.type==='punt'){
+        const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        if (p.puntTeam === 'Opponent'){
+          forcedPunts++;
+          if (p.puntResult === 'Returned' && p.returner){
+            const pr = puntReturns[p.returner] || (puntReturns[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
+            pr.ret++;
+            const retYds = (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : null;
+            if (retYds != null) pr.yds += retYds;
+            if (p.td){ pr.td++; scoring.touchdowns++; }
+          }
+        } else if (p.punter){
+          const pt = punting[p.punter] || (punting[p.punter] = {name:p.punter, punts:0, touchback:0, fairCatch:0, downed:0, returned:0, muffed:0, netYds:0, netCount:0, grossYds:0, grossCount:0});
+          pt.punts++;
+          if (p.puntResult==='Touchback') pt.touchback++;
+          else if (p.puntResult==='Fair Catch') pt.fairCatch++;
+          else if (p.puntResult==='Downed') pt.downed++;
+          else if (p.puntResult==='Returned') pt.returned++;
+          else if (p.puntResult==='Muffed') pt.muffed++;
+          if (startAbs != null && endAbs != null){ pt.netYds += (endAbs - startAbs); pt.netCount++; }
+          if (startAbs != null && catchAbs != null){ pt.grossYds += (catchAbs - startAbs); pt.grossCount++; }
+        }
+      }
+      if ((p.type==='tackle' || p.type==='punt') && p.tackler){
+        const t = tackles[p.tackler] || (tackles[p.tackler] = {name:p.tackler, solo:0, ast:0});
+        t.solo++; // primary tackler always credited solo, regardless of whether there's an assist
+        asList(p.assist).forEach(function(name){
+          const t2 = tackles[name] || (tackles[name] = {name:name, solo:0, ast:0});
+          t2.ast++;
+        });
+      }
+      if (p.type==='defextra' && p.player){
+        const d = defExtra[p.player] || (defExtra[p.player] = {name:p.player, int:0, pbu:0, sack:0, fum:0, td:0});
+        if (p.extraType==='INT') d.int++;
+        else if (p.extraType==='PBU') d.pbu++;
+        else if (p.extraType==='Sack') d.sack++;
+        if (p.td){ d.td++; scoring.touchdowns++; }
+      }
+      if (p.type==='turnover'){
+        if (p.td) scoring.touchdowns++;
+        turnoverNotes.push((p.toType||'Turnover') + ' — lost by ' + (p.lostBy||'?') +
+          (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td ? ' · TD return' : '') +
+          (p.note ? ' ('+p.note+')' : ''));
+        // Nathan: "add fumbles recovered along with yards per carry."
+        if (p.toType === 'Fumble' && p.recoveredBy){
+          const d = defExtra[p.recoveredBy] || (defExtra[p.recoveredBy] = {name:p.recoveredBy, int:0, pbu:0, sack:0, fum:0, td:0});
+          d.fum++;
+        }
+      }
+      if (p.type==='score'){
+        if (p.scoreKind==='PAT Good') scoring.patGood++;
+        else if (p.scoreKind==='PAT No Good') scoring.patNoGood++;
+        else if (p.scoreKind==='2PT Good') scoring.twoPtGood++;
+        else if (p.scoreKind==='2PT No Good') scoring.twoPtNoGood++;
+        else if (p.scoreKind==='Safety') scoring.safety++;
+      }
+      if (p.type==='penalty' && !p.declined){
+        const ydsNum = Number(p.penYards||0);
+        if (p.penTeam === 'Opponent'){ penCountOpp++; penYardsOpp += ydsNum; }
+        else { penCountUs++; penYardsUs += ydsNum; }
+        if (p.penPlayer && p.penTeam !== 'Opponent'){
+          const pr = penalties[p.penPlayer] || (penalties[p.penPlayer] = {name:p.penPlayer, count:0, yds:0});
+          pr.count++; pr.yds += ydsNum;
+        }
+      }
+    });
+
+    return {
+      game: gameLabel.value || 'Untitled game',
+      rushing: Object.values(rushing).map(function(r){
+        return Object.assign({}, r, { ypc: r.att ? Math.round(r.yds / r.att * 10) / 10 : null });
+      }),
+      passing: Object.values(passing), receiving: Object.values(receiving),
+      kickoffs: Object.values(kickoffs), tackles: Object.values(tackles), defExtra: Object.values(defExtra),
+      turnovers: turnoverNotes,
+      scoring: scoring,
+      snaps: { offense: offSnaps, defense: defSnaps },
+      penalties: Object.values(penalties),
+      penaltyTotals: { us: {count:penCountUs, yds:penYardsUs}, opponent: {count:penCountOpp, yds:penYardsOpp} },
+      punting: Object.values(punting).map(function(pt){
+        return Object.assign({}, pt, {
+          avgNet: pt.netCount ? Math.round(pt.netYds / pt.netCount * 10) / 10 : null,
+          avgGross: pt.grossCount ? Math.round(pt.grossYds / pt.grossCount * 10) / 10 : null,
+        });
+      }),
+      puntReturns: Object.values(puntReturns),
+      onside: { us: onsideUs, opponent: onsideOpp },
+      forcedPunts: forcedPunts,
+      oppPassing: { att: oppPassAtt, comp: oppPassComp, yds: oppPassYds },
+    };
+  }
+
+  function statTable(title, rows, cols){
+    if (!rows.length) return '';
+    let html = '<div class="statSectionTitle">'+title+'</div><table class="statTable"><thead><tr><th>Player</th>' +
+      cols.map(c=>'<th>'+c.label+'</th>').join('') + '</tr></thead><tbody>';
+    rows.forEach(function(r){
+      html += '<tr><td>'+escapeHtml(r.name)+'</td>' + cols.map(c=>'<td class="num">'+(r[c.key]||0)+'</td>').join('') + '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function renderStats(){
+    const hasPlays = plays.some(function(p){ return p.type !== 'quarterEnd'; });
+    if (!hasPlays){ statsArea.innerHTML = '<div class="emptyState">Log a play to see compiled stats here.</div>'; return; }
+    const s = compileStatSheet();
+    const sc = s.scoring;
+    let html = '';
+    html += '<div class="statSectionTitle">Snap Counts</div>' +
+      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🏈 Offense: '+s.snaps.offense+' plays &nbsp;·&nbsp; 🛡️ Defense: '+s.snaps.defense+' plays</div>';
+    html += '<div class="statSectionTitle">Scoring Summary</div>' +
+      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🏆 TD: '+sc.touchdowns+
+      ' &nbsp;·&nbsp; PAT: '+sc.patGood+'/'+(sc.patGood+sc.patNoGood)+
+      ' &nbsp;·&nbsp; 2PT: '+sc.twoPtGood+'/'+(sc.twoPtGood+sc.twoPtNoGood)+
+      ' &nbsp;·&nbsp; Safety: '+sc.safety+'</div>';
+    html += '<div class="statSectionTitle">Penalties</div>' +
+      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🚩 Us: '+s.penaltyTotals.us.count+' for '+s.penaltyTotals.us.yds+
+      ' yds &nbsp;·&nbsp; Opponent: '+s.penaltyTotals.opponent.count+' for '+s.penaltyTotals.opponent.yds+' yds</div>';
+    if (s.onside.us || s.onside.opponent){
+      html += '<div class="statSectionTitle">Onside Kicks</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">⚡ Recovered by Us: '+s.onside.us+
+        ' &nbsp;·&nbsp; Recovered by Opponent: '+s.onside.opponent+'</div>';
+    }
+    if (s.forcedPunts){
+      html += '<div class="statSectionTitle">Forced Punts</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🚩 Opponent forced to punt: '+s.forcedPunts+'</div>';
+    }
+    if (s.oppPassing.att){
+      html += '<div class="statSectionTitle">Opponent Passing (allowed)</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppPassing.comp+'/'+s.oppPassing.att+' for '+s.oppPassing.yds+' yds</div>';
+    }
+    html += statTable('Rushing', s.rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'},{key:'fd',label:'1st'}]);
+    html += statTable('Passing', s.passing, [{key:'comp',label:'Comp'},{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    html += statTable('Receiving', s.receiving, [{key:'rec',label:'Rec'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    html += statTable('Kickoff Returns', s.kickoffs, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    html += statTable('Punting', s.punting, [{key:'punts',label:'Punts'},{key:'avgGross',label:'Avg Gross'},{key:'avgNet',label:'Avg Net'},{key:'touchback',label:'TB'},{key:'fairCatch',label:'FC'},{key:'downed',label:'Dwn'},{key:'returned',label:'Ret Agnst'},{key:'muffed',label:'Muff'}]);
+    html += statTable('Punt Returns', s.puntReturns, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    html += statTable('Tackles', s.tackles, [{key:'solo',label:'Solo'},{key:'ast',label:'Ast'}]);
+    html += statTable('Defensive Extras', s.defExtra, [{key:'int',label:'INT'},{key:'pbu',label:'PBU'},{key:'sack',label:'Sack'},{key:'fum',label:'FR'},{key:'td',label:'TD'}]);
+    html += statTable('Penalties (Us, by player)', s.penalties, [{key:'count',label:'#'},{key:'yds',label:'Yds'}]);
+    if (s.turnovers.length){
+      html += '<div class="statSectionTitle">Turnovers</div>' +
+        s.turnovers.map(t=>'<div style="font-size:12px;color:#ccd3dd;margin-bottom:4px">• '+escapeHtml(t)+'</div>').join('');
+    }
+    statsArea.innerHTML = html;
+  }
+
+  document.getElementById('copyTextBtn').addEventListener('click', async function(){
+    const s = compileStatSheet();
+    const sc = s.scoring;
+    let txt = 'STAT SUMMARY — ' + s.game + '\n\n';
+    txt += 'SNAP COUNTS\n  Offense: '+s.snaps.offense+' plays · Defense: '+s.snaps.defense+' plays\n\n';
+    txt += 'SCORING\n  TD: '+sc.touchdowns+' · PAT: '+sc.patGood+'/'+(sc.patGood+sc.patNoGood)+
+      ' · 2PT: '+sc.twoPtGood+'/'+(sc.twoPtGood+sc.twoPtNoGood)+' · Safety: '+sc.safety+'\n\n';
+    txt += 'PENALTIES\n  Us: '+s.penaltyTotals.us.count+' for '+s.penaltyTotals.us.yds+' yds · Opponent: '+
+      s.penaltyTotals.opponent.count+' for '+s.penaltyTotals.opponent.yds+' yds\n\n';
+    if (s.onside.us || s.onside.opponent){
+      txt += 'ONSIDE KICKS\n  Recovered by Us: '+s.onside.us+' · Recovered by Opponent: '+s.onside.opponent+'\n\n';
+    }
+    if (s.forcedPunts){
+      txt += 'FORCED PUNTS\n  Opponent forced to punt: '+s.forcedPunts+'\n\n';
+    }
+    if (s.oppPassing.att){
+      txt += 'OPPONENT PASSING (ALLOWED)\n  '+s.oppPassing.comp+'/'+s.oppPassing.att+' for '+s.oppPassing.yds+' yds\n\n';
+    }
+    function section(title, rows, fmt){
+      if (!rows.length) return;
+      txt += title.toUpperCase() + '\n';
+      rows.forEach(r => txt += '  ' + fmt(r) + '\n');
+      txt += '\n';
+    }
+    section('Rushing', s.rushing, r=>r.name+': '+r.att+' att, '+r.yds+' yds ('+(r.ypc==null?'—':r.ypc)+' ypc), '+r.td+' TD');
+    section('Passing', s.passing, r=>r.name+': '+r.comp+'/'+r.att+', '+r.yds+' yds, '+r.td+' TD');
+    section('Receiving', s.receiving, r=>r.name+': '+r.rec+' rec, '+r.yds+' yds, '+r.td+' TD');
+    section('Kickoff Returns', s.kickoffs, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds');
+    section('Punting', s.punting, r=>r.name+': '+r.punts+' punts, '+(r.avgGross!=null?r.avgGross:'-')+' avg gross, '+(r.avgNet!=null?r.avgNet:'-')+' avg net (TB '+r.touchback+', FC '+r.fairCatch+', downed '+r.downed+', returned against '+r.returned+', muffed '+r.muffed+')');
+    section('Punt Returns', s.puntReturns, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds, '+r.td+' TD');
+    section('Tackles', s.tackles, r=>r.name+': '+r.solo+' solo, '+r.ast+' ast');
+    section('Defensive Extras', s.defExtra, r=>r.name+': '+r.int+' INT, '+r.pbu+' PBU, '+r.sack+' sack, '+r.fum+' FR');
+    section('Penalties (Us, by player)', s.penalties, r=>r.name+': '+r.count+' for '+r.yds+' yds');
+    if (s.turnovers.length){ txt += 'TURNOVERS\n'; s.turnovers.forEach(t=>txt+='  '+t+'\n'); }
+    try {
+      await navigator.clipboard.writeText(txt);
+      alert('Summary copied — paste it into a text, email, or team chat.');
+    } catch(e){
+      prompt('Copy this manually:', txt);
+    }
+  });
+
+  document.getElementById('downloadJsonBtn').addEventListener('click', function(){
+    const s = compileStatSheet();
+    const blob = new Blob([JSON.stringify(s, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'statSheet-' + (gameLabel.value || 'game').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
+    a.click();
+  });
+
+  // Raw play-by-play export (not the compiled totals) — the live Coach Tools
+  // import needs individual attempts (yards/dir/1st-down per play) to rebuild
+  // its attempt-array statSheet shape and feed Tendencies; the compiled
+  // statSheet.json above only has season/game totals, which can't be
+  // un-summed back into individual plays.
+  function downloadGameLog(){
+    const payload = {
+      game: gameLabel.value || 'Untitled game',
+      exportedAt: new Date().toISOString(),
+      roster: ROSTER,
+      plays: plays,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'statkeeper-gamelog-' + (gameLabel.value || 'game').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
+    a.click();
+  }
+  document.getElementById('downloadGameLogBtn').addEventListener('click', downloadGameLog);
+
+  // ---------------------------------------------------------------------
+  // Push to Live Stats -- Nathan: "is there a way to automate the push
+  // from the statkeeper app direct into the stats instead of a manual
+  // coach upload?" Rather than download a file and click Import in Coach
+  // Tools, this signs in with the same coach gate the live app uses and
+  // writes the translated statSheet straight into the picked game's record
+  // in schedule.json. "Download Game Log" above still works too -- keep it
+  // as a backup for offline use or double-checking before it goes live.
+  //
+  // Two things are deliberately duplicated here from the live app rather
+  // than shared, since this file has no build step / module system and
+  // has to stay a single standalone HTML file:
+  //   1. The coach-gate auth flow -- ported from dev2/js/cloud-auth.js.
+  //      COACH_CODE_HASH below is the exact same public hash from
+  //      dev2/js/auth.js (sha256 of the real code -- the plaintext code
+  //      itself never appears here or travels anywhere either).
+  //   2. The play-by-play -> statSheet translator -- ported from
+  //      dev2/js/statkeeper-import.js's translateStatKeeperExport(). If
+  //      that file's logic ever changes, port the change here too.
+  // ---------------------------------------------------------------------
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const FIREBASE_API_KEY = 'AIzaSyCBvobt9qfyLoJOGUz6fIiGrFKMEQFsA3E'; // public project identifier, not a secret -- see dev2/js/cloud-auth.js
+  const COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
+  const SIGNUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
+  const SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+  const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const GATE_SESSION_KEY = 'bengalsGateSession'; // same key dev2 uses -- if this page shares an origin with the live app in this browser, a coach already signed in there is picked up here for free.
+  const SAFETY_MARGIN_MS = 60000;
+  let authCache = null;
+
+  async function sha256Hex(text){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function loadGateSession(){
+    try { return JSON.parse(localStorage.getItem(GATE_SESSION_KEY) || 'null'); } catch(e){ return null; }
+  }
+  function saveGateSession(refreshToken){
+    try { localStorage.setItem(GATE_SESSION_KEY, JSON.stringify({refreshToken, kind:'coach'})); } catch(e){}
+  }
+  function hasGateSession(){
+    const s = loadGateSession();
+    return !!(s && s.refreshToken);
+  }
+  async function refreshIdToken(refreshToken){
+    const res = await fetch(REFRESH_URL, {
+      method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+    });
+    if (!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
+    const data = await res.json();
+    return { idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: Date.now() + Number(data.expires_in)*1000 };
+  }
+  async function signInWithCoachGate(passwordHash){
+    const email = 'coach-gate@aslbengals.internal';
+    let res = await fetch(SIGNUP_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
+    });
+    if (!res.ok){
+      const errBody = await res.json().catch(() => ({}));
+      const code = errBody.error && errBody.error.message;
+      if (code === 'EMAIL_EXISTS'){
+        res = await fetch(SIGNIN_URL, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
+        });
+        if (!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+      } else {
+        throw new Error('Gate account setup failed: ' + (code || res.status));
+      }
+    }
+    const data = await res.json();
+    authCache = { idToken: data.idToken, refreshToken: data.refreshToken, expiresAt: Date.now() + Number(data.expiresIn)*1000 };
+    saveGateSession(authCache.refreshToken);
+    return authCache;
+  }
+  async function getFirebaseIdToken(){
+    if (authCache && authCache.expiresAt - SAFETY_MARGIN_MS > Date.now()) return authCache.idToken;
+    if (authCache && authCache.refreshToken){
+      authCache = await refreshIdToken(authCache.refreshToken);
+      saveGateSession(authCache.refreshToken);
+      return authCache.idToken;
+    }
+    const saved = loadGateSession();
+    if (saved && saved.refreshToken){
+      authCache = await refreshIdToken(saved.refreshToken);
+      saveGateSession(authCache.refreshToken);
+      return authCache.idToken;
+    }
+    throw new Error('Not signed in');
+  }
+  async function firebaseAuthedUrl(url){
+    const token = await getFirebaseIdToken();
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    return `${url}${sep}auth=${encodeURIComponent(token)}`;
+  }
+
+  async function ensureCoachAuth(){
+    if (hasGateSession()){
+      try { await getFirebaseIdToken(); return true; }
+      catch(e){ /* saved session no longer valid -- fall through to re-prompt */ }
+    }
+    const code = prompt('Enter the coach code to push stats to the live app:');
+    if (!code) return false;
+    const hash = await sha256Hex(code);
+    if (hash !== COACH_CODE_HASH){ alert('Incorrect code.'); return false; }
+    try { await signInWithCoachGate(hash); return true; }
+    catch(e){ alert("Couldn't sign in: " + e.message); return false; }
+  }
+
+  // ---- Port of dev2/js/statkeeper-import.js's translateStatKeeperExport ----
+  function blankLiveStatSheet(){
+    return {
+      roster: [], rushing: [], passing: [], receiving: [], kickoffs: [], tackles: [], defExtra: [], turnovers: [],
+      penalties: [], punts: [], puntReturns: [],
+      scoring: { patGood:0, patNoGood:0, twoPtGood:0, twoPtNoGood:0, safety:0 },
+      penaltyTotals: { us:{count:0,yds:0}, opponent:{count:0,yds:0} },
+      onside: { us:0, opponent:0 },
+      oppPassing: { att:0, comp:0, yds:0 },
+      forcedPunts: 0,
+    };
+  }
+  function translatePlaysForLive(playList, liveRoster){
+    const warnings = [];
+    // Rows below are keyed by jersey NUMBER, same as the live app -- but
+    // several roster players have no number yet (blank num is legit), so
+    // two blank-number players would otherwise collapse onto the same row
+    // and the wrong one shows up with the stats. numCounts flags any
+    // number (blank or real) shared by more than one player so numFor()
+    // can skip it instead of guessing wrong.
+    const nameIndex = {};
+    const numCounts = {};
+    (liveRoster || []).forEach(p => {
+      if (!p) return;
+      const key = p.num === null || p.num === undefined ? '' : String(p.num);
+      numCounts[key] = (numCounts[key] || 0) + 1;
+    });
+    (liveRoster || []).forEach(p => { if (p && p.name) nameIndex[String(p.name).trim().toLowerCase()] = p.num; });
+    function numFor(name){
+      if (!name) return null;
+      const num = nameIndex[String(name).trim().toLowerCase()];
+      if (num === undefined){ warnings.push(`Couldn't match "${name}" to a player on the current live roster -- that credit was skipped.`); return null; }
+      const key = num === null || num === undefined ? '' : String(num);
+      if ((numCounts[key] || 0) > 1){
+        warnings.push(`"${name}" shares jersey #${num || '(blank)'} with another player on the roster -- that credit was skipped to avoid mixing up their stats. Give them each a unique number to fix this for good.`);
+        return null;
+      }
+      return num;
+    }
+    const ss = blankLiveStatSheet();
+    ss.roster = (liveRoster || []).map(p => ({ num: p.num, name: p.name }));
+    function ensureAttemptRow(sectionKey, num){
+      let row = ss[sectionKey].find(r => String(r.num) === String(num));
+      if (!row){ row = { num, attempts: [] }; ss[sectionKey].push(row); }
+      return row;
+    }
+    function ensureTackleRow(num){
+      let row = ss.tackles.find(r => String(r.num) === String(num));
+      if (!row){ row = { num, marks: [] }; ss.tackles.push(row); }
+      return row;
+    }
+    function ensureDefExtraRow(num){
+      let row = ss.defExtra.find(r => String(r.num) === String(num));
+      if (!row){ row = { num, int:0, pbu:0, sacks:0, fum:0, td:false }; ss.defExtra.push(row); }
+      return row;
+    }
+    function ensurePuntingRow(num){
+      let row = ss.punts.find(r => String(r.num) === String(num));
+      if (!row){ row = { num, punts:0, touchback:0, fairCatch:0, downed:0, returned:0, muffed:0, netYds:0, grossYds:0 }; ss.punts.push(row); }
+      return row;
+    }
+    function ensurePuntReturnRow(num){
+      let row = ss.puntReturns.find(r => String(r.num) === String(num));
+      if (!row){ row = { num, ret:0, yds:0, td:0 }; ss.puntReturns.push(row); }
+      return row;
+    }
+
+    (playList || []).forEach(p => {
+      if (!p || p.type === 'quarterEnd') return;
+
+      if (p.type === 'run' && p.carrier){
+        const num = numFor(p.carrier);
+        if (num != null) ensureAttemptRow('rushing', num).attempts.push({ yds: Number(p.yards)||0, fd: !!p.firstDown, dir: p.dir||null, td: !!p.td });
+      }
+      if (p.type === 'pass'){
+        const isUsPass = p.passTeam !== 'Opponent';
+        if (isUsPass){
+          if (p.passer){
+            const num = numFor(p.passer);
+            if (num != null) ensureAttemptRow('passing', num).attempts.push({ yds: p.result==='Complete' ? (Number(p.yards)||0) : 0, comp: p.result==='Complete', fd: !!p.firstDown, td: !!p.td });
+          }
+          if (p.result==='Complete' && p.target){
+            const num = numFor(p.target);
+            if (num != null) ensureAttemptRow('receiving', num).attempts.push({ yds: Number(p.yards)||0, fd: !!p.firstDown, td: !!p.td });
+          }
+        } else {
+          ss.oppPassing.att += 1;
+          if (p.result==='Complete'){ ss.oppPassing.comp += 1; ss.oppPassing.yds += Number(p.yards)||0; }
+        }
+        if (p.result !== 'Complete' && p.incReason==='Broken Up' && p.pbuBy){
+          const num = numFor(p.pbuBy);
+          if (num != null) ensureDefExtraRow(num).pbu += 1;
+        }
+      }
+      if (p.type === 'kick'){
+        if (p.onside){ if (p.recoveredByTeam==='Opponent') ss.onside.opponent += 1; else ss.onside.us += 1; }
+        if (p.returner){
+          const num = numFor(p.returner);
+          if (num != null) ensureAttemptRow('kickoffs', num).attempts.push({ yds: Number(p.yards)||0, td: !!p.td });
+        }
+      }
+      if (p.type === 'punt'){
+        const isUs = p.puntTeam !== 'Opponent';
+        const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        if (!isUs){
+          ss.forcedPunts += 1;
+          if (p.puntResult==='Returned' && p.returner){
+            const num = numFor(p.returner);
+            if (num != null){
+              const row = ensurePuntReturnRow(num);
+              row.ret += 1;
+              row.yds += (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : 0;
+              if (p.td) row.td += 1;
+            }
+          }
+        } else if (p.punter){
+          const num = numFor(p.punter);
+          if (num != null){
+            const row = ensurePuntingRow(num);
+            row.punts += 1;
+            if (p.puntResult==='Touchback') row.touchback += 1;
+            else if (p.puntResult==='Fair Catch') row.fairCatch += 1;
+            else if (p.puntResult==='Downed') row.downed += 1;
+            else if (p.puntResult==='Returned') row.returned += 1;
+            else if (p.puntResult==='Muffed') row.muffed += 1;
+            if (startAbs != null && endAbs != null) row.netYds += (endAbs - startAbs);
+            if (startAbs != null && catchAbs != null) row.grossYds += (catchAbs - startAbs);
+          }
+        }
+        if (isUs && p.tackler){
+          const tNum = numFor(p.tackler);
+          if (tNum != null) ensureTackleRow(tNum).marks.push('solo');
+          asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });
+        }
+      }
+      if (p.type === 'tackle' && p.tackler){
+        const tNum = numFor(p.tackler);
+        if (tNum != null) ensureTackleRow(tNum).marks.push('solo');
+        asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });
+      }
+      if (p.type === 'defextra' && p.player){
+        const num = numFor(p.player);
+        if (num != null){
+          const row = ensureDefExtraRow(num);
+          if (p.extraType==='INT') row.int += 1;
+          else if (p.extraType==='PBU') row.pbu += 1;
+          else if (p.extraType==='Sack') row.sacks += 1;
+          if (p.td) row.td = true;
+        }
+      }
+      if (p.type === 'turnover'){
+        ss.turnovers.push({ desc: (p.toType||'Turnover') + ' -- lost by ' + (p.lostBy||'?') +
+          (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td ? ' (TD return)' : '') + (p.note ? ' ('+p.note+')' : '') });
+        // Nathan: "add fumbles recovered along with yards per carry" --
+        // same "name a player, credit them" pattern already used for
+        // pbuBy on a broken-up pass.
+        if (p.toType === 'Fumble' && p.recoveredBy){
+          const num = numFor(p.recoveredBy);
+          if (num != null){
+            const row = ensureDefExtraRow(num);
+            row.fum += 1;
+            if (p.td) row.td = true;
+          }
+        }
+      }
+      if (p.type === 'score'){
+        if (p.scoreKind==='PAT Good') ss.scoring.patGood += 1;
+        else if (p.scoreKind==='PAT No Good') ss.scoring.patNoGood += 1;
+        else if (p.scoreKind==='2PT Good') ss.scoring.twoPtGood += 1;
+        else if (p.scoreKind==='2PT No Good') ss.scoring.twoPtNoGood += 1;
+        else if (p.scoreKind==='Safety') ss.scoring.safety += 1;
+      }
+      if (p.type === 'penalty'){
+        const teamKey = p.penTeam==='Opponent' ? 'opponent' : 'us';
+        const yds = Number(p.penYards)||0;
+        const num = p.penPlayer ? numFor(p.penPlayer) : null;
+        ss.penalties.push({ team: p.penTeam==='Opponent' ? 'Opponent' : 'Us', type: (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty'), yards: yds, num, declined: !!p.declined });
+        if (!p.declined){ ss.penaltyTotals[teamKey].count += 1; ss.penaltyTotals[teamKey].yds += yds; }
+      }
+    });
+    return { statSheet: ss, warnings };
+  }
+
+  function statSheetHasAnything(ss){
+    if (!ss) return false;
+    return ['rushing','passing','receiving','kickoffs','tackles','defExtra','turnovers','penalties','punts','puntReturns']
+      .some(k => Array.isArray(ss[k]) && ss[k].length > 0);
+  }
+
+  async function pushToLiveStats(){
+    if (!plays.length){ alert('No plays logged yet — nothing to push.'); return; }
+    const statusEl = document.getElementById('pushLiveStatus');
+    const setPushStatus = t => { if (statusEl) statusEl.textContent = t || ''; };
+    const ok = await ensureCoachAuth();
+    if (!ok) return;
+
+    setPushStatus('Loading live roster and schedule…');
+    let liveRoster = [], games = [];
+    try {
+      const rosterUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
+      const rosterRes = await fetch(rosterUrl);
+      liveRoster = rosterRes.ok ? (await rosterRes.json() || []) : [];
+      const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
+      const schedRes = await fetch(schedUrl);
+      games = schedRes.ok ? (await schedRes.json() || []) : [];
+    } catch(e){ setPushStatus(''); alert('Could not reach the live app: ' + e.message); return; }
+    liveRoster = Array.isArray(liveRoster) ? liveRoster.filter(p => p && p.id) : [];
+    games = Array.isArray(games) ? games.filter(g => g && g.id) : [];
+    if (!games.length){ setPushStatus(''); alert('No games found on the live schedule.'); return; }
+
+    const sorted = games.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999'));
+    const listTxt = sorted.map((g,i) => (i+1) + '. ' + (g.homeAway==='Away' ? '@' : 'vs') + ' ' + (g.opponent||'TBD') + (g.date ? ' — '+g.date : '')).join('\n');
+    const choice = prompt('Which live game does this belong to? Type the number:\n\n' + listTxt);
+    setPushStatus('');
+    if (!choice) return;
+    const idx = parseInt(choice, 10) - 1;
+    if (!(idx >= 0 && idx < sorted.length)){ alert('Cancelled — no valid game picked.'); return; }
+    const targetGame = sorted[idx];
+
+    if (statSheetHasAnything(targetGame.statSheet) && !confirm(`"${targetGame.opponent||'This game'}" already has stats entered live. Pushing will REPLACE them entirely with this Stat Keeper log. Continue?`)) return;
+
+    const result = translatePlaysForLive(plays, liveRoster);
+    const gameIdx = games.findIndex(g => g.id === targetGame.id);
+    games[gameIdx] = Object.assign({}, targetGame, { statSheet: result.statSheet, updatedAt: new Date().toISOString() });
+
+    setPushStatus('Pushing to live stats…');
+    try {
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(games) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ setPushStatus(''); alert('Push failed: ' + e.message); return; }
+
+    setPushStatus('');
+    let msg = `✅ Pushed! Stats for ${targetGame.opponent||'this game'} are now live -- check Coach Tools > Stats.`;
+    if (result.warnings.length) msg += '\n\nWarnings:\n' + result.warnings.join('\n');
+    alert(msg);
+  }
+  document.getElementById('pushLiveBtn').addEventListener('click', function(){
+    pushToLiveStats().catch(function(e){ document.getElementById('pushLiveStatus').textContent = ''; alert('Push failed: ' + e.message); });
+  });
+
+  document.getElementById('finishGameBtn').addEventListener('click', function(){
+    if (!plays.length){ alert('No plays logged yet — nothing to finish.'); return; }
+    const score = computeRunningScore();
+    const actualUs = finalScoreUs.value === '' ? null : Number(finalScoreUs.value);
+    const actualOpp = finalScoreOpp.value === '' ? null : Number(finalScoreOpp.value);
+    const mismatch = (actualUs != null && actualUs !== score.us) || (actualOpp != null && actualOpp !== score.opp);
+    let msg = 'Finish this game?\n\nThis downloads the full play-by-play log as a file to import into the live Coach Tools > Stats > Enter Stats screen ("Import from Stat Keeper" button). You can keep logging afterward and re-export anytime with "Download Game Log" below.';
+    if (mismatch){
+      msg = '⚠️ Your Final Score Check doesn\'t match your play log (log has US ' + score.us + ' — ' + score.opp + ' OPP). ' +
+        'Check for a missing/extra 🏆 Touchdown toggle, or a missing PAT/2PT/Safety Score entry.\n\n' + msg;
+    }
+    if (!confirm(msg)) return;
+    downloadGameLog();
+  });
+
+  updateSideUI();
+  renderTypeGrid();
+  populateEndQuarterSel();
+  resetDraft();
+  renderLog();
+  renderStats();
+})();
+</script>
+</body>
+</html>
