@@ -568,29 +568,48 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    status summary, not a reward moment. */
 .digestHeroHeader{background:linear-gradient(160deg, #2c3e6b 0%, #1a2647 100%)}
 
-/* ---- Home-screen engagement callout (index.html's #engagementCallout,
-   js/study-quiz.js's renderEngagementCallout) -- Nathan: "promote taking the
-   timed quiz, promote moving up the leaderboard... callouts to everyone who
-   opens the app... calling out top users who are setting the example."
-   Compact inline cards (not another full popup) sitting above Study every
-   time it opens, so this reuses the same warm/gold "you earned this" and
-   cool "reminder" color language as the rankUp/nudge popups above at a much
-   smaller footprint. */
-.engageWrap{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
-.engageCard{border-radius:12px;padding:10px 12px}
-.engageLeaderCard{display:flex;align-items:center;gap:10px;
-  background:linear-gradient(135deg, #ffb703 0%, var(--bengal-orange) 100%)}
-.engageIcon{font-size:22px;line-height:1;flex-shrink:0}
-.engageLeaderCard .engageTitle{color:#4a2600;font-size:11px;font-weight:800;text-transform:uppercase;
-  letter-spacing:.03em}
-.engageLeaderCard .engageBody{color:#2a1400;font-size:13.5px;font-weight:800}
-.engageNudgeCard{background:var(--card);border:1px solid var(--line)}
-.engageNudgeCard .engageTitle{color:var(--ink);font-size:13px;font-weight:800;margin-bottom:2px}
-.engageNudgeCard .engageBody{color:var(--muted);font-size:12px;font-weight:600;line-height:1.4}
-.engageCtaBtn{display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:7px 12px;border:none;
-  border-radius:8px;background:var(--bengal-orange);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer}
-.engageCtaBtn:active{background:var(--bengal-orange-dark)}
-.engageCtaBtn::after{content:'→'}
+/* ---- Global engagement callout (index.html's #globalCallout, right below
+   the header on every section; js/study-quiz.js's renderEngagementCallout)
+   -- Nathan: "promote taking the timed quiz, promote moving up the
+   leaderboard... callouts to everyone who opens the app... calling out top
+   users who are setting the example." Nathan (follow-up): "top of the
+   leaderboard banner should be moved to just below the ASL Bengals header
+   bar - it should rotate with key events and be clickable to go to that
+   page... have the banners be dynamic and colorful." A single auto-rotating
+   carousel: all slides are absolutely stacked in .gcStage and cross-faded
+   via .active, so the banner never reflows the layout beneath it as it
+   rotates. Each tone is a distinct saturated gradient so different slide
+   types ("you're #N", streak, schedule, leaderboard...) are readable as
+   different colors at a glance, not just different text. */
+.globalCallout{position:relative;margin:0;overflow:hidden}
+.gcStage{position:relative;height:64px}
+.gcSlide{position:absolute;inset:0;display:flex;align-items:center;gap:10px;
+  padding:10px 16px;opacity:0;pointer-events:none;cursor:pointer;
+  transition:opacity .45s ease}
+.gcSlide.active{opacity:1;pointer-events:auto}
+.gcIcon{font-size:24px;line-height:1;flex-shrink:0}
+.gcText{flex:1;min-width:0}
+.gcTitle{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gcBody{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gcArrow{font-size:22px;font-weight:800;flex-shrink:0;opacity:.85}
+.gc-gold{background:linear-gradient(135deg, #ffb703 0%, var(--bengal-orange) 100%);color:#2a1400}
+.gc-gold .gcTitle{color:#4a2600}
+.gc-green{background:linear-gradient(135deg, #4cae4c 0%, #1f7a2d 100%);color:#fff}
+.gc-green .gcTitle{color:#eafbe7}
+.gc-blue{background:linear-gradient(135deg, #3a8fd6 0%, #1f5fa8 100%);color:#fff}
+.gc-blue .gcTitle{color:#e6f2fd}
+.gc-red{background:linear-gradient(135deg, #ef5350 0%, #b71c1c 100%);color:#fff}
+.gc-red .gcTitle{color:#fde8e8}
+.gc-navy{background:linear-gradient(135deg, #3d4f7d 0%, #1a2647 100%);color:#fff}
+.gc-navy .gcTitle{color:#e4e8f5}
+.gcDots{position:absolute;bottom:4px;left:0;right:0;display:flex;justify-content:center;gap:5px}
+.gcDot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.5)}
+.gcDot.active{background:#fff}
+@media (prefers-reduced-motion: reduce){
+  .gcSlide{transition:none}
+}
+[data-theme="dark"] .gcDot{background:rgba(255,255,255,.35)}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with
@@ -701,6 +720,16 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 [data-theme="dark"] .badgeCard.earned{background:linear-gradient(160deg, #3a2c10 0%, #4a3410 100%)}
 [data-theme="dark"] .badgeCard.earned .badgeProgress{color:var(--accent)}
 
+/* New-features intro (index.html's #newFeaturesOverlay, js/study-quiz.js's
+   maybeShowNewFeaturesIntro) -- Nathan: "We would also need a callout to
+   speak to the new features." A simple stacked list inside the same
+   .lbCardCool chrome badgesIntroOverlay uses, one row per feature. */
+.nfList{padding:14px 18px 4px;display:flex;flex-direction:column;gap:12px}
+.nfRow{display:flex;align-items:flex-start;gap:12px}
+.nfIcon{font-size:22px;line-height:1;flex-shrink:0;margin-top:1px}
+.nfTitle{font-size:13.5px;font-weight:800;color:var(--ink)}
+.nfDesc{font-size:12px;font-weight:600;color:var(--muted);line-height:1.4;margin-top:2px}
+
 /* Spotlight (js/study-quiz.js's renderSpotlight, inside #lbOverlay) -- a
    small callout strip above the leaderboard tabs naming each board's #1
    plus the current streak leader. Warm gold-tinted card (same family as the
@@ -717,6 +746,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .lbTabBtn{flex:1;min-width:0;border:none;background:transparent;padding:9px 3px;border-radius:8px;font-size:10.5px;
   font-weight:800;color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbTabBtn.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+/* All-Time / This Week pill toggle (Overall tab only) -- smaller and
+   text-only next to .lbTabRow's icon+label tabs above, since this is a
+   secondary filter on the Overall board, not a sibling top-level tab. */
+.lbRangeToggle{display:flex;gap:4px;margin:-4px 18px 10px;background:var(--paper);border-radius:20px;padding:3px}
+.lbRangeBtn{flex:1;border:none;background:transparent;padding:6px 4px;border-radius:16px;font-size:11px;
+  font-weight:800;color:var(--muted);cursor:pointer}
+.lbRangeBtn.active{background:var(--bengal-orange);color:#fff}
+[data-theme="dark"] .lbRangeToggle{background:var(--paper)}
 .lbXClose{position:absolute !important;top:10px !important;right:10px !important;left:auto !important;
   margin:0 !important;z-index:5;width:32px !important;height:32px !important;border-radius:50%;
   border:none;background:rgba(255,255,255,.25);color:#fff;font-size:22px;line-height:1;cursor:pointer;

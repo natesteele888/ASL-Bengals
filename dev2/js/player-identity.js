@@ -1332,6 +1332,17 @@
       // sessions, only shows the full intro once per player). See
       // js/study-quiz.js's maybeShowBadgesIntro.
       if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
+      // Nathan: "We would also need a callout to speak to the new features"
+      // -- a one-time, one-screen tour of this round's additions (weekly
+      // leaderboard, most-improved, streak nudge, playbook badges, the
+      // rotating banner itself). Deliberately its OWN overlay rather than
+      // reusing js/whats-new.js -- Nathan already said of that feature
+      // "needs to be just new plays," so a second, separate mechanism
+      // handles "new app features" instead. Gates itself internally
+      // (skips parent sessions, shows once per device via localStorage,
+      // same pattern as maybeShowBadgesIntro above). See
+      // js/study-quiz.js's maybeShowNewFeaturesIntro.
+      if (typeof window.maybeShowNewFeaturesIntro === 'function') window.maybeShowNewFeaturesIntro();
       // Nathan: "make sure players are only using one sign in... ask them
       // upon [next] log in if those submissions belong to them." Same
       // trigger point as the other post-session checks here -- see the

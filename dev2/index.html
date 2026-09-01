@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824f">
+<link rel="stylesheet" href="css/styles.css?v=20260824g">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -354,6 +354,17 @@
     </div>
   </div>
 </header>
+
+<!-- Nathan (2026-09-01): "top of the leaderboard banner should be moved to
+     just below the ASL Bengals header bar - it should rotate with key
+     events and be clickable to go to that page... have the banners be
+     dynamic and colorful." Sits right under the header so it's visible on
+     every section (Play, This Week, Schedule, Coach Tools) -- unlike the
+     Play sub-tabs below, this isn't scoped to any one part of the app.
+     Populated/rotated by js/study-quiz.js's renderEngagementCallout(),
+     called once per open from player-identity.js's gate(). Empty by
+     default so it never leaves a visible gap before that runs. -->
+<div id="globalCallout" class="globalCallout" style="display:none;"></div>
 
 <!-- Nathan: "I dont want This Week to appear as another tab - we will need
      to have a seperate top tab to choose between play tabs and this week
@@ -1067,18 +1078,6 @@
 </div>
 
 
-<!-- Nathan: "some users are not doing a lot so we need to promote taking the
-     timed quiz, promote moving up the leaderboard... Callouts to everyone
-     who opens the app to keep using it and calling out top users who are
-     setting the example." An inline banner (not another popup -- the app
-     already shows plenty of those on open: badges intro, gameday splash,
-     cancellation panel, coach/parent digest) sitting right at the top of
-     Study, the first thing everyone sees when they open Play. Populated by
-     js/study-quiz.js's renderEngagementCallout(), called once per open from
-     player-identity.js's gate() alongside the other post-session checks.
-     Empty by default so it never leaves visible gap before that runs. -->
-<div id="engagementCallout"></div>
-
 <div id="studyMode" class="modePanel show">
   <div class="study-grid" id="studyGrid"></div>
 </div>
@@ -1236,6 +1235,17 @@
       <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz</button>
       <button class="lbTabBtn" id="lbTabPCQ" data-lbtab="pcq">🧠 Play Quiz</button>
     </div>
+    <!-- Nathan: "I don't think we take away the all time leaderboard but
+         add a weekly leaderboard that resets." A second lens on the same
+         Overall tab (not a whole new tab) -- js/study-quiz.js's
+         renderOverallLeaderboard() switches between computeOverallStandings()
+         (unchanged, all-time) and computeWeeklyStandings() (new, rebuilt
+         from this Mon-Sun's raw attempt logs only) based on which pill is
+         active. -->
+    <div class="lbRangeToggle" id="overallLbRangeToggle">
+      <button type="button" class="lbRangeBtn active" data-range="alltime">All-Time</button>
+      <button type="button" class="lbRangeBtn" data-range="week">This Week</button>
+    </div>
     <div class="lbSub" id="overallLbNote" style="margin:-4px 18px 8px;">Points: 20 for 1st place down to 1 for 20th, added up across the Timed and Play Calls Quiz boards.</div>
     <div class="lbList" id="overallLbList"></div>
     <div class="lbList" id="timedLbList" style="display:none"></div>
@@ -1322,6 +1332,25 @@
     </div>
     <div id="badgesIntroBody"></div>
     <button class="navBtn" id="badgesIntroOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
+<!-- Nathan: "We would also need a callout to speak to the new features" --
+     a one-time, one-screen tour fired by js/study-quiz.js's
+     maybeShowNewFeaturesIntro() the first time this round of gamification
+     features exists for a signed-in session (once ever per device). A
+     SEPARATE mechanism from js/whats-new.js on purpose -- Nathan already
+     said that feature "needs to be just new plays." -->
+<div class="lbOverlay" id="newFeaturesOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="newFeaturesCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🆕</div>
+      <h3>What's New</h3>
+      <div class="lbSub">A few new ways to compete and keep your streak going</div>
+    </div>
+    <div id="newFeaturesBody" class="nfList"></div>
+    <button class="navBtn" id="newFeaturesOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it! 🚀</button>
   </div>
 </div>
 
@@ -1877,7 +1906,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824r';
+  const BUILD_V = '20260824s';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

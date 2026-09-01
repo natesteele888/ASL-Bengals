@@ -37,14 +37,11 @@ function setMode(mode){
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
   }
-  // Nathan's leaderboard/quiz-promotion callout (see index.html's
-  // #engagementCallout) only makes sense on Study -- the actual landing
-  // tab everyone sees first -- not repeated on every Play sub-tab (that
-  // would just be new clutter replacing the old tab clutter) and not on
-  // This Week/Schedule/Coach Tools, which have nothing to do with quiz
-  // standings.
-  const engagementCalloutEl = document.getElementById('engagementCallout');
-  if (engagementCalloutEl) engagementCalloutEl.style.display = mode === 'study' ? '' : 'none';
+  // Nathan (2026-09-01 follow-up): the engagement/leaderboard callout moved
+  // out from under Study specifically -- it now lives in index.html's
+  // #globalCallout, right below the header, visible on every section
+  // (see renderEngagementCallout below), so it no longer needs a per-mode
+  // show/hide here.
   if(mode==='timed' && typeof timedBuildQuiz === 'function') timedBuildQuiz();
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
   if(mode==='editplays') openEditPlaysGated();
@@ -1007,98 +1004,244 @@ async function computeOverallStandings(){
   const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches), pointsForRank(quizData.coaches));
   return { players, coaches };
 }
+
+// ---------------------------------------------------------------------------
+// Weekly leaderboard + "most improved" (Nathan, 2026-09-01): "add a weekly
+// leaderboard that resets" + "most improved this week". Nathan was explicit
+// the all-time board (computeOverallStandings above) stays as-is -- this is
+// additive, a second lens on the same underlying activity.
+//
+// computeOverallStandings (and fetchTimedLeaderboardData/fetchQuizLeaderboardData/
+// fetchPCQLeaderboardData) rank people by their CURRENT BEST saved score/time,
+// which has no notion of "when" beyond a single date field on that one best
+// run -- there's no way to ask "who was leading a week ago" or "what did
+// this person's best look like using only what they'd done by then" from
+// that data. The raw per-attempt logs each mode already pushes for other
+// reasons (analytics/standardResults, analytics/timedResults,
+// analytics/pcqResults -- every completed run, timestamped, never
+// overwritten) DO have everything needed: filter each log down to whatever
+// date window matters, re-run the exact same "pick this person's best
+// attempt" + sort + points logic the live boards use, and the result is
+// "standings as they'd have looked using only what happened in that
+// window." One function does both jobs this session needs:
+//   - weekStartISO()..now  -> this week's leaderboard (resets every Monday,
+//     same Mon-Sun week js/thisweek.js already uses for consistency)
+//   - null..sevenDaysAgoISO()  -> a "week-ago" baseline to diff against
+//     current standings for "most improved"
+// Kept deliberately separate from computeOverallStandings rather than
+// reworked to share it -- the live boards' extra tie-break polish
+// (timesAchieved counts, etc.) needs the FULL unfiltered history to compute
+// and doesn't matter for either of these supplementary views.
+function mondayOfWeek(d){
+  // Same "anchor to the most recent Monday" math as js/thisweek.js's
+  // buildWeekAheadData, duplicated rather than shared since that function
+  // lives in a different file loaded for a different purpose -- kept
+  // identical on purpose so "this week" always means the same Mon-Sun
+  // window everywhere in the app.
+  const dt = new Date(d);
+  dt.setHours(0, 0, 0, 0);
+  const dow = dt.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = (dow + 6) % 7;
+  dt.setDate(dt.getDate() - mondayOffset);
+  return dt;
+}
+function weekStartISO(){ return mondayOfWeek(new Date()).toISOString(); }
+function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString(); }
+
+function filterEntriesByDate(list, predicate){
+  return (list || []).filter(e => e && e.date && predicate(e.date));
+}
+// Rebuilds one board's "best entry per person" from a raw per-attempt log,
+// restricted to whatever date window `predicate` allows -- same dedupe/sort
+// rule each live board already uses (quizIsBetter/timedIsBetter/high-score),
+// just applied to a filtered slice instead of the full history.
+function bestFromRawLog(rawList, predicate, isBetterFn, sortFn){
+  const filtered = filterEntriesByDate(rawList, predicate);
+  const best = dedupeBestByName(filtered, isBetterFn);
+  best.sort(sortFn);
+  return best;
+}
+async function standingsFromRawHistory(predicate){
+  const [rawStandard, rawTimed, rawPcq] = await Promise.all([
+    cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+  ]);
+  const stdBest = bestFromRawLog(rawStandard, predicate, quizIsBetter,
+    (a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
+  const timedBest = bestFromRawLog(rawTimed, predicate, timedIsBetter,
+    (a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
+  const pcqBest = bestFromRawLog(rawPcq, predicate, (a,b)=> a.score > b.score, (a,b)=> b.score - a.score);
+  const stdSplit = splitByCoach(stdBest), timedSplit = splitByCoach(timedBest), pcqSplit = splitByCoach(pcqBest);
+  return {
+    players: combinePoints(pointsForRank(timedSplit.players), pointsForRank(pcqSplit.players), pointsForRank(stdSplit.players)),
+    coaches: combinePoints(pointsForRank(timedSplit.coaches), pointsForRank(pcqSplit.coaches), pointsForRank(stdSplit.coaches)),
+  };
+}
+function computeWeeklyStandings(){
+  const startISO = weekStartISO();
+  return standingsFromRawHistory(d => d >= startISO);
+}
+// "Most improved this week": current all-time-style standings (rebuilt from
+// the same raw logs, so it's directly comparable) vs. what those same
+// standings would have looked like using only attempts from 7+ days ago --
+// whoever's OVERALL POINTS grew the most in that window wins the spotlight.
+// A player with no prior standing (rank null a week ago) still counts --
+// their full current point total IS their "improvement," same idea as
+// going from unranked to on-the-board.
+async function computeMostImproved(){
+  const cutoff = daysAgoISO(7);
+  const [current, before] = await Promise.all([
+    standingsFromRawHistory(() => true),
+    standingsFromRawHistory(d => d <= cutoff),
+  ]);
+  let best = null;
+  current.players.forEach(p => {
+    const priorEntry = before.players.find(b => normName(b.name) === normName(p.name));
+    const gain = p.points - (priorEntry ? priorEntry.points : 0);
+    if(gain > 0 && (!best || gain > best.gain)) best = { name: p.name, gain, points: p.points };
+  });
+  return best;
+}
+let overallLbRange = 'alltime';
 async function renderOverallLeaderboard(){
   const overallLbList = document.getElementById('overallLbList');
-  overallLbList.innerHTML = '<div class="lbEmpty">Loading overall standings…</div>';
-  const { players, coaches } = await computeOverallStandings();
+  overallLbList.innerHTML = overallLbRange === 'week'
+    ? '<div class="lbEmpty">Loading this week’s standings…</div>'
+    : '<div class="lbEmpty">Loading overall standings…</div>';
+  const { players, coaches } = overallLbRange === 'week' ? await computeWeeklyStandings() : await computeOverallStandings();
   const scoreFn = e => `${e.points} pt${e.points===1?'':'s'}`;
   overallLbList.innerHTML = players.length
     ? players.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('')
-    : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
+    : overallLbRange === 'week'
+      ? '<div class="lbEmpty">Nobody\'s finished a Quiz Scores, Timed Quiz, or Play Calls Quiz run yet this week!</div>'
+      : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
   overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
+}
+const overallLbRangeToggleEl = document.getElementById('overallLbRangeToggle');
+if(overallLbRangeToggleEl){
+  overallLbRangeToggleEl.querySelectorAll('.lbRangeBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(btn.dataset.range === overallLbRange) return;
+      overallLbRange = btn.dataset.range;
+      overallLbRangeToggleEl.querySelectorAll('.lbRangeBtn').forEach(b => b.classList.toggle('active', b === btn));
+      renderOverallLeaderboard();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Home-screen engagement callout (Nathan, 2026-09-01): "some users are not
-// doing a lot so we need to promote taking the timed quiz, promote moving up
-// the leaderboard if you complete multiple quizzes. Callouts to everyone who
+// Global engagement callout (Nathan, 2026-09-01): "some users are not doing
+// a lot so we need to promote taking the timed quiz, promote moving up the
+// leaderboard if you complete multiple quizzes. Callouts to everyone who
 // opens the app to keep using it and calling out top users who are setting
 // the example." Distinct from showRankUpCelebration/showQuizNudge above --
 // those only fire right after finishing a quiz (a real improvement, or every
-// NUDGE_EVERY completions). This renders inline into index.html's
-// #engagementCallout every time Study opens (see setMode()), regardless of
-// whether the player has done anything at all this session, so someone who
-// never finishes a quiz still sees it.
+// NUDGE_EVERY completions). This renders every time a session is confirmed
+// (see player-identity.js's gate()), regardless of whether the player has
+// done anything at all this session, so someone who never finishes a quiz
+// still sees it.
 //
-// Two independent pieces:
-//   1) a public "leader" card naming whoever tops the Overall Leaderboard
-//      right now -- visible to everyone (players and coaches), reusing the
-//      exact same computeOverallStandings() data the Overall Leaderboard tab
-//      shows, so the two can never disagree about who's actually leading.
-//      Labeled "Top of the leaderboard" rather than "Player of the week" --
-//      there's no weekly reset behind these standings (they're all-time
-//      bests), and a "week" label would overpromise something that isn't
-//      actually happening.
-//   2) a private "you're #N" nudge with a straight line into the Timed Quiz
-//      tab -- players only. Coach entries are ranked in their own separate
-//      pool (see splitByCoach/coachSortWeight) and were never meant to chase
-//      the kids' board, so a coach session only ever sees card 1.
-// Nathan: "increase difficulty" etc. weren't asked here, so this
-// deliberately does NOT touch NUDGE_EVERY or the existing popups --
-// additive, not a replacement.
-function engagementLeaderCardHtml(leader){
-  if(!leader) return '';
-  return `<div class="engageCard engageLeaderCard">
-    <div class="engageIcon">🏆</div>
-    <div class="engageText">
-      <div class="engageTitle">Top of the leaderboard</div>
-      <div class="engageBody">${leader.name} — ${leader.points} pt${leader.points===1?'':'s'}</div>
+// Nathan (2026-09-01 follow-up), mid-build: "top of the leaderboard banner
+// should be moved to just below the ASL Bengals header bar - it should
+// rotate with key events and be clickable to go to that page. have a
+// callout for this weeks schedule - link to this week view. leaderboard can
+// link to the leaderboard. A few other callouts, have the banners be
+// dynamic and colorful." That moved this from a Study-only static 2-card
+// block into index.html's #globalCallout -- a single auto-rotating,
+// clickable, colorful carousel visible on every section, below the header.
+const GLOBAL_CALLOUT_ROTATE_MS = 6000;
+let globalCalloutSlides = [];
+let globalCalloutIndex = 0;
+let globalCalloutTimer = null;
+
+function globalCalloutSlideHtml(slide, isActive){
+  return `<div class="gcSlide gc-${slide.tone}${isActive ? ' active' : ''}" data-idx="${slide.idx}">
+    <div class="gcIcon">${slide.icon}</div>
+    <div class="gcText">
+      <div class="gcTitle">${slide.title}</div>
+      <div class="gcBody">${slide.body}</div>
     </div>
+    <div class="gcArrow">›</div>
   </div>`;
 }
-function engagementNudgeCardHtml(rank, me, ahead){
-  if(!rank){
-    return `<div class="engageCard engageNudgeCard">
-      <div class="engageTitle">You're not on the leaderboard yet</div>
-      <div class="engageBody">Take a Quiz, Timed Quiz, or Play Calls Quiz to get on the board.</div>
-      <button type="button" class="engageCtaBtn" id="engageCtaBtn">Take the Timed Quiz</button>
-    </div>`;
-  }
-  if(rank === 1){
-    return `<div class="engageCard engageNudgeCard">
-      <div class="engageTitle">You're #1 on the leaderboard</div>
-      <div class="engageBody">${me.points} pt${me.points===1?'':'s'} — keep it up!</div>
-    </div>`;
-  }
-  const gap = ahead.points - me.points;
-  return `<div class="engageCard engageNudgeCard">
-    <div class="engageTitle">You're #${rank} on the leaderboard</div>
-    <div class="engageBody">${gap} pt${gap===1?'':'s'} behind ${ahead.name} — a Timed Quiz run could close that gap.</div>
-    <button type="button" class="engageCtaBtn" id="engageCtaBtn">Take the Timed Quiz</button>
-  </div>`;
+function renderGlobalCalloutDom(){
+  const host = document.getElementById('globalCallout');
+  if(!host) return;
+  if(!globalCalloutSlides.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
+  host.style.display = '';
+  host.innerHTML = `<div class="gcStage">${globalCalloutSlides.map((s,i)=>globalCalloutSlideHtml(s, i===globalCalloutIndex)).join('')}</div>` +
+    (globalCalloutSlides.length > 1 ? `<div class="gcDots">${globalCalloutSlides.map((s,i)=>`<span class="gcDot${i===globalCalloutIndex?' active':''}"></span>`).join('')}</div>` : '');
+  host.querySelectorAll('.gcSlide').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = Number(el.dataset.idx);
+      const slide = globalCalloutSlides[idx];
+      if(slide && typeof slide.onClick === 'function') slide.onClick();
+    });
+  });
 }
+function startGlobalCalloutRotation(){
+  if(globalCalloutTimer) clearInterval(globalCalloutTimer);
+  if(globalCalloutSlides.length < 2) return;
+  globalCalloutTimer = setInterval(() => {
+    globalCalloutIndex = (globalCalloutIndex + 1) % globalCalloutSlides.length;
+    renderGlobalCalloutDom();
+  }, GLOBAL_CALLOUT_ROTATE_MS);
+}
+function goToTimedQuiz(){ lastPlaySubMode = 'timed'; if (typeof setSection === 'function') setSection('play'); else setMode('timed'); }
+function goToThisWeek(){ if(typeof setSection === 'function') setSection('thisweek'); }
+function openLeaderboardOverlay(){ const btn = document.getElementById('openLeaderboardBtn'); if(btn) btn.click(); }
+
 async function renderEngagementCallout(){
-  const host = document.getElementById('engagementCallout');
+  globalCalloutSlides = [];
+  if(globalCalloutTimer){ clearInterval(globalCalloutTimer); globalCalloutTimer = null; }
+  const host = document.getElementById('globalCallout');
   if(!host) return;
   // Nothing here is relevant to a parent session (Schedule is their whole
   // app -- see refreshCoachToolsVisibility's comment on isParentSession).
-  if(window.isParentSession){ host.innerHTML = ''; return; }
+  if(window.isParentSession){ host.innerHTML = ''; host.style.display = 'none'; return; }
   const { name } = currentPlayerTag();
+  const isCoach = !!window.isCoachSession || isCoachEntryName(name);
+  const slides = [];
   try {
-    const { players } = await computeOverallStandings();
-    let html = engagementLeaderCardHtml(players[0]);
-    if(name && !isCoachEntryName(name)){
-      const { rank } = findEntryAndRank(players, name);
-      html += engagementNudgeCardHtml(rank, rank ? players[rank-1] : null, rank && rank > 1 ? players[rank-2] : null);
+    const [{ players }, mostImproved, ownRecord] = await Promise.all([
+      computeOverallStandings(),
+      computeMostImproved().catch(() => null),
+      (!isCoach && window.PlayerIdentity && typeof window.PlayerIdentity.getSession === 'function' && window.PlayerIdentity.getSession())
+        ? window.PlayerIdentity.getPlayerRecord(window.PlayerIdentity.getSession().playerId).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const leader = players[0];
+    if(leader){
+      slides.push({ tone: 'gold', icon: '🏆', title: 'Top of the leaderboard', body: `${leader.name} — ${leader.points} pt${leader.points===1?'':'s'}`, onClick: openLeaderboardOverlay });
     }
-    host.innerHTML = html ? `<div class="engageWrap">${html}</div>` : '';
-    const ctaBtn = document.getElementById('engageCtaBtn');
-    if(ctaBtn) ctaBtn.addEventListener('click', () => { lastPlaySubMode = 'timed'; setMode('timed'); });
+    if(mostImproved){
+      slides.push({ tone: 'green', icon: '📈', title: "This week's most improved", body: `${mostImproved.name} climbed +${mostImproved.gain} pt${mostImproved.gain===1?'':'s'}`, onClick: openLeaderboardOverlay });
+    }
+    if(name && !isCoach){
+      const { rank } = findEntryAndRank(players, name);
+      if(!rank){
+        slides.push({ tone: 'blue', icon: '🎯', title: "You're not on the leaderboard yet", body: 'Take a Quiz, Timed Quiz, or Play Calls Quiz to get on the board', onClick: goToTimedQuiz });
+      } else if(rank === 1){
+        slides.push({ tone: 'blue', icon: '🎯', title: "You're #1 on the leaderboard", body: `${players[0].points} pt${players[0].points===1?'':'s'} — keep it up!`, onClick: openLeaderboardOverlay });
+      } else {
+        const ahead = players[rank-2];
+        const gap = ahead.points - players[rank-1].points;
+        slides.push({ tone: 'blue', icon: '🎯', title: `You're #${rank} on the leaderboard`, body: `${gap} pt${gap===1?'':'s'} behind ${ahead.name} — take the Timed Quiz`, onClick: goToTimedQuiz });
+      }
+      const streak = (ownRecord && ownRecord.loginStreak) || 0;
+      if(streak > 1){
+        slides.push({ tone: 'red', icon: '🔥', title: `${streak}-day streak`, body: "Don't break it — come back tomorrow to keep it alive", onClick: goToTimedQuiz });
+      }
+    }
   } catch(e) {
-    // Nice-to-have promo banner -- never worth breaking Study over a failed
-    // leaderboard fetch (offline sideline wifi, etc.). Leave it blank.
-    host.innerHTML = '';
+    // Nice-to-have promo banner -- never worth breaking the app over a
+    // failed leaderboard fetch (offline sideline wifi, etc.).
   }
+  slides.push({ tone: 'navy', icon: '📅', title: "This week's schedule", body: 'See upcoming practices and games', onClick: goToThisWeek });
+  slides.push({ tone: 'gold', icon: '🏆', title: 'Leaderboard', body: 'See where the whole team stands', onClick: openLeaderboardOverlay });
+  globalCalloutSlides = slides.map((s,i)=>Object.assign({idx:i}, s));
+  globalCalloutIndex = 0;
+  renderGlobalCalloutDom();
+  startGlobalCalloutRotation();
 }
 window.renderEngagementCallout = renderEngagementCallout;
 
@@ -1175,13 +1318,28 @@ const DEDICATION_BADGE_TIERS = [
   { threshold: 50, icon: '🎯', label: 'Veteran (50 plays)' },
   { threshold: 100, icon: '🎯', label: 'All-Pro (100 plays)' },
 ];
+// Nathan: "Play-coverage badge ('knows the whole playbook')" -- distinct
+// from the Dedication tiers above, which just count total quiz/timed/PCQ
+// *completions* regardless of which signals came up. This instead counts
+// how many DISTINCT flashcards (out of every card in ALL_CARDS) a player
+// has ever answered correctly in Study/Quiz's per-card attempt log
+// (analytics/signalAttempts, {signalId,correct,date,name,playerId} --
+// signalId matches ALL_CARDS[].id), so getting the same handful of signals
+// right over and over doesn't quietly earn "knows the whole playbook" --
+// they actually have to have seen and known most of the deck.
+const COVERAGE_BADGE_TIERS = [
+  { pct: 0.25, icon: '📖', label: 'Quarter of the Playbook' },
+  { pct: 0.50, icon: '📖', label: 'Half the Playbook' },
+  { pct: 0.75, icon: '📖', label: 'Most of the Playbook' },
+  { pct: 1.00, icon: '📖', label: 'Knows the Whole Playbook' },
+];
 function matchesPlayer(entry, playerId, name){
   if(!entry) return false;
   if(playerId && entry.playerId && entry.playerId === playerId) return true;
   return !!normName(name) && normName(entry.name) === normName(name);
 }
-function computeBadges(playerRecord, quizHistory, timedHistory, pcqHistory, name, playerId){
-  quizHistory = quizHistory || []; timedHistory = timedHistory || []; pcqHistory = pcqHistory || [];
+function computeBadges(playerRecord, quizHistory, timedHistory, pcqHistory, name, playerId, signalHistory){
+  quizHistory = quizHistory || []; timedHistory = timedHistory || []; pcqHistory = pcqHistory || []; signalHistory = signalHistory || [];
   const totalCompletions = quizHistory.concat(timedHistory, pcqHistory).filter(e => matchesPlayer(e, playerId, name)).length;
   const perfectScore = quizHistory.some(e => matchesPlayer(e, playerId, name) && e.total && e.score === e.total)
     || pcqHistory.some(e => matchesPlayer(e, playerId, name) && e.maxScore && e.score === e.maxScore);
@@ -1189,7 +1347,15 @@ function computeBadges(playerRecord, quizHistory, timedHistory, pcqHistory, name
   const streakBadges = STREAK_BADGE_TIERS.map(tier => Object.assign({}, tier, { earned: bestStreak >= tier.threshold, progress: bestStreak, category: 'streak' }));
   const dedicationBadges = DEDICATION_BADGE_TIERS.map(tier => Object.assign({}, tier, { earned: totalCompletions >= tier.threshold, progress: totalCompletions, category: 'dedication' }));
   const perfectBadge = { icon: '💯', label: 'Perfect Score', threshold: 1, earned: perfectScore, progress: perfectScore ? 1 : 0, category: 'perfect' };
-  return streakBadges.concat(dedicationBadges, [perfectBadge]);
+  const totalSignals = (typeof ALL_CARDS !== 'undefined' && ALL_CARDS && ALL_CARDS.length) || 0;
+  const correctSignalIds = new Set();
+  signalHistory.forEach(e => { if(e && e.correct && e.signalId && matchesPlayer(e, playerId, name)) correctSignalIds.add(e.signalId); });
+  const coverageCount = correctSignalIds.size;
+  const coverageBadges = totalSignals ? COVERAGE_BADGE_TIERS.map(tier => {
+    const thresholdCount = Math.max(1, Math.ceil(tier.pct * totalSignals));
+    return Object.assign({}, tier, { threshold: thresholdCount, earned: coverageCount >= thresholdCount, progress: coverageCount, category: 'coverage' });
+  }) : [];
+  return streakBadges.concat(dedicationBadges, [perfectBadge], coverageBadges);
 }
 function badgeGridHtml(badges){
   if(!badges || !badges.length) return '';
@@ -1301,11 +1467,12 @@ window.celebrateNewBadges = async function(){
   try {
     const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
     if(!session || !session.name || isCoachEntryName(session.name)) return;
-    const [ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
+    const [ownRecord, quizHistory, timedHistory, pcqHistory, signalHistory] = await Promise.all([
       window.PlayerIdentity.getPlayerRecord(session.playerId),
       cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+      cloudFetch('analytics/signalAttempts'),
     ]);
-    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
+    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId, signalHistory);
     const seen = getSeenBadgeLabels(session.playerId, session.name);
     const freshlyEarned = badges.filter(b => b.earned && seen.indexOf(b.label) === -1);
     if(!freshlyEarned.length){ refreshMyStatsBadgeDot(session.playerId, session.name, badges); return; }
@@ -1328,11 +1495,12 @@ window.maybeShowBadgesIntro = async function(){
     const introKey = badgesStorageKey(BADGES_INTRO_SEEN_PREFIX, session.playerId, session.name);
     let alreadySeen = false;
     try { alreadySeen = localStorage.getItem(introKey) === '1'; } catch(e){ /* ignore */ }
-    const [ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
+    const [ownRecord, quizHistory, timedHistory, pcqHistory, signalHistory] = await Promise.all([
       window.PlayerIdentity.getPlayerRecord(session.playerId),
       cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+      cloudFetch('analytics/signalAttempts'),
     ]);
-    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
+    const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId, signalHistory);
     if(!alreadySeen){
       showBadgesIntro(session.name, badges);
       try { localStorage.setItem(introKey, '1'); } catch(e){ /* ignore */ }
@@ -1345,6 +1513,63 @@ window.maybeShowBadgesIntro = async function(){
   } catch(e){ /* best-effort -- badges awareness shouldn't block login */ }
 };
 
+// ---------------------------------------------------------------------------
+// New-features intro (Nathan: "We would also need a callout to speak to the
+// new features") -- a one-time, one-screen tour covering everything added
+// in this round: the collapsed nav, the rotating banner itself, the weekly
+// leaderboard, Most Improved, the streak nudge, and the playbook-coverage
+// badges. Modeled on showBadgesIntro/maybeShowBadgesIntro just above (same
+// once-per-device localStorage gate, same lbCard/lbHeroHeader chrome) but
+// kept entirely separate from js/whats-new.js -- Nathan was explicit that
+// feature "needs to be just new plays," so a second app-feature-announcement
+// channel lives here instead of folding into it.
+// NEW_FEATURES_VERSION is a plain version tag, not a date -- bump it (and
+// the copy in newFeaturesListHtml) any time a new round of features ships
+// that's worth re-announcing; everyone sees the tour again exactly once.
+const NEW_FEATURES_VERSION = '2026-09-gamification-2';
+const NEW_FEATURES_SEEN_KEY = 'aslBengalsNewFeaturesSeen_' + NEW_FEATURES_VERSION;
+function newFeatureRowHtml(icon, title, desc){
+  return `<div class="nfRow">
+    <div class="nfIcon">${icon}</div>
+    <div class="nfText">
+      <div class="nfTitle">${title}</div>
+      <div class="nfDesc">${desc}</div>
+    </div>
+  </div>`;
+}
+function newFeaturesListHtml(){
+  return [
+    newFeatureRowHtml('🎡', 'New banner up top', "A colorful, rotating banner now sits right below the header -- tap any slide to jump straight to the leaderboard or this week's schedule."),
+    newFeatureRowHtml('📅', 'Weekly Leaderboard', "A leaderboard that resets every week now sits alongside the all-time board, so everyone gets a fresh shot."),
+    newFeatureRowHtml('📈', 'Most Improved', "Climbing the standings fast now gets you called out on the Leaderboard and in the banner up top."),
+    newFeatureRowHtml('🔥', "Don't break your streak", "Your login streak now shows up right in the rotating banner, with a nudge to come back tomorrow."),
+    newFeatureRowHtml('📖', 'Playbook badges', "New badges for knowing more of the playbook -- Quarter, Half, Most, and the Whole Playbook."),
+  ].join('');
+}
+// Called once a name/session is known (player-identity.js's gate() wrapper,
+// same hook point as maybeShowBadgesIntro just above). Parents get almost
+// none of this (Schedule is their whole app), so they're skipped entirely --
+// everyone else (players and coaches) sees the tour once per device.
+window.maybeShowNewFeaturesIntro = function(){
+  try {
+    if(window.isParentSession) return;
+    let alreadySeen = false;
+    try { alreadySeen = localStorage.getItem(NEW_FEATURES_SEEN_KEY) === '1'; } catch(e){ /* ignore */ }
+    if(alreadySeen) return;
+    const overlay = document.getElementById('newFeaturesOverlay');
+    const body = document.getElementById('newFeaturesBody');
+    if(!overlay || !body) return;
+    body.innerHTML = newFeaturesListHtml();
+    overlay.classList.add('show');
+    try { localStorage.setItem(NEW_FEATURES_SEEN_KEY, '1'); } catch(e){ /* ignore */ }
+    const closeAndClear = () => overlay.classList.remove('show');
+    const okBtn = document.getElementById('newFeaturesOkBtn');
+    const closeBtn = document.getElementById('newFeaturesCloseBtn');
+    if(okBtn) okBtn.onclick = closeAndClear;
+    if(closeBtn) closeBtn.onclick = closeAndClear;
+  } catch(e) { /* best-effort -- new-features awareness shouldn't block login */ }
+};
+
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
   const overlay = document.getElementById('myStatsOverlay');
@@ -1352,10 +1577,11 @@ window.showMyStats = async function showMyStats(){
   if(!overlay || !body || !session) return;
   overlay.classList.add('show');
   body.innerHTML = '<div class="lbEmpty">Loading your stats…</div>';
-  const [timedData, pcqData, quizData, overallData, ownRecord, quizHistory, timedHistory, pcqHistory] = await Promise.all([
+  const [timedData, pcqData, quizData, overallData, ownRecord, quizHistory, timedHistory, pcqHistory, signalHistory] = await Promise.all([
     fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), computeOverallStandings(),
     window.PlayerIdentity.getPlayerRecord(session.playerId),
     cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+    cloudFetch('analytics/signalAttempts'),
   ]);
   const overallList = groupFor(overallData, session.name);
   const timedList = groupFor(timedData, session.name);
@@ -1372,7 +1598,7 @@ window.showMyStats = async function showMyStats(){
   const streakHtml = streak > 1
     ? `<div class="lbSub" style="text-align:center;margin-bottom:8px;font-weight:700;">🔥 ${streak}-day login streak</div>`
     : '';
-  const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId);
+  const badges = computeBadges(ownRecord, quizHistory, timedHistory, pcqHistory, session.name, session.playerId, signalHistory);
   body.innerHTML = streakHtml + '<div class="msStatList">' + [
     myStatRowHtml('🏆', 'Overall Points', overall.entry ? `${overall.entry.points} pts` : '0 pts', overall.rank, overallList.length, true),
     myStatRowHtml('⏱️', 'Timed Quiz', timed.entry ? formatClock(timed.entry.timeMs) : 'No time saved yet', timed.rank, timedList.length),
@@ -1560,9 +1786,14 @@ async function renderSpotlight(){
   if(!wrap) return;
   wrap.style.display = 'none';
   wrap.innerHTML = '';
-  const [timedData, pcqData, quizData, allPlayers] = await Promise.all([
+  const [timedData, pcqData, quizData, allPlayers, mostImproved] = await Promise.all([
     fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(),
     window.PlayerIdentity ? window.PlayerIdentity.fetchAllPlayers().catch(() => ({})) : Promise.resolve({}),
+    // Nathan: "most improved this week" -- best-effort (catches its own
+    // errors) since this reads 3 raw analytics logs twice over just for a
+    // single Spotlight line; never worth blocking the rest of Spotlight
+    // over.
+    computeMostImproved().catch(() => null),
   ]);
   const rows = [];
   if(quizData.players[0]) rows.push({ icon: '📝', text: `<b>${escStatsHtml(quizData.players[0].name)}</b> is #1 on Quiz Scores!` });
@@ -1579,6 +1810,13 @@ async function renderSpotlight(){
     if(streak > 1 && (!streakLeader || streak > streakLeader.streak)) streakLeader = { name: p.name, streak };
   });
   if(streakLeader) rows.push({ icon: '🔥', text: `<b>${escStatsHtml(streakLeader.name)}</b> is on a ${streakLeader.streak}-day streak!` });
+  // Nathan: "most improved this week" -- a different kind of callout from
+  // the #1-on-each-board rows above (which, week after week, tend to name
+  // the same handful of kids). This spotlights whoever gained the most
+  // overall points in the last 7 days, so a player climbing from the
+  // middle or bottom of the pack gets recognized too, not just whoever's
+  // already on top.
+  if(mostImproved) rows.push({ icon: '📈', text: `<b>${escStatsHtml(mostImproved.name)}</b> is this week's most improved, +${mostImproved.gain} pt${mostImproved.gain===1?'':'s'}!` });
   if(!rows.length) return;
   wrap.style.display = '';
   wrap.innerHTML = '<div class="lbSpotlightHeader">🌟 Spotlight</div>' +
