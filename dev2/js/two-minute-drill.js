@@ -1721,6 +1721,7 @@
   const el = {
     twoMinDrillOverlay: document.getElementById('twoMinDrillOverlay'),
     twoMinDrillCloseBtn: document.getElementById('twoMinDrillCloseBtn'),
+    twoMinWrap: document.querySelector('.twoMinWrap'),
     startScreen: document.getElementById('startScreen'),
     startBtn: document.getElementById('startBtn'),
     twoMinLbOpenBtn: document.getElementById('twoMinLbOpenBtn'),
@@ -2066,7 +2067,7 @@
   }
 
   async function playGainAnimation(call) {
-    el.playDiagramWrap.style.display = 'block';
+    el.playDiagramWrap.style.display = 'flex';
     const isPlayingRef = { value: false };
     // Nathan: "it shouldn't run the clock when it plays back the play
     // diagram" -- pause for the whole duration of the diagram animation
@@ -2337,6 +2338,7 @@
     // stays visible, floating over the end screen until that timer
     // finally clears it. Force it gone immediately instead.
     el.resultBanner.className = 'twoMinBanner';
+    if (el.twoMinWrap) el.twoMinWrap.classList.remove('gameActive');
     el.gameScreen.style.display = 'none';
     el.endScreen.style.display = '';
     const maxScore = state.correctCount + state.wrongCount;
@@ -2385,6 +2387,11 @@
     if (el.twoMinLbScreen) el.twoMinLbScreen.style.display = 'none';
     el.endScreen.style.display = 'none';
     el.gameScreen.style.display = '';
+    // Nathan: "Whole game should fit to one screen" -- compact padding only
+    // while actually playing (see .twoMinWrap.gameActive in styles.css);
+    // removed again in endGame() so the end screen's recap/summary keep
+    // their normal roomier layout.
+    if (el.twoMinWrap) el.twoMinWrap.classList.add('gameActive');
     updateHud();
     startClock();
     startAmbientCrowd();

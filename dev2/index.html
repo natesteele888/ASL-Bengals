@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824d">
+<link rel="stylesheet" href="css/styles.css?v=20260824e">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1724,18 +1724,25 @@
       <div class="twoMinFieldMarkerLabel" id="fieldMarkerLabel"></div>
     </div>
 
+    <!-- Nathan: "I would rather it overlays where the coaching signals are
+         so you don't need to scroll." #playDiagramWrap now lives INSIDE
+         .twoMinSignalStage (absolutely positioned, see styles.css) instead
+         of as its own block below the choices grid -- when a correct call
+         plays its diagram, it covers the same box the signal images/GET
+         READY text already occupy rather than adding height below the
+         fold. See playGainAnimation()/runRound() in js/two-minute-drill.js
+         for the show/hide toggle. -->
     <div class="twoMinSignalStage">
       <div id="getReadyEl">GET READY…</div>
       <img id="signalImg" style="display:none;" alt="signal">
       <div id="signalTextCard"></div>
       <div class="twoMinProgress" id="signalProgress"></div>
+      <div id="playDiagramWrap">
+        <svg id="playDiagramSvg" viewBox="0 0 100 100"></svg>
+      </div>
     </div>
 
     <div class="twoMinChoices" id="choicesGrid"></div>
-
-    <div id="playDiagramWrap">
-      <svg id="playDiagramSvg" viewBox="0 0 100 100"></svg>
-    </div>
   </div>
 
   <div class="twoMinPanel" id="endScreen" style="display:none;">
@@ -1834,7 +1841,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824o';
+  const BUILD_V = '20260824p';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
