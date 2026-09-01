@@ -194,6 +194,35 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .modeBtn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ---- "More" tab dropdown (Nathan: "too busy to find things... don't love
+   always having rows of tabs") -- Timed/Play Quiz/Edit live here instead of
+   as three more equal-width buttons crammed onto the row above. See
+   index.html's #modeMoreWrap markup and study-quiz.js's setMode() for the
+   active-icon/label swap. */
+.modeMoreWrap{position:relative;flex:1;min-width:0;display:flex}
+.modeMoreToggle{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
+  background:none;cursor:pointer;font:inherit}
+.modeMoreToggle .modeIcon{font-size:20px;line-height:1}
+.modeMoreToggle .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.modeMoreToggle.active{color:var(--accent);border-bottom-color:var(--accent)}
+.modeMoreMenu{display:none;flex-direction:column;position:absolute;top:100%;right:0;min-width:150px;
+  background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);
+  padding:6px;z-index:271}
+.modeMoreMenu.show{display:flex}
+.modeMoreMenu .modeBtn{flex-direction:row;justify-content:flex-start;gap:8px;padding:9px 10px;
+  border:none;border-radius:8px;color:var(--ink)}
+.modeMoreMenu .modeBtn .modeIcon{font-size:16px}
+.modeMoreMenu .modeBtn .modeLabel{font-size:13px;font-weight:700;letter-spacing:0;overflow:visible;
+  white-space:nowrap;text-overflow:clip}
+.modeMoreMenu .modeBtn.active{background:rgba(255,106,19,.12);color:var(--accent)}
+.modeMoreMenu .modeBtn:active{background:var(--paper)}
+[data-theme="dark"] .modeMoreMenu{background:#1c1c1c;border-color:var(--line)}
+[data-theme="dark"] .modeMoreMenu .modeBtn{color:var(--ink)}
+[data-theme="dark"] .modeMoreMenu .modeBtn.active{background:rgba(255,106,19,.22)}
+
 .modePanel{display:none;padding:8px 10px 14px}
 .modePanel.show{display:block}
 
@@ -538,6 +567,30 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    kid-facing celebration/nudge colors above since this is a coach-only
    status summary, not a reward moment. */
 .digestHeroHeader{background:linear-gradient(160deg, #2c3e6b 0%, #1a2647 100%)}
+
+/* ---- Home-screen engagement callout (index.html's #engagementCallout,
+   js/study-quiz.js's renderEngagementCallout) -- Nathan: "promote taking the
+   timed quiz, promote moving up the leaderboard... callouts to everyone who
+   opens the app... calling out top users who are setting the example."
+   Compact inline cards (not another full popup) sitting above Study every
+   time it opens, so this reuses the same warm/gold "you earned this" and
+   cool "reminder" color language as the rankUp/nudge popups above at a much
+   smaller footprint. */
+.engageWrap{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+.engageCard{border-radius:12px;padding:10px 12px}
+.engageLeaderCard{display:flex;align-items:center;gap:10px;
+  background:linear-gradient(135deg, #ffb703 0%, var(--bengal-orange) 100%)}
+.engageIcon{font-size:22px;line-height:1;flex-shrink:0}
+.engageLeaderCard .engageTitle{color:#4a2600;font-size:11px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.03em}
+.engageLeaderCard .engageBody{color:#2a1400;font-size:13.5px;font-weight:800}
+.engageNudgeCard{background:var(--card);border:1px solid var(--line)}
+.engageNudgeCard .engageTitle{color:var(--ink);font-size:13px;font-weight:800;margin-bottom:2px}
+.engageNudgeCard .engageBody{color:var(--muted);font-size:12px;font-weight:600;line-height:1.4}
+.engageCtaBtn{display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:7px 12px;border:none;
+  border-radius:8px;background:var(--bengal-orange);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer}
+.engageCtaBtn:active{background:var(--bengal-orange-dark)}
+.engageCtaBtn::after{content:'→'}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with

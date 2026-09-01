@@ -1288,6 +1288,11 @@
     const onReady = function(){
       if (typeof window.refreshCoachToolsVisibility === 'function') window.refreshCoachToolsVisibility();
       if (typeof window.refreshWhatsNewBadge === 'function') window.refreshWhatsNewBadge();
+      // Nathan: "Callouts to everyone who opens the app to keep using it
+      // and calling out top users who are setting the example." Same
+      // trigger point as the other post-session checks here -- see
+      // js/study-quiz.js's renderEngagementCallout.
+      if (typeof window.renderEngagementCallout === 'function') window.renderEngagementCallout();
       // Nathan: drone footage "push" notifications (see js/drone-footage.js)
       // -- same trigger point as the What's New badge/notify check above,
       // now that a session is actually known.

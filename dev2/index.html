@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824e">
+<link rel="stylesheet" href="css/styles.css?v=20260824f">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -394,13 +394,37 @@
      (index.html's #childPillsWrap, up in #topToolbar) covers the same
      Card/Progress access now. -->
 
+<!-- Nathan: "as things have been added they are starting to get too busy to
+     find things... I don't love always having rows of tabs." All six tabs
+     used to sit here at equal width, squeezed onto one cramped row
+     (flex:1 on six .modeBtns). Study/Quiz/Play Calls (the three used every
+     session) stay directly on the row; Timed/Play Quiz/Edit (used less
+     often) move into the "More" dropdown below -- same buttons, same
+     data-mode/ids, same click-to-setMode() wiring (setMode()'s
+     modeTabsEl.querySelectorAll('.modeBtn') finds them regardless of how
+     deep they're nested inside #modeTabs), just visually tucked away so
+     the row everyone sees every time has room to breathe. -->
 <div class="modeTabs" id="modeTabs">
   <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
   <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
-  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
   <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
-  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
-  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
+  <div class="modeMoreWrap" id="modeMoreWrap">
+    <!-- Deliberately NOT class="modeBtn" -- the generic
+         `modeTabsEl.querySelectorAll('.modeBtn').forEach(btn => btn.addEventListener('click', ()=> setMode(btn.dataset.mode)))`
+         wiring in study-quiz.js would otherwise treat this as a real mode
+         tab and call setMode(undefined) on click (no data-mode here).
+         study-quiz.js's setMode() updates this button's own icon/label/
+         active state directly instead, so it reads as "whichever hidden
+         tab is currently open" rather than staying a static "More". -->
+    <button type="button" class="modeMoreToggle" id="modeMoreBtn" aria-haspopup="true" aria-expanded="false">
+      <span class="modeIcon">⋯</span><span class="modeLabel">More</span>
+    </button>
+    <div class="modeMoreMenu" id="modeMoreMenu">
+      <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
+      <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
+      <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
+    </div>
+  </div>
 </div>
 
 <!-- Nathan: "when a coach logs in, they can click their profile and choose
@@ -1042,6 +1066,18 @@
   </div>
 </div>
 
+
+<!-- Nathan: "some users are not doing a lot so we need to promote taking the
+     timed quiz, promote moving up the leaderboard... Callouts to everyone
+     who opens the app to keep using it and calling out top users who are
+     setting the example." An inline banner (not another popup -- the app
+     already shows plenty of those on open: badges intro, gameday splash,
+     cancellation panel, coach/parent digest) sitting right at the top of
+     Study, the first thing everyone sees when they open Play. Populated by
+     js/study-quiz.js's renderEngagementCallout(), called once per open from
+     player-identity.js's gate() alongside the other post-session checks.
+     Empty by default so it never leaves visible gap before that runs. -->
+<div id="engagementCallout"></div>
 
 <div id="studyMode" class="modePanel show">
   <div class="study-grid" id="studyGrid"></div>
@@ -1841,7 +1877,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824p';
+  const BUILD_V = '20260824r';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

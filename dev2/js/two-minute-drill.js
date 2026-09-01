@@ -1662,7 +1662,14 @@
   // first signal pass, see runRound) to the moment the player clicked an
   // answer. Answer inside SPEED_BONUS_INSTANT_MS for the full bonus, at or
   // past SPEED_BONUS_ZERO_MS for none, linear in between.
-  const SPEED_BONUS_MAX_YARDS = 10;
+  // Nathan (2026-08-31): "It's too easy to score, let's increase difficulty
+  // a little." A fast, hot-streak player was routinely stacking base yards
+  // + streak bonus + speed bonus + a big-play bonus on the same snap,
+  // regularly averaging 20-30+ yards a play -- a 75-yard drive could be
+  // three plays. SPEED_BONUS_MAX_YARDS trimmed from 10 to 6 as one part of
+  // that pass; see resolveGain below for the base-yardage/big-play trims
+  // that go with it.
+  const SPEED_BONUS_MAX_YARDS = 6;
   const SPEED_BONUS_INSTANT_MS = 800;
   const SPEED_BONUS_ZERO_MS = 6000;
   function speedBonusYards(pickElapsedMs) {
@@ -1688,22 +1695,36 @@
   // probability below, which stays somewhat elevated with a long streak
   // but is never a guarantee again until the streak resets and re-earns
   // it.
-  const STREAK_GUARANTEED_BIG_PLAY = 4;
+  // Nathan (2026-08-31): "It's too easy to score, let's increase difficulty
+  // a little." Raised from 4 to 5 -- one extra correct call before a streak
+  // cashes in its guaranteed big play, since 4-in-a-row was coming up
+  // often enough that the "one-time reward" read more like "the norm."
+  const STREAK_GUARANTEED_BIG_PLAY = 5;
 
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" + "bonus for multiple correct in a row" + "big gain
   // and get out of bounds" (all from Nathan) combined into one result:
+  //
+  // Nathan (2026-08-31): "It's too easy to score, let's increase difficulty
+  // a little." Base yardage, the streak-bonus rate/cap, and the big-play
+  // odds/payout were all trimmed here -- a hot, fast player was stacking
+  // base + streak + speed + big-play bonuses on the same snap often enough
+  // to turn a 75-yard drive into 2-3 plays. Together with
+  // SPEED_BONUS_MAX_YARDS (10 -> 6, above) and STREAK_GUARANTEED_BIG_PLAY
+  // (4 -> 5, above), an average correct call should now go for noticeably
+  // less, without changing what a "big play" or "streak bonus" actually
+  // look like when they do happen.
   function resolveGain(call, pickElapsedMs) {
     // Split's Pass is an independent toggle any play can carry (unlike
     // Wing, where only Option Pass is a real drop-back pass) -- a Split
     // call with Pass on gets the same passing-yardage treatment.
     const isPass = call.formation === 'split' ? !!call.passOn : PASSING_PLAY_KEYS.includes(call.playKey);
-    const base = isPass ? randRange(11, 22) : randRange(4, 9);
-    const streakBonus = Math.min(state.streak * 2, 16); // streak counted AFTER this play increments it, see below
+    const base = isPass ? randRange(8, 16) : randRange(3, 7);
+    const streakBonus = Math.min(Math.round(state.streak * 1.5), 10); // streak counted AFTER this play increments it, see below
     const speedBonus = speedBonusYards(pickElapsedMs);
-    const bigPlayChance = (isPass ? 0.22 : 0.12) + Math.min(state.streak * 0.02, 0.15);
+    const bigPlayChance = (isPass ? 0.16 : 0.08) + Math.min(state.streak * 0.015, 0.10);
     const bigPlay = state.streak === STREAK_GUARANTEED_BIG_PLAY || Math.random() < bigPlayChance;
-    const bigYards = bigPlay ? randRange(15, 35) : 0;
+    const bigYards = bigPlay ? randRange(12, 28) : 0;
     return {
       isPass: isPass,
       baseYards: base,
@@ -2188,9 +2209,19 @@
       if (scored) state.fieldPos = 100;
       updateHud();
 
+      // Nathan: "it says they ran out of bounds when they scored a
+      // touchdown." A big play that ALSO crosses the goal line is a
+      // touchdown, not an out-of-bounds gain -- it never actually went out
+      // of bounds, it just kept going into the end zone. `scored` (above)
+      // already tells us which one happened, so the OOB wording (both here
+      // in the drive log and in the banner below) only applies when the
+      // play did NOT score. A scoring big play still gets the "BREAKS
+      // FREE" excitement and whistle, just without the false OOB claim --
+      // the real TOUCHDOWN banner right below covers the score itself.
+      const wentOob = gain.bigPlay && !scored;
       state.driveLog.push({
         text: describeCall(correctCall),
-        result: `+${gain.totalYards} YDS${gain.bigPlay ? ' (OOB)' : ''}`,
+        result: `+${gain.totalYards} YDS${wentOob ? ' (OOB)' : ''}`,
         cls: 'gain',
       });
 
@@ -2199,7 +2230,11 @@
         // blow." Plain whistle, no crowd-groan chain -- this is a good
         // play, not a penalty.
         playSfx(el.sndWhistle);
-        await showBanner(`💥 BREAKS FREE! +${gain.totalYards} YDS — OUT OF BOUNDS!`, 'good big', 1700);
+        if (wentOob) {
+          await showBanner(`💥 BREAKS FREE! +${gain.totalYards} YDS — OUT OF BOUNDS!`, 'good big', 1700);
+        } else {
+          await showBanner(`💥 BREAKS FREE! +${gain.totalYards} YDS!`, 'good big', 1700);
+        }
       } else {
         await showBanner(`GAIN! +${gain.totalYards} YDS`, 'good', 1300);
       }

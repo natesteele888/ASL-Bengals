@@ -37,16 +37,67 @@ function setMode(mode){
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
   }
+  // Nathan's leaderboard/quiz-promotion callout (see index.html's
+  // #engagementCallout) only makes sense on Study -- the actual landing
+  // tab everyone sees first -- not repeated on every Play sub-tab (that
+  // would just be new clutter replacing the old tab clutter) and not on
+  // This Week/Schedule/Coach Tools, which have nothing to do with quiz
+  // standings.
+  const engagementCalloutEl = document.getElementById('engagementCallout');
+  if (engagementCalloutEl) engagementCalloutEl.style.display = mode === 'study' ? '' : 'none';
   if(mode==='timed' && typeof timedBuildQuiz === 'function') timedBuildQuiz();
   if(mode==='playcalls' && typeof initPlayCalls === 'function') initPlayCalls();
   if(mode==='editplays') openEditPlaysGated();
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
   if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
+
+  // Nathan: "too busy to find things... don't love always having rows of
+  // tabs" -- Timed/Play Quiz/Edit moved off the row into the "More"
+  // dropdown (see index.html's #modeMoreWrap), so the row itself never
+  // shows any of them as visually active anymore. Swap the More button's
+  // own icon/label to whichever of those three is actually open (and
+  // highlight it the same way an active tab highlights) so it still reads
+  // as "you're here", not just a static, unhelpful "More".
+  const moreBtn = document.getElementById('modeMoreBtn');
+  if (moreBtn) {
+    const MOVED_TAB_DISPLAY = { timed: ['⏱️', 'Timed'], playcallsquiz: ['🧠', 'Play Quiz'], editplays: ['✏️', 'Edit'] };
+    const hit = MOVED_TAB_DISPLAY[mode];
+    moreBtn.classList.toggle('active', !!hit);
+    const iconEl = moreBtn.querySelector('.modeIcon');
+    const labelEl = moreBtn.querySelector('.modeLabel');
+    if (iconEl) iconEl.textContent = hit ? hit[0] : '⋯';
+    if (labelEl) labelEl.textContent = hit ? hit[1] : 'More';
+  }
 }
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });
 });
+
+// ---- "More" dropdown open/close (see index.html's #modeMoreWrap) ----
+// Deliberately separate from the generic .modeBtn click wiring just above --
+// those buttons already call setMode() on click regardless of where they
+// live in the DOM; this only handles the dropdown's own show/hide chrome
+// (toggle button, click-a-tab-inside-it closes it, click-outside closes it).
+(function initModeMoreDropdown(){
+  const wrap = document.getElementById('modeMoreWrap');
+  const toggleBtn = document.getElementById('modeMoreBtn');
+  const menu = document.getElementById('modeMoreMenu');
+  if (!wrap || !toggleBtn || !menu) return;
+  function closeMenu(){
+    menu.classList.remove('show');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+  }
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.classList.toggle('show');
+    toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  menu.querySelectorAll('.modeBtn').forEach(btn => btn.addEventListener('click', closeMenu));
+  document.addEventListener('click', (e) => {
+    if (menu.classList.contains('show') && !wrap.contains(e.target)) closeMenu();
+  });
+})();
 
 /* ============================================================
    TOP-LEVEL SECTIONS -- Play (the sub-tab bar above, unchanged) vs This
@@ -152,6 +203,18 @@ window.refreshCoachToolsVisibility = function(){
   // point at it -- clicking into Play would then land a parent on a panel
   // whose own tab button is hidden. Fall back to Study for a parent in
   // that case.
+  // Nathan's "More" dropdown (Timed/Play Quiz/Edit) can end up with every
+  // single item inside it hidden at once -- e.g. a parent session hides
+  // Timed + Play Quiz above, and Edit just got hidden by the approvedCoach
+  // check a few lines up, leaving nothing in the menu. Hide the toggle
+  // itself in that case rather than showing a "More" button that opens an
+  // empty popup.
+  const modeMoreWrapEl = document.getElementById('modeMoreWrap');
+  const modeMoreMenuEl = document.getElementById('modeMoreMenu');
+  if (modeMoreWrapEl && modeMoreMenuEl) {
+    const anyVisible = [...modeMoreMenuEl.querySelectorAll('.modeBtn')].some(b => b.style.display !== 'none');
+    modeMoreWrapEl.style.display = anyVisible ? '' : 'none';
+  }
   if (isParent && (lastPlaySubMode === 'quiz' || lastPlaySubMode === 'timed' || lastPlaySubMode === 'playcallsquiz')) {
     lastPlaySubMode = 'study';
   }
@@ -954,6 +1017,90 @@ async function renderOverallLeaderboard(){
     : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
   overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
 }
+
+// ---------------------------------------------------------------------------
+// Home-screen engagement callout (Nathan, 2026-09-01): "some users are not
+// doing a lot so we need to promote taking the timed quiz, promote moving up
+// the leaderboard if you complete multiple quizzes. Callouts to everyone who
+// opens the app to keep using it and calling out top users who are setting
+// the example." Distinct from showRankUpCelebration/showQuizNudge above --
+// those only fire right after finishing a quiz (a real improvement, or every
+// NUDGE_EVERY completions). This renders inline into index.html's
+// #engagementCallout every time Study opens (see setMode()), regardless of
+// whether the player has done anything at all this session, so someone who
+// never finishes a quiz still sees it.
+//
+// Two independent pieces:
+//   1) a public "leader" card naming whoever tops the Overall Leaderboard
+//      right now -- visible to everyone (players and coaches), reusing the
+//      exact same computeOverallStandings() data the Overall Leaderboard tab
+//      shows, so the two can never disagree about who's actually leading.
+//      Labeled "Top of the leaderboard" rather than "Player of the week" --
+//      there's no weekly reset behind these standings (they're all-time
+//      bests), and a "week" label would overpromise something that isn't
+//      actually happening.
+//   2) a private "you're #N" nudge with a straight line into the Timed Quiz
+//      tab -- players only. Coach entries are ranked in their own separate
+//      pool (see splitByCoach/coachSortWeight) and were never meant to chase
+//      the kids' board, so a coach session only ever sees card 1.
+// Nathan: "increase difficulty" etc. weren't asked here, so this
+// deliberately does NOT touch NUDGE_EVERY or the existing popups --
+// additive, not a replacement.
+function engagementLeaderCardHtml(leader){
+  if(!leader) return '';
+  return `<div class="engageCard engageLeaderCard">
+    <div class="engageIcon">🏆</div>
+    <div class="engageText">
+      <div class="engageTitle">Top of the leaderboard</div>
+      <div class="engageBody">${leader.name} — ${leader.points} pt${leader.points===1?'':'s'}</div>
+    </div>
+  </div>`;
+}
+function engagementNudgeCardHtml(rank, me, ahead){
+  if(!rank){
+    return `<div class="engageCard engageNudgeCard">
+      <div class="engageTitle">You're not on the leaderboard yet</div>
+      <div class="engageBody">Take a Quiz, Timed Quiz, or Play Calls Quiz to get on the board.</div>
+      <button type="button" class="engageCtaBtn" id="engageCtaBtn">Take the Timed Quiz</button>
+    </div>`;
+  }
+  if(rank === 1){
+    return `<div class="engageCard engageNudgeCard">
+      <div class="engageTitle">You're #1 on the leaderboard</div>
+      <div class="engageBody">${me.points} pt${me.points===1?'':'s'} — keep it up!</div>
+    </div>`;
+  }
+  const gap = ahead.points - me.points;
+  return `<div class="engageCard engageNudgeCard">
+    <div class="engageTitle">You're #${rank} on the leaderboard</div>
+    <div class="engageBody">${gap} pt${gap===1?'':'s'} behind ${ahead.name} — a Timed Quiz run could close that gap.</div>
+    <button type="button" class="engageCtaBtn" id="engageCtaBtn">Take the Timed Quiz</button>
+  </div>`;
+}
+async function renderEngagementCallout(){
+  const host = document.getElementById('engagementCallout');
+  if(!host) return;
+  // Nothing here is relevant to a parent session (Schedule is their whole
+  // app -- see refreshCoachToolsVisibility's comment on isParentSession).
+  if(window.isParentSession){ host.innerHTML = ''; return; }
+  const { name } = currentPlayerTag();
+  try {
+    const { players } = await computeOverallStandings();
+    let html = engagementLeaderCardHtml(players[0]);
+    if(name && !isCoachEntryName(name)){
+      const { rank } = findEntryAndRank(players, name);
+      html += engagementNudgeCardHtml(rank, rank ? players[rank-1] : null, rank && rank > 1 ? players[rank-2] : null);
+    }
+    host.innerHTML = html ? `<div class="engageWrap">${html}</div>` : '';
+    const ctaBtn = document.getElementById('engageCtaBtn');
+    if(ctaBtn) ctaBtn.addEventListener('click', () => { lastPlaySubMode = 'timed'; setMode('timed'); });
+  } catch(e) {
+    // Nice-to-have promo banner -- never worth breaking Study over a failed
+    // leaderboard fetch (offline sideline wifi, etc.). Leave it blank.
+    host.innerHTML = '';
+  }
+}
+window.renderEngagementCallout = renderEngagementCallout;
 
 // ---- My Stats: a signed-in player's own bests + ranks. Deliberately
 // summary-only (best score/time + rank per board) -- no round-by-round or
