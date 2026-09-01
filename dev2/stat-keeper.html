@@ -1602,7 +1602,13 @@
       try { await getFirebaseIdToken(); return true; }
       catch(e){ /* saved session no longer valid -- fall through to re-prompt */ }
     }
-    const code = prompt('Enter the coach code to push stats to the live app:');
+    // prompt() throws in a few embedded/automated browser contexts instead
+    // of just returning null -- wrapped so boot() can't get stuck forever
+    // on "Signing in..." if that ever happens; a normal browser cancel
+    // still just returns null here same as before.
+    let code = null;
+    try { code = prompt('Enter the coach code to load/push stats with the live app:'); }
+    catch(e){ return false; }
     if (!code) return false;
     const hash = await sha256Hex(code);
     if (hash !== COACH_CODE_HASH){ alert('Incorrect code.'); return false; }
@@ -2094,6 +2100,7 @@
       loadError = e;
       try { gs = JSON.parse(localStorage.getItem(localCacheKey(selectedGame.id)) || 'null'); } catch(e2){}
     }
+    const usedLocalBackup = !!(loadError && gs);
 
     // Nathan: "it switches to OT1 as the next available but it doesn't show
     // the play logs" -- a saved log can contain nothing but quarter-end
@@ -2121,8 +2128,22 @@
       setGameLoadStatus('🔄 Rebuilt ' + rebuilt.length + ' plays from this game\'s already-pushed live stats (no detailed log had been saved before). Double-check pass targets, tackle assists, and opponent plays especially -- those can\'t be perfectly recovered from summary stats alone. Review, fix, then Push to Live to save your corrections.');
       applyGameState(gs);
       persist(); // this rebuild becomes the real saved log going forward
+    } else if (!hasRealPlays){
+      // Nathan: "nope still no plays showing." Made explicit rather than a
+      // silently blank log, so it's obvious this game genuinely has no
+      // play-by-play recorded ANYWHERE yet (no Stat Keeper log, and nothing
+      // in Coach Tools > Stats to rebuild from either) -- as opposed to
+      // something failing to load. A game with only a final score typed in
+      // on its Schedule page (ourScore/oppScore) but no detailed stats
+      // entered falls in here.
+      setGameLoadStatus(usedLocalBackup
+        ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.'
+        : (loadError
+          ? '⚠️ Could not load this game (starting blank): ' + loadError.message
+          : 'This game has no stats saved yet (no Stat Keeper log, and nothing entered in Coach Tools > Stats) -- log plays below to start one.'));
+      applyGameState(gs);
     } else {
-      setGameLoadStatus(loadError ? (gs ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '⚠️ Could not load this game (starting blank): ' + loadError.message) : '');
+      setGameLoadStatus(usedLocalBackup ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '');
       applyGameState(gs);
     }
     renderAllForGame();
@@ -2136,7 +2157,9 @@
     renderBallPositionControl();
     setGameControlsEnabled(false);
     setGameLoadStatus('Signing in…');
-    const ok = await ensureCoachAuth();
+    let ok = false;
+    try { ok = await ensureCoachAuth(); }
+    catch(e){ ok = false; } // belt-and-suspenders -- boot() must never hang on "Signing in..." forever
     if (!ok){
       setGameLoadStatus('Sign-in required to load games -- reload the page to try again.');
       gameSelect.innerHTML = '<option value="">— Sign-in required —</option>';
