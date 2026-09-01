@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASL Bengals — TeleStrator</title>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0e1116; --panel2:#141821; --line:#232a36; --line-bright:#39445a;
+    --text:#eef2f6; --dim:#7c8798; --orange:#f15a24;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif}
+  .proto-banner{background:#241405;color:#ffb066;font-size:11px;font-weight:700;text-align:center;
+    padding:5px 10px;letter-spacing:.03em;border-bottom:1px solid #4a2c0a}
+  .display-banner{background:#0a2a1a;color:#7bffb0;font-size:12px;font-weight:800;text-align:center;
+    padding:8px 10px;letter-spacing:.03em;border-bottom:1px solid #163f2a}
+  header{padding:10px 14px 6px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  header .brand{font-size:15px;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
+  header .brand span{color:var(--orange)}
+  header p{margin:0;font-size:11px;color:var(--dim)}
+  .wrap{max-width:900px;margin:0 auto;padding:6px 10px 60px}
+  .playerBox{position:relative;background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line-bright);}
+  video{width:100%;display:block;background:#000;max-height:70vh;}
+  canvas.drawLayer{position:absolute;top:0;left:0;width:100%;height:100%;touch-action:none;}
+  .toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:8px}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;
+    padding:8px 11px;font-size:12.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .btn:active{filter:brightness(1.2)}
+  .btn.primary{background:var(--orange);border-color:var(--orange);color:#fff}
+  .btn.on{outline:2px solid var(--orange)}
+  .swatch{width:22px;height:22px;border-radius:50%;border:2px solid #fff2;cursor:pointer;padding:0}
+  .swatch.on{border-color:#fff}
+  input[type=range]{flex:1;min-width:80px}
+  .scrubRow{display:flex;align-items:center;gap:8px;width:100%}
+  .timeLbl{font-size:11px;color:var(--dim);white-space:nowrap;min-width:82px;text-align:right}
+  .sectionTitle{font-size:11px;font-weight:800;color:var(--dim);text-transform:uppercase;
+    letter-spacing:.06em;margin:16px 0 6px}
+  .tvLinkBox{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .tvLinkBox input{flex:1;min-width:160px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit}
+  .annoRow{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;
+    margin-bottom:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .annoRow .note{flex:1;font-size:13px}
+  .annoRow .meta{font-size:10.5px;color:var(--dim)}
+  .statusLine{font-size:11px;color:var(--dim);margin-top:6px;min-height:14px}
+  .gate{max-width:340px;margin:60px auto;padding:0 16px;text-align:center}
+  .gate input{width:100%;padding:12px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);font-size:16px;text-align:center;margin-bottom:10px;box-sizing:border-box}
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;
+    z-index:50;flex-direction:column;padding:20px;}
+  .lightbox img{max-width:100%;max-height:80vh;border-radius:8px}
+  .lightbox .btn{margin-top:12px}
+</style>
+</head>
+<body>
+
+<div class="proto-banner">STANDALONE TOOL — footage plays directly from your Google Drive links; nothing is re-uploaded or re-hosted here.</div>
+<div id="displayBanner" class="display-banner" style="display:none;">📺 TV DISPLAY MODE — being controlled from another device</div>
+
+<header>
+  <div class="brand">ASL <span>Bengals</span> TeleStrator</div>
+  <p id="clipTitleLbl"></p>
+</header>
+
+<div id="gateScreen" class="gate" style="display:none;">
+  <p style="color:var(--dim);font-size:13px;">Enter the team code to open TeleStrator.</p>
+  <input type="text" id="gateInput" placeholder="Team code" inputmode="numeric">
+  <button type="button" class="btn primary" id="gateBtn" style="width:100%;justify-content:center;">Enter</button>
+  <div id="gateStatus" class="statusLine"></div>
+</div>
+
+<div id="mainWrap" class="wrap" style="display:none;">
+  <div class="playerBox" id="playerBox">
+    <video id="vid" playsinline preload="metadata"></video>
+    <canvas id="drawLayer" class="drawLayer"></canvas>
+  </div>
+
+  <div id="controllerToolbar" class="toolbar" style="display:none;">
+    <div class="scrubRow">
+      <button type="button" class="btn" id="playBtn">▶️</button>
+      <button type="button" class="btn" id="back10Btn">⏪10s</button>
+      <button type="button" class="btn" id="fwd10Btn">10s⏩</button>
+      <input type="range" id="scrubBar" min="0" max="1000" value="0">
+      <span class="timeLbl" id="timeLbl">0:00 / 0:00</span>
+    </div>
+    <select id="rateSel" class="btn" style="padding:8px 6px;">
+      <option value="0.25">0.25x</option>
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2">2x</option>
+    </select>
+    <button type="button" class="btn" id="drawToggleBtn">🖍️ Draw</button>
+    <span id="swatchWrap" style="display:none;gap:6px;">
+      <button type="button" class="swatch on" data-color="#ff3b30" style="background:#ff3b30;"></button>
+      <button type="button" class="swatch" data-color="#ffd60a" style="background:#ffd60a;"></button>
+      <button type="button" class="swatch" data-color="#30d158" style="background:#30d158;"></button>
+      <button type="button" class="swatch" data-color="#0a84ff" style="background:#0a84ff;"></button>
+      <button type="button" class="swatch" data-color="#ffffff" style="background:#ffffff;"></button>
+    </span>
+    <button type="button" class="btn" id="clearDrawBtn" style="display:none;">🧹 Clear</button>
+    <button type="button" class="btn primary" id="saveAnnoBtn">💾 Save Annotation</button>
+  </div>
+
+  <div id="statusLine" class="statusLine"></div>
+
+  <div id="tvSection">
+    <div class="sectionTitle">📺 Cast to a TV (simple version)</div>
+    <p style="font-size:12px;color:var(--dim);margin:0;">Open the link below on the TV's own browser (a smart TV, a laptop plugged into it, etc). Drawing and play/pause/rewind from THIS device will show up there live.</p>
+    <div class="tvLinkBox">
+      <input type="text" id="tvLinkInput" readonly>
+      <button type="button" class="btn" id="copyTvLinkBtn">Copy</button>
+    </div>
+  </div>
+
+  <div id="annoSection">
+    <div class="sectionTitle">🖍️ Saved Annotations</div>
+    <div id="annoList"></div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" src="">
+  <button type="button" class="btn" id="lightboxCloseBtn">Close</button>
+</div>
+
+<script>
+(async function () {
+  // ---------------------------------------------------------------------
+  // Nathan: "Add the TeleStrator feature to the app. when you playback
+  // footage, you should have the option to cast to a tv or screen and
+  // telestrate on the phone/tablet to rewind/fast forward, draw on screen
+  // etc... note the play formation and call - like the statkeeper but
+  // while watching the footage back." Standalone page, same reasoning as
+  // stat-keeper.html: video controls + a live drawing canvas + two-device
+  // sync don't fit inside the main SPA's layout, and this only needs
+  // read/write access to one game's record, not the whole app's boot
+  // sequence.
+  //
+  // Two roles, same URL:
+  //   Controller (default) -- the phone/tablet a coach actually taps/draws
+  //     on. Drives video playback and drawing locally, and broadcasts both
+  //     to Firebase so a Display can mirror them.
+  //   Display (?display=1) -- opened on the TV/second screen. No local
+  //     controls; just listens for the Controller's broadcasts and mirrors
+  //     play/pause/seek and drawing. This is "cast to a TV" the simple way
+  //     Nathan asked for: open a link on that device, no native casting API.
+  //
+  // Auth is the exact same coach-gate flow ported into stat-keeper.html --
+  // see that file's own comment for why it's duplicated rather than
+  // imported (no build step / module system, has to stay one file).
+  // ---------------------------------------------------------------------
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const FIREBASE_API_KEY = 'AIzaSyCBvobt9qfyLoJOGUz6fIiGrFKMEQFsA3E'; // public project identifier, not a secret
+  const COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
+  const SIGNUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
+  const SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+  const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const GATE_SESSION_KEY = 'bengalsGateSession';
+  const SAFETY_MARGIN_MS = 60000;
+  let authCache = null;
+
+  async function sha256Hex(text){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function loadGateSession(){ try { return JSON.parse(localStorage.getItem(GATE_SESSION_KEY) || 'null'); } catch(e){ return null; } }
+  function saveGateSession(refreshToken){ try { localStorage.setItem(GATE_SESSION_KEY, JSON.stringify({refreshToken, kind:'coach'})); } catch(e){} }
+  function hasGateSession(){ const s = loadGateSession(); return !!(s && s.refreshToken); }
+  async function refreshIdToken(refreshToken){
+    const res = await fetch(REFRESH_URL, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}` });
+    if (!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
+    const data = await res.json();
+    return { idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: Date.now() + Number(data.expires_in)*1000 };
+  }
+  async function signInWithCoachGate(passwordHash){
+    const email = 'coach-gate@aslbengals.internal';
+    let res = await fetch(SIGNUP_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+    if (!res.ok){
+      const errBody = await res.json().catch(() => ({}));
+      const code = errBody.error && errBody.error.message;
+      if (code === 'EMAIL_EXISTS'){
+        res = await fetch(SIGNIN_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+        if (!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+      } else { throw new Error('Gate account setup failed: ' + (code || res.status)); }
+    }
+    const data = await res.json();
+    authCache = { idToken: data.idToken, refreshToken: data.refreshToken, expiresAt: Date.now() + Number(data.expiresIn)*1000 };
+    saveGateSession(authCache.refreshToken);
+    return authCache;
+  }
+  async function getFirebaseIdToken(){
+    if (authCache && authCache.expiresAt - SAFETY_MARGIN_MS > Date.now()) return authCache.idToken;
+    if (authCache && authCache.refreshToken){ authCache = await refreshIdToken(authCache.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    const saved = loadGateSession();
+    if (saved && saved.refreshToken){ authCache = await refreshIdToken(saved.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    throw new Error('Not signed in');
+  }
+  async function firebaseAuthedUrl(url){
+    const token = await getFirebaseIdToken();
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    return `${url}${sep}auth=${encodeURIComponent(token)}`;
+  }
+
+  function genId(){ return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  // ---- Query params ----
+  const params = new URLSearchParams(location.search);
+  const gameId = params.get('gameId');
+  const clipId = params.get('clipId');
+  const isDisplay = params.get('display') === '1';
+  const sessionKey = `${gameId}_${clipId}`;
+
+  // ---- Gate screen (only shown if this device has no saved session at
+  // all -- normally it's opened from inside the already-logged-in app, so
+  // this is mainly for a TV browser that's never seen the app before) ----
+  const gateScreen = document.getElementById('gateScreen');
+  const mainWrap = document.getElementById('mainWrap');
+  async function ensureAppAuth(){
+    if (hasGateSession()){
+      try { await getFirebaseIdToken(); return true; } catch(e) { /* fall through to prompt */ }
+    }
+    return new Promise((resolve) => {
+      gateScreen.style.display = '';
+      const input = document.getElementById('gateInput');
+      const btn = document.getElementById('gateBtn');
+      const status = document.getElementById('gateStatus');
+      async function attempt(){
+        const code = input.value.trim();
+        if (!code) return;
+        status.textContent = 'Checking…';
+        const hash = await sha256Hex(code);
+        try {
+          await signInWithCoachGate(hash);
+          gateScreen.style.display = 'none';
+          resolve(true);
+        } catch(e){ status.textContent = "Couldn't sign in -- check the code and try again."; }
+      }
+      btn.addEventListener('click', attempt);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); });
+    });
+  }
+
+  function setStatus(t){ const el = document.getElementById('statusLine'); if (el) el.textContent = t || ''; }
+
+  // ---- Drive share-link -> direct-playable video URL -----------------
+  // Nathan's Drive links are the normal "share" shape
+  // (drive.google.com/file/d/<ID>/view?usp=...). That URL only serves an
+  // HTML preview page, not the raw video bytes, and Drive's own
+  // uc?export=download link fails for anything over ~100MB (a "Google
+  // can't scan this file for viruses" interstitial instead of the file --
+  // game footage here runs 700MB+ per quarter). drive.usercontent.google
+  // .com's download endpoint with confirm=t bypasses that interstitial and
+  // streams the real file straight into a <video> tag -- confirmed against
+  // a real 700MB+/20-minute game quarter before this was built at all.
+  function driveDirectVideoUrl(shareUrl){
+    if (!shareUrl) return '';
+    const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (!m) return shareUrl; // not a recognizable Drive link -- fall back to it as-is
+    return `https://drive.usercontent.google.com/download?id=${m[1]}&export=download&confirm=t`;
+  }
+
+  // ---- Load the game + clip ----
+  let game = null, clip = null, allGames = null;
+  async function loadGameAndClip(){
+    const url = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/schedule.json`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Could not load schedule (HTTP ' + res.status + ')');
+    allGames = (await res.json()) || [];
+    game = allGames.find(g => g.id === gameId);
+    if (!game) throw new Error('Game not found.');
+    const clips = Array.isArray(game.gameFootage) ? game.gameFootage : [];
+    clip = clips.find(c => c.id === clipId);
+    if (!clip) throw new Error('Footage clip not found on this game.');
+  }
+
+  // ---- Video + draw canvas ----
+  const vid = document.getElementById('vid');
+  const canvas = document.getElementById('drawLayer');
+  const ctx = canvas.getContext('2d');
+  let drawMode = false;
+  let currentColor = '#ff3b30';
+  let strokes = []; // [{color, points:[{x,y} 0-1 normalized]}]
+  let activeStroke = null;
+
+  function resizeCanvas(){
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.round(r.width);
+    canvas.height = Math.round(r.height);
+    redrawStrokes();
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  function redrawStrokes(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokes.forEach(s => {
+      if (!s.points.length) return;
+      ctx.strokeStyle = s.color; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      s.points.forEach((p, i) => {
+        const x = p.x * canvas.width, y = p.y * canvas.height;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+  }
+
+  function pointerPos(e){
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!drawMode || isDisplay) return;
+    canvas.setPointerCapture(e.pointerId);
+    activeStroke = { color: currentColor, points: [pointerPos(e)] };
+    strokes.push(activeStroke);
+    redrawStrokes();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawMode || isDisplay || !activeStroke) return;
+    activeStroke.points.push(pointerPos(e));
+    redrawStrokes();
+  });
+  function endStroke(){
+    if (!activeStroke) return;
+    activeStroke = null;
+    broadcastDraw();
+  }
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+
+  // ---- Controller <-> Display sync (Firebase RTDB REST streaming) ----
+  // Every write below is a full PUT to the exact path the other side
+  // listens on (never a partial patch to a parent), so every Server-Sent
+  // Event the listener gets is a plain 'put' with the complete new value --
+  // no need to special-case Firebase's 'patch' event at all. Playback and
+  // drawing are two separate paths/streams so a drawing update never
+  // forces a video seek and vice versa.
+  let broadcastTimer = null;
+  async function broadcastPlayback(){
+    if (isDisplay) return;
+    clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(async () => {
+      try {
+        const url = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/telestrator/${sessionKey}/playback.json`);
+        await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ t: vid.currentTime, playing: !vid.paused, rate: vid.playbackRate, at: Date.now() }) });
+      } catch(e) { /* best-effort -- sync issues shouldn't block local playback */ }
+    }, 150);
+  }
+  async function broadcastDraw(){
+    if (isDisplay) return;
+    try {
+      const url = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/telestrator/${sessionKey}/draw.json`);
+      await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ strokes, at: Date.now() }) });
+    } catch(e) { /* best-effort */ }
+  }
+  async function clearDrawBroadcast(){
+    strokes = [];
+    redrawStrokes();
+    broadcastDraw();
+  }
+
+  let playbackSource = null, drawSource = null, tokenRefreshTimer = null;
+  async function startDisplayListening(){
+    const token = await getFirebaseIdToken();
+    if (playbackSource) playbackSource.close();
+    if (drawSource) drawSource.close();
+    playbackSource = new EventSource(`${FIREBASE_DB_URL}/telestrator/${sessionKey}/playback.json?auth=${encodeURIComponent(token)}`);
+    playbackSource.addEventListener('put', (e) => {
+      let payload; try { payload = JSON.parse(e.data); } catch(err) { return; }
+      const val = payload && payload.data;
+      if (!val) return;
+      // Only correct drift beyond ~1.2s so normal playback doesn't stutter
+      // from being re-seeked on every single broadcast.
+      if (Math.abs(vid.currentTime - val.t) > 1.2) vid.currentTime = val.t;
+      if (val.rate && vid.playbackRate !== val.rate) vid.playbackRate = val.rate;
+      if (val.playing && vid.paused) vid.play().catch(() => {});
+      if (!val.playing && !vid.paused) vid.pause();
+    });
+    drawSource = new EventSource(`${FIREBASE_DB_URL}/telestrator/${sessionKey}/draw.json?auth=${encodeURIComponent(token)}`);
+    drawSource.addEventListener('put', (e) => {
+      let payload; try { payload = JSON.parse(e.data); } catch(err) { return; }
+      const val = payload && payload.data;
+      strokes = (val && Array.isArray(val.strokes)) ? val.strokes : [];
+      redrawStrokes();
+    });
+    // Firebase ID tokens expire in ~1hr -- a film session can easily run
+    // longer than that, so the Display's two long-lived connections get
+    // torn down and reopened with a fresh token well before that happens.
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = setTimeout(startDisplayListening, 40 * 60 * 1000);
+  }
+
+  // ---- Transport controls (controller only) ----
+  function fmtTime(s){
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+  function wireControllerUI(){
+    document.getElementById('controllerToolbar').style.display = 'flex';
+    document.getElementById('tvSection').style.display = '';
+    const playBtn = document.getElementById('playBtn');
+    const scrubBar = document.getElementById('scrubBar');
+    const timeLbl = document.getElementById('timeLbl');
+    const rateSel = document.getElementById('rateSel');
+    let scrubbing = false;
+
+    playBtn.addEventListener('click', () => { if (vid.paused) vid.play(); else vid.pause(); });
+    vid.addEventListener('play', () => { playBtn.textContent = '⏸️'; broadcastPlayback(); });
+    vid.addEventListener('pause', () => { playBtn.textContent = '▶️'; broadcastPlayback(); });
+    vid.addEventListener('seeked', broadcastPlayback);
+    vid.addEventListener('ratechange', broadcastPlayback);
+    document.getElementById('back10Btn').addEventListener('click', () => { vid.currentTime = Math.max(0, vid.currentTime - 10); });
+    document.getElementById('fwd10Btn').addEventListener('click', () => { vid.currentTime = Math.min(vid.duration || 1e9, vid.currentTime + 10); });
+    rateSel.addEventListener('change', () => { vid.playbackRate = Number(rateSel.value); });
+    vid.addEventListener('timeupdate', () => {
+      if (!scrubbing && vid.duration) scrubBar.value = String(Math.round((vid.currentTime / vid.duration) * 1000));
+      timeLbl.textContent = `${fmtTime(vid.currentTime)} / ${fmtTime(vid.duration)}`;
+    });
+    scrubBar.addEventListener('input', () => {
+      scrubbing = true;
+      if (vid.duration) vid.currentTime = (Number(scrubBar.value) / 1000) * vid.duration;
+    });
+    scrubBar.addEventListener('change', () => { scrubbing = false; });
+
+    const drawToggleBtn = document.getElementById('drawToggleBtn');
+    const swatchWrap = document.getElementById('swatchWrap');
+    const clearDrawBtn = document.getElementById('clearDrawBtn');
+    drawToggleBtn.addEventListener('click', () => {
+      drawMode = !drawMode;
+      drawToggleBtn.classList.toggle('on', drawMode);
+      swatchWrap.style.display = drawMode ? 'inline-flex' : 'none';
+      clearDrawBtn.style.display = drawMode ? '' : 'none';
+      canvas.style.pointerEvents = drawMode ? 'auto' : 'none';
+      // Telestrating over a moving picture doesn't work -- pause so the
+      // frame being drawn on actually holds still, same as a broadcast
+      // telestrator freezing the replay before drawing on it.
+      if (drawMode && !vid.paused) vid.pause();
+    });
+    document.querySelectorAll('.swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        currentColor = sw.dataset.color;
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('on'));
+        sw.classList.add('on');
+      });
+    });
+    clearDrawBtn.addEventListener('click', clearDrawBroadcast);
+
+    document.getElementById('saveAnnoBtn').addEventListener('click', saveAnnotation);
+
+    const tvLinkInput = document.getElementById('tvLinkInput');
+    const tvUrl = new URL(location.href);
+    tvUrl.searchParams.set('display', '1');
+    tvLinkInput.value = tvUrl.toString();
+    document.getElementById('copyTvLinkBtn').addEventListener('click', () => {
+      tvLinkInput.select();
+      navigator.clipboard && navigator.clipboard.writeText(tvLinkInput.value).catch(() => {});
+      setStatus('TV link copied.');
+    });
+  }
+
+  // ---- Save Annotation (composited frame + drawing) -------------------
+  // Nathan: "Let a coach save a drawn-on frame... attached to the game, so
+  // players can look at it later." Composited at the video's real
+  // resolution (not the on-screen CSS size) so a saved annotation looks
+  // sharp even if it was drawn on a small phone screen. The image bytes
+  // live at their own Firebase path (footageAnnotations/{id}) same as
+  // js/drone-footage.js keeps video blobs out of the whole-array PUT to
+  // schedule.json -- only lightweight metadata (note, timestamp, id)
+  // actually lives on the game record itself.
+  async function saveAnnotation(){
+    if (!vid.videoWidth) { alert('Video not loaded yet.'); return; }
+    const note = prompt('Add a short note for this frame (e.g. "Watch the safety cheat toward the boundary"):', '');
+    if (note === null) return;
+    setStatus('Saving annotation…');
+    try {
+      const w = vid.videoWidth, h = vid.videoHeight;
+      const composite = document.createElement('canvas');
+      composite.width = w; composite.height = h;
+      const cctx = composite.getContext('2d');
+      cctx.drawImage(vid, 0, 0, w, h);
+      strokes.forEach(s => {
+        if (!s.points.length) return;
+        cctx.strokeStyle = s.color; cctx.lineWidth = Math.max(3, w / 220); cctx.lineJoin = 'round'; cctx.lineCap = 'round';
+        cctx.beginPath();
+        s.points.forEach((p, i) => { const x = p.x * w, y = p.y * h; if (i === 0) cctx.moveTo(x, y); else cctx.lineTo(x, y); });
+        cctx.stroke();
+      });
+      const dataUrl = composite.toDataURL('image/jpeg', 0.82);
+      const id = genId();
+      const imgUrl = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/footageAnnotations/${id}.json`);
+      const imgRes = await fetch(imgUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dataUrl) });
+      if (!imgRes.ok) throw new Error('HTTP ' + imgRes.status);
+
+      const schedUrl = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/schedule.json`);
+      const schedRes = await fetch(schedUrl);
+      const games = (await schedRes.json()) || [];
+      const idx = games.findIndex(g => g.id === gameId);
+      if (idx === -1) throw new Error('Game no longer found');
+      games[idx].gameFootageAnnotations = Array.isArray(games[idx].gameFootageAnnotations) ? games[idx].gameFootageAnnotations : [];
+      games[idx].gameFootageAnnotations.push({ id, clipId, note: note.trim(), createdAt: new Date().toISOString(), atTime: vid.currentTime });
+      const putUrl = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/schedule.json`);
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(games) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      allGames = games; game = games[idx];
+      setStatus('Annotation saved.');
+      renderAnnotations();
+    } catch(e){
+      setStatus('');
+      alert('Could not save annotation: ' + e.message);
+    }
+  }
+
+  function renderAnnotations(){
+    const list = document.getElementById('annoList');
+    list.innerHTML = '';
+    const rows = (Array.isArray(game.gameFootageAnnotations) ? game.gameFootageAnnotations : []).filter(a => a.clipId === clipId);
+    if (!rows.length){ list.innerHTML = '<div style="color:var(--dim);font-size:12px;">No saved annotations for this clip yet.</div>'; return; }
+    rows.slice().reverse().forEach(a => {
+      const row = document.createElement('div');
+      row.className = 'annoRow';
+      row.innerHTML = `<span class="note">${(a.note || '(no note)').replace(/</g,'&lt;')}</span>
+        <span class="meta">${new Date(a.createdAt).toLocaleDateString()} · ${fmtTime(a.atTime || 0)}</span>`;
+      const viewBtn = document.createElement('button');
+      viewBtn.type = 'button'; viewBtn.className = 'btn'; viewBtn.textContent = '👁 View';
+      viewBtn.addEventListener('click', async () => {
+        viewBtn.textContent = '…';
+        try {
+          const url = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/footageAnnotations/${a.id}.json`);
+          const res = await fetch(url);
+          const dataUrl = await res.json();
+          document.getElementById('lightboxImg').src = dataUrl || '';
+          document.getElementById('lightbox').style.display = 'flex';
+        } catch(e) { alert('Could not load image: ' + e.message); }
+        viewBtn.textContent = '👁 View';
+      });
+      row.appendChild(viewBtn);
+      list.appendChild(row);
+    });
+  }
+  document.getElementById('lightboxCloseBtn').addEventListener('click', () => { document.getElementById('lightbox').style.display = 'none'; });
+
+  // ---- Boot ----
+  try {
+    await ensureAppAuth();
+    mainWrap.style.display = '';
+    await loadGameAndClip();
+    document.getElementById('clipTitleLbl').textContent = `${game.opponent || 'Game'} — ${clip.title || 'Footage'}`;
+    vid.src = driveDirectVideoUrl(clip.url);
+    resizeCanvas();
+    if (isDisplay){
+      document.getElementById('displayBanner').style.display = '';
+      document.getElementById('tvSection').style.display = 'none';
+      canvas.style.pointerEvents = 'none';
+      await startDisplayListening();
+    } else {
+      wireControllerUI();
+    }
+    renderAnnotations();
+  } catch(e){
+    setStatus('');
+    mainWrap.style.display = '';
+    document.getElementById('playerBox').innerHTML = `<div style="padding:30px;text-align:center;color:#ff8a80;">${(e.message || 'Something went wrong.').replace(/</g,'&lt;')}</div>`;
+  }
+})();
+</script>
+</body>
+</html>

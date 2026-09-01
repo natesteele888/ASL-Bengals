@@ -824,8 +824,17 @@
   function gameFootageReadOnlyHtml(game) {
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
     if (!clips.length) return '<span class="lbEmpty" style="padding:0;">No footage linked yet.</span>';
+    // Nathan: "Add the TeleStrator feature to the app... while watching the
+    // footage back." TeleStrator (telestrator.html) reads the clip's URL
+    // itself straight off this game's record via gameId+clipId -- it's a
+    // separate standalone page (video controls + drawing canvas + a TV
+    // sync channel don't fit this SPA's layout), same reasoning
+    // stat-keeper.html already used.
     return `<div style="display:flex;flex-direction:column;gap:6px;">${clips.map(c => `
-      <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>`).join('')}</div>`;
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;flex:1;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>
+        <a href="telestrator.html?gameId=${encodeURIComponent(game.id)}&clipId=${encodeURIComponent(c.id)}" target="_blank" rel="noopener" class="lbLinkBtn">🖍️ TeleStrator</a>
+      </div>`).join('')}</div>`;
   }
 
   // Coach edit list -- mutates current.gameFootage in place and re-renders
@@ -1015,7 +1024,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [] };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -1051,6 +1060,12 @@
     // lives (Nathan's Google Drive) -- see gameFootageReadOnlyHtml/
     // renderGameFootageEditor below.
     current.gameFootage = Array.isArray(current.gameFootage) ? current.gameFootage : [];
+    // Nathan: "Let a coach save a drawn-on frame... attached to the game."
+    // Populated by telestrator.html directly (it reads/writes schedule.json
+    // itself, same as this file) -- declared here too just so it's a known
+    // field on every game record, same backfill discipline as everything
+    // else in this block.
+    current.gameFootageAnnotations = Array.isArray(current.gameFootageAnnotations) ? current.gameFootageAnnotations : [];
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
