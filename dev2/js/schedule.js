@@ -824,16 +824,14 @@
   function gameFootageReadOnlyHtml(game) {
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
     if (!clips.length) return '<span class="lbEmpty" style="padding:0;">No footage linked yet.</span>';
-    // Nathan: "Add the TeleStrator feature to the app... while watching the
-    // footage back." TeleStrator (telestrator.html) reads the clip's URL
-    // itself straight off this game's record via gameId+clipId -- it's a
-    // separate standalone page (video controls + drawing canvas + a TV
-    // sync channel don't fit this SPA's layout), same reasoning
-    // stat-keeper.html already used.
+    // Nathan: "remove telestrator for now as it doesn't work" -- pulled the
+    // TeleStrator link (telestrator.html) that used to sit next to each
+    // clip below. Plain footage links stay; telestrator.html itself is left
+    // on disk, unlinked from anywhere in the app, so the drawing/cast work
+    // already done on it isn't lost if it gets revisited later.
     return `<div style="display:flex;flex-direction:column;gap:6px;">${clips.map(c => `
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;flex:1;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>
-        <a href="telestrator.html?gameId=${encodeURIComponent(game.id)}&clipId=${encodeURIComponent(c.id)}" target="_blank" rel="noopener" class="lbLinkBtn">🖍️ TeleStrator</a>
       </div>`).join('')}</div>`;
   }
 

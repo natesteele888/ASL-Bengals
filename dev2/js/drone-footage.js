@@ -574,7 +574,7 @@
   // source alongside practice drone clips: no video-blob loading, no
   // comments, no coach edit form here (that already lives on the game's
   // own Schedule page) -- just another alphabetized entry that opens the
-  // same link/TeleStrator buttons schedule.js's own footage list uses.
+  // same Open Footage link schedule.js's own footage list uses.
   let vaultGamesCache = null;
 
   function vaultAllPairs(practices) {
@@ -701,8 +701,9 @@
   // Drive link (schedule.js's gameFootage), not an uploaded blob, so
   // there's no video-blob loading, no coach edit form (that already lives
   // on the game's own Schedule page), and no comments here -- just the
-  // same Open/TeleStrator links schedule.js's own read-only footage list
-  // already uses.
+  // same Open link schedule.js's own read-only footage list already uses.
+  // (Nathan: "remove telestrator for now as it doesn't work" -- the
+  // TeleStrator link that used to sit next to Open Footage is gone.)
   function filmVaultGameClipHtml(pair) {
     const clip = pair.clip;
     const game = pair.game;
@@ -717,7 +718,6 @@
           <div class="lbSub" style="text-align:center;margin-bottom:8px;">🏈 ${escapeHtml(fmtVaultGameLabel(game))}</div>
           <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
             <a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener" class="lbLinkBtn">🎥 Open Footage</a>
-            <a href="telestrator.html?gameId=${encodeURIComponent(game.id)}&clipId=${encodeURIComponent(clip.id)}" target="_blank" rel="noopener" class="lbLinkBtn">🖍️ TeleStrator</a>
           </div>
         </div>
       </div>`;
