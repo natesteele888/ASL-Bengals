@@ -74,15 +74,19 @@
 
 <div id="mainWrap" class="wrap" style="display:none;">
   <div class="playerBox" id="playerBox">
-    <video id="vid" playsinline preload="metadata"></video>
+    <video id="vid" playsinline preload="metadata" x-webkit-airplay="allow"></video>
     <canvas id="drawLayer" class="drawLayer"></canvas>
   </div>
 
   <div id="controllerToolbar" class="toolbar" style="display:none;">
     <div class="scrubRow">
       <button type="button" class="btn" id="playBtn">▶️</button>
+      <button type="button" class="btn" id="back20Btn">⏪20s</button>
       <button type="button" class="btn" id="back10Btn">⏪10s</button>
       <button type="button" class="btn" id="fwd10Btn">10s⏩</button>
+      <button type="button" class="btn" id="fwd20Btn">20s⏩</button>
+    </div>
+    <div class="scrubRow">
       <input type="range" id="scrubBar" min="0" max="1000" value="0">
       <span class="timeLbl" id="timeLbl">0:00 / 0:00</span>
     </div>
@@ -93,7 +97,17 @@
       <option value="1.5">1.5x</option>
       <option value="2">2x</option>
     </select>
+    <button type="button" class="btn primary" id="castBtn" style="display:none;">📺 Cast to TV</button>
     <button type="button" class="btn" id="drawToggleBtn">🖍️ Draw</button>
+    <span id="toolWrap" style="display:none;gap:6px;">
+      <button type="button" class="btn on" id="toolPenBtn" data-tool="pen">✏️ Pen</button>
+      <button type="button" class="btn" id="toolLineBtn" data-tool="line">📏 Line</button>
+      <button type="button" class="btn" id="toolCircleBtn" data-tool="circle">⭕ Circle</button>
+    </span>
+    <span id="lineCapWrap" style="display:none;gap:6px;">
+      <button type="button" class="btn on" id="capArrowBtn" data-cap="arrow">➡️ Arrow end</button>
+      <button type="button" class="btn" id="capTBtn" data-cap="t">⊥ T end</button>
+    </span>
     <span id="swatchWrap" style="display:none;gap:6px;">
       <button type="button" class="swatch on" data-color="#ff3b30" style="background:#ff3b30;"></button>
       <button type="button" class="swatch" data-color="#ffd60a" style="background:#ffd60a;"></button>
@@ -108,8 +122,8 @@
   <div id="statusLine" class="statusLine"></div>
 
   <div id="tvSection">
-    <div class="sectionTitle">📺 Cast to a TV (simple version)</div>
-    <p style="font-size:12px;color:var(--dim);margin:0;">Open the link below on the TV's own browser (a smart TV, a laptop plugged into it, etc). Drawing and play/pause/rewind from THIS device will show up there live.</p>
+    <div class="sectionTitle">📺 Cast to a TV</div>
+    <p style="font-size:12px;color:var(--dim);margin:0;">Tap "Cast to TV" above to mirror this footage straight from your phone (AirPlay on iPhone/iPad, or Chromecast/Google Cast on Android and Chrome) -- the video plays on the TV while this control bar and drawing stay on your device. If your TV doesn't support either of those, open the link below on the TV's own browser instead; play/pause/rewind/drawing from this device will still show up there live.</p>
     <div class="tvLinkBox">
       <input type="text" id="tvLinkInput" readonly>
       <button type="button" class="btn" id="copyTvLinkBtn">Copy</button>
@@ -286,8 +300,24 @@
   const ctx = canvas.getContext('2d');
   let drawMode = false;
   let currentColor = '#ff3b30';
-  let strokes = []; // [{color, points:[{x,y} 0-1 normalized]}]
-  let activeStroke = null;
+  // Nathan: "line options with arrow or T ends. Circle tool to circle a
+  // player." Three shape types now live in the same `strokes` array/sync
+  // path -- a plain freehand stroke (the original pen tool, `type:'pen'`,
+  // undefined type on old saved data treated the same way for backward
+  // compatibility with any strokes already saved before this), a straight
+  // `line` with a chosen end-cap (arrowhead or a perpendicular T-bar, drawn
+  // at the END point -- i.e. where the drag finished, same convention as a
+  // real telestrator pointing AT something), and a `circle` (really an
+  // ellipse: drag distance sets the x/y radius independently so it still
+  // reads as a circle around a player regardless of the canvas's aspect
+  // ratio). All three normalize their coordinates 0-1 same as pen points
+  // always did, so redraw/sync/composite-save all keep working unchanged
+  // across different screen sizes on the two synced devices.
+  let drawTool = 'pen'; // 'pen' | 'line' | 'circle'
+  let lineEndCap = 'arrow'; // 'arrow' | 't'
+  let strokes = []; // [{type, color, ...shape-specific fields, all coords 0-1 normalized}]
+  let activeStroke = null; // in-progress pen stroke (committed to `strokes` immediately, points appended live)
+  let activeShape = null; // in-progress line/circle (NOT in `strokes` until pointerup, so a live preview can be drawn without broadcasting half-finished shapes)
 
   function resizeCanvas(){
     const r = canvas.getBoundingClientRect();
@@ -297,18 +327,53 @@
   }
   window.addEventListener('resize', resizeCanvas);
 
-  function redrawStrokes(){
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    strokes.forEach(s => {
-      if (!s.points.length) return;
-      ctx.strokeStyle = s.color; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.beginPath();
-      s.points.forEach((p, i) => {
-        const x = p.x * canvas.width, y = p.y * canvas.height;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+  // Shared by the live canvas (ctx, CSS pixel size) and saveAnnotation's
+  // offscreen composite (video's native resolution) so the two never drift
+  // out of sync with each other.
+  function renderShapesTo(context, list, w, h, lineWidth){
+    (list || []).forEach(s => {
+      const type = s.type || 'pen'; // strokes saved before the line/circle tools existed have no `type` -- they're all pen
+      context.strokeStyle = s.color; context.lineWidth = lineWidth; context.lineJoin = 'round'; context.lineCap = 'round';
+      if (type === 'pen') {
+        if (!s.points || !s.points.length) return;
+        context.beginPath();
+        s.points.forEach((p, i) => {
+          const x = p.x * w, y = p.y * h;
+          if (i === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+      } else if (type === 'line') {
+        const x1 = s.x1 * w, y1 = s.y1 * h, x2 = s.x2 * w, y2 = s.y2 * h;
+        context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const capSize = Math.max(10, lineWidth * 3.5);
+        if (s.endCap === 't') {
+          const perp = angle + Math.PI / 2;
+          context.beginPath();
+          context.moveTo(x2 - (capSize / 1.4) * Math.cos(perp), y2 - (capSize / 1.4) * Math.sin(perp));
+          context.lineTo(x2 + (capSize / 1.4) * Math.cos(perp), y2 + (capSize / 1.4) * Math.sin(perp));
+          context.stroke();
+        } else {
+          context.beginPath();
+          context.moveTo(x2, y2);
+          context.lineTo(x2 - capSize * Math.cos(angle - Math.PI / 6), y2 - capSize * Math.sin(angle - Math.PI / 6));
+          context.moveTo(x2, y2);
+          context.lineTo(x2 - capSize * Math.cos(angle + Math.PI / 6), y2 - capSize * Math.sin(angle + Math.PI / 6));
+          context.stroke();
+        }
+      } else if (type === 'circle') {
+        const cx = s.cx * w, cy = s.cy * h, rx = Math.max(s.rx * w, 4), ry = Math.max(s.ry * h, 4);
+        context.beginPath();
+        context.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        context.stroke();
+      }
     });
+  }
+
+  function redrawStrokes(preview){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    renderShapesTo(ctx, strokes, canvas.width, canvas.height, 4);
+    if (preview) renderShapesTo(ctx, [preview], canvas.width, canvas.height, 4);
   }
 
   function pointerPos(e){
@@ -318,18 +383,44 @@
   canvas.addEventListener('pointerdown', (e) => {
     if (!drawMode || isDisplay) return;
     canvas.setPointerCapture(e.pointerId);
-    activeStroke = { color: currentColor, points: [pointerPos(e)] };
-    strokes.push(activeStroke);
-    redrawStrokes();
+    const p = pointerPos(e);
+    if (drawTool === 'pen') {
+      activeStroke = { type: 'pen', color: currentColor, points: [p] };
+      strokes.push(activeStroke);
+      redrawStrokes();
+    } else if (drawTool === 'line') {
+      activeShape = { type: 'line', color: currentColor, endCap: lineEndCap, x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      redrawStrokes(activeShape);
+    } else if (drawTool === 'circle') {
+      activeShape = { type: 'circle', color: currentColor, cx: p.x, cy: p.y, rx: 0, ry: 0 };
+      redrawStrokes(activeShape);
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!drawMode || isDisplay || !activeStroke) return;
-    activeStroke.points.push(pointerPos(e));
-    redrawStrokes();
+    if (!drawMode || isDisplay) return;
+    const p = pointerPos(e);
+    if (drawTool === 'pen' && activeStroke) {
+      activeStroke.points.push(p);
+      redrawStrokes();
+    } else if (drawTool === 'line' && activeShape) {
+      activeShape.x2 = p.x; activeShape.y2 = p.y;
+      redrawStrokes(activeShape);
+    } else if (drawTool === 'circle' && activeShape) {
+      activeShape.rx = Math.abs(p.x - activeShape.cx);
+      activeShape.ry = Math.abs(p.y - activeShape.cy);
+      redrawStrokes(activeShape);
+    }
   });
   function endStroke(){
-    if (!activeStroke) return;
-    activeStroke = null;
+    if (drawTool === 'pen') {
+      if (!activeStroke) return;
+      activeStroke = null;
+    } else {
+      if (!activeShape) return;
+      strokes.push(activeShape);
+      activeShape = null;
+    }
+    redrawStrokes();
     broadcastDraw();
   }
   canvas.addEventListener('pointerup', endStroke);
@@ -418,8 +509,10 @@
     vid.addEventListener('pause', () => { playBtn.textContent = '▶️'; broadcastPlayback(); });
     vid.addEventListener('seeked', broadcastPlayback);
     vid.addEventListener('ratechange', broadcastPlayback);
+    document.getElementById('back20Btn').addEventListener('click', () => { vid.currentTime = Math.max(0, vid.currentTime - 20); });
     document.getElementById('back10Btn').addEventListener('click', () => { vid.currentTime = Math.max(0, vid.currentTime - 10); });
     document.getElementById('fwd10Btn').addEventListener('click', () => { vid.currentTime = Math.min(vid.duration || 1e9, vid.currentTime + 10); });
+    document.getElementById('fwd20Btn').addEventListener('click', () => { vid.currentTime = Math.min(vid.duration || 1e9, vid.currentTime + 20); });
     rateSel.addEventListener('change', () => { vid.playbackRate = Number(rateSel.value); });
     vid.addEventListener('timeupdate', () => {
       if (!scrubbing && vid.duration) scrubBar.value = String(Math.round((vid.currentTime / vid.duration) * 1000));
@@ -433,11 +526,15 @@
 
     const drawToggleBtn = document.getElementById('drawToggleBtn');
     const swatchWrap = document.getElementById('swatchWrap');
+    const toolWrap = document.getElementById('toolWrap');
+    const lineCapWrap = document.getElementById('lineCapWrap');
     const clearDrawBtn = document.getElementById('clearDrawBtn');
     drawToggleBtn.addEventListener('click', () => {
       drawMode = !drawMode;
       drawToggleBtn.classList.toggle('on', drawMode);
       swatchWrap.style.display = drawMode ? 'inline-flex' : 'none';
+      toolWrap.style.display = drawMode ? 'inline-flex' : 'none';
+      lineCapWrap.style.display = (drawMode && drawTool === 'line') ? 'inline-flex' : 'none';
       clearDrawBtn.style.display = drawMode ? '' : 'none';
       canvas.style.pointerEvents = drawMode ? 'auto' : 'none';
       // Telestrating over a moving picture doesn't work -- pause so the
@@ -450,6 +547,19 @@
         currentColor = sw.dataset.color;
         document.querySelectorAll('.swatch').forEach(s => s.classList.remove('on'));
         sw.classList.add('on');
+      });
+    });
+    document.querySelectorAll('#toolWrap [data-tool]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        drawTool = btn.dataset.tool;
+        document.querySelectorAll('#toolWrap [data-tool]').forEach(b => b.classList.toggle('on', b === btn));
+        lineCapWrap.style.display = (drawMode && drawTool === 'line') ? 'inline-flex' : 'none';
+      });
+    });
+    document.querySelectorAll('#lineCapWrap [data-cap]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        lineEndCap = btn.dataset.cap;
+        document.querySelectorAll('#lineCapWrap [data-cap]').forEach(b => b.classList.toggle('on', b === btn));
       });
     });
     clearDrawBtn.addEventListener('click', clearDrawBroadcast);
@@ -465,6 +575,33 @@
       navigator.clipboard && navigator.clipboard.writeText(tvLinkInput.value).catch(() => {});
       setStatus('TV link copied.');
     });
+
+    // Nathan: "cast to the TV so it mirrors the footage to it" -- real
+    // one-tap mirroring straight from the phone, not opening a second link
+    // manually on the TV (that's now just the fallback below for TVs/smart-
+    // TV browsers that don't support either native API). AirPlay
+    // (webkitShowPlaybackTargetPicker, Safari/iOS/iPadOS only) and the
+    // Remote Playback API (video.remote.prompt(), Chrome/Edge -- finds
+    // Chromecast/Google Cast/DIAL receivers) both hand control of the SAME
+    // <video> element to the TV once connected, so every play/pause/seek/
+    // rate change this control bar already makes against `vid` keeps
+    // working unchanged and mirrors to the TV automatically -- no separate
+    // "remote control" code path needed.
+    const castBtn = document.getElementById('castBtn');
+    const canAirPlay = typeof vid.webkitShowPlaybackTargetPicker === 'function';
+    const canRemotePlayback = !!(vid.remote && typeof vid.remote.prompt === 'function');
+    if (canAirPlay || canRemotePlayback) castBtn.style.display = '';
+    castBtn.addEventListener('click', async () => {
+      try {
+        if (canAirPlay) vid.webkitShowPlaybackTargetPicker();
+        else if (canRemotePlayback) await vid.remote.prompt();
+      } catch (e) { /* user closed the device picker, or found no devices -- not worth alerting over */ }
+    });
+    if (canRemotePlayback) {
+      vid.remote.addEventListener('connecting', () => setStatus('Connecting to TV…'));
+      vid.remote.addEventListener('connect', () => setStatus('Casting to TV.'));
+      vid.remote.addEventListener('disconnect', () => setStatus(''));
+    }
   }
 
   // ---- Save Annotation (composited frame + drawing) -------------------
@@ -487,13 +624,7 @@
       composite.width = w; composite.height = h;
       const cctx = composite.getContext('2d');
       cctx.drawImage(vid, 0, 0, w, h);
-      strokes.forEach(s => {
-        if (!s.points.length) return;
-        cctx.strokeStyle = s.color; cctx.lineWidth = Math.max(3, w / 220); cctx.lineJoin = 'round'; cctx.lineCap = 'round';
-        cctx.beginPath();
-        s.points.forEach((p, i) => { const x = p.x * w, y = p.y * h; if (i === 0) cctx.moveTo(x, y); else cctx.lineTo(x, y); });
-        cctx.stroke();
-      });
+      renderShapesTo(cctx, strokes, w, h, Math.max(3, w / 220));
       const dataUrl = composite.toDataURL('image/jpeg', 0.82);
       const id = genId();
       const imgUrl = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/footageAnnotations/${id}.json`);

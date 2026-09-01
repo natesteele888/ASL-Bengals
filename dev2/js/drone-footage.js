@@ -566,13 +566,30 @@
   // Vault (js/coachtools-nav.js) is what calls window.initFilmVault below.
   // ---------------------------------------------------------------------------
   let vaultOpenClipId = null;
-  let vaultPairs = []; // current filtered+sorted [{clip, practice}] on screen -- lets action handlers find the right practice by clip id
+  let vaultPairs = []; // current filtered+sorted [{clip, practice, kind}] on screen -- lets action handlers find the right practice by clip id
   let vaultPracticesCache = null;
+  // Nathan: "Game Clips should be available in Film Vault as well." Game
+  // footage (schedule.js's game.gameFootage, {id, title, url} -- a Google
+  // Drive link, not an uploaded blob) is a second, much simpler data
+  // source alongside practice drone clips: no video-blob loading, no
+  // comments, no coach edit form here (that already lives on the game's
+  // own Schedule page) -- just another alphabetized entry that opens the
+  // same link/TeleStrator buttons schedule.js's own footage list uses.
+  let vaultGamesCache = null;
 
   function vaultAllPairs(practices) {
     const out = [];
     (practices || []).forEach(practice => {
-      sortedClips(practice).forEach(clip => out.push({ clip, practice }));
+      sortedClips(practice).forEach(clip => out.push({ clip, practice, kind: 'practice' }));
+    });
+    return out;
+  }
+  function vaultAllGamePairs(games) {
+    const out = [];
+    (games || []).forEach(game => {
+      (Array.isArray(game.gameFootage) ? game.gameFootage : []).forEach(clip => {
+        if (clip.url) out.push({ clip, game, kind: 'game' });
+      });
     });
     return out;
   }
@@ -590,6 +607,14 @@
     const d = new Date(practice.date + 'T00:00:00');
     if (isNaN(d)) return 'Practice';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function fmtVaultGameLabel(game) {
+    if (!game) return 'Game';
+    const opp = game.opponent || 'TBD';
+    if (!game.date) return opp;
+    const d = new Date(game.date + 'T00:00:00');
+    if (isNaN(d)) return opp;
+    return `${opp} — ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
 
   // Same lazy-load-on-open behavior as ensureVideoLoaded above, just
@@ -639,7 +664,7 @@
     }
 
     return `
-      <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}">
+      <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}" data-kind="practice">
         <button type="button" class="accordion-header" style="padding:9px 12px;font-size:13px;font-style:normal;font-weight:700;">
           <span>🎥 ${escapeHtml(clip.title || 'Drone Clip')}${clip.durationSec ? ` <span class="lbSub" style="font-weight:400;">(${fmtDuration(clip.durationSec)})</span>` : ''}</span>
           <span class="accordion-chevron">▾</span>
@@ -671,6 +696,33 @@
       </div>`;
   }
 
+  // Nathan: "Game Clips should be available in Film Vault as well." Much
+  // simpler card than the practice one above -- game footage is a Google
+  // Drive link (schedule.js's gameFootage), not an uploaded blob, so
+  // there's no video-blob loading, no coach edit form (that already lives
+  // on the game's own Schedule page), and no comments here -- just the
+  // same Open/TeleStrator links schedule.js's own read-only footage list
+  // already uses.
+  function filmVaultGameClipHtml(pair) {
+    const clip = pair.clip;
+    const game = pair.game;
+    const open = vaultOpenClipId === clip.id;
+    return `
+      <div class="accordion-item${open ? ' open' : ''}" data-clip-id="${clip.id}" data-kind="game">
+        <button type="button" class="accordion-header" style="padding:9px 12px;font-size:13px;font-style:normal;font-weight:700;">
+          <span>🎥 ${escapeHtml(clip.title || 'Game Footage')}</span>
+          <span class="accordion-chevron">▾</span>
+        </button>
+        <div class="accordion-body" style="padding:8px;">
+          <div class="lbSub" style="text-align:center;margin-bottom:8px;">🏈 ${escapeHtml(fmtVaultGameLabel(game))}</div>
+          <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+            <a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener" class="lbLinkBtn">🎥 Open Footage</a>
+            <a href="telestrator.html?gameId=${encodeURIComponent(game.id)}&clipId=${encodeURIComponent(clip.id)}" target="_blank" rel="noopener" class="lbLinkBtn">🖍️ TeleStrator</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
   // Delegated the same way wireActions above is, but looks the clip's
   // practice up from vaultPairs (built fresh on every render) instead of
   // assuming a single practice, since Vault rows span every practice at
@@ -682,9 +734,12 @@
       if (header) {
         const item = header.closest('.accordion-item');
         const id = item && item.dataset.clipId;
+        const kind = item && item.dataset.kind;
         if (id) {
           if (vaultOpenClipId === id) { vaultOpenClipId = null; renderFilmVaultList(); }
-          else { vaultOpenClipId = id; renderFilmVaultList(); ensureVaultVideoLoaded(id); }
+          // Game clips have nothing to lazy-load -- they're an external
+          // link, not a stored video blob (see filmVaultGameClipHtml).
+          else { vaultOpenClipId = id; renderFilmVaultList(); if (kind !== 'game') ensureVaultVideoLoaded(id); }
         }
         return;
       }
@@ -744,20 +799,20 @@
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     const searchInput = document.getElementById('filmVaultSearch');
     const term = searchInput ? searchInput.value : '';
-    const all = vaultAllPairs(vaultPracticesCache || []);
+    const all = vaultAllPairs(vaultPracticesCache || []).concat(vaultAllGamePairs(vaultGamesCache || []));
     vaultPairs = vaultFilterAndSort(all, term);
 
     if (countEl) countEl.textContent = all.length ? `${vaultPairs.length} of ${all.length} clip${all.length !== 1 ? 's' : ''}` : '';
 
     if (!all.length) {
-      listEl.innerHTML = '<div class="lbEmpty">No drone footage uploaded yet -- clips uploaded from a practice\'s Drone Footage section will show up here automatically, alphabetized by title.</div>';
+      listEl.innerHTML = '<div class="lbEmpty">No drone or game footage yet -- clips uploaded from a practice\'s Drone Footage section, or linked on a game\'s Schedule page, will show up here automatically, alphabetized by title.</div>';
       return;
     }
     if (!vaultPairs.length) {
       listEl.innerHTML = `<div class="lbEmpty">No clips match "${escapeHtml(term)}".</div>`;
       return;
     }
-    listEl.innerHTML = `<div class="play-grid">${vaultPairs.map(p => filmVaultClipHtml(p, approved)).join('')}</div>`;
+    listEl.innerHTML = `<div class="play-grid">${vaultPairs.map(p => p.kind === 'game' ? filmVaultGameClipHtml(p) : filmVaultClipHtml(p, approved)).join('')}</div>`;
   }
 
   // Entry point -- js/coachtools-nav.js calls this every time the Film
@@ -776,9 +831,13 @@
       wireFilmVaultActions(listEl);
     }
     if (!window.ensurePracticesLoaded) return;
-    if (listEl && !vaultPracticesCache) listEl.innerHTML = '<div class="lbEmpty">Loading…</div>';
-    window.ensurePracticesLoaded().then(practices => {
+    if (listEl && !vaultPracticesCache && !vaultGamesCache) listEl.innerHTML = '<div class="lbEmpty">Loading…</div>';
+    Promise.all([
+      window.ensurePracticesLoaded(),
+      window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
+    ]).then(([practices, games]) => {
       vaultPracticesCache = practices;
+      vaultGamesCache = games;
       renderFilmVaultList();
     });
   };
