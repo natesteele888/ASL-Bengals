@@ -156,7 +156,7 @@
 </head>
 <body>
 
-<div class="proto-banner">STANDALONE PROTOTYPE — not connected to the live ASL Bengals app or database. Roster is a one-time snapshot, not live-synced.</div>
+<div class="proto-banner">STANDALONE TOOL — signs in with your coach code to load real games from the Schedule and save each game's play log to the cloud (so you can come back and edit it later). Roster is still a one-time snapshot, not live-synced.</div>
 
 <header>
   <div class="brand">STAT<span>KEEPER</span></div>
@@ -165,18 +165,35 @@
 
 <div class="wrap">
 
+  <!-- Nathan: "I need the ability to go back to a game I created stats for
+       in the StatsKeeper, so I can edit them." Replaced the free-text game
+       label with a dropdown of REAL games off the live Schedule -- picking
+       one loads that game's play log from Firebase (statKeeperLogs/{gameId})
+       if it's been started before, and every change auto-saves back to that
+       same path, so closing this tab and coming back to the same game later
+       picks up right where you left off. Requires the same coach-gate sign-in
+       "Push to Live" already used (see ensureCoachAuth/gameSelect below). -->
   <div class="gameBar">
     <label>Game</label>
-    <input type="text" id="gameLabel" placeholder="e.g. vs. Charlton/Dudley, 8/30">
-    <select class="btn small ghost" id="endQuarterSel" style="margin-left:auto" title="Pick whichever quarter just ended — you can jump ahead if you missed one"></select>
-    <button class="btn small primary" id="finishGameBtn">🏁 Finish Game</button>
-    <button class="btn small ghost" id="resetGameBtn">Start New Game</button>
+    <select id="gameSelect" style="flex:1 1 220px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+      border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
+      <option value="">— Sign in to load games —</option>
+    </select>
+    <select class="btn small ghost" id="endQuarterSel" style="margin-left:auto" title="Pick whichever quarter just ended — you can jump ahead if you missed one" disabled></select>
+    <button class="btn small primary" id="finishGameBtn" disabled>🏁 Finish Game</button>
+    <button class="btn small ghost" id="resetGameBtn" disabled>Clear This Game's Log</button>
   </div>
+  <div id="gameLoadStatus" style="font-size:11px;color:var(--dim2);margin:-6px 0 10px;text-align:center;"></div>
 
   <div class="scoreboard" id="scoreboardBox">US 0 — 0 OPP</div>
 
   <div class="entryPanel">
     <h2>Log a Play</h2>
+    <!-- Nathan: "add in the field yardage markage." Always-visible, always-
+         editable running field position -- see renderBallPositionControl()
+         below. Auto-advances after run/pass/kick-return plays; punts sync it
+         from their own explicit spot fields instead. -->
+    <div id="ballPosWrap" class="fieldRow"></div>
     <div class="sideToggle" id="sideToggle">
       <div class="sideBtn off" data-side="offense">🏈 OFFENSE</div>
       <div class="sideBtn def" data-side="defense">🛡️ DEFENSE</div>
@@ -185,7 +202,7 @@
 
     <div id="fieldsArea"></div>
 
-    <button class="btn primary logPlayBtn" id="logPlayBtn">✅ Log Play</button>
+    <button class="btn primary logPlayBtn" id="logPlayBtn" disabled>✅ Log Play</button>
   </div>
 
   <section class="panel">
@@ -215,7 +232,7 @@
       <button class="btn small" id="copyTextBtn">📋 Copy Text Summary</button>
       <button class="btn small" id="downloadJsonBtn">⬇ Download statSheet.json</button>
       <button class="btn small" id="downloadGameLogBtn">⬇ Download Game Log (for Coach Tools import)</button>
-      <button class="btn small primary" id="pushLiveBtn">🚀 Push to Live Stats</button>
+      <button class="btn small primary" id="pushLiveBtn" disabled>🚀 Push to Live Stats</button>
     </div>
     <div id="pushLiveStatus" style="margin-top:6px;font-size:11px;color:var(--dim2);"></div>
   </section>
@@ -270,6 +287,13 @@
   // Sure" fallback with a free-text write-in alongside the real names.
   const PLAYBOOK = ['Inside Zone','Outside Zone','Option','Blast','Double Blast','Option Pass','Sweep'];
 
+  // Nathan: "add the play formation we are in." The real playbook runs two
+  // formations (see js/play-calls.js's buildSignalSequence formation param) --
+  // kept separate from Play Called since a coach might know the formation
+  // from the sideline (Wing vs. Split is easy to spot) even when the exact
+  // play call isn't obvious.
+  const FORMATIONS = ['Wing','Split'];
+
   const fieldsArea = document.getElementById('fieldsArea');
   const typeGrid = document.getElementById('typeGrid');
   const sideToggle = document.getElementById('sideToggle');
@@ -278,12 +302,18 @@
   const insertPosSel = document.getElementById('insertPosSel');
   const playCount = document.getElementById('playCount');
   const statsArea = document.getElementById('statsArea');
-  const gameLabel = document.getElementById('gameLabel');
+  const gameSelect = document.getElementById('gameSelect');
+  const gameLoadStatus = document.getElementById('gameLoadStatus');
+  const ballPosWrap = document.getElementById('ballPosWrap');
 
   // Which play types are offered under each side-of-ball tab. 'turnover' can happen
   // either way (offense fumbles it away, defense forces/recovers it), so it shows on both.
+  // Nathan: "fill out yardages for the opposing team's possessions" -- run
+  // now has both sides too (mirrors pass's existing Us/Opponent split, see
+  // draft.runTeam in renderFields below), so their rushing yards count
+  // toward a real final box score instead of only their passing yards.
   const TYPE_DEFS = {
-    run:      {label:'🏃 Run',        sides:['offense']},
+    run:      {label:'🏃 Run',        sides:['offense','defense']},
     pass:     {label:'🎯 Pass',       sides:['offense','defense']},
     kick:     {label:'🦵 Kick Ret.',  sides:['offense']},
     punt:     {label:'🦶 Punt',       sides:['offense','defense']},
@@ -297,13 +327,43 @@
   let currentType = 'run';
   let currentSide = 'offense';
   try { currentSide = localStorage.getItem('statKeeperProtoSide') || 'offense'; } catch(e){}
-  let currentQuarter = 1;
-  try { currentQuarter = parseInt(localStorage.getItem('statKeeperProtoQuarter')||'1', 10) || 1; } catch(e){}
 
+  // ---- Per-game state ---------------------------------------------------
+  // Nathan: "I need the ability to go back to a game I created stats for in
+  // the StatsKeeper, so I can edit them." Everything that used to be one
+  // global localStorage slot (one game at a time, wiped by "Start New
+  // Game") is now keyed by the selected game's real schedule.json id --
+  // Firebase (statKeeperLogs/{gameId}) is the real source of truth,
+  // loaded/saved by loadSelectedGame()/persistCloud() further down;
+  // localStorage below is just an offline-friendly cache of the same
+  // per-game object, keyed the same way, so a dropped connection mid-game
+  // doesn't lose anything typed since the last successful cloud save.
+  let selectedGame = null; // the real game record from schedule.json, once picked from #gameSelect
+  let currentQuarter = 1;
   let plays = [];
-  try { plays = JSON.parse(localStorage.getItem('statKeeperProtoPlays')||'[]'); } catch(e){}
-  try { gameLabel.value = localStorage.getItem('statKeeperProtoGameLabel') || ''; } catch(e){}
-  gameLabel.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoGameLabel', gameLabel.value); }catch(e){} });
+  // Nathan: "add in the field yardage markage" -- one running field
+  // position (0 = our own goal line, 100 = the opponent's) carried across
+  // the WHOLE game regardless of which team currently has the ball, same
+  // OWN/OPP-is-always-our-frame convention the punt spot fields already use
+  // (see absoluteSpot/spotLabel above). Auto-advanced after run/pass/
+  // kick-return plays in commitPlay() below; always visible/editable via
+  // renderBallPositionControl().
+  let currentSpot = 50;
+
+  function localCacheKey(gameId){ return 'statKeeperGame_' + gameId; }
+  function blankGameState(){ return { plays: [], quarter: 1, spot: 50, finalUs: '', finalOpp: '' }; }
+  function currentGameStateObj(){
+    return { plays: plays, quarter: currentQuarter, spot: currentSpot,
+      finalUs: finalScoreUs.value, finalOpp: finalScoreOpp.value, updatedAt: new Date().toISOString() };
+  }
+  function applyGameState(gs){
+    gs = gs || blankGameState();
+    plays = Array.isArray(gs.plays) ? gs.plays : [];
+    currentQuarter = gs.quarter || 1;
+    currentSpot = (typeof gs.spot === 'number') ? gs.spot : 50;
+    finalScoreUs.value = gs.finalUs || '';
+    finalScoreOpp.value = gs.finalOpp || '';
+  }
 
   // Nathan: "would be nice to have a score verification through the
   // STATKEEPER" -- the running score is computed ONLY from explicit
@@ -318,10 +378,12 @@
   const finalScoreUs = document.getElementById('finalScoreUs');
   const finalScoreOpp = document.getElementById('finalScoreOpp');
   const scoreCheckResult = document.getElementById('scoreCheckResult');
-  try { finalScoreUs.value = localStorage.getItem('statKeeperProtoFinalUs') || ''; } catch(e){}
-  try { finalScoreOpp.value = localStorage.getItem('statKeeperProtoFinalOpp') || ''; } catch(e){}
-  finalScoreUs.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoFinalUs', finalScoreUs.value); }catch(e){} updateScoreboard(); });
-  finalScoreOpp.addEventListener('input', function(){ try{ localStorage.setItem('statKeeperProtoFinalOpp', finalScoreOpp.value); }catch(e){} updateScoreboard(); });
+  // Final-score fields are now part of the per-game state object (see
+  // applyGameState/currentGameStateObj above) instead of their own
+  // standalone localStorage keys -- persist() below saves the whole game
+  // object on every change, these included.
+  finalScoreUs.addEventListener('input', function(){ persist(); updateScoreboard(); });
+  finalScoreOpp.addEventListener('input', function(){ persist(); updateScoreboard(); });
 
   // Touchdowns are read straight off the scoring play's own td flag (run/
   // pass/kick/punt/defextra) using the exact same team logic describePlay()
@@ -344,7 +406,10 @@
         return;
       }
       if (!p.td) return;
-      if (p.type === 'run'){ us += 6; }
+      // Nathan: "fill out yardages for the opposing team's possessions" --
+      // run now has a runTeam like pass already had passTeam, so an
+      // opponent scoop-and-score/broken-run TD counts for them, not us.
+      if (p.type === 'run'){ if (p.runTeam !== 'Opponent') us += 6; else opp += 6; }
       else if (p.type === 'pass'){ if (p.passTeam !== 'Opponent') us += 6; else opp += 6; }
       else if (p.type === 'kick' && !p.onside){ us += 6; } // kick return type is always us returning
       else if (p.type === 'punt'){ if (p.puntTeam !== 'Opponent') opp += 6; else us += 6; } // TD on our punt = their return; TD on their punt = our return
@@ -656,6 +721,62 @@
     return wrap;
   }
 
+  function spotLabelAbs(spot){
+    const y = Math.round(spot <= 50 ? spot : (100 - spot));
+    if (Math.round(spot) === 50) return 'Midfield (the 50)';
+    return (spot <= 50 ? 'OWN ' : 'OPP ') + y;
+  }
+  // Nathan: "add in the field yardage markage." Unlike spotPicker (bound to
+  // one play's draft fields), this is bound directly to the persistent
+  // currentSpot game-state variable -- always visible above the entry
+  // panel, editable any time (kickoffs/penalties/manual corrections),
+  // auto-advanced after run/pass/kick-return plays by advanceSpotForPlay().
+  function renderBallPositionControl(){
+    if (!ballPosWrap) return;
+    ballPosWrap.innerHTML = '';
+    const lab = document.createElement('label');
+    lab.textContent = '🏈 Ball Position ';
+    const cur = document.createElement('span');
+    cur.style.cssText = 'color:var(--cyan);text-transform:none;font-weight:700;letter-spacing:0;';
+    cur.textContent = spotLabelAbs(currentSpot);
+    lab.appendChild(cur);
+    ballPosWrap.appendChild(lab);
+
+    const side = currentSpot <= 50 ? 'OWN' : 'OPP';
+    const yard = Math.round(currentSpot <= 50 ? currentSpot : (100 - currentSpot));
+    function setFromSideYard(newSide, newYard){
+      newYard = Math.max(0, Math.min(50, Number(newYard) || 0));
+      currentSpot = clampSpot(newSide === 'OWN' ? newYard : (100 - newYard));
+      persist();
+      renderBallPositionControl();
+    }
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    const chipRow = document.createElement('div'); chipRow.className = 'chipRow2';
+    ['OWN','OPP'].forEach(function(opt){
+      const c = document.createElement('div');
+      c.className = 'optChip' + (side === opt ? ' active' : '');
+      c.textContent = opt;
+      c.addEventListener('click', function(){ setFromSideYard(opt, yard); });
+      chipRow.appendChild(c);
+    });
+    row.appendChild(chipRow);
+
+    const stepWrap = document.createElement('div'); stepWrap.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.min = 0; input.max = 50; input.value = yard;
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ setFromSideYard(side, yard - 1); });
+    plus.addEventListener('click', function(){ setFromSideYard(side, yard + 1); });
+    input.addEventListener('change', function(){ setFromSideYard(side, input.value); });
+    stepWrap.appendChild(minus); stepWrap.appendChild(input); stepWrap.appendChild(plus);
+    const suffix = document.createElement('span'); suffix.style.cssText = 'color:var(--dim);font-size:12px;'; suffix.textContent = 'yard line';
+    stepWrap.appendChild(suffix);
+    row.appendChild(stepWrap);
+    ballPosWrap.appendChild(row);
+  }
+
   function textInput(key, placeholder){
     const input = document.createElement('input');
     input.type = 'text'; input.className = 'plainText';
@@ -697,15 +818,34 @@
     return wrap;
   }
 
+  // Nathan: "add the play formation we are in." Only meaningful for OUR own
+  // plays (Wing vs. Split is about our playbook, not something to guess at
+  // for the opponent's snaps) -- shown alongside Play Called on run/pass
+  // plays where we have the ball.
+  function formationField(){
+    return optChips('formation', FORMATIONS);
+  }
+
   function renderFields(){
     fieldsArea.innerHTML = '';
     if (currentType === 'run'){
-      fieldsArea.appendChild(fieldBlock('Ball Carrier', playerPicker('carrier')));
-      fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+      // Nathan: "fill out yardages for the opposing team's possessions" --
+      // mirrors pass's existing passTeam split. Defaults to whichever tab
+      // you're logging from, same reasoning as passTeam below.
+      if (draft.runTeam == null) draft.runTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
+      const isUsRun = draft.runTeam !== 'Opponent';
+      fieldsArea.appendChild(fieldBlock('Running Team', optChips('runTeam', ['Us','Opponent'])));
+      if (isUsRun){
+        fieldsArea.appendChild(fieldBlock('Ball Carrier', playerPicker('carrier')));
+        fieldsArea.appendChild(fieldBlock('Formation (optional)', formationField()));
+        fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+      } else {
+        fieldsArea.appendChild(fieldBlock('Opponent Ball Carrier (optional)', textInput('oppCarrier', "Opponent's ball carrier, if known")));
+      }
       fieldsArea.appendChild(fieldBlock('Yards Gained', yardStepper('yards', 0)));
       fieldsArea.appendChild(fieldBlock('Direction', optChips('dir', ['Left','Middle','Right'])));
       const toggles = document.createElement('div'); toggles.className='toggleRow';
-      toggles.appendChild(chipToggle('firstDown','1st Down'));
+      toggles.appendChild(chipToggle('firstDown', isUsRun ? '1st Down' : 'Opponent 1st Down'));
       toggles.appendChild(chipToggle('td','🏆 Touchdown'));
       fieldsArea.appendChild(fieldBlock('', toggles));
     }
@@ -718,6 +858,7 @@
       if (isUsPass){
         fieldsArea.appendChild(fieldBlock('Passer', playerPicker('passer')));
         fieldsArea.appendChild(fieldBlock('Target', playerPicker('target')));
+        fieldsArea.appendChild(fieldBlock('Formation (optional)', formationField()));
         fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Passer (optional)', textInput('oppPasser', "Opponent's QB, if known")));
@@ -830,10 +971,17 @@
     const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
     return ' [Called: ' + name + ']';
   }
+  function formationTxt(p){ return p.formation ? ' ['+p.formation+']' : ''; }
 
   function describePlay(p){
-    if (p.type==='run') return (p.td?'🏆 ':'') + 'Run — ' + (p.carrier||'?') + ', ' + p.yards + ' yds' +
-      (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + playCallTxt(p);
+    if (p.type==='run'){
+      const isUsRun = p.runTeam !== 'Opponent';
+      const carrierTxt = isUsRun ? (p.carrier||'?') : ('Opponent' + (p.oppCarrier ? ' ('+p.oppCarrier+')' : ''));
+      const prefix = isUsRun ? '' : '🛡️ ';
+      return prefix + (p.td?'🏆 ':'') + 'Run — ' + carrierTxt + ', ' + p.yards + ' yds' +
+        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
+        (isUsRun ? formationTxt(p) + playCallTxt(p) : '');
+    }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
       const passerTxt = isUsPass ? (p.passer||'?') : ('Opponent' + (p.oppPasser ? ' ('+p.oppPasser+')' : ''));
@@ -841,10 +989,10 @@
       const prefix = isUsPass ? '' : '🛡️ ';
       if (p.result==='Incomplete'){
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
-        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + playCallTxt(p);
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playCallTxt(p) : '');
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + playCallTxt(p);
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playCallTxt(p) : '');
     }
     if (p.type==='kick'){
       if (p.onside){
@@ -908,12 +1056,36 @@
     return 'Play';
   }
 
+  // Nathan: "add in the field yardage markage." One running field position
+  // (currentSpot, declared above) carried across the whole game -- stamped
+  // onto run/pass/kick-return plays as `spot` (where the play STARTED),
+  // then auto-advanced by however far that play actually moved the ball.
+  // Punts already carry their own explicit start/catch/end spot fields
+  // (more precise than a single auto-advance number), so those just sync
+  // currentSpot from their own "Brought Ball To" field instead.
+  function clampSpot(v){ return Math.max(0, Math.min(100, v)); }
+  function advanceSpotForPlay(entry){
+    if (entry.type === 'run'){
+      currentSpot = clampSpot(currentSpot + (entry.runTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
+    } else if (entry.type === 'pass' && entry.result === 'Complete'){
+      currentSpot = clampSpot(currentSpot + (entry.passTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
+    } else if (entry.type === 'kick' && !entry.onside){
+      currentSpot = clampSpot(currentSpot + Number(entry.yards||0)); // kick return type is always us returning
+    } else if (entry.type === 'punt'){
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      if (endAbs != null) currentSpot = clampSpot(endAbs);
+    }
+  }
+
   document.getElementById('logPlayBtn').addEventListener('click', function(){
     const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
+    if (entry.type === 'run' || entry.type === 'pass' || entry.type === 'kick') entry.spot = currentSpot;
     insertPlay(entry);
+    advanceSpotForPlay(entry);
     persist();
     renderLog();
     renderStats();
+    renderBallPositionControl();
     resetDraft();
   });
 
@@ -922,13 +1094,43 @@
     if (!n) return;
     insertPlay({type:'quarterEnd', id:'q_'+Date.now(), quarter: n});
     currentQuarter = n + 1;
-    try{ localStorage.setItem('statKeeperProtoQuarter', String(currentQuarter)); }catch(e){}
     persist();
     renderLog();
     populateEndQuarterSel();
   });
 
-  function persist(){ try{ localStorage.setItem('statKeeperProtoPlays', JSON.stringify(plays)); }catch(e){} }
+  // Nathan: "the ability to go back to a game I created stats for... so I
+  // can edit them." persist() now saves the WHOLE per-game state object
+  // (plays + quarter + ball spot + final score), not just the play array,
+  // and does it in two places: an immediate localStorage cache (keyed by
+  // the selected game's id, so it survives a dropped connection) and a
+  // debounced push to Firebase (statKeeperLogs/{gameId}, see
+  // scheduleCloudSave/saveGameToCloud near the coach-gate auth section
+  // below) -- the cloud copy is what actually makes "go back and edit"
+  // possible from any device/browser, not just this one's local storage.
+  let cloudSaveTimer = null;
+  function persist(){
+    try{ localStorage.setItem(localCacheKey(selectedGame ? selectedGame.id : 'unsaved'), JSON.stringify(currentGameStateObj())); }catch(e){}
+    scheduleCloudSave();
+  }
+  function scheduleCloudSave(){
+    if (!selectedGame) return; // nothing to sync until a real game is picked
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(function(){
+      saveGameToCloud().catch(function(e){ setGameLoadStatus('⚠️ Cloud save failed: ' + e.message + ' (still saved locally on this device)'); });
+    }, 600);
+  }
+  // FIREBASE_DB_URL/firebaseAuthedUrl are declared further down (same
+  // coach-gate auth block "Push to Live Stats" already used) -- safe to
+  // reference here since this only ever runs after a game's been picked,
+  // well after the whole script (including those consts) has finished
+  // its initial top-to-bottom pass.
+  async function saveGameToCloud(){
+    if (!selectedGame) return;
+    const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+    const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(currentGameStateObj()) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
   function renderLog(){
@@ -963,14 +1165,16 @@
     populateInsertPosSel();
   }
 
+  // Nathan: "go back to a game... so I can edit them" made "Start New Game"
+  // (which used to wipe the one global slot) the wrong action now that
+  // every real game has its own persistent slot -- this clears just the
+  // CURRENTLY SELECTED game's log, not some separate unrelated "new" game.
   document.getElementById('resetGameBtn').addEventListener('click', function(){
-    if (!confirm('Start a new game? This clears the current play log (make sure you\'ve exported it first).')) return;
-    plays = [];
-    currentQuarter = 1;
-    try{ localStorage.setItem('statKeeperProtoQuarter', '1'); }catch(e){}
-    finalScoreUs.value = ''; finalScoreOpp.value = '';
-    try{ localStorage.removeItem('statKeeperProtoFinalUs'); localStorage.removeItem('statKeeperProtoFinalOpp'); }catch(e){}
-    persist(); renderLog(); renderStats(); populateEndQuarterSel();
+    if (!selectedGame){ alert('Select a game above first.'); return; }
+    if (!confirm('Clear the play log for this game? This can\'t be undone -- export or push it first if you need a copy.')) return;
+    applyGameState(blankGameState());
+    persist();
+    renderLog(); renderStats(); renderBallPositionControl(); populateEndQuarterSel();
   });
 
   // ---- Compile plays into the same shape as the live app's statSheet ----
@@ -985,15 +1189,33 @@
     let onsideUs = 0, onsideOpp = 0;
     let forcedPunts = 0;
     let oppPassAtt = 0, oppPassComp = 0, oppPassYds = 0;
+    // Nathan: "fill out yardages for the opposing team's possessions" --
+    // mirrors oppPassAtt/oppPassComp/oppPassYds above, so a real final box
+    // score (both teams' rushing AND passing) is possible from Stat Keeper
+    // alone, not just our own offense.
+    let oppRushAtt = 0, oppRushYds = 0, oppRushTd = 0;
 
     plays.forEach(function(p){
       if (p.type === 'quarterEnd') return;
       if (p.side === 'offense') offSnaps++;
       else if (p.side === 'defense') defSnaps++;
 
-      if (p.type==='run' && p.carrier){
-        const r = rushing[p.carrier] || (rushing[p.carrier] = {name:p.carrier, att:0, yds:0, td:0, fd:0});
-        r.att++; r.yds += Number(p.yards||0); if (p.td){ r.td++; scoring.touchdowns++; } if (p.firstDown) r.fd++;
+      if (p.type==='run'){
+        const isUsRun = p.runTeam !== 'Opponent';
+        if (isUsRun && p.carrier){
+          const r = rushing[p.carrier] || (rushing[p.carrier] = {name:p.carrier, att:0, yds:0, td:0, fd:0});
+          // Nathan's note: TD counting used to fire for run's `td` flag
+          // unconditionally (fine back when run had no team at all) --
+          // scoring.touchdowns below is scored TOTAL by both teams (same
+          // as every other field in this Scoring Summary, e.g. patGood
+          // isn't split by team either), so it still increments regardless
+          // of which side scored, just via the isUsRun/else split now.
+          r.att++; r.yds += Number(p.yards||0); if (p.td){ r.td++; } if (p.firstDown) r.fd++;
+        } else if (!isUsRun){
+          oppRushAtt++; oppRushYds += Number(p.yards||0);
+          if (p.td) oppRushTd++;
+        }
+        if (p.td) scoring.touchdowns++;
       }
       if (p.type==='pass'){
         const isUsPass = p.passTeam !== 'Opponent';
@@ -1002,7 +1224,7 @@
           pa.att++;
           if (p.result==='Complete'){
             pa.comp++; pa.yds += Number(p.yards||0);
-            if (p.td){ pa.td++; scoring.touchdowns++; }
+            if (p.td) pa.td++;
             if (p.target){
               const rc = receiving[p.target] || (receiving[p.target] = {name:p.target, rec:0, yds:0, td:0});
               rc.rec++; rc.yds += Number(p.yards||0); if (p.td) rc.td++;
@@ -1012,6 +1234,10 @@
           oppPassAtt++;
           if (p.result==='Complete'){ oppPassComp++; oppPassYds += Number(p.yards||0); }
         }
+        // Fix alongside the run change above: an opponent completion's TD
+        // flag used to never reach scoring.touchdowns at all (only our own
+        // pa.td branch did) -- same "total by both teams" fix as run's.
+        if (p.result==='Complete' && p.td) scoring.touchdowns++;
         if (p.result !== 'Complete' && p.incReason === 'Broken Up' && p.pbuBy){
           const d = defExtra[p.pbuBy] || (defExtra[p.pbuBy] = {name:p.pbuBy, int:0, pbu:0, sack:0, fum:0, td:0});
           d.pbu++;
@@ -1094,7 +1320,7 @@
     });
 
     return {
-      game: gameLabel.value || 'Untitled game',
+      game: currentGameLabel(),
       rushing: Object.values(rushing).map(function(r){
         return Object.assign({}, r, { ypc: r.att ? Math.round(r.yds / r.att * 10) / 10 : null });
       }),
@@ -1115,6 +1341,7 @@
       onside: { us: onsideUs, opponent: onsideOpp },
       forcedPunts: forcedPunts,
       oppPassing: { att: oppPassAtt, comp: oppPassComp, yds: oppPassYds },
+      oppRushing: { att: oppRushAtt, yds: oppRushYds, td: oppRushTd },
     };
   }
 
@@ -1154,9 +1381,20 @@
       html += '<div class="statSectionTitle">Forced Punts</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🚩 Opponent forced to punt: '+s.forcedPunts+'</div>';
     }
+    if (s.oppRushing.att){
+      html += '<div class="statSectionTitle">Opponent Rushing (allowed)</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppRushing.att+' att for '+s.oppRushing.yds+' yds'+(s.oppRushing.td?' · '+s.oppRushing.td+' TD':'')+'</div>';
+    }
     if (s.oppPassing.att){
       html += '<div class="statSectionTitle">Opponent Passing (allowed)</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppPassing.comp+'/'+s.oppPassing.att+' for '+s.oppPassing.yds+' yds</div>';
+    }
+    if (s.oppRushing.att || s.oppPassing.att){
+      // Nathan: "so we can see full stats from the game" -- the combined
+      // number a real box score leads with (total yards allowed), not just
+      // the two halves separately.
+      html += '<div class="statSectionTitle">Opponent Total Offense</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+(s.oppRushing.yds+s.oppPassing.yds)+' yds allowed</div>';
     }
     html += statTable('Rushing', s.rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'},{key:'fd',label:'1st'}]);
     html += statTable('Passing', s.passing, [{key:'comp',label:'Comp'},{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
@@ -1189,8 +1427,14 @@
     if (s.forcedPunts){
       txt += 'FORCED PUNTS\n  Opponent forced to punt: '+s.forcedPunts+'\n\n';
     }
+    if (s.oppRushing.att){
+      txt += 'OPPONENT RUSHING (ALLOWED)\n  '+s.oppRushing.att+' att for '+s.oppRushing.yds+' yds'+(s.oppRushing.td?' · '+s.oppRushing.td+' TD':'')+'\n\n';
+    }
     if (s.oppPassing.att){
       txt += 'OPPONENT PASSING (ALLOWED)\n  '+s.oppPassing.comp+'/'+s.oppPassing.att+' for '+s.oppPassing.yds+' yds\n\n';
+    }
+    if (s.oppRushing.att || s.oppPassing.att){
+      txt += 'OPPONENT TOTAL OFFENSE\n  '+(s.oppRushing.yds+s.oppPassing.yds)+' yds allowed\n\n';
     }
     function section(title, rows, fmt){
       if (!rows.length) return;
@@ -1221,7 +1465,7 @@
     const blob = new Blob([JSON.stringify(s, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'statSheet-' + (gameLabel.value || 'game').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
+    a.download = 'statSheet-' + currentGameLabel().replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
     a.click();
   });
 
@@ -1232,7 +1476,7 @@
   // un-summed back into individual plays.
   function downloadGameLog(){
     const payload = {
-      game: gameLabel.value || 'Untitled game',
+      game: currentGameLabel(),
       exportedAt: new Date().toISOString(),
       roster: ROSTER,
       plays: plays,
@@ -1240,7 +1484,7 @@
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'statkeeper-gamelog-' + (gameLabel.value || 'game').replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
+    a.download = 'statkeeper-gamelog-' + currentGameLabel().replace(/[^a-z0-9]+/gi,'-').toLowerCase() + '.json';
     a.click();
   }
   document.getElementById('downloadGameLogBtn').addEventListener('click', downloadGameLog);
@@ -1365,6 +1609,11 @@
       penaltyTotals: { us:{count:0,yds:0}, opponent:{count:0,yds:0} },
       onside: { us:0, opponent:0 },
       oppPassing: { att:0, comp:0, yds:0 },
+      // Nathan: "fill out yardages for the opposing team's possessions" --
+      // pushed through alongside oppPassing even though the live Coach
+      // Tools stats page doesn't render it yet, so the data isn't stuck
+      // behind a re-push whenever that catches up.
+      oppRushing: { att:0, yds:0, td:0 },
       forcedPunts: 0,
     };
   }
@@ -1426,9 +1675,17 @@
     (playList || []).forEach(p => {
       if (!p || p.type === 'quarterEnd') return;
 
-      if (p.type === 'run' && p.carrier){
-        const num = numFor(p.carrier);
-        if (num != null) ensureAttemptRow('rushing', num).attempts.push({ yds: Number(p.yards)||0, fd: !!p.firstDown, dir: p.dir||null, td: !!p.td });
+      if (p.type === 'run'){
+        if (p.runTeam !== 'Opponent'){
+          if (p.carrier){
+            const num = numFor(p.carrier);
+            if (num != null) ensureAttemptRow('rushing', num).attempts.push({ yds: Number(p.yards)||0, fd: !!p.firstDown, dir: p.dir||null, td: !!p.td });
+          }
+        } else {
+          ss.oppRushing.att += 1;
+          ss.oppRushing.yds += Number(p.yards)||0;
+          if (p.td) ss.oppRushing.td += 1;
+        }
       }
       if (p.type === 'pass'){
         const isUsPass = p.passTeam !== 'Opponent';
@@ -1546,6 +1803,12 @@
   }
 
   async function pushToLiveStats(){
+    // Nathan: "go back to a game... so I can edit them" already means a
+    // real game is selected above before you can even log a play now --
+    // pushToLiveStats used to ask AGAIN, separately, via a numbered-list
+    // prompt() (easy to mismatch against what you'd actually been
+    // logging). Pushes straight to the already-selected game instead.
+    if (!selectedGame){ alert('Select a game above first.'); return; }
     if (!plays.length){ alert('No plays logged yet — nothing to push.'); return; }
     const statusEl = document.getElementById('pushLiveStatus');
     const setPushStatus = t => { if (statusEl) statusEl.textContent = t || ''; };
@@ -1564,21 +1827,13 @@
     } catch(e){ setPushStatus(''); alert('Could not reach the live app: ' + e.message); return; }
     liveRoster = Array.isArray(liveRoster) ? liveRoster.filter(p => p && p.id) : [];
     games = Array.isArray(games) ? games.filter(g => g && g.id) : [];
-    if (!games.length){ setPushStatus(''); alert('No games found on the live schedule.'); return; }
-
-    const sorted = games.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999'));
-    const listTxt = sorted.map((g,i) => (i+1) + '. ' + (g.homeAway==='Away' ? '@' : 'vs') + ' ' + (g.opponent||'TBD') + (g.date ? ' — '+g.date : '')).join('\n');
-    const choice = prompt('Which live game does this belong to? Type the number:\n\n' + listTxt);
-    setPushStatus('');
-    if (!choice) return;
-    const idx = parseInt(choice, 10) - 1;
-    if (!(idx >= 0 && idx < sorted.length)){ alert('Cancelled — no valid game picked.'); return; }
-    const targetGame = sorted[idx];
+    const gameIdx = games.findIndex(g => g.id === selectedGame.id);
+    if (gameIdx === -1){ setPushStatus(''); alert('This game is no longer on the live schedule.'); return; }
+    const targetGame = games[gameIdx];
 
     if (statSheetHasAnything(targetGame.statSheet) && !confirm(`"${targetGame.opponent||'This game'}" already has stats entered live. Pushing will REPLACE them entirely with this Stat Keeper log. Continue?`)) return;
 
     const result = translatePlaysForLive(plays, liveRoster);
-    const gameIdx = games.findIndex(g => g.id === targetGame.id);
     games[gameIdx] = Object.assign({}, targetGame, { statSheet: result.statSheet, updatedAt: new Date().toISOString() });
 
     setPushStatus('Pushing to live stats…');
@@ -1612,12 +1867,105 @@
     downloadGameLog();
   });
 
-  updateSideUI();
-  renderTypeGrid();
-  populateEndQuarterSel();
-  resetDraft();
-  renderLog();
-  renderStats();
+  // ---------------------------------------------------------------------
+  // Nathan: "the ability to go back to a game I created stats for... so I
+  // can edit them." Boot now: (1) signs in with the coach gate right away
+  // (this page can no longer be used fully signed-out, since even loading
+  // the game picker needs to read schedule.json), (2) loads the real game
+  // list into #gameSelect, (3) whenever a game is picked, loads that
+  // game's saved play log from Firebase (statKeeperLogs/{gameId}) --
+  // falling back to this device's local cache if the cloud read fails --
+  // and re-renders everything around it.
+  // ---------------------------------------------------------------------
+  function currentGameLabel(){
+    if (!selectedGame) return 'Untitled game';
+    return (selectedGame.homeAway === 'Away' ? '@ ' : 'vs ') + (selectedGame.opponent || 'TBD') +
+      (selectedGame.date ? ' — ' + selectedGame.date : '');
+  }
+  function setGameLoadStatus(t){ if (gameLoadStatus) gameLoadStatus.textContent = t || ''; }
+  function setGameControlsEnabled(on){
+    ['logPlayBtn','finishGameBtn','resetGameBtn','pushLiveBtn','endQuarterSel'].forEach(function(id){
+      const b = document.getElementById(id);
+      if (b) b.disabled = !on;
+    });
+  }
+  function renderAllForGame(){
+    populateEndQuarterSel();
+    resetDraft();
+    renderLog();
+    renderStats();
+    renderBallPositionControl();
+  }
+
+  let liveGamesCache = [];
+  function populateGameSelect(){
+    gameSelect.innerHTML = '';
+    const topOpt = document.createElement('option'); topOpt.value = ''; topOpt.textContent = '— Select a game —';
+    gameSelect.appendChild(topOpt);
+    liveGamesCache.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(function(g){
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = (g.homeAway === 'Away' ? '@ ' : 'vs ') + (g.opponent || 'TBD') + (g.date ? ' — ' + g.date : '');
+      gameSelect.appendChild(opt);
+    });
+  }
+
+  async function selectGame(gameId){
+    clearTimeout(cloudSaveTimer);
+    selectedGame = liveGamesCache.find(function(g){ return g.id === gameId; }) || null;
+    if (!selectedGame){
+      applyGameState(blankGameState());
+      setGameControlsEnabled(false);
+      setGameLoadStatus('');
+      renderAllForGame();
+      return;
+    }
+    setGameControlsEnabled(true);
+    setGameLoadStatus('Loading this game\'s log…');
+    let gs = null;
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      gs = await res.json();
+      setGameLoadStatus('');
+    } catch(e){
+      try { gs = JSON.parse(localStorage.getItem(localCacheKey(selectedGame.id)) || 'null'); } catch(e2){}
+      setGameLoadStatus(gs ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '⚠️ Could not load this game (starting blank): ' + e.message);
+    }
+    applyGameState(gs);
+    renderAllForGame();
+  }
+  gameSelect.addEventListener('change', function(){ selectGame(gameSelect.value); });
+
+  async function boot(){
+    updateSideUI();
+    renderTypeGrid();
+    resetDraft();
+    renderBallPositionControl();
+    setGameControlsEnabled(false);
+    setGameLoadStatus('Signing in…');
+    const ok = await ensureCoachAuth();
+    if (!ok){
+      setGameLoadStatus('Sign-in required to load games -- reload the page to try again.');
+      gameSelect.innerHTML = '<option value="">— Sign-in required —</option>';
+      return;
+    }
+    setGameLoadStatus('Loading games…');
+    try {
+      const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
+      const res = await fetch(schedUrl);
+      const games = res.ok ? (await res.json() || []) : [];
+      liveGamesCache = Array.isArray(games) ? games.filter(function(g){ return g && g.id; }) : [];
+    } catch(e){
+      liveGamesCache = [];
+      setGameLoadStatus('⚠️ Could not load games: ' + e.message);
+      return;
+    }
+    populateGameSelect();
+    setGameLoadStatus(liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.');
+  }
+  boot();
 })();
 </script>
 </body>
