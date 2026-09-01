@@ -203,6 +203,7 @@
     <div id="fieldsArea"></div>
 
     <button class="btn primary logPlayBtn" id="logPlayBtn" disabled>✅ Log Play</button>
+    <button class="btn ghost" id="cancelEditBtn" type="button" style="display:none;width:100%;margin-top:6px;justify-content:center;">✕ Cancel Edit</button>
   </div>
 
   <section class="panel">
@@ -531,7 +532,13 @@
     try{ localStorage.setItem('statKeeperProtoSide', currentSide); }catch(e){}
     updateSideUI();
     renderTypeGrid();
-    resetDraft();
+    // Switching side/type mid-edit would otherwise leave editingId pointing
+    // at the play being edited while the form quietly resets to blank --
+    // hitting Save Changes at that point would overwrite the real play
+    // with an empty one. Cancel the edit outright instead (cancelEditPlay
+    // is declared further down, near renderLog -- hoisted like every other
+    // function declaration in this file, safe to call here).
+    cancelEditPlay();
   });
 
   // Ranks players by tackle involvement so far this game (solo=1, assist=0.5) — used to
@@ -554,7 +561,7 @@
     const btn = e.target.closest('.typeBtn'); if (!btn) return;
     currentType = btn.getAttribute('data-type');
     document.querySelectorAll('.typeBtn').forEach(b=>b.classList.toggle('active', b===btn));
-    resetDraft();
+    cancelEditPlay(); // see sideToggle's own handler for why
   });
 
   // Normalizes a field that may hold a single name (string) or several
@@ -806,9 +813,10 @@
     return wrap;
   }
 
-  // "Play Called" is separate from what actually happened (a Sweep call can
-  // turn into a broken-play scramble) — chips for the real playbook, plus a
-  // write-in for when the call isn't in the book or you couldn't tell.
+  // "Play Run" (what actually happened) -- chips for the real playbook,
+  // plus a write-in for when the call isn't in the book or you couldn't
+  // tell. Separate from Coach's Call below since a Sweep call can turn
+  // into a broken-play scramble -- this field is what the team executed.
   function playCallField(){
     const wrap = document.createElement('div');
     wrap.appendChild(optChips('playCall', PLAYBOOK.concat(['Other / Not Sure'])));
@@ -820,10 +828,31 @@
 
   // Nathan: "add the play formation we are in." Only meaningful for OUR own
   // plays (Wing vs. Split is about our playbook, not something to guess at
-  // for the opponent's snaps) -- shown alongside Play Called on run/pass
-  // plays where we have the ball.
+  // for the opponent's snaps) -- shown alongside Play Run on run/pass plays
+  // where we have the ball. Represents what the team actually lined up in.
   function formationField(){
     return optChips('formation', FORMATIONS);
+  }
+
+  // Nathan: "I want to attach the formation and play call to say what play
+  // the team ran, AS WELL as another section that shows what the coach
+  // called... so we can see if the kids are running the play that was
+  // called." A second, independent formation/play pair -- filled in
+  // separately (often later, after watching the game footage back and
+  // actually spotting/hearing the sideline signal) from what the log
+  // already captured about what got run. Deliberately its own set of
+  // fields (coachFormation/coachCall/coachCallOther) rather than reusing
+  // formation/playCall, since the two can legitimately disagree.
+  function coachFormationField(){
+    return optChips('coachFormation', FORMATIONS);
+  }
+  function coachCallField(){
+    const wrap = document.createElement('div');
+    wrap.appendChild(optChips('coachCall', PLAYBOOK.concat(['Other / Not Sure'])));
+    if (draft.coachCall === 'Other / Not Sure'){
+      wrap.appendChild(textInput('coachCallOther', 'Type the call if known, or leave blank'));
+    }
+    return wrap;
   }
 
   function renderFields(){
@@ -837,8 +866,10 @@
       fieldsArea.appendChild(fieldBlock('Running Team', optChips('runTeam', ['Us','Opponent'])));
       if (isUsRun){
         fieldsArea.appendChild(fieldBlock('Ball Carrier', playerPicker('carrier')));
-        fieldsArea.appendChild(fieldBlock('Formation (optional)', formationField()));
-        fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+        fieldsArea.appendChild(fieldBlock('Formation Run (optional)', formationField()));
+        fieldsArea.appendChild(fieldBlock('Play Run (optional)', playCallField()));
+        fieldsArea.appendChild(fieldBlock("Coach's Call — Formation (optional, from film)", coachFormationField()));
+        fieldsArea.appendChild(fieldBlock("Coach's Call — Play (optional, from film)", coachCallField()));
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Ball Carrier (optional)', textInput('oppCarrier', "Opponent's ball carrier, if known")));
       }
@@ -858,8 +889,10 @@
       if (isUsPass){
         fieldsArea.appendChild(fieldBlock('Passer', playerPicker('passer')));
         fieldsArea.appendChild(fieldBlock('Target', playerPicker('target')));
-        fieldsArea.appendChild(fieldBlock('Formation (optional)', formationField()));
-        fieldsArea.appendChild(fieldBlock('Play Called (optional)', playCallField()));
+        fieldsArea.appendChild(fieldBlock('Formation Run (optional)', formationField()));
+        fieldsArea.appendChild(fieldBlock('Play Run (optional)', playCallField()));
+        fieldsArea.appendChild(fieldBlock("Coach's Call — Formation (optional, from film)", coachFormationField()));
+        fieldsArea.appendChild(fieldBlock("Coach's Call — Play (optional, from film)", coachCallField()));
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Passer (optional)', textInput('oppPasser', "Opponent's QB, if known")));
         fieldsArea.appendChild(fieldBlock('Opponent Target (optional)', textInput('oppTarget', "Opponent's receiver, if known")));
@@ -966,12 +999,24 @@
     }
   }
 
-  function playCallTxt(p){
+  // playRunTxt/formationTxt describe what the team actually executed;
+  // coachCallTxt/coachFormationTxt (Nathan: "another section that shows
+  // what the coach called... so we can see if the kids are running the
+  // play that was called") describe the separate, independently-tracked
+  // sideline signal -- kept visually distinct in the log ("Ran" vs
+  // "Called") so a mismatch between the two is easy to spot at a glance.
+  function playRunTxt(p){
     if (!p.playCall) return '';
     const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
-    return ' [Called: ' + name + ']';
+    return ' [Ran: ' + name + ']';
   }
   function formationTxt(p){ return p.formation ? ' ['+p.formation+']' : ''; }
+  function coachCallTxt(p){
+    if (!p.coachCall) return '';
+    const name = p.coachCall === 'Other / Not Sure' ? (p.coachCallOther || 'unknown call') : p.coachCall;
+    return ' [Called: ' + name + ']';
+  }
+  function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation+']' : ''; }
 
   function describePlay(p){
     if (p.type==='run'){
@@ -980,7 +1025,7 @@
       const prefix = isUsRun ? '' : '🛡️ ';
       return prefix + (p.td?'🏆 ':'') + 'Run — ' + carrierTxt + ', ' + p.yards + ' yds' +
         (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
-        (isUsRun ? formationTxt(p) + playCallTxt(p) : '');
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
@@ -989,10 +1034,10 @@
       const prefix = isUsPass ? '' : '🛡️ ';
       if (p.result==='Incomplete'){
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
-        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playCallTxt(p) : '');
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playCallTxt(p) : '');
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
     if (p.type==='kick'){
       if (p.onside){
@@ -1079,6 +1124,25 @@
   }
 
   document.getElementById('logPlayBtn').addEventListener('click', function(){
+    if (editingId){
+      // Nathan: "I need the ability to click into it so it can be
+      // updated." Updates the SAME array slot in place -- keeps its
+      // original id/quarter/spot rather than treating an edit as a brand
+      // new snap (which would double-advance the ball position and lose
+      // its place in the log).
+      const idx = plays.findIndex(function(p){ return p.id === editingId; });
+      if (idx !== -1){
+        const original = plays[idx];
+        plays[idx] = Object.assign({}, draft, { type: currentType, id: original.id, side: currentSide, quarter: original.quarter, spot: original.spot });
+      }
+      editingId = null;
+      updateEditModeUI();
+      persist();
+      renderLog();
+      renderStats();
+      resetDraft();
+      return;
+    }
     const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
     if (entry.type === 'run' || entry.type === 'pass' || entry.type === 'kick') entry.spot = currentSpot;
     insertPlay(entry);
@@ -1089,6 +1153,7 @@
     renderBallPositionControl();
     resetDraft();
   });
+  document.getElementById('cancelEditBtn').addEventListener('click', cancelEditPlay);
 
   endQuarterSel.addEventListener('change', function(){
     const n = parseInt(endQuarterSel.value, 10);
@@ -1134,27 +1199,84 @@
   }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
+  // Nathan: "I need the ability to click into it so it can be updated."
+  // Clicking Edit loads that play straight back into the Log a Play form
+  // (right type/side, every field prefilled) instead of only ever being
+  // able to delete-and-redo -- see startEditPlay/cancelEditPlay and the
+  // logPlayBtn handler's editingId branch below.
+  let editingId = null;
+  function startEditPlay(id){
+    const p = plays.find(function(pl){ return pl.id === id; });
+    if (!p || p.type === 'quarterEnd') return;
+    editingId = id;
+    currentSide = p.side || currentSide;
+    currentType = p.type;
+    draft = Object.assign({}, p);
+    updateSideUI();
+    renderTypeGrid();
+    renderFields();
+    updateEditModeUI();
+    document.querySelector('.entryPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+  function cancelEditPlay(){
+    editingId = null;
+    resetDraft();
+    updateEditModeUI();
+  }
+  function updateEditModeUI(){
+    const btn = document.getElementById('logPlayBtn');
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (btn) btn.textContent = editingId ? '💾 Save Changes' : '✅ Log Play';
+    if (cancelBtn) cancelBtn.style.display = editingId ? '' : 'none';
+  }
+
+  function movePlay(id, dir){
+    const idx = plays.findIndex(function(p){ return p.id === id; });
+    const newIdx = idx + dir;
+    if (idx === -1 || newIdx < 0 || newIdx >= plays.length) return;
+    const tmp = plays[idx]; plays[idx] = plays[newIdx]; plays[newIdx] = tmp;
+    persist(); renderLog();
+  }
+
   function renderLog(){
     const realPlays = plays.filter(function(p){ return p.type !== 'quarterEnd'; });
     playCount.textContent = realPlays.length + (realPlays.length===1 ? ' play' : ' plays');
     updateScoreboard();
     if (!plays.length){ playLogList.innerHTML = '<div class="emptyState">No plays logged yet.</div>'; populateInsertPosSel(); return; }
-    playLogList.innerHTML = plays.map(function(p){
+    playLogList.innerHTML = plays.map(function(p, i){
       if (p.type === 'quarterEnd'){
         return '<div class="quarterMarker" data-id="'+p.id+'">— END OF '+quarterLabel(p.quarter)+' — '+
           '<button class="qDelBtn" title="Remove marker">✕</button></div>';
       }
       const sideTag = p.side ? '<span class="tag side-'+p.side+'">'+(p.side==='offense'?'OFF':'DEF')+'</span>' : '';
+      const upDisabled = i === 0 ? 'disabled' : '';
+      const downDisabled = i === plays.length - 1 ? 'disabled' : '';
       return '<div class="playLogItem" data-id="'+p.id+'">'+
         '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+escapeHtml(describePlay(p))+'</div>'+
-        '<button class="btn small danger delBtn">Delete</button></div>';
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;">'+
+        '<button class="btn small moveUpBtn" title="Move earlier" '+upDisabled+'>▲</button>'+
+        '<button class="btn small moveDownBtn" title="Move later" '+downDisabled+'>▼</button>'+
+        '<button class="btn small editBtn">✏️ Edit</button>'+
+        '<button class="btn small danger delBtn">Delete</button></div></div>';
     }).join('');
     playLogList.querySelectorAll('.delBtn').forEach(function(btn){
       btn.addEventListener('click', function(){
         const id = btn.closest('.playLogItem').getAttribute('data-id');
+        if (editingId === id) cancelEditPlay();
         plays = plays.filter(p=>p.id!==id);
         persist(); renderLog(); renderStats();
       });
+    });
+    playLogList.querySelectorAll('.editBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        startEditPlay(btn.closest('.playLogItem').getAttribute('data-id'));
+      });
+    });
+    playLogList.querySelectorAll('.moveUpBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){ movePlay(btn.closest('.playLogItem').getAttribute('data-id'), -1); });
+    });
+    playLogList.querySelectorAll('.moveDownBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){ movePlay(btn.closest('.playLogItem').getAttribute('data-id'), 1); });
     });
     playLogList.querySelectorAll('.qDelBtn').forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -1861,11 +1983,27 @@
       return r ? r.name : null;
     }
 
+    // Nathan: "the data did pull in from all the plays but it didn't come in
+    // the correct order of the game." Coach Tools' own live stat entry
+    // (game-stats-editor.js's commitAttempt) already stamps a `seq` -- a
+    // simple incrementing counter -- on every rushing/passing/receiving
+    // attempt as it's typed in, specifically so it can be put back in true
+    // chronological order later (its own comment says as much). Carried
+    // through here as `_ord` (an internal sort key, stripped before
+    // returning) so our real offensive snaps land in their actual game
+    // order instead of grouped by stat category. Anything the live stats
+    // never stamped a seq on (defense, special teams, penalties, scoring,
+    // opponent plays -- none of which carry any timing info in the
+    // aggregate stats to begin with) has no honest way to be interleaved,
+    // so it's grouped in after the real chronological plays instead of
+    // guessed at.
+    function seqOf(a){ return typeof a.seq === 'number' ? a.seq : null; }
+
     (ss.rushing || []).forEach(function(row){
       const name = nameForNum(row.num);
       (row.attempts || []).forEach(function(a){
         plays.push({ type:'run', id:nextId(), side:'offense', quarter:1, runTeam:'Us',
-          carrier:name, yards:Number(a.yds)||0, dir:a.dir||null, firstDown:!!a.fd, td:!!a.td });
+          carrier:name, yards:Number(a.yds)||0, dir:a.dir||null, firstDown:!!a.fd, td:!!a.td, _ord:seqOf(a) });
       });
     });
 
@@ -1873,17 +2011,31 @@
     (ss.receiving || []).forEach(function(row){
       const name = nameForNum(row.num);
       (row.attempts || []).forEach(function(a){
-        receivingPool.push({ name:name, yds:Number(a.yds)||0, fd:!!a.fd, td:!!a.td, used:false });
+        receivingPool.push({ name:name, yds:Number(a.yds)||0, fd:!!a.fd, td:!!a.td, seq:seqOf(a), used:false });
       });
     });
     (ss.passing || []).forEach(function(row){
       const name = nameForNum(row.num);
       (row.attempts || []).forEach(function(a){
+        const ord = seqOf(a);
         const entry = { type:'pass', id:nextId(), side:'offense', quarter:1, passTeam:'Us', passer:name,
           result: a.comp ? 'Complete' : 'Incomplete', yards: a.comp ? (Number(a.yds)||0) : 0,
-          firstDown: !!a.fd, td: !!a.td };
+          firstDown: !!a.fd, td: !!a.td, _ord:ord };
         if (a.comp){
-          const match = receivingPool.find(function(r){ return !r.used && r.yds === entry.yards && r.fd === entry.firstDown && r.td === entry.td; });
+          // Same {yds, fd, td} signature match as before, but when more
+          // than one unused reception matches, prefer whichever was
+          // stamped closest in seq to this throw -- passing and receiving
+          // are entered as two separate attempts even for the same real
+          // play, so their seq values won't be identical, just close.
+          const candidates = receivingPool.filter(function(r){ return !r.used && r.yds === entry.yards && r.fd === entry.firstDown && r.td === entry.td; });
+          let match = candidates[0] || null;
+          if (candidates.length > 1 && ord != null){
+            match = candidates.reduce(function(best, c){
+              if (c.seq == null) return best;
+              if (!best || best.seq == null) return c;
+              return Math.abs(c.seq - ord) < Math.abs(best.seq - ord) ? c : best;
+            }, match);
+          }
           if (match){ match.used = true; entry.target = match.name; }
         }
         plays.push(entry);
@@ -1967,7 +2119,16 @@
         result: isComp ? 'Complete' : 'Incomplete', yards: (isComp && oppP.comp) ? Math.round((oppP.yds||0)/oppP.comp) : 0 });
     }
 
-    return plays;
+    // Real chronological order for anything that carried a seq (our own
+    // rushing/passing snaps), everything else grouped in afterward, then
+    // reversed to match this app's own newest-first plays[] convention
+    // (see insertPlay's unshift) so it slots in exactly like a normally-
+    // logged game would.
+    const ordered = plays.filter(function(p){ return p._ord != null; })
+      .sort(function(a, b){ return a._ord - b._ord; })
+      .concat(plays.filter(function(p){ return p._ord == null; }));
+    ordered.forEach(function(p){ delete p._ord; });
+    return ordered.reverse();
   }
 
   async function pushToLiveStats(){
@@ -2059,7 +2220,8 @@
   }
   function renderAllForGame(){
     populateEndQuarterSel();
-    resetDraft();
+    editingId = null; // switching games mid-edit should never carry an edit into the new game's log
+    cancelEditPlay();
     renderLog();
     renderStats();
     renderBallPositionControl();
@@ -2125,7 +2287,7 @@
         finalUs: selectedGame.ourScore != null ? String(selectedGame.ourScore) : '',
         finalOpp: selectedGame.oppScore != null ? String(selectedGame.oppScore) : '',
       };
-      setGameLoadStatus('🔄 Rebuilt ' + rebuilt.length + ' plays from this game\'s already-pushed live stats (no detailed log had been saved before). Double-check pass targets, tackle assists, and opponent plays especially -- those can\'t be perfectly recovered from summary stats alone. Review, fix, then Push to Live to save your corrections.');
+      setGameLoadStatus('🔄 Rebuilt ' + rebuilt.length + ' plays from this game\'s already-pushed live stats (no detailed log had been saved before). Your own rush/pass snaps are in real game order; defense, special teams, penalties, scoring, and opponent plays have no timing data to place them by, so they\'re grouped in rather than interleaved -- use the ▲▼ buttons on those rows to reposition them if you know roughly when they happened. Double-check pass targets and tackle assists too -- those can\'t be perfectly recovered from summary stats alone. Review, fix, then Push to Live to save your corrections.');
       applyGameState(gs);
       persist(); // this rebuild becomes the real saved log going forward
     } else if (!hasRealPlays){
