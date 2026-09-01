@@ -24,14 +24,64 @@
   // breakdown -- kept off Passing/Receiving/Kickoffs to not clutter entry
   // for stats where "direction" isn't the interesting question.
   const RUN_DIRECTIONS = ['Left', 'Middle', 'Right'];
+  // Nathan: "Need the ability to show where on the field the ball is at all
+  // times so it would tell momentum in the game" + "Ability to go back and
+  // add 'plays called' ... to go along with the play result." Both only
+  // make sense for actual snaps from scrimmage -- Kickoffs already jump the
+  // ball a long way by definition (return yardage, not a normal down), so
+  // it's excluded from both, same reasoning allowFD already excludes it for.
   const ATTEMPT_SECTIONS = [
-    { key: 'rushing', title: '🏃 Rushing', allowFD: true, passingMode: false, trackDirection: true },
-    { key: 'passing', title: '🎯 Passing', allowFD: true, passingMode: true },
-    { key: 'receiving', title: '🙌 Receiving', allowFD: true, passingMode: false },
+    { key: 'rushing', title: '🏃 Rushing', allowFD: true, passingMode: false, trackDirection: true, trackFieldPosition: true, trackPlayCall: true },
+    { key: 'passing', title: '🎯 Passing', allowFD: true, passingMode: true, trackFieldPosition: true, trackPlayCall: true },
+    { key: 'receiving', title: '🙌 Receiving', allowFD: true, passingMode: false, trackFieldPosition: true, trackPlayCall: true },
     { key: 'kickoffs', title: '🦵 Kickoffs', allowFD: false, passingMode: false },
   ];
   window.gameStatAttemptSections = ATTEMPT_SECTIONS;
   window.runDirections = RUN_DIRECTIONS;
+
+  // ---- Field position (Nathan: "show where on the field the ball is at
+  // all times ... momentum in the game") ----
+  // Same 0-100 absolute-scale convention as _stat-keeper-prototype's
+  // absoluteSpot(): 0 = our own goal line, 100 = the opponent's, so two
+  // spots can always be compared/subtracted for real net yardage regardless
+  // of which side of the field they're on.
+  function absoluteSpot(side, yard) {
+    if (!side || yard === '' || yard == null) return null;
+    const y = Number(yard);
+    if (isNaN(y)) return null;
+    return side === 'OWN' ? y : (100 - y);
+  }
+  function ballPositionLabel(spot) {
+    if (spot === null || spot === undefined || isNaN(spot)) return 'Not set';
+    const r = Math.round(spot);
+    if (r === 50) return 'Midfield';
+    return r < 50 ? `OWN ${r}` : `OPP ${100 - r}`;
+  }
+
+  // ---- Play called (Nathan: "add 'plays called' and 'plays executed' to
+  // go along with the play result") ----
+  // Reuses the exact same {key, direction} shape/catalog js/drivebuilder.js
+  // already picks real plays from (window.DATA.playTypes via
+  // window.playbookLiveFamilies) -- this is a real link to a named play
+  // from the playbook, not free text. Same "each file keeps its own tiny
+  // copy of this numbering, no shared export" house rule drivebuilder.js's
+  // own comment already documents (js/thisweek.js and js/call-sheet-pdf.js
+  // do the same).
+  function playCallOptions() {
+    if (!window.playbookLiveFamilies || !window.DATA || !window.DATA.playTypes) return [];
+    const families = window.playbookLiveFamilies();
+    const out = [];
+    families.forEach(fam => {
+      ['Left', 'Right'].forEach(direction => out.push({ key: fam.key, direction, label: `${fam.label} • ${direction}` }));
+    });
+    return out;
+  }
+  function playCallLabelFor(pc) {
+    if (!pc || !pc.key) return '';
+    const families = window.playbookLiveFamilies ? window.playbookLiveFamilies() : [];
+    const fam = families.find(f => f.key === pc.key);
+    return fam ? `${fam.label}${pc.direction ? ' • ' + pc.direction : ''}` : pc.key;
+  }
 
   // Nathan: "I need these stats to load into the live season" -- Stat Keeper
   // (a standalone prototype) tracks several categories the live app never
@@ -271,8 +321,18 @@
           const cell = document.createElement('div');
           cell.className = 'attemptBox' + (cfg.allowFD && a.fd ? ' fd' : '') + (cfg.passingMode && !a.comp ? ' incomplete' : '');
           cell.textContent = cfg.passingMode && !a.comp ? '-' : (a.yds === '' || a.yds === null || a.yds === undefined ? '' : a.yds);
+          // Nathan: "plays called" + "show where on the field the ball is"
+          // -- both ride along in this same hover tooltip rather than more
+          // visible tags, so a play entered before this feature existed (or
+          // one where the coach skipped the optional play-call picker)
+          // looks exactly the same as it always did.
+          const infoParts = [];
+          if (cfg.trackDirection && a.dir) infoParts.push(a.dir);
+          if (a.fd) infoParts.push('1st down');
+          if (a.playCall) { const lbl = playCallLabelFor(a.playCall); if (lbl) infoParts.push(`Called: ${lbl}`); }
+          if (cfg.trackFieldPosition && a.spot != null) infoParts.push(`Ball at ${ballPositionLabel(a.spot)}`);
+          if (infoParts.length) cell.title = `${a.yds ?? 0} yds — ${infoParts.join(' — ')}`;
           if (cfg.trackDirection && a.dir) {
-            cell.title = `${a.yds ?? 0} yds — ${a.dir}${a.fd ? ' — 1st down' : ''}`;
             const tag = document.createElement('span');
             tag.className = 'attemptBoxDirTag';
             tag.textContent = a.dir[0];
@@ -317,17 +377,68 @@
               dirSelect.appendChild(opt);
             });
           }
+          // Nathan: "Ability to go back and add 'plays called' ... to go
+          // along with the play result." Optional -- a coach entering
+          // stats quickly can skip it and it just stays untagged, same as
+          // direction/FD/TD are all optional today.
+          let playCallSelect = null;
+          if (cfg.trackPlayCall) {
+            const options = playCallOptions();
+            if (options.length) {
+              playCallSelect = document.createElement('select');
+              playCallSelect.className = 'statsSmallBtn';
+              const blankOpt = document.createElement('option');
+              blankOpt.value = ''; blankOpt.textContent = 'Play called (optional)';
+              playCallSelect.appendChild(blankOpt);
+              options.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = `${o.key}|${o.direction}`; opt.textContent = o.label;
+                playCallSelect.appendChild(opt);
+              });
+            }
+          }
           function commitAttempt() {
             const raw = input.value.trim();
             if (raw === '') return;
             const dir = dirSelect ? dirSelect.value : undefined;
             if (dir) rowData._lastDir = dir;
+            let playCall = null;
+            if (playCallSelect && playCallSelect.value) {
+              const [key, direction] = playCallSelect.value.split('|');
+              playCall = { key, direction };
+            }
+            // Nathan: "show where on the field the ball is at all times" --
+            // spot is the line of scrimmage BEFORE this play (the shared
+            // "Ball Position" control above the Rushing section, kept live
+            // on ss._currentLos so it survives the full rerender() this
+            // file does after every commit). seq is a simple incrementing
+            // counter so a later chart can put every rushing/passing/
+            // receiving play from the whole game back in true chronological
+            // order -- statSheet is otherwise organized by player, not by
+            // time, so without this there'd be no way to tell whose play
+            // came before whose.
+            let spot = null, seq;
+            if (cfg.trackFieldPosition) {
+              spot = ss._currentLos != null ? ss._currentLos : null;
+              seq = ss._nextSeq || 1;
+              ss._nextSeq = seq + 1;
+            }
+            const extra = {};
+            if (playCall) extra.playCall = playCall;
+            if (cfg.trackFieldPosition) { extra.spot = spot; extra.seq = seq; }
             if (cfg.passingMode) {
-              if (raw === '-') rowData.attempts.push({ yds: null, comp: false, fd: false });
-              else { const n = Number(raw); if (!isNaN(n)) rowData.attempts.push({ yds: n, comp: true, fd: false }); }
+              if (raw === '-') rowData.attempts.push(Object.assign({ yds: null, comp: false, fd: false }, extra));
+              else { const n = Number(raw); if (!isNaN(n)) rowData.attempts.push(Object.assign({ yds: n, comp: true, fd: false }, extra)); }
             } else {
               const n = Number(raw);
-              if (!isNaN(n)) rowData.attempts.push(dir ? { yds: n, fd: false, dir } : { yds: n, fd: false });
+              if (!isNaN(n)) rowData.attempts.push(Object.assign(dir ? { yds: n, fd: false, dir } : { yds: n, fd: false }, extra));
+            }
+            // Only real yardage (not an incomplete pass) actually moves the
+            // ball -- clamped to the field's ends so a long TD run can't
+            // push the tracker past 100/below 0.
+            if (cfg.trackFieldPosition && spot != null) {
+              const n = Number(raw);
+              if (!isNaN(n)) ss._currentLos = Math.max(0, Math.min(100, spot + n));
             }
             input.value = '';
             rerender();
@@ -339,7 +450,15 @@
           const undoBtn = document.createElement('button');
           undoBtn.type = 'button'; undoBtn.className = 'statsSmallBtn'; undoBtn.textContent = '↺';
           undoBtn.title = 'Remove last attempt';
-          undoBtn.addEventListener('click', () => { rowData.attempts.pop(); rerender(); });
+          undoBtn.addEventListener('click', () => {
+            const removed = rowData.attempts.pop();
+            // Put the "Ball Position" tracker back where it was before that
+            // play, not just wherever it ended up -- otherwise an undo
+            // right after a big run would leave the next play defaulting
+            // to the WRONG (already-advanced) spot.
+            if (removed && cfg.trackFieldPosition && removed.spot != null) ss._currentLos = removed.spot;
+            rerender();
+          });
           const rmRowBtn = document.createElement('button');
           rmRowBtn.type = 'button'; rmRowBtn.className = 'statsRmBtn'; rmRowBtn.textContent = '✕ Row';
           rmRowBtn.addEventListener('click', () => { rows.splice(rowIdx, 1); rerender(); });
@@ -372,6 +491,40 @@
         pickWrap.appendChild(sel); pickWrap.appendChild(addRowBtn);
         box.appendChild(pickWrap);
       }
+      return box;
+    }
+
+    // Nathan: "Need the ability to show where on the field the ball is at
+    // all times." One shared control (not per-player, not per-section --
+    // there's only one ball) shown once, above Rushing/Passing/Receiving,
+    // for overriding ss._currentLos -- start of the game, after a kickoff
+    // return, a turnover, a punt, or the start of any new drive. Every
+    // normal committed play (see commitAttempt above) auto-advances it, so
+    // this is a rare override, not a per-play requirement.
+    function renderBallPositionControl() {
+      const box = document.createElement('div');
+      box.className = 'attemptSectionBox';
+      box.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
+      const label = document.createElement('span');
+      label.className = 'lbSub';
+      label.style.margin = '0';
+      label.textContent = `Currently: ${ballPositionLabel(ss._currentLos)}`;
+      box.appendChild(label);
+      const sideSel = document.createElement('select');
+      sideSel.className = 'statsSmallBtn';
+      ['OWN', 'OPP'].forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sideSel.appendChild(o); });
+      const yardInput = document.createElement('input');
+      yardInput.type = 'number'; yardInput.min = '0'; yardInput.max = '50'; yardInput.placeholder = 'Yard line';
+      yardInput.className = 'attemptAddInput'; yardInput.style.width = '80px';
+      const setBtn = document.createElement('button');
+      setBtn.type = 'button'; setBtn.className = 'statsSmallBtn'; setBtn.textContent = 'Set';
+      setBtn.addEventListener('click', () => {
+        const spot = absoluteSpot(sideSel.value, yardInput.value);
+        if (spot == null) return;
+        ss._currentLos = spot;
+        rerender();
+      });
+      box.appendChild(sideSel); box.appendChild(yardInput); box.appendChild(setBtn);
       return box;
     }
 
@@ -591,6 +744,11 @@
 
     wrap.appendChild(sectionHeading('👥 Roster'));
     wrap.appendChild(renderRoster());
+
+    if (!readOnly) {
+      wrap.appendChild(sectionHeading('📍 Ball Position'));
+      wrap.appendChild(renderBallPositionControl());
+    }
 
     ATTEMPT_SECTIONS.forEach(cfg => {
       if (readOnly && !ss[cfg.key].length) return;

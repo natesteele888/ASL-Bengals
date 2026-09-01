@@ -553,6 +553,64 @@
     wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>`;
   }
 
+  // Nathan: "Need the ability to show where on the field the ball is at
+  // all times so it would tell momentum in the game." Pulls the spot/seq
+  // pairs game-stats-editor.js's "Ball Position" tracker stamped onto every
+  // rushing/passing/receiving attempt (see commitAttempt there) back out in
+  // true chronological order -- statSheet is otherwise organized by
+  // player, not by time, so seq is what makes "the game's actual sequence
+  // of plays" reconstructable at all.
+  function fieldPositionSeries(game) {
+    if (!game || !game.statSheet) return [];
+    const ss = game.statSheet;
+    const out = [];
+    ['rushing', 'passing', 'receiving'].forEach(key => {
+      (ss[key] || []).forEach(row => {
+        (row.attempts || []).forEach(a => {
+          if (a.spot !== null && a.spot !== undefined && a.seq !== null && a.seq !== undefined) out.push({ seq: a.seq, spot: a.spot });
+        });
+      });
+    });
+    return out.sort((a, b) => a.seq - b.seq);
+  }
+  // Simple inline-SVG line/area chart -- 0 (own goal line) at the bottom,
+  // 100 (opponent's goal line) at the top, so a line trending up the chart
+  // reads the same way it would on an actual field. No chart library
+  // needed for something this small, same "plain SVG string" approach
+  // h2hBarHtml above already uses for its bars.
+  function momentumChartSvg(series) {
+    const W = 600, H = 150, padL = 34, padR = 10, padT = 10, padB = 6;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const n = series.length;
+    const x = i => padL + (n <= 1 ? innerW / 2 : (innerW * i) / (n - 1));
+    const y = spot => padT + innerH - (Math.max(0, Math.min(100, spot)) / 100) * innerH;
+    const floorY = (padT + innerH).toFixed(1);
+    const midY = y(50).toFixed(1);
+    const points = series.map((p, i) => `${x(i).toFixed(1)},${y(p.spot).toFixed(1)}`).join(' ');
+    const fillPoints = `${x(0).toFixed(1)},${floorY} ${points} ${x(n - 1).toFixed(1)},${floorY}`;
+    return `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+        <line x1="${padL}" y1="${midY}" x2="${W - padR}" y2="${midY}" stroke="#999" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${padL - 4}" y="${floorY}" font-size="9" fill="#888" text-anchor="end">Own GL</text>
+        <text x="${padL - 4}" y="${midY}" font-size="9" fill="#888" text-anchor="end" dy="3">50</text>
+        <text x="${padL - 4}" y="${(padT + 7).toFixed(1)}" font-size="9" fill="#888" text-anchor="end">Opp GL</text>
+        <polygon points="${fillPoints}" style="fill:var(--bengal-orange);opacity:.15;"/>
+        <polyline points="${points}" style="fill:none;stroke:var(--bengal-orange);stroke-width:2px;" stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>`;
+  }
+  function renderMomentumChart() {
+    const wrap = document.getElementById('schedMomentumWrap');
+    if (!wrap || !current) return;
+    const series = fieldPositionSeries(current);
+    // Need at least 2 plotted plays for a line to mean anything -- a single
+    // point (or none, e.g. every play skipped the optional Ball Position
+    // override so ss._currentLos was never set) just hides the section
+    // rather than showing an empty/flat chart.
+    if (series.length < 2) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    wrap.style.display = '';
+    wrap.innerHTML = `<div class="lbSectionHeader">📈 Momentum (Field Position)</div><div class="h2hBox">${momentumChartSvg(series)}</div>`;
+  }
+
   // ---- Season Leaders -- Nathan: "Passing Yards, Rushing Yards, Receiving
   // Yards, Sacks, Tackles... showing their profile image with name under
   // it, even placeholders before stats are there." Reuses the same season
@@ -1076,6 +1134,7 @@
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedMomentumWrap" style="display:none;"></div>
         <div id="schedLeadersWrap" style="margin-top:16px;"></div>
         <div style="margin-top:16px;">
           <div class="lbSectionHeader">🩹 Injury Report</div>
@@ -1109,6 +1168,7 @@
       renderGamePreview();
       renderWeather();
       renderHeadToHead();
+      renderMomentumChart();
       renderSeasonLeaders();
       renderLast5Panel('last5');
       // Nathan (6th pass on weather cancellation): "It should be available
