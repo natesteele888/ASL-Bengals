@@ -1041,6 +1041,7 @@
     }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
+      if (!p.tackler && assists.length) return 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ');
       return 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
     }
     if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
@@ -1278,6 +1279,15 @@
       if ((p.type==='tackle' || p.type==='punt') && p.tackler){
         const t = tackles[p.tackler] || (tackles[p.tackler] = {name:p.tackler, solo:0, ast:0});
         t.solo++; // primary tackler always credited solo, regardless of whether there's an assist
+        asList(p.assist).forEach(function(name){
+          const t2 = tackles[name] || (tackles[name] = {name:name, solo:0, ast:0});
+          t2.ast++;
+        });
+      } else if (p.type==='tackle' && !p.tackler && asList(p.assist).length){
+        // reconstructPlaysFromStatSheet can produce assist-only marks (the
+        // live stats it rebuilds from don't say which solo tackle a given
+        // assist actually paired with) -- still credit the assist rather
+        // than silently dropping it just because there's no tackler here.
         asList(p.assist).forEach(function(name){
           const t2 = tackles[name] || (tackles[name] = {name:name, solo:0, ast:0});
           t2.ast++;
@@ -1752,6 +1762,10 @@
         const tNum = numFor(p.tackler);
         if (tNum != null) ensureTackleRow(tNum).marks.push('solo');
         asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });
+      } else if (p.type === 'tackle' && !p.tackler){
+        // Same assist-only case compileStatSheet handles above -- see
+        // reconstructPlaysFromStatSheet's comment for why this can happen.
+        asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });
       }
       if (p.type === 'defextra' && p.player){
         const num = numFor(p.player);
@@ -1800,6 +1814,154 @@
     if (!ss) return false;
     return ['rushing','passing','receiving','kickoffs','tackles','defExtra','turnovers','penalties','punts','puntReturns']
       .some(k => Array.isArray(ss[k]) && ss[k].length > 0);
+  }
+
+  // Nathan: "select the game and have it load all the stats as if I had
+  // entered it in but haven't submitted it yet." For a game pushed live
+  // BEFORE per-game raw logs existed (or pushed from a browser that never
+  // saved one), there's nothing at statKeeperLogs/{id} to load verbatim --
+  // this rebuilds a best-effort, fully editable play list straight from
+  // the game's already-pushed live statSheet instead of starting blank, so
+  // there's something real to correct rather than re-typing the whole
+  // game from memory.
+  //
+  // This can't be a perfect round-trip -- the live statSheet shape (same
+  // one translatePlaysForLive above builds) doesn't keep some of the
+  // links the original raw log has:
+  //   - which catch belongs to which throw (passing/receiving are two
+  //     separate arrays) -- matched back up by finding a receiving
+  //     attempt with the exact same {yds, fd, td} as a completion, and
+  //     "used up" once matched so it isn't reused for a different throw.
+  //     Ambiguous ties (two catches with identical stat lines) can match
+  //     the wrong receiver to the wrong throw.
+  //   - which assist belongs to which specific tackle -- each mark
+  //     becomes its own standalone entry rather than a shared tackle event.
+  //   - opponent plays -- only totals were ever pushed (oppRushing/
+  //     oppPassing), not individual plays, so those become evenly-split
+  //     synthetic plays (e.g. 40 opp rush yards on 5 attempts becomes five
+  //     8-yard runs) purely so the total yardage/attempt count still adds
+  //     up -- not what actually happened play-by-play.
+  //   - quarter/formation/play-called/field-position -- none of that ever
+  //     existed in the pushed data, so every rebuilt play lands in Q1 with
+  //     those left blank.
+  // Flagged in the status line wherever this fires (see selectGame) so it
+  // gets a once-over, not blind trust.
+  function reconstructPlaysFromStatSheet(ss){
+    const plays = [];
+    let seq = 0;
+    function nextId(){ seq++; return 'rebuilt_' + seq; }
+    function nameForNum(num){
+      const r = (ss.roster || []).find(function(p){ return String(p.num) === String(num); });
+      return r ? r.name : null;
+    }
+
+    (ss.rushing || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      (row.attempts || []).forEach(function(a){
+        plays.push({ type:'run', id:nextId(), side:'offense', quarter:1, runTeam:'Us',
+          carrier:name, yards:Number(a.yds)||0, dir:a.dir||null, firstDown:!!a.fd, td:!!a.td });
+      });
+    });
+
+    const receivingPool = [];
+    (ss.receiving || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      (row.attempts || []).forEach(function(a){
+        receivingPool.push({ name:name, yds:Number(a.yds)||0, fd:!!a.fd, td:!!a.td, used:false });
+      });
+    });
+    (ss.passing || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      (row.attempts || []).forEach(function(a){
+        const entry = { type:'pass', id:nextId(), side:'offense', quarter:1, passTeam:'Us', passer:name,
+          result: a.comp ? 'Complete' : 'Incomplete', yards: a.comp ? (Number(a.yds)||0) : 0,
+          firstDown: !!a.fd, td: !!a.td };
+        if (a.comp){
+          const match = receivingPool.find(function(r){ return !r.used && r.yds === entry.yards && r.fd === entry.firstDown && r.td === entry.td; });
+          if (match){ match.used = true; entry.target = match.name; }
+        }
+        plays.push(entry);
+      });
+    });
+
+    (ss.kickoffs || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      (row.attempts || []).forEach(function(a){
+        plays.push({ type:'kick', id:nextId(), side:'offense', quarter:1, returner:name, yards:Number(a.yds)||0, td:!!a.td });
+      });
+    });
+
+    (ss.tackles || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      (row.marks || []).forEach(function(mark){
+        if (mark === 'solo') plays.push({ type:'tackle', id:nextId(), side:'defense', quarter:1, tackler:name });
+        else plays.push({ type:'tackle', id:nextId(), side:'defense', quarter:1, tackler:null, assist:[name] });
+      });
+    });
+
+    (ss.defExtra || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      for (let i=0;i<(row.int||0);i++) plays.push({ type:'defextra', id:nextId(), side:'defense', quarter:1, player:name, extraType:'INT' });
+      for (let i=0;i<(row.pbu||0);i++) plays.push({ type:'defextra', id:nextId(), side:'defense', quarter:1, player:name, extraType:'PBU' });
+      for (let i=0;i<(row.sacks||0);i++) plays.push({ type:'defextra', id:nextId(), side:'defense', quarter:1, player:name, extraType:'Sack' });
+      // Fumble recoveries aren't a defExtra extraType in this tool (they're
+      // logged as a Turnover entry instead) -- represented as a synthetic
+      // Turnover so the count still round-trips through compileStatSheet.
+      for (let i=0;i<(row.fum||0);i++) plays.push({ type:'turnover', id:nextId(), side:'defense', quarter:1, toType:'Fumble', recoveredBy:name });
+    });
+
+    (ss.punts || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      const n = row.punts || 0;
+      for (let i=0;i<n;i++){
+        const before = row.touchback||0;
+        const before2 = before + (row.fairCatch||0);
+        const before3 = before2 + (row.downed||0);
+        const before4 = before3 + (row.returned||0);
+        const result = i < before ? 'Touchback' : i < before2 ? 'Fair Catch' : i < before3 ? 'Downed' : i < before4 ? 'Returned' : 'Muffed';
+        plays.push({ type:'punt', id:nextId(), side:'offense', quarter:1, puntTeam:'Us', punter:name, puntResult:result });
+      }
+    });
+    (ss.puntReturns || []).forEach(function(row){
+      const name = nameForNum(row.num);
+      const n = row.ret || 0;
+      for (let i=0;i<n;i++){
+        plays.push({ type:'punt', id:nextId(), side:'defense', quarter:1, puntTeam:'Opponent', puntResult:'Returned',
+          returner:name, yards: n ? Math.round((row.yds||0)/n) : 0, td: i===0 && (row.td||0) > 0 });
+      }
+    });
+
+    (ss.penalties || []).forEach(function(p){
+      plays.push({ type:'penalty', id:nextId(), side: p.team==='Opponent' ? 'defense' : 'offense', quarter:1,
+        penTeam:p.team, penType:p.type, penYards:p.yards, penPlayer: p.num != null ? nameForNum(p.num) : null, declined:!!p.declined });
+    });
+
+    (ss.turnovers || []).forEach(function(t){
+      plays.push({ type:'turnover', id:nextId(), side:'offense', quarter:1, note: (t && t.desc) || '' });
+    });
+
+    const sc = ss.scoring || {};
+    for (let i=0;i<(sc.patGood||0);i++) plays.push({ type:'score', id:nextId(), quarter:1, scoreKind:'PAT Good', scoreTeam:'Us' });
+    for (let i=0;i<(sc.patNoGood||0);i++) plays.push({ type:'score', id:nextId(), quarter:1, scoreKind:'PAT No Good', scoreTeam:'Us' });
+    for (let i=0;i<(sc.twoPtGood||0);i++) plays.push({ type:'score', id:nextId(), quarter:1, scoreKind:'2PT Good', scoreTeam:'Us' });
+    for (let i=0;i<(sc.twoPtNoGood||0);i++) plays.push({ type:'score', id:nextId(), quarter:1, scoreKind:'2PT No Good', scoreTeam:'Us' });
+    for (let i=0;i<(sc.safety||0);i++) plays.push({ type:'score', id:nextId(), quarter:1, scoreKind:'Safety', scoreTeam:'Us' });
+
+    // Opponent plays only ever existed as totals -- split evenly across a
+    // synthetic attempt count purely so yardage/attempts still add up.
+    const oppR = ss.oppRushing || {att:0, yds:0, td:0};
+    for (let i=0;i<(oppR.att||0);i++){
+      plays.push({ type:'run', id:nextId(), side:'defense', quarter:1, runTeam:'Opponent',
+        yards: oppR.att ? Math.round((oppR.yds||0)/oppR.att) : 0, td: i===0 && (oppR.td||0) > 0 });
+    }
+    const oppP = ss.oppPassing || {att:0, comp:0, yds:0};
+    for (let i=0;i<(oppP.att||0);i++){
+      const isComp = i < (oppP.comp||0);
+      plays.push({ type:'pass', id:nextId(), side:'defense', quarter:1, passTeam:'Opponent',
+        result: isComp ? 'Complete' : 'Incomplete', yards: (isComp && oppP.comp) ? Math.round((oppP.yds||0)/oppP.comp) : 0 });
+    }
+
+    return plays;
   }
 
   async function pushToLiveStats(){
@@ -1922,18 +2084,47 @@
     }
     setGameControlsEnabled(true);
     setGameLoadStatus('Loading this game\'s log…');
-    let gs = null;
+    let gs = null, loadError = null;
     try {
       const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       gs = await res.json();
-      setGameLoadStatus('');
     } catch(e){
+      loadError = e;
       try { gs = JSON.parse(localStorage.getItem(localCacheKey(selectedGame.id)) || 'null'); } catch(e2){}
-      setGameLoadStatus(gs ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '⚠️ Could not load this game (starting blank): ' + e.message);
     }
-    applyGameState(gs);
+
+    // Nathan: "it switches to OT1 as the next available but it doesn't show
+    // the play logs" -- a saved log can contain nothing but quarter-end
+    // markers (e.g. from clicking through the quarter dropdown before any
+    // real play ever got logged for this game), which used to count as
+    // "already has a real log" purely because the array wasn't empty --
+    // blocking the live-stats rebuild below from ever running, even though
+    // there was nothing but empty quarter dividers to show. Only a log with
+    // at least one REAL play (not just quarterEnd markers) should count.
+    const hasRealPlays = gs && Array.isArray(gs.plays) && gs.plays.some(function(p){ return p && p.type !== 'quarterEnd'; });
+    if (!hasRealPlays && statSheetHasAnything(selectedGame.statSheet)){
+      // Nathan: "select the game and have it load all the stats as if I
+      // had entered it in but haven't submitted it yet." No raw log was
+      // ever saved for this game (it predates this feature, or was pushed
+      // from a different browser) -- rebuild an editable one from what's
+      // already live instead of leaving the log blank. See
+      // reconstructPlaysFromStatSheet's own comment for exactly what can
+      // and can't be recovered faithfully.
+      const rebuilt = reconstructPlaysFromStatSheet(selectedGame.statSheet);
+      gs = {
+        plays: rebuilt, quarter: 1, spot: 50,
+        finalUs: selectedGame.ourScore != null ? String(selectedGame.ourScore) : '',
+        finalOpp: selectedGame.oppScore != null ? String(selectedGame.oppScore) : '',
+      };
+      setGameLoadStatus('🔄 Rebuilt ' + rebuilt.length + ' plays from this game\'s already-pushed live stats (no detailed log had been saved before). Double-check pass targets, tackle assists, and opponent plays especially -- those can\'t be perfectly recovered from summary stats alone. Review, fix, then Push to Live to save your corrections.');
+      applyGameState(gs);
+      persist(); // this rebuild becomes the real saved log going forward
+    } else {
+      setGameLoadStatus(loadError ? (gs ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '⚠️ Could not load this game (starting blank): ' + loadError.message) : '');
+      applyGameState(gs);
+    }
     renderAllForGame();
   }
   gameSelect.addEventListener('change', function(){ selectGame(gameSelect.value); });
