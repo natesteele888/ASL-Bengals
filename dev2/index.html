@@ -2011,7 +2011,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260902b';
+  const BUILD_V = '20260902c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2065,6 +2065,7 @@ if (window.ResizeObserver) {
   // cloud-auth.js) -- fire-and-forget so neither ever delays boot; both
   // no-op instantly once already done.
   if(window.__cleanupBadLeaderboardEntries) window.__cleanupBadLeaderboardEntries();
+  if(window.__cleanupParentDrillEntries) window.__cleanupParentDrillEntries();
   if(window.__addHoustonRouteWhatsNewNote) window.__addHoustonRouteWhatsNewNote();
   if(window.__addSept2026FeatureWhatsNewNotes) window.__addSept2026FeatureWhatsNewNotes();
 

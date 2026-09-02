@@ -286,6 +286,56 @@
     } catch(e){ console.error('Leaderboard cleanup failed:', e); }
   };
 
+  // ---- One-time cleanup of a parent's 2 Minute Drill score -- Nathan:
+  // "remove the score from Matthew Gilman on 2 minute drill." Matthew is a
+  // parent account (role:'parent') that ran the drill once during testing;
+  // study-quiz.js's splitByCoach now hides any parent from every live
+  // leaderboard render going forward, but that's a display-time filter --
+  // the actual entry was still sitting in the database, and Nathan asked
+  // for the score itself removed, not just hidden. Same guarded,
+  // runs-once-ever migration shape as __cleanupBadLeaderboardEntries above
+  // (a fresh flag path, since that one's already been used) -- matches by
+  // name only, not by role, since fetching PlayerIdentity records just to
+  // re-derive "is this a parent" here would be extra work for a fix this
+  // targeted and one-off.
+  const CLEANUP_FLAG_PATH_2 = 'cleanup/leaderboardFix2';
+  const PARENT_DRILL_NAMES_TO_REMOVE = ['matthew gilman'];
+  window.__cleanupParentDrillEntries = async function(){
+    if(!window.hasGateSession || !window.hasGateSession()) return;
+    try {
+      const checkUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${CLEANUP_FLAG_PATH_2}.json`);
+      const checkRes = await fetch(checkUrl);
+      if(checkRes.ok){
+        const already = await checkRes.json();
+        if(already) return; // already cleaned up by some earlier session
+      }
+      let removed = 0;
+      const listUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/twoMinDrillLeaderboard.json`);
+      const listRes = await fetch(listUrl);
+      if(listRes.ok){
+        const data = await listRes.json();
+        if(data){
+          for(const key of Object.keys(data)){
+            const entry = data[key];
+            const name = entry && entry.name ? entry.name.trim().toLowerCase() : '';
+            if(PARENT_DRILL_NAMES_TO_REMOVE.indexOf(name) !== -1){
+              const delUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/twoMinDrillLeaderboard/${key}.json`);
+              const delRes = await fetch(delUrl, { method: 'DELETE' });
+              if(delRes.ok) removed++;
+            }
+          }
+        }
+      }
+      const flagUrl = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${CLEANUP_FLAG_PATH_2}.json`);
+      await fetch(flagUrl, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(new Date().toISOString()),
+      });
+      console.log(`ASL Bengals: 2 Minute Drill parent cleanup removed ${removed} entr${removed === 1 ? 'y' : 'ies'}.`);
+    } catch(e){ console.error('2 Minute Drill parent cleanup failed:', e); }
+  };
+
   // ---- One-time What's New note for a route edit -- Nathan: "please
   // mention that the Houston route was updated -- outside receiver runs a
   // Post instead of a Fly, inside receiver's hitch turns to the outside."
