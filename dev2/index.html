@@ -457,6 +457,13 @@
        upcoming Schedule game -- shown as a tappable link here, and pulled
        onto that game's own Schedule detail page too (see schedule.js). -->
   <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
+  <!-- Nathan: "We also have footage from the other teams we play. I need an
+       option to add in Opponent Film on the Upcoming Game. When you click
+       into This Week it should have a Watch Footage button that opens the
+       film from the upcoming opponent." Same link this week's linked game
+       carries on its own Schedule page (schedule.js's opponentFilmUrl) --
+       only shown once a coach has actually set one on that game. -->
+  <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;box-sizing:border-box;">🎥 Watch Footage</a>
   <!-- Nathan: "For 'This Week' can we incorporate an AI generated look
        ahead for the team?... Would be nice to be a little write up of the
        week ahead." then, later: "I dont like that the week ahead is just
@@ -1906,7 +1913,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824s';
+  const BUILD_V = '20260824t';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

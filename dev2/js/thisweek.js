@@ -581,16 +581,32 @@
     const keysList = document.getElementById('thisweekKeysList');
     const gridEl = document.getElementById('thisweekCardsGrid');
     const gameLinkEl = document.getElementById('thisweekGameLink');
+    const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
     if (!keysBox || !keysList || !gridEl) return;
 
+    const linkedGame = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
     if (gameLinkEl) {
-      const game = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
-      if (game) {
+      if (linkedGame) {
         gameLinkEl.style.display = '';
-        gameLinkEl.textContent = `🏈 This week's game: ${gameLabel(game)} ›`;
-        gameLinkEl.onclick = () => { if (window.openScheduleGame) window.openScheduleGame(game.id); };
+        gameLinkEl.textContent = `🏈 This week's game: ${gameLabel(linkedGame)} ›`;
+        gameLinkEl.onclick = () => { if (window.openScheduleGame) window.openScheduleGame(linkedGame.id); };
       } else {
         gameLinkEl.style.display = 'none';
+      }
+    }
+    // Nathan: "I need an option to add in Opponent Film on the Upcoming
+    // Game... When you click into This Week it should have a Watch
+    // Footage button that opens the film from the upcoming opponent."
+    // Same opponentFilmUrl a coach sets on the game itself (schedule.js) --
+    // only shown once one's actually set on whichever game This Week is
+    // currently linked to.
+    if (watchFootageBtn) {
+      if (linkedGame && linkedGame.opponentFilmUrl) {
+        watchFootageBtn.style.display = 'block';
+        watchFootageBtn.href = linkedGame.opponentFilmUrl;
+      } else {
+        watchFootageBtn.style.display = 'none';
+        watchFootageBtn.removeAttribute('href');
       }
     }
 

@@ -70,7 +70,7 @@
   // playoffs) get a visible tag.
   const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff'];
 
-  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl}]
+  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
   // Nathan: "would be awesome if we could include an image of the field
@@ -1022,7 +1022,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [] };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '' };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -1064,6 +1064,16 @@
     // field on every game record, same backfill discipline as everything
     // else in this block.
     current.gameFootageAnnotations = Array.isArray(current.gameFootageAnnotations) ? current.gameFootageAnnotations : [];
+    // Nathan: "We also have footage from the other teams we play. I need an
+    // option to add in Opponent Film on the Upcoming Game." Distinct from
+    // gameFootage above -- that's footage OF one of OUR games (recorded
+    // after the fact, possibly several clips). This is scouting footage
+    // OF THE OPPONENT (from Hudl, Drive, wherever it already lives), so
+    // it's a single link, entered ahead of the game like Scouting Report,
+    // not a growing list. Surfaced as a "Watch Footage" button both here
+    // on the game's own Schedule preview and on This Week (js/thisweek.js),
+    // which reads it straight off whichever game is linked as saved.gameId.
+    current.opponentFilmUrl = current.opponentFilmUrl || '';
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
@@ -1159,6 +1169,7 @@
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
           ${current.infoUrl ? `<a href="${escapeHtml(current.infoUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🔗 More Info</a>` : ''}
+          ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🎥 Watch Footage</a>` : ''}
         </div>
         ${current.fieldPhoto ? `<img src="${current.fieldPhoto}" alt="Field/venue photo" style="width:100%;border-radius:10px;margin-bottom:8px;display:block;">` : ''}
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
@@ -1259,6 +1270,9 @@
       <div class="lbSectionHeader" style="margin-top:6px;">🔎 Scouting Report</div>
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
+      <div class="lbSectionHeader" style="margin-top:12px;">🎥 Opponent Film</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Link to game film of this opponent (Hudl share link, Google Drive, YouTube, etc.) -- shows a "Watch Footage" button here and on This Week once a game is linked to it.</div>
+      <input type="text" id="schedOpponentFilmUrl" placeholder="https://…" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:4px;">
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div id="gameCancelSection"></div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
@@ -1285,6 +1299,7 @@
     renderGameFootageEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
+    document.getElementById('schedOpponentFilmUrl').value = current.opponentFilmUrl || '';
     const fillHighlightsBtn = document.getElementById('schedFillHighlightsBtn');
     if (fillHighlightsBtn) {
       fillHighlightsBtn.addEventListener('click', () => {
@@ -1507,6 +1522,7 @@
     current.writeup = document.getElementById('schedWriteup').value.trim();
     current.scouting = document.getElementById('schedScouting').value.trim();
     current.infoUrl = document.getElementById('schedInfoUrl').value.trim();
+    current.opponentFilmUrl = document.getElementById('schedOpponentFilmUrl').value.trim();
     current.fieldPhoto = pendingFieldPhoto;
     return true;
   }
