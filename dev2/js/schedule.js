@@ -607,6 +607,58 @@
     wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>`;
   }
 
+  // Nathan: "all the stats should show in the game info - just like an NFL
+  // game with all the individual leaders - box score style." Head-to-Head
+  // above is the team-level comparison; this is the per-PLAYER box score
+  // for this specific game -- every player who recorded a stat in each
+  // category, not just the top one, same convention real box scores use.
+  // Reuses computeGamePlayerStats (coachtools-stats.js) -- the same
+  // aggregator the Season Leaders section and player profile pages already
+  // rely on -- and .standingsTable's existing styling (standings.js) so
+  // this reads as the same kind of table already used elsewhere in the app.
+  function boxScoreTableHtml(title, rows, cols) {
+    if (!rows.length) return '';
+    let html = `<div class="lbSectionHeader" style="margin-top:14px;">${escapeHtml(title)}</div>` +
+      '<div class="standingsTableWrap"><table class="standingsTable"><thead><tr><th>Player</th>' +
+      cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr></thead><tbody>';
+    rows.forEach(r => {
+      html += `<tr><td style="text-align:left;">${escapeHtml(r.name || '?')}</td>` +
+        cols.map(c => `<td>${r[c.key] != null ? r[c.key] : 0}</td>`).join('') + '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+  function renderGameBoxScore() {
+    const wrap = document.getElementById('schedBoxScoreWrap');
+    if (!wrap || !current) return;
+    if (!current.statSheet || !window.computeGamePlayerStats) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    const perPlayer = Object.values(window.computeGamePlayerStats(current.statSheet));
+    const rushing = perPlayer.filter(p => p.rushAtt > 0)
+      .sort((a, b) => b.rushYds - a.rushYds)
+      .map(p => ({ name: p.name, att: p.rushAtt, yds: p.rushYds, ypc: p.ypc ? p.ypc.toFixed(1) : '0.0', td: p.td || 0 }));
+    const passing = perPlayer.filter(p => p.passYds > 0 || p.passTd > 0)
+      .sort((a, b) => b.passYds - a.passYds)
+      .map(p => ({ name: p.name, yds: p.passYds, td: p.passTd || 0 }));
+    const receiving = perPlayer.filter(p => p.recYds > 0)
+      .sort((a, b) => b.recYds - a.recYds)
+      .map(p => ({ name: p.name, yds: p.recYds, td: p.td || 0 }));
+    const tackles = perPlayer.filter(p => (p.solo || 0) + (p.assist || 0) > 0)
+      .sort((a, b) => b.tackles - a.tackles)
+      .map(p => ({ name: p.name, solo: p.solo || 0, ast: p.assist || 0 }));
+    const defense = perPlayer.filter(p => (p.int || 0) + (p.sacks || 0) + (p.pbu || 0) + (p.fum || 0) > 0)
+      .sort((a, b) => ((b.int||0)+(b.sacks||0)+(b.pbu||0)+(b.fum||0)) - ((a.int||0)+(a.sacks||0)+(a.pbu||0)+(a.fum||0)))
+      .map(p => ({ name: p.name, int: p.int || 0, sacks: p.sacks || 0, pbu: p.pbu || 0, fum: p.fum || 0 }));
+    let html =
+      boxScoreTableHtml('🏃 Rushing', rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'}]) +
+      boxScoreTableHtml('🎯 Passing', passing, [{key:'yds',label:'Yds'},{key:'td',label:'TD'}]) +
+      boxScoreTableHtml('🙌 Receiving', receiving, [{key:'yds',label:'Yds'},{key:'td',label:'TD'}]) +
+      boxScoreTableHtml('💥 Tackles', tackles, [{key:'solo',label:'Solo'},{key:'ast',label:'Ast'}]) +
+      boxScoreTableHtml('🛡️ Defense', defense, [{key:'int',label:'INT'},{key:'sacks',label:'Sack'},{key:'pbu',label:'PBU'},{key:'fum',label:'FR'}]);
+    if (!html) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+    wrap.style.display = '';
+    wrap.innerHTML = `<div class="lbSectionHeader">📊 Box Score</div>${html}`;
+  }
+
   // Nathan: "Need the ability to show where on the field the ball is at
   // all times so it would tell momentum in the game." Pulls the spot/seq
   // pairs game-stats-editor.js's "Ball Position" tracker stamped onto every
@@ -1233,6 +1285,7 @@
         </div>
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
         <div id="schedMomentumWrap" style="display:none;"></div>
         <div id="schedLeadersWrap" style="margin-top:16px;"></div>
         <div style="margin-top:16px;">
@@ -1267,6 +1320,7 @@
       renderGamePreview();
       renderWeather();
       renderHeadToHead();
+      renderGameBoxScore();
       renderMomentumChart();
       renderSeasonLeaders();
       renderLast5Panel('last5');

@@ -1748,6 +1748,29 @@
     return html;
   }
 
+  // Nathan: "make sure you have a comparison for penalties, penalty yards,
+  // and all in a split screen style where the length of the bar from
+  // center shows how much they got." Each side grows independently out
+  // from a shared center line, sized relative to whichever side's own
+  // value is bigger -- not one bar split proportionally between the two
+  // (which would show SHARE of a combined total instead of real magnitude).
+  function splitBarHtml(label, us, them){
+    const maxVal = Math.max(Math.abs(us), Math.abs(them), 1);
+    const usPct = Math.min(100, Math.round(Math.abs(us) / maxVal * 100));
+    const themPct = Math.min(100, Math.round(Math.abs(them) / maxVal * 100));
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">' +
+      '<span style="flex:0 0 auto;min-width:34px;text-align:right;font-weight:800;color:var(--cyan);font-size:13px;">'+us+'</span>' +
+      '<div style="flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden;display:flex;justify-content:flex-end;">' +
+        '<span style="display:block;height:100%;width:'+usPct+'%;background:var(--cyan);"></span>' +
+      '</div>' +
+      '<span style="flex:0 0 auto;min-width:80px;text-align:center;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--dim);">'+escapeHtml(label)+'</span>' +
+      '<div style="flex:1;height:8px;background:var(--line);border-radius:4px;overflow:hidden;display:flex;justify-content:flex-start;">' +
+        '<span style="display:block;height:100%;width:'+themPct+'%;background:#e0201a;"></span>' +
+      '</div>' +
+      '<span style="flex:0 0 auto;min-width:34px;text-align:left;font-weight:800;color:#e0201a;font-size:13px;">'+them+'</span>' +
+    '</div>';
+  }
+
   function renderStats(){
     const hasPlays = plays.some(function(p){ return p.type !== 'quarterEnd'; });
     if (!hasPlays){ statsArea.innerHTML = '<div class="emptyState">Log a play to see compiled stats here.</div>'; return; }
@@ -1761,9 +1784,16 @@
       ' &nbsp;·&nbsp; PAT: '+sc.patGood+'/'+(sc.patGood+sc.patNoGood)+
       ' &nbsp;·&nbsp; 2PT: '+sc.twoPtGood+'/'+(sc.twoPtGood+sc.twoPtNoGood)+
       ' &nbsp;·&nbsp; Safety: '+sc.safety+'</div>';
-    html += '<div class="statSectionTitle">Penalties</div>' +
-      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🚩 Us: '+s.penaltyTotals.us.count+' for '+s.penaltyTotals.us.yds+
-      ' yds &nbsp;·&nbsp; Opponent: '+s.penaltyTotals.opponent.count+' for '+s.penaltyTotals.opponent.yds+' yds</div>';
+    html += '<div class="statSectionTitle">🥊 Team Comparison</div>';
+    const ourRushYds = s.rushing.reduce(function(sum,r){ return sum + (r.yds||0); }, 0);
+    const ourPassYds = s.passing.reduce(function(sum,p){ return sum + (p.yds||0); }, 0);
+    html += '<div style="margin-bottom:10px;">' +
+      splitBarHtml('Total Yds', ourRushYds + ourPassYds, s.oppRushing.yds + s.oppPassing.yds) +
+      splitBarHtml('Rush Yds', ourRushYds, s.oppRushing.yds) +
+      splitBarHtml('Pass Yds', ourPassYds, s.oppPassing.yds) +
+      splitBarHtml('Penalties', s.penaltyTotals.us.count, s.penaltyTotals.opponent.count) +
+      splitBarHtml('Penalty Yds', s.penaltyTotals.us.yds, s.penaltyTotals.opponent.yds) +
+    '</div>';
     if (s.onside.us || s.onside.opponent){
       html += '<div class="statSectionTitle">Onside Kicks</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">⚡ Recovered by Us: '+s.onside.us+
