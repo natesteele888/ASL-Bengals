@@ -436,6 +436,163 @@
     });
   }
 
+  // ---- Team Stats (by game and overall) -- Nathan: "I need all the high
+  // level team and game stats by game and overall. Again, when we talk
+  // about offensive plays, I don't believe punts and kick offs should be
+  // counted. I think that stat refers to offensive plays run." Computed
+  // straight from each game's statSheet SECTIONS (not from the per-player
+  // CATS aggregator above, which blends rushing/receiving/kickoff-return/
+  // defensive TDs into one generic `td` field that can't be split back out
+  // cleanly by category) so "Offensive Plays"/"Offensive TDs" stay
+  // unambiguous at the team level. Kickoffs live in their own section
+  // entirely and are never added into rushAtt/passAtt, matching the same
+  // run/pass-only convention already established for Stat Keeper's own
+  // offensive snap count (js/stat-keeper.html's "Snap Counts": "punts,
+  // penalties, kick offs and things like that are still counting towards
+  // offensive snaps" was the bug there; the fix was the same exclusion).
+  function gameTeamStats(statSheet) {
+    const ss = window.normalizeGameStatSheet(statSheet);
+    const t = {
+      rushAtt: 0, rushYds: 0, rushTd: 0,
+      passAtt: 0, passComp: 0, passYds: 0, passTd: 0,
+      koYds: 0, koRet: 0, koTd: 0,
+      tackles: 0, solo: 0, assist: 0, sacks: 0, int: 0, pbu: 0, fum: 0,
+    };
+    (ss.rushing || []).forEach(row => (row.attempts || []).forEach(a => {
+      t.rushAtt++; t.rushYds += Number(a.yds) || 0; if (a.td) t.rushTd++;
+    }));
+    (ss.passing || []).forEach(row => (row.attempts || []).forEach(a => {
+      t.passAtt++;
+      if (a.comp) { t.passComp++; t.passYds += Number(a.yds) || 0; if (a.td) t.passTd++; }
+    }));
+    (ss.kickoffs || []).forEach(row => (row.attempts || []).forEach(a => {
+      t.koRet++; t.koYds += Number(a.yds) || 0; if (a.td) t.koTd++;
+    }));
+    (ss.tackles || []).forEach(row => {
+      const solo = (row.marks || []).filter(m => m === 'solo').length;
+      const assist = (row.marks || []).filter(m => m === 'assist').length;
+      t.solo += solo; t.assist += assist; t.tackles += solo + assist * 0.5;
+    });
+    (ss.defExtra || []).forEach(row => {
+      t.int += Number(row.int) || 0; t.pbu += Number(row.pbu) || 0;
+      t.sacks += Number(row.sacks) || 0; t.fum += Number(row.fum) || 0;
+    });
+    // Offensive plays run = real called run/pass snaps only -- see the
+    // comment above for why kickoffs are structurally excluded already.
+    t.offPlays = t.rushAtt + t.passAtt;
+    t.totalYds = t.rushYds + t.passYds;
+    // passTd only ever increments on a completed pass's own td flag (see
+    // above), so this never double-counts a receiver's separately-entered
+    // receiving-section score.
+    t.offTd = t.rushTd + t.passTd;
+    return t;
+  }
+  // Shared with anywhere else that might want the same team-level totals
+  // (e.g. a future recap/preview write-up), same pattern as
+  // window.computeGamePlayerStats above.
+  window.computeGameTeamStats = gameTeamStats;
+
+  function addGameTeamStats(into, g) {
+    Object.keys(g).forEach(k => { into[k] = (into[k] || 0) + g[k]; });
+    return into;
+  }
+
+  // Nathan's win/loss record needs every scheduled game with a final score
+  // entered, not just the ones with a full statSheet -- a coach might log
+  // the final score on Schedule the same night without ever opening Enter
+  // Stats. Same result logic as schedule.js's own resultFor() (not exposed
+  // on window there, so duplicated here rather than reaching across
+  // modules for one three-line comparison).
+  function resultForGame(g) {
+    if (g.ourScore === null || g.ourScore === undefined || g.oppScore === null || g.oppScore === undefined || g.ourScore === '' || g.oppScore === '') return null;
+    const us = Number(g.ourScore), them = Number(g.oppScore);
+    if (isNaN(us) || isNaN(them)) return null;
+    if (us > them) return 'W';
+    if (us < them) return 'L';
+    return 'T';
+  }
+
+  const TEAM_STAT_ROWS = [
+    { key: 'offPlays', label: 'Offensive Plays' },
+    { key: 'totalYds', label: 'Total Yards' },
+    { key: 'rushAtt', label: 'Rush Attempts' },
+    { key: 'rushYds', label: 'Rush Yards' },
+    { key: 'passAtt', label: 'Pass Attempts' },
+    { key: 'passComp', label: 'Completions' },
+    { key: 'passYds', label: 'Pass Yards' },
+    { key: 'offTd', label: 'Offensive TDs' },
+    { key: 'tackles', label: 'Tackles' },
+    { key: 'sacks', label: 'Sacks' },
+    { key: 'int', label: 'Interceptions' },
+    { key: 'pbu', label: 'Pass Breakups' },
+    { key: 'fum', label: 'Fumble Recoveries' },
+    { key: 'koRet', label: 'Kickoff Returns' },
+    { key: 'koYds', label: 'Kickoff Return Yards' },
+  ];
+
+  function renderTeamStats(wrap, playedGames) {
+    wrap.appendChild(sectionHeading('📋 Team Stats'));
+
+    let w = 0, l = 0, tcount = 0, pf = 0, pa = 0, scoredGames = 0;
+    games.forEach(g => {
+      const r = resultForGame(g);
+      if (!r) return;
+      scoredGames++;
+      if (r === 'W') w++; else if (r === 'L') l++; else tcount++;
+      pf += Number(g.ourScore) || 0; pa += Number(g.oppScore) || 0;
+    });
+
+    const recordBox = document.createElement('div');
+    recordBox.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:10px 14px;border:2px solid #eee;border-radius:10px;';
+    recordBox.innerHTML = scoredGames
+      ? `<div style="font-size:22px;font-weight:900;">${w}-${l}${tcount ? '-' + tcount : ''}</div>
+         <div style="color:#666;font-size:12.5px;">Points For <b>${pf}</b> &nbsp;·&nbsp; Points Against <b>${pa}</b> &nbsp;·&nbsp; ${scoredGames} game${scoredGames === 1 ? '' : 's'} with a final score</div>`
+      : '<div class="lbEmpty" style="padding:0;">No final scores entered yet -- add them under Schedule.</div>';
+    wrap.appendChild(recordBox);
+
+    if (!playedGames.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'No stats entered for any game yet -- enter some under "Enter Stats" for team/game breakdowns here.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    // ---- Season totals ----
+    const seasonTotals = playedGames.reduce((acc, g) => addGameTeamStats(acc, gameTeamStats(g.statSheet)), {});
+    const seasonGrid = document.createElement('div');
+    seasonGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:16px;';
+    TEAM_STAT_ROWS.forEach(row => {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;';
+      card.innerHTML = `<div style="font-weight:700;color:#666;">${row.label}</div><div style="font-size:16px;font-weight:800;">${formatNum(seasonTotals[row.key] || 0)}</div>`;
+      seasonGrid.appendChild(card);
+    });
+    wrap.appendChild(seasonGrid);
+
+    // ---- Per-game table ----
+    const tableWrap = document.createElement('div');
+    tableWrap.style.cssText = 'overflow-x:auto;margin-bottom:20px;';
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;';
+    const headCells = ['Game', 'Result', ...TEAM_STAT_ROWS.map(r => r.label)];
+    table.innerHTML = `<thead><tr>${headCells.map(h => `<th style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd;">${h}</th>`).join('')}</tr></thead>`;
+    const tbody = document.createElement('tbody');
+    playedGames.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(g => {
+      const t = gameTeamStats(g.statSheet);
+      const r = resultForGame(g);
+      const label = `${g.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(g.opponent || 'TBD')}${g.date ? ' — ' + escapeHtml(g.date) : ''}`;
+      const resultLabel = r ? `${r} ${escapeHtml(String(g.ourScore))}-${escapeHtml(String(g.oppScore))}` : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">${label}</td><td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">${resultLabel}</td>` +
+        TEAM_STAT_ROWS.map(row => `<td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;">${formatNum(t[row.key] || 0)}</td>`).join('');
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    wrap.appendChild(tableWrap);
+  }
+
   // ---- Leaderboard sub-view ----
   function renderLeaderboard() {
     const wrap = document.getElementById('coachStatsBody');
@@ -445,8 +602,13 @@
     const { byNum, playedGames } = seasonAggregate();
     const players = Object.values(byNum);
 
+    renderTeamStats(wrap, playedGames);
+
     if (!players.length) {
-      wrap.innerHTML = '<div class="lbEmpty">No stats entered for any game yet -- enter some under "Enter Stats" and the leaderboard fills in automatically.</div>';
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'No stats entered for any game yet -- enter some under "Enter Stats" and the player leaderboard fills in automatically.';
+      wrap.appendChild(empty);
       return;
     }
 
