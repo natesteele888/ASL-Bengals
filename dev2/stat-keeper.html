@@ -2135,19 +2135,50 @@
     // can skip it instead of guessing wrong.
     const nameIndex = {};
     const numCounts = {};
+    // Nathan: "we have those players on the roster" -- a few real mismatches
+    // baked into this exact-match lookup:
+    //   - "#49 Emmett B" -- the jersey number got typed right into the name
+    //     itself (from a quick-pick label or a stray "#NN " habit), so it
+    //     never matches a roster row named plainly "Emmett B". Stripped off
+    //     below before either side of the comparison, since the number's
+    //     already looked up separately anyway.
+    //   - "Rocco" vs the roster's "Rocco D" -- logged with just a first
+    //     name, no last initial. firstNameIndex below is a fallback for
+    //     exactly this: if precisely ONE roster player's first name matches,
+    //     use them; if it's ambiguous (two Roccos) or there's still no
+    //     match at all, this still safely falls through to the warning
+    //     rather than guessing wrong.
+    // "Jayden L" vs a roster spelled "Jaiden L" (or a name not on the
+    // roster at all, like a departed player) can't be resolved here --
+    // that's a real spelling/roster mismatch, not a lookup bug, and needs
+    // a human to decide which spelling is correct.
+    function stripJerseyPrefix(name){ return String(name).replace(/^#\d+\s+/, ''); }
     (liveRoster || []).forEach(p => {
       if (!p) return;
       const key = p.num === null || p.num === undefined ? '' : String(p.num);
       numCounts[key] = (numCounts[key] || 0) + 1;
     });
-    (liveRoster || []).forEach(p => { if (p && p.name) nameIndex[String(p.name).trim().toLowerCase()] = p.num; });
-    function numFor(name){
-      if (!name) return null;
-      const num = nameIndex[String(name).trim().toLowerCase()];
-      if (num === undefined){ warnings.push(`Couldn't match "${name}" to a player on the current live roster -- that credit was skipped.`); return null; }
+    const firstNameIndex = {};
+    (liveRoster || []).forEach(p => {
+      if (!p || !p.name) return;
+      const full = String(p.name).trim();
+      nameIndex[full.toLowerCase()] = p.num;
+      const first = full.split(/\s+/)[0].toLowerCase();
+      (firstNameIndex[first] = firstNameIndex[first] || []).push(p.num);
+    });
+    function numFor(rawName){
+      if (!rawName) return null;
+      const name = stripJerseyPrefix(rawName).trim();
+      let num = nameIndex[name.toLowerCase()];
+      if (num === undefined){
+        const first = name.split(/\s+/)[0].toLowerCase();
+        const candidates = firstNameIndex[first];
+        if (candidates && candidates.length === 1) num = candidates[0];
+      }
+      if (num === undefined){ warnings.push(`Couldn't match "${rawName}" to a player on the current live roster -- that credit was skipped.`); return null; }
       const key = num === null || num === undefined ? '' : String(num);
       if ((numCounts[key] || 0) > 1){
-        warnings.push(`"${name}" shares jersey #${num || '(blank)'} with another player on the roster -- that credit was skipped to avoid mixing up their stats. Give them each a unique number to fix this for good.`);
+        warnings.push(`"${rawName}" shares jersey #${num || '(blank)'} with another player on the roster -- that credit was skipped to avoid mixing up their stats. Give them each a unique number to fix this for good.`);
         return null;
       }
       return num;
