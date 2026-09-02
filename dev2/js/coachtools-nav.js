@@ -14,6 +14,13 @@
     // update the standings." See js/standings.js -- also feeds the
     // read-only Standings top-level tab everyone sees.
     { key: 'standings', label: '🏆 Standings', panel: 'coachStandingsPanel', init: () => window.initCoachToolsStandings && window.initCoachToolsStandings() },
+    // Nathan: "I need to be able to copy all the information from the
+    // coaches site and extract the game schedule with field, kickoff time,
+    // arrival time and other details needed... Would be great for this to
+    // just go into the site without manually extracting out the info." See
+    // js/schedule-import.js -- same paste-box pattern as Standings above,
+    // feeds straight into the Schedule tab everyone sees.
+    { key: 'scheduleimport', label: '📅 Schedule Import', panel: 'coachScheduleImportPanel', init: () => window.initCoachToolsScheduleImport && window.initCoachToolsScheduleImport() },
     { key: 'stats', label: '📊 Stats', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
     // Nathan: "add a coaching staff section to go with the roster so we can
     // link log ins to coaches" -- js/coaching-staff.js, rendered right below

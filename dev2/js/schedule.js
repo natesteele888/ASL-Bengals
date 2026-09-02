@@ -125,6 +125,7 @@
   // use the real mascot logo already shipped for the header.
   const BUNDLED_LOGOS = {
     clinton: 'assets/images/opponents/clinton.png',
+    leominster: 'assets/images/opponents/leominster.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
@@ -1156,13 +1157,14 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
     if (!current.gameTime && current.time) current.gameTime = current.time; // fold in the old single-time field
     current.arriveTime = current.arriveTime || '';
     current.warmupTime = current.warmupTime || '';
+    current.gameDayNotes = current.gameDayNotes || '';
     current.gameTime = current.gameTime || '';
     current.gameType = GAME_TYPES.includes(current.gameType) ? current.gameType : 'Regular Season'; // older saved games predate this field
     current.fieldPhoto = current.fieldPhoto || null; // older saved games predate this field
@@ -1317,6 +1319,9 @@
         </div>
         ${current.fieldPhoto ? `<img src="${current.fieldPhoto}" alt="Field/venue photo" style="width:100%;border-radius:10px;margin-bottom:8px;display:block;">` : ''}
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
+        ${current.gameDayNotes ? `
+        <div class="lbSectionHeader" style="margin-top:16px;">🗒️ Game Day Info</div>
+        <div class="scheduleWriteup">${escapeHtml(current.gameDayNotes).replace(/\n/g, '<br>')}</div>` : ''}
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
           <div id="schedGamePlanKeys"></div>
@@ -1375,6 +1380,8 @@
         <a id="schedMapLink" href="#" target="_blank" rel="noopener" class="lbLinkBtn" style="white-space:nowrap;align-self:center;">📍 View on Map</a>
       </div>
       <div id="schedMapPreviewWrap" style="margin-bottom:8px;"></div>
+      <div class="lbSub" style="margin:0 0 4px;">Game day info (host contact, parking/arrival, field rules -- shown to everyone on this game's page):</div>
+      <textarea id="schedGameDayNotes" placeholder="e.g. Host contact: Pat Bishop 617-678-8550. Parking available in the athletic field lot off 2A. Bengals wearing BLACK jerseys." style="width:100%;min-height:70px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:8px;"></textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
         <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Field Photo<input type="file" id="schedFieldPhotoInput" accept="image/*" style="display:none;"></label>
         <span id="schedFieldPhotoStatus" class="lbSub" style="margin:0;"></span>
@@ -1436,6 +1443,7 @@
     document.getElementById('schedWarmupTime').value = to24h(current.warmupTime);
     document.getElementById('schedGameTime').value = to24h(current.gameTime);
     document.getElementById('schedLocation').value = current.location || '';
+    document.getElementById('schedGameDayNotes').value = current.gameDayNotes || '';
     document.getElementById('schedOurScore').value = current.ourScore === null || current.ourScore === undefined ? '' : current.ourScore;
     document.getElementById('schedOppScore').value = current.oppScore === null || current.oppScore === undefined ? '' : current.oppScore;
     document.getElementById('schedOppYards').value = current.oppYards === null || current.oppYards === undefined ? '' : current.oppYards;
@@ -1656,6 +1664,7 @@
     current.warmupTime = document.getElementById('schedWarmupTime').value.trim();
     current.gameTime = document.getElementById('schedGameTime').value.trim();
     current.location = document.getElementById('schedLocation').value.trim();
+    current.gameDayNotes = document.getElementById('schedGameDayNotes').value.trim();
     const ourScoreRaw = document.getElementById('schedOurScore').value.trim();
     const oppScoreRaw = document.getElementById('schedOppScore').value.trim();
     current.ourScore = ourScoreRaw === '' ? '' : Number(ourScoreRaw);
