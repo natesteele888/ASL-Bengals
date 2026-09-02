@@ -322,18 +322,31 @@ function normalizePlayData(playTypes) {
     // instant Motion moves #4 to the other physical side even with wing
     // side and direction held fixed -- two already-independent stored
     // arrays (sameSidePoints/crossPoints, cloned since the #87 aliasing
-    // fix), no separate mode needed. Reverted the data back to
-    // blockRelative; this heals any snapshot a coach saved during that
-    // window back the other way -- pure flag flip, field names are
-    // unchanged between the two modes. Also keeps force-healing #1's
-    // ballStart delayMs, unrelated to the blocking mode and still correct.
+    // fix), no separate mode needed. Reverted the data back to blockRelative
+    // -- but a first pass at this repair only flipped the flag back WHEN
+    // motionIndependentBlock was still literally present, which is the same
+    // mistake the two repairs above this one already learned not to make:
+    // a coach's real cloud snapshot (playEdits.json, which always wins over
+    // shipped defaults once it exists at all) can be in ANY shape from
+    // whatever was last saved -- the pre-#87 flat shape, the
+    // motionIndependentBlock shape, or something else entirely -- and a
+    // conditional migrate silently does nothing for any shape it didn't
+    // anticipate. Nathan kept seeing "no change" after both the original
+    // fix and the revert for exactly this reason: neither ever reached his
+    // actual live data. Force it unconditionally instead, every load, same
+    // as REPAIRED_COUNTER_P4_POINTS/REPAIRED_COUNTER_TE_POINTS above --
+    // whatever shape was there, this always ends in the one correct shape.
     if (pt.key === 'shuffle_pass') {
       ['Left', 'Right'].forEach(dirKey => {
         const dv = pt.directions && pt.directions[dirKey];
         if (!dv || !dv.paths) return;
         dv.paths.forEach(p => {
-          if (p.player === 4 && p.isBlocking && p.motionIndependentBlock) {
+          if (p.player === 4 && p.isBlocking) {
             delete p.motionIndependentBlock;
+            delete p.sameSidePoints4x4Motion;
+            delete p.crossPoints4x4Motion;
+            delete p.sameSidePointsMotion;
+            delete p.crossPointsMotion;
             p.blockRelative = true;
           }
           if (p.player === 1 && p.ballStart) {

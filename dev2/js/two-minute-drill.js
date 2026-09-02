@@ -1525,6 +1525,32 @@
           });
         });
       }
+      // Same unconditional "cloud always wins" force-repair as
+      // play-calls.js's normalizePlayData -- see that file's matching
+      // block for the full rationale (Nathan: "I want to set blocking
+      // assignments independently for those 1-6 players... like on our
+      // other plays"). Missing here meant Shuffle Pass in 2-Minute Drill
+      // could still show whatever stale shape a coach's playEdits.json
+      // snapshot happened to have, even after that other file was fixed.
+      if (pt.key === 'shuffle_pass') {
+        ['Left', 'Right'].forEach(dirKey => {
+          const dv = pt.directions && pt.directions[dirKey];
+          if (!dv || !dv.paths) return;
+          dv.paths.forEach(p => {
+            if (p.player === 4 && p.isBlocking) {
+              delete p.motionIndependentBlock;
+              delete p.sameSidePoints4x4Motion;
+              delete p.crossPoints4x4Motion;
+              delete p.sameSidePointsMotion;
+              delete p.crossPointsMotion;
+              p.blockRelative = true;
+            }
+            if (p.player === 1 && p.ballStart) {
+              p.delayMs = 450;
+            }
+          });
+        });
+      }
       Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
         const variants = collectLeafVariants(dirVal);
         variants.forEach(variant => {
