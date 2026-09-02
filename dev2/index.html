@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824k">
+<link rel="stylesheet" href="css/styles.css?v=20260901b">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -479,26 +479,27 @@
        detail page. Nathan (later, 2026-09-01): "Should appear at the top
        of the This Week block" -- moved ahead of the game link/Watch
        Footage button below, so it's the very first thing anyone sees. -->
+  <!-- Nathan: "We also have footage from the other teams we play... When
+       you click into This Week it should have a Watch Footage button
+       that opens the film from the upcoming opponent." Same link this
+       week's linked game carries on its own Schedule page (schedule.js's
+       opponentFilmUrl) -- only shown once a coach has actually set one on
+       that game. This CTA (id="thisweekWatchFootageBtn"/
+       "thisweekWatchFootageNote") went through two earlier placements --
+       below the whole box, then "right below the AI write-up" -- before
+       Nathan's precise final ask (2026-09-01): "move the CTA to just below
+       the number icons callouts... so it would sit just above the Games
+       This Week section." The write-up, the icon stat cards
+       (.weekAheadStats), and the Games/Practices columns are all rendered
+       together into #thisweekAheadText below by js/thisweek.js's
+       weekAheadInfographicHtml() -- so to land between the stat cards and
+       the columns, this button/note now has to be generated as PART of
+       that same innerHTML (see weekAheadInfographicHtml) rather than living
+       here as a separate static element the way it used to. renderWeekAhead()
+       populates it right after setting that innerHTML. -->
   <div id="thisweekAheadBox" class="thisweekKeysBox" style="display:none;">
     <div class="thisweekKeysTitle">📅 Week Ahead</div>
     <div id="thisweekAheadText"></div>
-    <!-- Nathan: "We also have footage from the other teams we play... When
-         you click into This Week it should have a Watch Footage button
-         that opens the film from the upcoming opponent." Same link this
-         week's linked game carries on its own Schedule page (schedule.js's
-         opponentFilmUrl) -- only shown once a coach has actually set one on
-         that game. Nathan (2026-09-01, final placement): "I don't want the
-         Film for Upcoming Opponent to be down below the upcoming week info.
-         It needs to be right below the AI write up at the top of the box.
-         It should be right there to see and act on." -- moved inside the
-         Week Ahead box itself, directly under the write-up text, ahead of
-         the "Auto-generated from..." caption below. -->
-    <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:10px 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
-    <!-- Nathan: "include a write-in spot for the footage to say something underneath it.
-         example is 'Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6'" --
-         optional coach-entered caption (schedule.js's opponentFilmNote), shown only when
-         the button above is also shown. -->
-    <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
     <div class="lbSub" style="margin-top:8px;text-align:center;">Auto-generated from this week's Schedule -- tap a card to open it</div>
   </div>
   <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
@@ -2004,7 +2005,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260825c';
+  const BUILD_V = '20260901b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

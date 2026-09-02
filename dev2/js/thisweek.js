@@ -415,14 +415,42 @@
     const gamesHtml = data.gameEntries.map(({ d, g }) => weekAheadGameCardHtml(d, g, data.record)).join('');
     const practicesHtml = data.practiceEntries.map(({ d, p }) => weekAheadPracticeCardHtml(d, p)).join('');
 
+    // Nathan (2026-09-01, final placement): "move the CTA to just below
+    // the number icons callouts... so it would sit just above the Games
+    // This Week section." These two elements used to be static markup in
+    // index.html; now they're generated fresh as part of this same
+    // innerHTML so they can land in the exact spot Nathan wants (between
+    // the stat cards above and the Games/Practices columns below) --
+    // renderWeekAhead() finds them by these same ids right after setting
+    // textEl.innerHTML to this return value and fills in href/text/visibility.
+    const footageHtml = `
+      <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:0 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
+      <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
+    `;
+
     return `
       <div class="weekAheadWriteup">${escapeHtml(weekAheadWriteupText(data))}</div>
       <div class="weekAheadStats">${statCards.join('')}</div>
+      ${footageHtml}
       <div class="weekAheadColumns">
         ${gamesHtml ? `<div class="weekAheadCol"><div class="lbSectionHeader">🏈 Games this week</div>${gamesHtml}</div>` : ''}
         ${practicesHtml ? `<div class="weekAheadCol"><div class="lbSectionHeader">🏃 Practice &amp; film</div>${practicesHtml}</div>` : ''}
       </div>
     `;
+  }
+
+  // Nathan: "same CTA to watch the upcoming opponents video footage" needs
+  // to know which game This Week is currently pointing at -- the manually-set
+  // saved.gameId (Weekly Goals' own game picker) often isn't set even when
+  // Week Ahead is already showing this week's game automatically
+  // (buildWeekAheadData scans the same upcomingGames list by date, no manual
+  // link required), so this falls back to that same auto-detected game.
+  // Shared by renderReadOnly() (the "This week's game: ..." link) and
+  // renderWeekAhead() (the Watch Footage CTA) so both agree on the exact
+  // same game without duplicating this lookup.
+  function getLinkedWeekGame() {
+    const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
+    return (saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null) || autoWeekGame;
   }
 
   function renderWeekAhead() {
@@ -448,6 +476,51 @@
         if (window.openPracticeDetail) window.openPracticeDetail(btn.dataset.openPractice);
       });
     });
+
+    // Nathan: "I need an option to add in Opponent Film on the Upcoming
+    // Game... When you click into This Week it should have a Watch
+    // Footage button that opens the film from the upcoming opponent." The
+    // button/note themselves are now generated fresh as part of the
+    // innerHTML above (see weekAheadInfographicHtml) so they land between
+    // the stat cards and the Games/Practices columns -- this just finds
+    // them by id (they may not exist at all if there's nothing on the
+    // Schedule this week, hence the "Nothing on the Schedule" early-return
+    // branch in weekAheadInfographicHtml, so every lookup below is guarded)
+    // and fills in href/text/visibility from whichever game This Week is
+    // currently linked to.
+    const linkedGame = getLinkedWeekGame();
+    const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
+    const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
+    const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
+    if (watchFootageBtn) {
+      if (linkedGame && linkedGame.opponentFilmUrl) {
+        watchFootageBtn.style.display = 'block';
+        watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
+        watchFootageBtn.href = linkedGame.opponentFilmUrl;
+        // Nathan: "let me know who is watching film" -- js/film-views.js's
+        // document-level click listener reads this attribute off whatever
+        // was actually clicked, so it works here and on Schedule's own
+        // Watch Footage button (schedule.js) without either file needing to
+        // know about the other.
+        watchFootageBtn.dataset.filmGameId = linkedGame.id;
+      } else {
+        watchFootageBtn.style.display = 'none';
+        watchFootageBtn.removeAttribute('href');
+      }
+    }
+    // Nathan: "include a write-in spot for the footage to say something
+    // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
+    // - Merrimack Valley 6'" -- same opponentFilmNote a coach sets on the
+    // game itself (schedule.js), only shown alongside the button above.
+    if (watchFootageNoteEl) {
+      if (hasFootageNote) {
+        watchFootageNoteEl.style.display = '';
+        watchFootageNoteEl.textContent = linkedGame.opponentFilmNote;
+      } else {
+        watchFootageNoteEl.style.display = 'none';
+        watchFootageNoteEl.textContent = '';
+      }
+    }
   }
 
   function numberedRows() {
@@ -602,21 +675,16 @@
     const keysList = document.getElementById('thisweekKeysList');
     const gridEl = document.getElementById('thisweekCardsGrid');
     const gameLinkEl = document.getElementById('thisweekGameLink');
-    const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
-    const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
     if (!keysBox || !keysList || !gridEl) return;
 
     // Nathan: "column width CTA under the Week Ahead write up on the This
     // Week tab is still missing. Should have the same CTA... that is
     // available on the game card when you click into the schedule." The
-    // manually-set saved.gameId link (Weekly Goals' own game picker) often
-    // isn't set even when Week Ahead is already showing this week's game
-    // automatically (buildWeekAheadData scans the same upcomingGames list
-    // by date, no manual link required) -- fall back to that same
-    // auto-detected game so the footage CTA doesn't depend on a coach
-    // separately linking the game a second time.
-    const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
-    const linkedGame = (saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null) || autoWeekGame;
+    // Watch Footage CTA itself is now populated over in renderWeekAhead()
+    // (its button/note markup lives inside #thisweekAheadText's own
+    // innerHTML now -- see weekAheadInfographicHtml) -- this just still
+    // needs linkedGame for the separate "This week's game: ..." link below.
+    const linkedGame = getLinkedWeekGame();
     if (gameLinkEl) {
       if (linkedGame) {
         gameLinkEl.style.display = '';
@@ -624,42 +692,6 @@
         gameLinkEl.onclick = () => { if (window.openScheduleGame) window.openScheduleGame(linkedGame.id); };
       } else {
         gameLinkEl.style.display = 'none';
-      }
-    }
-    // Nathan: "I need an option to add in Opponent Film on the Upcoming
-    // Game... When you click into This Week it should have a Watch
-    // Footage button that opens the film from the upcoming opponent."
-    // Same opponentFilmUrl a coach sets on the game itself (schedule.js) --
-    // only shown once one's actually set on whichever game This Week is
-    // currently linked to.
-    const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
-    if (watchFootageBtn) {
-      if (linkedGame && linkedGame.opponentFilmUrl) {
-        watchFootageBtn.style.display = 'block';
-        watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
-        watchFootageBtn.href = linkedGame.opponentFilmUrl;
-        // Nathan: "let me know who is watching film" -- js/film-views.js's
-        // document-level click listener reads this attribute off whatever
-        // was actually clicked, so it works here and on Schedule's own
-        // Watch Footage button (schedule.js) without either file needing to
-        // know about the other.
-        watchFootageBtn.dataset.filmGameId = linkedGame.id;
-      } else {
-        watchFootageBtn.style.display = 'none';
-        watchFootageBtn.removeAttribute('href');
-      }
-    }
-    // Nathan: "include a write-in spot for the footage to say something
-    // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
-    // - Merrimack Valley 6'" -- same opponentFilmNote a coach sets on the
-    // game itself (schedule.js), only shown alongside the button above.
-    if (watchFootageNoteEl) {
-      if (hasFootageNote) {
-        watchFootageNoteEl.style.display = '';
-        watchFootageNoteEl.textContent = linkedGame.opponentFilmNote;
-      } else {
-        watchFootageNoteEl.style.display = 'none';
-        watchFootageNoteEl.textContent = '';
       }
     }
 

@@ -20,15 +20,10 @@
   // (whether a cloud snapshot has had the old Left/Right swap bug repaired),
   // not a real "direction can't be picked" behavior, so Option answers like
   // any other play: noBoot is already handled generically below.
-  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" --
-  // deliberately NOT added here. Rounds pick wingSide/direction
-  // independently at random (see below) and buildSignalSequence/the reveal
-  // diagram do an unguarded playType.directions[direction] lookup -- fine
-  // for every other play here since each has both Left and Right authored,
-  // but shuffle_pass only has a Right variant so far. Picking it randomly
-  // would break the reveal the moment Left came up. Safe to add once a
-  // coach mirrors a Left variant via Edit Plays.
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
+  // Nathan: new play, signal #23, "Wing Right/Left, Shuffle Pass" -- now
+  // has both Left and Right authored (data/plays.json), so it's safe to
+  // include in the random pool alongside every other play here.
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option', 'shuffle_pass'];
   const POINTS_FULL = 10, POINTS_HALF = 5;
 
   function playFlags(key){
@@ -49,7 +44,7 @@
   // sameSide: true = direction must match wing side, false = must differ.
   // pool: which plays are eligible this round (on top of the boot filter).
   // bootOnly: true = further restrict the pool to plays that allow Boot.
-  const SIMPLE_KEYS = ['inside_zone', 'outside_zone', 'sweep', 'option_pass', 'option']; // no Inside/Outside decision
+  const SIMPLE_KEYS = ['inside_zone', 'outside_zone', 'sweep', 'option_pass', 'option', 'shuffle_pass']; // no Inside/Outside decision
   const IO_KEYS = ['blast', 'double_blast']; // Inside/Outside decision plays
   const TIERS = [
     { pool: SIMPLE_KEYS, motion: false, boot: false, sameSide: true },

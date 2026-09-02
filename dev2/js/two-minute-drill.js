@@ -176,9 +176,7 @@
 
   function getVariant(playType, direction, insideOutside, readPosition, counterOn, twSweepOn) {
     // Same defensive fallback as play-calls.js's copy of this function --
-    // see its comment. Not load-bearing for the drill's own random call
-    // generation (shuffle_pass is deliberately excluded from
-    // ELIGIBLE_PLAY_KEYS above), just cheap insurance.
+    // see its comment. Cheap insurance for a play missing one side's data.
     let v = playType.directions[direction] || playType.directions.Right || playType.directions.Left;
     if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
     if (playType.hasReadToggle) v = v[readPosition || 'A'];
@@ -946,17 +944,16 @@
   //   - hasInsideOutside plays (Blast/Double Blast) require a pick.
   // Counter itself only exists on Option/Outside Zone (hasCounter).
   // ================================================================
-  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" --
-  // deliberately NOT added here. This generator picks wingSide/direction
-  // independently at random (see generateCorrectCall below) and getVariant
-  // does an unguarded playType.directions[direction] lookup -- fine for
-  // every other play here since each has both Left and Right authored, but
-  // shuffle_pass only has a Right variant so far (only "Wing Right,
-  // Shuffle Pass Right" was ever described), and it's also Wing-only with
-  // no Split data at all. Picking it randomly would crash the diagram the
-  // moment Left, or the Split branch, came up. Safe to add once a coach
-  // mirrors a Left variant (and, if wanted, a Split one) via Edit Plays.
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
+  // Nathan: new play, signal #23, "Wing Right/Left, Shuffle Pass" -- now
+  // has both Left and Right authored (data/plays.json), so it's safe to
+  // add to the random pool. Still Wing-only, no Split data -- but that's
+  // fine here since this generator only ever reaches for Split via its own
+  // separate 'split' branch below with its own playKey pool
+  // (pickWeightedPlayKey draws from ELIGIBLE_PLAY_KEYS for BOTH branches,
+  // so a Wing-only play showing up on a Split round would still be a
+  // problem -- see the Split-only guard added where playKey is picked for
+  // that branch).
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option', 'shuffle_pass'];
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" -- Option Pass is the only real drop-back pass among
   // these 7 plays on Wing (Split's independent Pass toggle, checked via
@@ -992,7 +989,7 @@
 
   function playFlags(key) {
     const pt = (DATA.playTypes || []).find(p => p.key === key) || {};
-    return { noBoot: !!pt.noBoot, hasInsideOutside: !!pt.hasInsideOutside, hasCounter: !!pt.hasCounter, counterAwayFromWing: !!pt.counterAwayFromWing };
+    return { noBoot: !!pt.noBoot, hasInsideOutside: !!pt.hasInsideOutside, hasCounter: !!pt.hasCounter, counterAwayFromWing: !!pt.counterAwayFromWing, wingOnly: !!pt.wingOnly };
   }
   function playLabel(key) {
     const pt = (DATA.playTypes || []).find(p => p.key === key);
@@ -1174,7 +1171,12 @@
     const rampFactor = (tier + 1) / (DIFFICULTY_RAMP_MAX_TIER + 1);
     const playKey = pickWeightedPlayKey();
     const flags = playFlags(playKey);
-    if (Math.random() < SPLIT_FORMATION_CHANCE) {
+    // Nathan: new play, signal #23, "Wing Right/Left, Shuffle Pass" -- run
+    // out of Wing only, no Split identity of its own (unlike every other
+    // play here, which works from both formations). wingOnly plays never
+    // roll into the Split branch below, same as if the SPLIT_FORMATION_CHANCE
+    // coin flip had simply come up tails.
+    if (!flags.wingOnly && Math.random() < SPLIT_FORMATION_CHANCE) {
       return normalizeCall({
         formation: 'split',
         playKey: playKey,

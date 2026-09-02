@@ -635,12 +635,11 @@ const NOBALL_COLOR = '#123a8c';
 const CIRCLE_R = 36;
 
 function getVariant(playType, direction, insideOutside, readPosition, counterOn) {
-  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" -- only
-  // a Right variant was ever authored (a coach can mirror a Left one later
-  // via Edit Plays). Falling back to whichever side DOES exist keeps a
-  // manual Left toggle from just blanking/crashing the diagram in the
-  // meantime -- harmless for every other play here, which already has
-  // both sides, so this fallback never actually triggers for them.
+  // Defensive fallback for any play missing one side's data (a brand-new
+  // play added via Edit Plays might only have one direction authored at
+  // first) -- falls back to whichever side DOES exist instead of blanking/
+  // crashing the diagram. Every shipped play has both Left and Right
+  // authored, so this never actually triggers for them.
   let v = playType.directions[direction] || playType.directions.Right || playType.directions.Left;
   if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
   if (playType.hasReadToggle) v = v[readPosition || 'A'];
