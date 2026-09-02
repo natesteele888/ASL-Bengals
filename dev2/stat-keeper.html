@@ -1103,17 +1103,24 @@
     else if (currentType === 'kneel'){
       // Nathan: "add a quick Kneel/Spike log" -- a real snap from scrimmage
       // (clock-killing kneel, or a spike to stop the clock) that's worth
-      // counting toward the snap totals and keeping in the play order, but
-      // isn't a designed run/pass and doesn't need yardage/spot tracking
-      // ("not worried about time of possession").
+      // counting toward the snap totals and keeping in the play order.
+      // Doesn't need Rushing-table-style yardage/carrier detail, but a
+      // kneel-down does still move the ball (Nathan: "we are in shotgun so
+      // it will be a 4 or 5 yard loss each time") -- a spike doesn't lose
+      // ground at all, so the loss picker only applies to a real Kneel.
       if (draft.kneelTeam == null) draft.kneelTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
       const isUsKneel = draft.kneelTeam !== 'Opponent';
+      if (draft.kneelType == null) draft.kneelType = 'Kneel';
       fieldsArea.appendChild(fieldBlock('Team', optChips('kneelTeam', ['Us','Opponent'])));
       fieldsArea.appendChild(fieldBlock('Type', optChips('kneelType', ['Kneel','Spike'])));
       if (isUsKneel){
         fieldsArea.appendChild(fieldBlock('QB (optional)', playerPicker('qb')));
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent QB (optional)', textInput('oppQb', "Opponent's QB, if known")));
+      }
+      if (draft.kneelType === 'Kneel'){
+        if (draft.kneelYards == null) draft.kneelYards = 5;
+        fieldsArea.appendChild(fieldBlock('Yards Lost (shotgun kneel)', optChips('kneelYards', [4, 5])));
       }
     }
     else if (currentType === 'tackle'){
@@ -1261,7 +1268,8 @@
     if (p.type==='kneel'){
       const isUsKneel = p.kneelTeam !== 'Opponent';
       const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
-      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt;
+      const lossTxt = (p.kneelType !== 'Spike' && p.kneelYards) ? ', -' + p.kneelYards + ' yds' : '';
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt;
     }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
@@ -1312,6 +1320,12 @@
     } else if (entry.type === 'punt'){
       const endAbs = absoluteSpot(entry.endSide, entry.endYard);
       if (endAbs != null) currentSpot = clampSpot(endAbs);
+    } else if (entry.type === 'kneel' && entry.kneelType !== 'Spike'){
+      // Nathan: "we are in shotgun so it will be a 4 or 5 yard loss each
+      // time" -- same direction convention as a run for a loss: whichever
+      // team is kneeling gets pushed back toward THEIR OWN goal.
+      const loss = Number(entry.kneelYards || 0);
+      currentSpot = clampSpot(currentSpot + (entry.kneelTeam !== 'Opponent' ? -loss : loss));
     }
   }
 
