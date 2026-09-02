@@ -14470,7 +14470,7 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "width": 7,
               "isBlocking": true,
-              "motionIndependentBlock": true,
+              "blockRelative": true,
               "points": [
                 [
                   0,
@@ -15087,7 +15087,7 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "width": 7,
               "isBlocking": true,
-              "motionIndependentBlock": true,
+              "blockRelative": true,
               "points": [
                 [
                   0,

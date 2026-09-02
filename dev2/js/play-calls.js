@@ -310,30 +310,31 @@ function normalizePlayData(playTypes) {
       });
     }
     // Same "cloud always wins" problem as the two repairs above, for
-    // Shuffle Pass specifically. Nathan: "still can't set #4's blocking
-    // assignment to different people on the same play" after the
-    // blockRelative -> motionIndependentBlock rework shipped in code --
-    // root cause is identical to the option/outside_zone Counter fix
-    // above: any coach's prior "Save to Cloud" on this play (it's been
-    // edited before -- see the #4 block-assignment history on this play)
-    // freezes a full snapshot with the OLD p.blockRelative flag, and that
-    // snapshot loads and wins over shipped data on every visit regardless
-    // of what data/plays.json now says -- "Admin: Sync Shipped Defaults to
-    // Cloud" does NOT fix this either, since (per its own confirm dialog)
-    // it deliberately never touches a coach's saved snapshot. Field names
-    // (sameSidePoints/crossPoints/...4x4) are unchanged between the two
-    // modes, so this is a pure flag flip, not a data restructure. Also
-    // force-heals #1's ballStart delayMs the same way -- a stale snapshot
-    // would otherwise keep serving the old 315 (or original pre-fix
-    // timing) forever instead of the current 450.
+    // Shuffle Pass specifically. A short-lived experiment tried a separate
+    // p.motionIndependentBlock mode for #4 here (chase back to the same
+    // real target across Motion, with an explicit per-variant override) --
+    // Nathan: "I want to set blocking assignments independently for those
+    // 1-6 players. motion puts them on the other side of the field so like
+    // on our other plays, I would assign them to block someone else." That
+    // ordinary p.blockRelative already does exactly this for every OTHER
+    // blocking play (Blast, Option, Outside Zone, ...): its same-side/
+    // cross-side bucket is chosen by p4Side(), which already flips the
+    // instant Motion moves #4 to the other physical side even with wing
+    // side and direction held fixed -- two already-independent stored
+    // arrays (sameSidePoints/crossPoints, cloned since the #87 aliasing
+    // fix), no separate mode needed. Reverted the data back to
+    // blockRelative; this heals any snapshot a coach saved during that
+    // window back the other way -- pure flag flip, field names are
+    // unchanged between the two modes. Also keeps force-healing #1's
+    // ballStart delayMs, unrelated to the blocking mode and still correct.
     if (pt.key === 'shuffle_pass') {
       ['Left', 'Right'].forEach(dirKey => {
         const dv = pt.directions && pt.directions[dirKey];
         if (!dv || !dv.paths) return;
         dv.paths.forEach(p => {
-          if (p.player === 4 && p.isBlocking && p.blockRelative && !p.motionIndependentBlock) {
-            delete p.blockRelative;
-            p.motionIndependentBlock = true;
+          if (p.player === 4 && p.isBlocking && p.motionIndependentBlock) {
+            delete p.motionIndependentBlock;
+            p.blockRelative = true;
           }
           if (p.player === 1 && p.ballStart) {
             p.delayMs = 450;
