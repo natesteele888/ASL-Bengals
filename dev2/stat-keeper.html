@@ -535,13 +535,21 @@
     try{ localStorage.setItem('statKeeperProtoSide', currentSide); }catch(e){}
     updateSideUI();
     renderTypeGrid();
-    // Switching side/type mid-edit would otherwise leave editingId pointing
-    // at the play being edited while the form quietly resets to blank --
-    // hitting Save Changes at that point would overwrite the real play
-    // with an empty one. Cancel the edit outright instead (cancelEditPlay
-    // is declared further down, near renderLog -- hoisted like every other
-    // function declaration in this file, safe to call here).
-    cancelEditPlay();
+    // Nathan: "as soon as I make edits, it no longer gives me the option to
+    // update the call and instead saves it as a new play." This used to
+    // call cancelEditPlay() here -- switching side/type mid-edit left the
+    // draft's old fields mismatched against the newly-selected type, and
+    // saving that mismatched draft over the real play risked overwriting
+    // it with garbage, so the whole edit got abandoned (editingId cleared)
+    // as a defensive measure. But that meant fixing a mislogged side/type
+    // on a play you're editing was impossible -- Log Play would just
+    // insert a brand new play instead of updating the one you opened.
+    // resetDraftForTypeChange() (declared further down, near renderLog --
+    // hoisted like every other function declaration in this file, safe to
+    // call here) clears the draft so the new type's fields start blank
+    // (same as any fresh entry) WITHOUT touching editingId, so Save
+    // Changes still updates the original play in place.
+    resetDraftForTypeChange();
   });
 
   // Ranks players by tackle involvement so far this game (solo=1, assist=0.5) — used to
@@ -564,7 +572,7 @@
     const btn = e.target.closest('.typeBtn'); if (!btn) return;
     currentType = btn.getAttribute('data-type');
     document.querySelectorAll('.typeBtn').forEach(b=>b.classList.toggle('active', b===btn));
-    cancelEditPlay(); // see sideToggle's own handler for why
+    resetDraftForTypeChange(); // see sideToggle's own handler for why
   });
 
   // Normalizes a field that may hold a single name (string) or several
@@ -1428,6 +1436,18 @@
   }
   function cancelEditPlay(){
     editingId = null;
+    resetDraft();
+    updateEditModeUI();
+  }
+  // Nathan: "as soon as I make edits, it no longer gives me the option to
+  // update the call and instead saves it as a new play." Used by the side
+  // toggle / type grid click handlers above when switching type or side
+  // WHILE editing an existing play -- clears the draft (the old fields
+  // don't make sense for a different type anyway) exactly like
+  // cancelEditPlay() does, but deliberately leaves editingId alone so
+  // Save Changes still updates the play you opened instead of falling
+  // back to "insert a new one."
+  function resetDraftForTypeChange(){
     resetDraft();
     updateEditModeUI();
   }
