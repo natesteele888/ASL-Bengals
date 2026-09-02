@@ -233,6 +233,8 @@
       <button class="btn small" id="copyTextBtn">📋 Copy Text Summary</button>
       <button class="btn small" id="downloadJsonBtn">⬇ Download statSheet.json</button>
       <button class="btn small" id="downloadGameLogBtn">⬇ Download Game Log (for Coach Tools import)</button>
+      <button class="btn small" id="restoreGameLogBtn">⬆ Restore Game Log (from file)</button>
+      <input type="file" id="restoreGameLogInput" accept="application/json,.json" style="display:none">
       <button class="btn small primary" id="pushLiveBtn" disabled>🚀 Push to Live Stats</button>
     </div>
     <div id="pushLiveStatus" style="margin-top:6px;font-size:11px;color:var(--dim2);"></div>
@@ -1917,6 +1919,57 @@
     a.click();
   }
   document.getElementById('downloadGameLogBtn').addEventListener('click', downloadGameLog);
+
+  // Nathan: "the plays to show up in the correct order as I showed was
+  // available in the JSON I shared." A game's per-game raw log
+  // (statKeeperLogs/{id}, the true chronological source selectGame()
+  // prefers above) can go missing from the cloud even though a perfectly
+  // ordered copy still exists as a previously-downloaded Game Log file
+  // (downloadGameLog above just dumps `plays` verbatim, same shape this
+  // reads back in) -- when that happens, selectGame() has no choice but to
+  // fall back to reconstructPlaysFromStatSheet, which can only preserve
+  // true order for rushing/passing snaps that were stamped with a seq at
+  // entry time; anything from a game logged before that stamping existed
+  // comes back grouped by stat category instead of true game order (e.g.
+  // every one carrier's runs bunched together). This lets a coach hand
+  // back that exact previously-downloaded file to restore the real
+  // sequence directly, no re-typing the game -- and since it goes through
+  // persist(), the restored order gets pushed right back to
+  // statKeeperLogs/{id} as the new source of truth, so this only has to be
+  // done once per affected game.
+  function restoreGameLogFromFile(file){
+    if (!selectedGame){ alert('Select a game above first.'); return; }
+    const reader = new FileReader();
+    reader.onload = function(){
+      let parsed;
+      try { parsed = JSON.parse(String(reader.result)); }
+      catch(e){ alert('Could not read that file as JSON: ' + e.message); return; }
+      if (!parsed || !Array.isArray(parsed.plays)){
+        alert('That file doesn\'t look like a Stat Keeper "Download Game Log" export (no plays array found).');
+        return;
+      }
+      const ok = confirm('Replace the ' + plays.length + ' plays currently loaded for ' + currentGameLabel() +
+        ' with the ' + parsed.plays.length + ' plays from "' + (parsed.game || file.name) + '"' +
+        (parsed.exportedAt ? ' (exported ' + new Date(parsed.exportedAt).toLocaleString() + ')' : '') +
+        '?\n\nThis replaces the play log immediately and saves it as this game\'s log going forward.');
+      if (!ok) return;
+      plays = parsed.plays;
+      persist();
+      renderAllForGame();
+      setGameLoadStatus('✅ Restored ' + plays.length + ' plays from ' + file.name + ' and saved as this game\'s log.');
+    };
+    reader.onerror = function(){ alert('Could not read that file.'); };
+    reader.readAsText(file);
+  }
+  document.getElementById('restoreGameLogBtn').addEventListener('click', function(){
+    if (!selectedGame){ alert('Select a game above first.'); return; }
+    document.getElementById('restoreGameLogInput').click();
+  });
+  document.getElementById('restoreGameLogInput').addEventListener('change', function(e){
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (file) restoreGameLogFromFile(file);
+  });
 
   // ---------------------------------------------------------------------
   // Push to Live Stats -- Nathan: "is there a way to automate the push
