@@ -940,6 +940,21 @@
         <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;flex:1;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>
       </div>`).join('')}</div>`;
   }
+  // Nathan: "the little game footage text links at the bottom of the Game
+  // info page is hard to find. If game footage is added to a game, the
+  // full width CTAs should be up towards the top under game recap." Same
+  // gameFootage clips as gameFootageReadOnlyHtml above (still rendered
+  // further down as a plain link list -- fine once you know it's there),
+  // but promoted to full-width buttons -- same navBtn treatment as the
+  // "Watch Game Film of our Upcoming Opponent" CTA above the hero -- and
+  // moved to sit right under the auto-generated Game Recap/Preview box,
+  // where a coach or player actually looks first. One button per clip,
+  // since (unlike opponentFilmUrl) a game can have several.
+  function gameFootageTopCtaHtml(game) {
+    const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
+    if (!clips.length) return '';
+    return clips.map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;${i < clips.length - 1 ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch ${escapeHtml(c.title || 'Game Footage')}</a>`).join('');
+  }
 
   // Coach edit list -- mutates current.gameFootage in place and re-renders
   // just this block, same pattern as renderInjuryEditor above.
@@ -1283,6 +1298,7 @@
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
         </div>
+        ${gameFootageTopCtaHtml(current)}
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div id="schedH2HWrap" style="display:none;"></div>
         <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
