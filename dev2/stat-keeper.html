@@ -724,7 +724,12 @@
   function spotPicker(sideKey, yardKey, defaultYard){
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
-    wrap.appendChild(optChips(sideKey, ['OWN','OPP']));
+    // "Our Side" / "Opponent's Side" always mean the same physical half of
+    // the field, regardless of who's punting, kicking, running, or passing
+    // on this particular play -- unlike "OWN"/"OPP" read in isolation,
+    // there's nothing here to have to re-derive from the Punting
+    // Team/Kicking Team chip above it.
+    wrap.appendChild(optChips(sideKey, [{value:'OWN', label:'Our Side'}, {value:'OPP', label:"Opponent's Side"}]));
     wrap.appendChild(yardStepper(yardKey, defaultYard, 'yard line'));
     return wrap;
   }
@@ -786,6 +791,49 @@
   function signedYardsFromSpots(startAbs, endAbs, isUsTeam){
     if (startAbs == null || endAbs == null) return 0;
     return isUsTeam ? (endAbs - startAbs) : (startAbs - endAbs);
+  }
+  // Nathan: "wording is used like Us or Opponent or OWN and OPP, depending
+  // on how you were setting up the play determines where it thinks you
+  // are... we need a starting point." Punt and Kickoff used to make you
+  // hand-pick a Side+yard-line for where the play started every single
+  // time, which meant re-deriving OWN/OPP relative to whichever team you'd
+  // just picked as punting/kicking -- exactly the confusion Run and Pass
+  // already avoid by never asking for their own start spot at all (see
+  // snapSpotFields above), since the app already knows where the ball is
+  // from the shared Ball Position tracker. Same fix here: the start spot is
+  // just shown, not asked for. If it's ever wrong (e.g. after an untracked
+  // kickoff/possession change), fix it via the Ball Position control above
+  // the entry panel before logging the play -- same as Run/Pass already
+  // requires.
+  function startSpotLabelRow(sideKey, yardKey){
+    if (draft[sideKey] == null || draft[yardKey] == null){
+      const sy = sideYardFromAbs(currentSpot);
+      draft[sideKey] = sy.side; draft[yardKey] = sy.yard;
+    }
+    const row = document.createElement('div');
+    row.style.cssText = 'color:var(--dim);font-size:13px;';
+    row.textContent = spotLabelAbs(absoluteSpot(draft[sideKey], draft[yardKey]));
+    return row;
+  }
+  // Nathan: "Kickoffs to start the halves are from the team's own 40 yard
+  // line." Unlike Punt (which genuinely depends on wherever the prior
+  // drive ended, so it's right to trust the tracked Ball Position for
+  // that one), a kickoff's start spot is a fixed league rule that has
+  // nothing to do with anything tracked earlier in the game -- so it
+  // doesn't need (or want) the Ball Position widget to be correctly kept
+  // up to date first. Recomputed fresh from whichever team is currently
+  // kicking on every render of a NEW play, so toggling the Kicking Team
+  // chip flips the side too; only left alone when editing an
+  // already-recorded play that has its own real historical spot.
+  function kickoffStartSpotRow(isUsKick){
+    if (editingId == null || draft.startSide == null || draft.startYard == null){
+      draft.startSide = isUsKick ? 'OWN' : 'OPP';
+      draft.startYard = 40;
+    }
+    const row = document.createElement('div');
+    row.style.cssText = 'color:var(--dim);font-size:13px;';
+    row.textContent = spotLabelAbs(absoluteSpot(draft.startSide, draft.startYard));
+    return row;
   }
   // Nathan: "add in the field yardage markage." Unlike spotPicker (bound to
   // one play's draft fields), this is bound directly to the persistent
@@ -855,13 +903,24 @@
     return chip;
   }
 
+  // Nathan: "wording is used like Us or Opponent or OWN and OPP, depending
+  // on how you were setting up the play determines where it thinks you
+  // are... confusing." Every option here still STORES the same plain
+  // string it always has (so absoluteSpot/spotLabel/etc. never need to
+  // change) -- this just lets a chip DISPLAY friendlier, context-
+  // independent wording instead. Pass a plain string for the old
+  // behavior, or {value, label} when the raw value ('OWN'/'OPP') is too
+  // easy to misread as "whichever team currently has the ball" instead of
+  // "always our side of the field, no matter who's punting/kicking".
   function optChips(key, options){
     const wrap = document.createElement('div'); wrap.className = 'chipRow2';
     options.forEach(function(opt){
+      const value = (opt && typeof opt === 'object') ? opt.value : opt;
+      const text = (opt && typeof opt === 'object') ? opt.label : opt;
       const c = document.createElement('div');
-      c.className = 'optChip' + (draft[key]===opt ? ' active' : '');
-      c.textContent = opt;
-      c.addEventListener('click', function(){ draft[key] = opt; renderFields(); });
+      c.className = 'optChip' + (draft[key]===value ? ' active' : '');
+      c.textContent = text;
+      c.addEventListener('click', function(){ draft[key] = value; renderFields(); });
       wrap.appendChild(c);
     });
     return wrap;
@@ -992,7 +1051,7 @@
         } else {
           fieldsArea.appendChild(fieldBlock('Returner', playerPicker('returner')));
         }
-        fieldsArea.appendChild(fieldBlock('Kicked From (spot)', spotPicker('startSide', 'startYard', isUsKick ? 40 : 35)));
+        fieldsArea.appendChild(fieldBlock('Kicked From (spot)', kickoffStartSpotRow(isUsKick)));
         fieldsArea.appendChild(fieldBlock('Caught/Fielded At (spot, optional)', spotPicker('catchSide', 'catchYard', isUsKick ? 20 : 15)));
         fieldsArea.appendChild(fieldBlock('Brought Ball To (final spot)', spotPicker('endSide', 'endYard', isUsKick ? 30 : 40)));
         fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown')));
@@ -1009,7 +1068,7 @@
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Punter (optional)', textInput('oppPunter', "Opponent's punter, if known")));
       }
-      fieldsArea.appendChild(fieldBlock('Punted From (spot)', spotPicker('startSide', 'startYard', 35)));
+      fieldsArea.appendChild(fieldBlock('Punted From (spot)', startSpotLabelRow('startSide', 'startYard')));
       fieldsArea.appendChild(fieldBlock('Result', optChips('puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned'])));
       if (draft.puntResult === 'Returned'){
         if (isUs){
