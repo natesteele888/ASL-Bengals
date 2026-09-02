@@ -14289,6 +14289,10 @@ window.SHIPPED_PLAYS_JSON = {
                   345
                 ],
                 [
+                  806,
+                  389
+                ],
+                [
                   911,
                   415
                 ],
@@ -14302,7 +14306,8 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 500
+              "delayMs": 500,
+              "handoffIndex": 3
             },
             {
               "ball": false,
@@ -15057,6 +15062,10 @@ window.SHIPPED_PLAYS_JSON = {
                   345
                 ],
                 [
+                  806,
+                  389
+                ],
+                [
                   700,
                   415
                 ],
@@ -15070,7 +15079,8 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 500
+              "delayMs": 500,
+              "handoffIndex": 3
             },
             {
               "ball": false,
