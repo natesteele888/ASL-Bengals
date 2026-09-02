@@ -991,6 +991,17 @@
       const toggles = document.createElement('div'); toggles.className='toggleRow';
       toggles.appendChild(chipToggle('firstDown', isUsRun ? '1st Down' : 'Opponent 1st Down'));
       toggles.appendChild(chipToggle('td','🏆 Touchdown'));
+      // Nathan: "rushing attempts where there is a fumble on the exchange
+      // isn't a rushing attempt" -- a botched snap/handoff before the
+      // ball's really been handed off isn't a designed run, so it
+      // shouldn't count as a carry or add to a player's rushing yards in
+      // the box score. Still a real snap (counts toward snap totals) and
+      // still moves the ball (spot tracking above is unaffected) -- this
+      // only pulls it out of the Rushing stat table. Lets a play like
+      // "Desmond S, -1 yd" get corrected after the fact via the normal
+      // click-to-edit flow once you realize it was actually a fumbled
+      // exchange he recovered himself, not a real designed carry.
+      toggles.appendChild(chipToggle('fumbledExchange', 'Fumbled Exchange (not a rush attempt)'));
       fieldsArea.appendChild(fieldBlock('', toggles));
     }
     else if (currentType === 'pass'){
@@ -1170,7 +1181,8 @@
       const isUsRun = p.runTeam !== 'Opponent';
       const carrierTxt = isUsRun ? (p.carrier||'?') : ('Opponent' + (p.oppCarrier ? ' ('+p.oppCarrier+')' : ''));
       const prefix = isUsRun ? '' : '🛡️ ';
-      return prefix + (p.td?'🏆 ':'') + 'Run — ' + carrierTxt + ', ' + p.yards + ' yds' +
+      const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
+      return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
         (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
         (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
@@ -1525,18 +1537,25 @@
 
       if (p.type==='run'){
         const isUsRun = p.runTeam !== 'Opponent';
-        if (isUsRun && p.carrier){
-          const r = rushing[p.carrier] || (rushing[p.carrier] = {name:p.carrier, att:0, yds:0, td:0, fd:0});
-          // Nathan's note: TD counting used to fire for run's `td` flag
-          // unconditionally (fine back when run had no team at all) --
-          // scoring.touchdowns below is scored TOTAL by both teams (same
-          // as every other field in this Scoring Summary, e.g. patGood
-          // isn't split by team either), so it still increments regardless
-          // of which side scored, just via the isUsRun/else split now.
-          r.att++; r.yds += Number(p.yards||0); if (p.td){ r.td++; } if (p.firstDown) r.fd++;
-        } else if (!isUsRun){
-          oppRushAtt++; oppRushYds += Number(p.yards||0);
-          if (p.td) oppRushTd++;
+        // Nathan: "rushing attempts where there is a fumble on the
+        // exchange isn't a rushing attempt" -- a botched snap/handoff
+        // still happened (real snap, real field-position change, handled
+        // by the spot tracker separately) but doesn't get credited as a
+        // carry to anyone's rushing line, for us or the opponent.
+        if (!p.fumbledExchange){
+          if (isUsRun && p.carrier){
+            const r = rushing[p.carrier] || (rushing[p.carrier] = {name:p.carrier, att:0, yds:0, td:0, fd:0});
+            // Nathan's note: TD counting used to fire for run's `td` flag
+            // unconditionally (fine back when run had no team at all) --
+            // scoring.touchdowns below is scored TOTAL by both teams (same
+            // as every other field in this Scoring Summary, e.g. patGood
+            // isn't split by team either), so it still increments regardless
+            // of which side scored, just via the isUsRun/else split now.
+            r.att++; r.yds += Number(p.yards||0); if (p.td){ r.td++; } if (p.firstDown) r.fd++;
+          } else if (!isUsRun){
+            oppRushAtt++; oppRushYds += Number(p.yards||0);
+            if (p.td) oppRushTd++;
+          }
         }
         if (p.td) scoring.touchdowns++;
       }
@@ -2070,7 +2089,7 @@
     (playList || []).forEach(p => {
       if (!p || p.type === 'quarterEnd') return;
 
-      if (p.type === 'run'){
+      if (p.type === 'run' && !p.fumbledExchange){
         if (p.runTeam !== 'Opponent'){
           if (p.carrier){
             const num = numFor(p.carrier);
