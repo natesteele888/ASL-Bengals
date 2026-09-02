@@ -64,6 +64,7 @@ modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> {
     hideGlobalCallout(); // Nathan: "goes away when you go to another screen"
     if (btn.dataset.mode === 'twominute') {
+      dismissTwoMinuteNewBadge(); // Nathan: "call out 2 min drill as a new game" -- only until they've actually tried it once
       if (window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay();
       return;
     }
@@ -71,6 +72,25 @@ modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
     setMode(btn.dataset.mode);
   });
 });
+// Nathan: "make sure we call out 2 min drill as a new game" -- a small NEW
+// pill on the tab (see .modeNewBadge in styles.css) until someone's
+// actually opened the drill once, then it's gone for good on that device
+// (localStorage, same durability as the twoMinDrillBestTDs/BestStreak
+// bests already stored that way in two-minute-drill.js).
+const TWO_MIN_NEW_SEEN_KEY = 'twoMinDrillNewBadgeSeen';
+function dismissTwoMinuteNewBadge(){
+  try { localStorage.setItem(TWO_MIN_NEW_SEEN_KEY, '1'); } catch(e) { /* localStorage unavailable -- badge just won't stick as dismissed */ }
+  const badge = document.getElementById('twoMinuteNewBadge');
+  if (badge) badge.style.display = 'none';
+}
+(function initTwoMinuteNewBadge(){
+  let seen = false;
+  try { seen = localStorage.getItem(TWO_MIN_NEW_SEEN_KEY) === '1'; } catch(e) { /* default to showing it */ }
+  if (seen) {
+    const badge = document.getElementById('twoMinuteNewBadge');
+    if (badge) badge.style.display = 'none';
+  }
+})();
 
 /* ============================================================
    TOP-LEVEL SECTIONS -- Play (the sub-tab bar above, unchanged) vs This

@@ -2254,6 +2254,11 @@
       if (!state.running) return;
 
       if (scored) {
+        // Nathan: "if you score a touchdown, the clock should stop." Same
+        // open-ended hold a timeout/out-of-bounds play uses -- it only
+        // clears again on the NEXT round's correct pick (line ~2183), once
+        // the "kickoff" for the following possession has actually been run.
+        state.clockHoldForSelection = true;
         state.score++;
         updateHud();
         state.driveLog.push({ text: '', result: '🏈 TOUCHDOWN', cls: 'touchdown' });
@@ -2507,6 +2512,17 @@
   };
   if (el.twoMinDrillCloseBtn) {
     el.twoMinDrillCloseBtn.addEventListener('click', () => {
+      // Nathan: "if you hit the X to close it, it should ask you to
+      // confirm if you want to quit the game. If you proceed it will stop
+      // the game and close. If you say no, it will keep the game going."
+      // Only a drive actually in progress has anything to lose -- closing
+      // from the start/end/leaderboard screens (state.running is false
+      // there) just closes immediately, same as before.
+      if (state.running) {
+        const proceed = window.confirm('Quit this 2 Minute Drill? Your current drive will end.');
+        if (!proceed) return;
+        endGame(); // stops the clock/crowd audio and saves the result, same cleanup as the clock hitting 0
+      }
       if (el.twoMinDrillOverlay) {
         el.twoMinDrillOverlay.classList.remove('show');
         el.twoMinDrillOverlay.style.display = 'none';
