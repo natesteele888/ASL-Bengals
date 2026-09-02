@@ -759,6 +759,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   border:none;background:rgba(255,255,255,.25);color:#fff;font-size:22px;line-height:1;cursor:pointer;
   display:flex;align-items:center;justify-content:center}
 .lbXClose:active{background:rgba(255,255,255,.4)}
+/* Nathan: "since the background is white, you can't see the white X in the
+   corner to close - make sure its black X so it's visible" -- .lbXClose is
+   shared with several dark-background overlays (leaderboard, rank-up,
+   badges, etc.) where white-on-translucent-white is the right look, so this
+   only overrides it for the 2 Minute Drill's own light (#f4f2ee) overlay
+   rather than changing the shared default everywhere. */
+.twoMinDrillOverlay .lbXClose{background:rgba(0,0,0,.08);color:#1a1a1a}
+.twoMinDrillOverlay .lbXClose:active{background:rgba(0,0,0,.16)}
 
 .lbSaveForm{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px;background:var(--paper);
   border-radius:10px}
@@ -2286,24 +2294,27 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 /* ---- big bold result banner (raised above the overlay's own
    z-index:1900 -- was 500 on the standalone page, which had nothing else
    on top of it to worry about) ---- */
+/* Nathan: "colored banner at the top is a little too big - needs to be
+   smaller" -- shrunk font sizes/padding/radius across the board (roughly
+   -30%), position and animation timing unchanged. */
 .twoMinBanner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%) scale(.7); z-index: 1950;
-  font-size: 30px; font-weight: 900; text-align: center; padding: 18px 26px; border-radius: 16px;
-  color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  font-size: 21px; font-weight: 900; text-align: center; padding: 12px 18px; border-radius: 12px;
+  color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 8px 28px rgba(0,0,0,.5);
   transition: opacity .15s ease, transform .15s ease; max-width: 90vw; }
-.twoMinBanner::before { content: ''; position: absolute; inset: -30px; border-radius: 50%;
+.twoMinBanner::before { content: ''; position: absolute; inset: -22px; border-radius: 50%;
   background: radial-gradient(circle, currentColor 0%, transparent 68%); opacity: 0; z-index: -1; }
 .twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .45s cubic-bezier(.2,1.7,.4,1); }
 .twoMinBanner.show::before { animation: twoMinBannerRing .65s ease-out; }
 .twoMinBanner.good { background: linear-gradient(135deg, #3fb454, #1b5e20 65%, #0d3d13); color: #eafff0; }
 .twoMinBanner.good::before { color: #3fb454; }
-.twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 34px; }
+.twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 24px; }
 .twoMinBanner.good.big::before { color: #f9a825; }
 .twoMinBanner.show.good.big { animation: twoMinBannerPunch .5s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .5s ease .18s; }
 .twoMinBanner.bad { background: linear-gradient(135deg, #e5433d, #c62828 55%, #7a1f1f); }
 .twoMinBanner.bad::before { color: #c62828; }
-.twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 26px; }
+.twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 18px; }
 .twoMinBanner.timeout::before { color: #4fc3f7; }
-.twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 42px; }
+.twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 29px; }
 .twoMinBanner.touchdown::before { color: var(--bengal-orange); }
 .twoMinBanner.show.touchdown { animation: twoMinBannerPunch .55s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .6s ease .2s, twoMinBannerGlow 1.3s ease-in-out .5s infinite; }
 @keyframes twoMinBannerPunch { 0% { transform: translate(-50%, -50%) scale(.5); } 60% { transform: translate(-50%, -50%) scale(1.12); } 100% { transform: translate(-50%, -50%) scale(1); } }
