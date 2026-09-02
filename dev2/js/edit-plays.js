@@ -924,14 +924,28 @@ function getBlockFieldKey() {
 // Old saved data (from before same-side/cross-side blocking was independent)
 // only has points/points4x4. Rather than crash on the missing field, migrate
 // it in-memory the first time it's touched, so old cloud saves keep working.
+//
+// Nathan: "I can set the 4 as a blocker but as soon as I swap him to the
+// other side, it blocks his assignment on the other side. Each variation
+// needs the ability to set independent blocking assignments." Root cause:
+// `p.sameSidePoints = p.sameSidePoints || p.points || fallback` and the
+// crossPoints line right after it both fell back to the exact same
+// `p.points` array OBJECT when neither had been split out yet -- not a
+// copy of it, the same reference. sameSidePoints and crossPoints looked
+// independent (two different property names), but pointed at one shared
+// array, so writeBackPoint's `p[fieldKey][1] = ...` mutated whichever
+// field was active AND silently changed the other one too. Cloning each
+// fallback separately means editing one side's assignment can never again
+// reach across and change the other's.
+function clonePts(arr) { return arr ? arr.map(pt => pt.slice()) : arr; }
 function getBlockPoints(p) {
   const fieldKey = getBlockFieldKey();
   if (!p[fieldKey]) {
     const fallback = defenseMode === '4x4' ? (p.points4x4 || p.points) : p.points;
-    p.sameSidePoints = p.sameSidePoints || p.points || fallback;
-    p.crossPoints = p.crossPoints || p.points || fallback;
-    p.sameSidePoints4x4 = p.sameSidePoints4x4 || p.points4x4 || fallback;
-    p.crossPoints4x4 = p.crossPoints4x4 || p.points4x4 || fallback;
+    p.sameSidePoints = p.sameSidePoints || clonePts(p.points) || clonePts(fallback);
+    p.crossPoints = p.crossPoints || clonePts(p.points) || clonePts(fallback);
+    p.sameSidePoints4x4 = p.sameSidePoints4x4 || clonePts(p.points4x4) || clonePts(fallback);
+    p.crossPoints4x4 = p.crossPoints4x4 || clonePts(p.points4x4) || clonePts(fallback);
   }
   return p[fieldKey];
 }
