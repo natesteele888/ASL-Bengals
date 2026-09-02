@@ -1586,6 +1586,84 @@ window.maybeShowNewFeaturesIntro = function(){
   } catch(e) { /* best-effort -- new-features awareness shouldn't block login */ }
 };
 
+// ---------------------------------------------------------------------------
+// "Getting Started" wizard (Nathan, 2026-09-01): "If a player logs in and
+// doesn't use the app to it's fullest, we should have a pop-up wizard...
+// Lead them through a course - learn the signals, then try the quiz. once
+// comfortable try the timed quiz. once you feel good about those, start
+// studying the play calls and the variations. Be sure to flip the card and
+// see the play signals. Then try the play quiz. the more you play, the
+// higher you climb on the leaderboard. Then put it all together with the
+// new 2 minute drill." Same trigger point/gating pattern as
+// maybeShowBadgesIntro/maybeShowNewFeaturesIntro just above (fired from
+// player-identity.js's gate(), once ever per device) -- but only for
+// someone who's actually "not using the app to its fullest": no rank at
+// all on the combined leaderboard, i.e. they've never finished a single
+// Quiz/Timed Quiz/Play Calls Quiz run. That's the same signal the old
+// engagement-carousel slides used for their "you're not on the leaderboard
+// yet" message -- a player who already has real activity doesn't need to
+// be walked through the app again.
+const GETTING_STARTED_SEEN_KEY = 'aslBengalsGettingStartedSeen';
+function gettingStartedStepHtml(icon, title, desc, mode){
+  return `<div class="nfRow gsRow" data-gs-mode="${mode}">
+    <div class="nfIcon">${icon}</div>
+    <div class="nfText">
+      <div class="nfTitle">${title}</div>
+      <div class="nfDesc">${desc}</div>
+    </div>
+    <div class="gsArrow">›</div>
+  </div>`;
+}
+function gettingStartedListHtml(){
+  return [
+    gettingStartedStepHtml('🎓', '1. Learn the Signals', 'Start in Study -- flip through every hand signal until they feel familiar.', 'study'),
+    gettingStartedStepHtml('🏈', '2. Take the Quiz', 'Test yourself on the signals you just learned.', 'quiz'),
+    gettingStartedStepHtml('⏱️', '3. Try the Timed Quiz', "Once you're comfortable, race the clock for extra points.", 'timed'),
+    gettingStartedStepHtml('📋', '4. Study the Play Calls', 'Learn the play calls and their variations -- flip each card to see its play signal too.', 'playcalls'),
+    gettingStartedStepHtml('🧠', '5. Take the Play Quiz', 'Put your play call knowledge to the test.', 'playcallsquiz'),
+    gettingStartedStepHtml('🏆', '6. Climb the Leaderboard', 'The more you play, the higher you climb -- check where you stand.', 'leaderboard'),
+    gettingStartedStepHtml('⏱️🏈', '7. Put It All Together', 'Try the new 2 Minute Drill -- read the defense, call the right play, and drive for the score under the clock.', 'twominute'),
+  ].join('');
+}
+function gettingStartedGoTo(mode){
+  const overlay = document.getElementById('gettingStartedOverlay');
+  if(overlay) overlay.classList.remove('show');
+  if(mode === 'twominute'){ if(window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay(); return; }
+  if(mode === 'leaderboard'){ openLeaderboardOverlay(); return; }
+  lastPlaySubMode = mode;
+  if(typeof setSection === 'function') setSection('play');
+  setMode(mode);
+}
+window.maybeShowGettingStartedIntro = async function(){
+  try {
+    if(window.isParentSession) return;
+    const { name } = currentPlayerTag();
+    if(!name) return;
+    const isCoach = !!window.isCoachSession || isCoachEntryName(name);
+    if(isCoach) return; // this is a player onboarding flow, not for coaches
+    let alreadySeen = false;
+    try { alreadySeen = localStorage.getItem(GETTING_STARTED_SEEN_KEY) === '1'; } catch(e){ /* ignore */ }
+    if(alreadySeen) return;
+    const { players } = await computeOverallStandings();
+    const { rank } = findEntryAndRank(players, name);
+    if(rank) return; // already has real activity on the board -- not "new" anymore
+    const overlay = document.getElementById('gettingStartedOverlay');
+    const body = document.getElementById('gettingStartedBody');
+    if(!overlay || !body) return;
+    body.innerHTML = gettingStartedListHtml();
+    body.querySelectorAll('.gsRow').forEach(row => {
+      row.addEventListener('click', () => gettingStartedGoTo(row.dataset.gsMode));
+    });
+    overlay.classList.add('show');
+    try { localStorage.setItem(GETTING_STARTED_SEEN_KEY, '1'); } catch(e){ /* ignore */ }
+    const closeAndClear = () => overlay.classList.remove('show');
+    const okBtn = document.getElementById('gettingStartedOkBtn');
+    const closeBtn = document.getElementById('gettingStartedCloseBtn');
+    if(okBtn) okBtn.onclick = closeAndClear;
+    if(closeBtn) closeBtn.onclick = closeAndClear;
+  } catch(e) { /* best-effort -- onboarding shouldn't block login */ }
+};
+
 window.showMyStats = async function showMyStats(){
   const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
   const overlay = document.getElementById('myStatsOverlay');

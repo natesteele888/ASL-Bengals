@@ -39,6 +39,8 @@
     ['double_blast', '#8a2e5c'],
     ['option_pass', '#b8860b'],
     ['sweep', '#0e7c7b'],
+    // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right."
+    ['shuffle_pass', '#455a64'],
   ];
   // Sweep only ever exists as coach-edited cloud data, historically saved
   // with just one real (Outside) variant -- forcing a single sub-variant

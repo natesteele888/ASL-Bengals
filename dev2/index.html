@@ -1427,6 +1427,31 @@
   </div>
 </div>
 
+<!-- Nathan: "If a player logs in and doesn't use the app to it's fullest,
+     we should have a pop-up wizard saying something like 'New to the app?
+     Here's what to do.'" Fired by js/study-quiz.js's
+     maybeShowGettingStartedIntro() the first time a signed-in, non-coach,
+     non-parent player is found with NO activity at all on the combined
+     leaderboard (computeOverallStandings finds no rank for them) -- the
+     closest real signal this app has for "hasn't really used it yet,"
+     same rank lookup the old engagement-carousel slides used to use for
+     their "you're not on the leaderboard yet" message. Shows once ever per
+     device (localStorage), same pattern as badgesIntroOverlay/
+     newFeaturesOverlay above. Each row is clickable and jumps straight to
+     that step (closing this overlay first) instead of just describing it. -->
+<div class="lbOverlay" id="gettingStartedOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="gettingStartedCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🏈</div>
+      <h3>New to the App?</h3>
+      <div class="lbSub">Here's what to do, step by step -- tap any step to jump right to it</div>
+    </div>
+    <div id="gettingStartedBody" class="nfList"></div>
+    <button class="navBtn" id="gettingStartedOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
 <!-- Nathan: "success sound can play when you have received an badge. It
      should show the badge on the screen with the title, congrats! and
      make the sound when it pops up." Different moment than

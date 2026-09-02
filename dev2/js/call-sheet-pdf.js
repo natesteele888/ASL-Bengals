@@ -41,7 +41,10 @@
   // Coach's chosen call-order (matches the app's own play grid, and keeps
   // Wing and Split reading the same left-to-right so a coach scanning both
   // bands doesn't have to re-search for a play).
-  const PLAY_ORDER = ['inside_zone', 'outside_zone', 'blast', 'sweep', 'option', 'option_pass', 'double_blast'];
+  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" -- added
+  // to the Wing-formation call order right after Sweep (same grouping
+  // plays.json uses).
+  const PLAY_ORDER = ['inside_zone', 'outside_zone', 'blast', 'sweep', 'shuffle_pass', 'option', 'option_pass', 'double_blast'];
   const ROUTE_NAMES = ['seattle', 'houston', 'florida', 'boston'];
 
   // ---- SVG rasterization helpers (same pattern as playbook-pdf.js's

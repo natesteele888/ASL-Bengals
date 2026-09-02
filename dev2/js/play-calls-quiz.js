@@ -20,7 +20,11 @@
   // (whether a cloud snapshot has had the old Left/Right swap bug repaired),
   // not a real "direction can't be picked" behavior, so Option answers like
   // any other play: noBoot is already handled generically below.
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
+  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" -- a
+  // pitch/misdirection gadget play like option_pass, not a QB-keep-style
+  // run, so it's marked noBoot in plays.json the same way and grouped into
+  // SIMPLE_KEYS below (no Inside/Outside decision either).
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option', 'shuffle_pass'];
   const POINTS_FULL = 10, POINTS_HALF = 5;
 
   function playFlags(key){
@@ -41,7 +45,7 @@
   // sameSide: true = direction must match wing side, false = must differ.
   // pool: which plays are eligible this round (on top of the boot filter).
   // bootOnly: true = further restrict the pool to plays that allow Boot.
-  const SIMPLE_KEYS = ['inside_zone', 'outside_zone', 'sweep', 'option_pass', 'option']; // no Inside/Outside decision
+  const SIMPLE_KEYS = ['inside_zone', 'outside_zone', 'sweep', 'option_pass', 'option', 'shuffle_pass']; // no Inside/Outside decision
   const IO_KEYS = ['blast', 'double_blast']; // Inside/Outside decision plays
   const TIERS = [
     { pool: SIMPLE_KEYS, motion: false, boot: false, sameSide: true },

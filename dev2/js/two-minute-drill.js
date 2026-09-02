@@ -807,10 +807,12 @@
   let SIGNAL_CARDS = {};
   const PLAY_TYPE_SIGNAL_ID = {
     inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
+    shuffle_pass: 23,
   };
   const PLAY_TYPE_SIGNAL_LABEL = {
     inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
     option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
+    shuffle_pass: 'Shuffle Pass',
   };
   const WING_TOUCH_ID = 7;
   const FINGER_RIGHT_IDS = [4, 5, 6];
@@ -940,7 +942,11 @@
   //   - hasInsideOutside plays (Blast/Double Blast) require a pick.
   // Counter itself only exists on Option/Outside Zone (hasCounter).
   // ================================================================
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
+  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" -- added
+  // to the drill's call pool. Not in PASSING_PLAY_KEYS below: it's a
+  // pitch/misdirection gadget play like the run game, not a real drop-back
+  // pass, for resolveGain's yardage-engine purposes.
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option', 'shuffle_pass'];
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" -- Option Pass is the only real drop-back pass among
   // these 7 plays on Wing (Split's independent Pass toggle, checked via
@@ -971,7 +977,10 @@
     inside_zone: ['outside_zone'], outside_zone: ['inside_zone', 'sweep'],
     blast: ['double_blast'], double_blast: ['blast'],
     option: ['option_pass'], option_pass: ['option'],
-    sweep: ['outside_zone'],
+    sweep: ['outside_zone', 'shuffle_pass'],
+    // Nathan: "similar to the counter play" -- same misdirection family as
+    // Sweep, so it's a natural decoy pairing with it.
+    shuffle_pass: ['sweep'],
   };
 
   function playFlags(key) {

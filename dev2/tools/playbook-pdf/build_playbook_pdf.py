@@ -148,6 +148,7 @@ FAMILY_META = [
     ("double_blast", "#8a2e5c"),
     ("option_pass", "#b8860b"),
     ("sweep", "#0e7c7b"),
+    ("shuffle_pass", "#455a64"),  # Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right"
 ]
 FAMILIES = [(key, PLAY_TYPES[key]["label"], color) for key, color in FAMILY_META if key in PLAY_TYPES]
 

@@ -1343,6 +1343,13 @@
       // same pattern as maybeShowBadgesIntro above). See
       // js/study-quiz.js's maybeShowNewFeaturesIntro.
       if (typeof window.maybeShowNewFeaturesIntro === 'function') window.maybeShowNewFeaturesIntro();
+      // Nathan: "If a player logs in and doesn't use the app to it's
+      // fullest, we should have a pop-up wizard saying something like 'New
+      // to the app? Here's what to do.'" Same trigger point as the other
+      // post-session checks here -- gates itself internally (players only,
+      // only if they have no real activity yet, once per device). See
+      // js/study-quiz.js's maybeShowGettingStartedIntro.
+      if (typeof window.maybeShowGettingStartedIntro === 'function') window.maybeShowGettingStartedIntro();
       // Nathan: "make sure players are only using one sign in... ask them
       // upon [next] log in if those submissions belong to them." Same
       // trigger point as the other post-session checks here -- see the
