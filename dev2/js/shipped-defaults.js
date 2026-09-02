@@ -14254,7 +14254,7 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "ball": false,
-              "delayMs": 500,
+              "delayMs": 620,
               "player": 1,
               "points": [
                 [
@@ -14306,7 +14306,6 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 1000,
               "handoffIndex": 3
             },
             {
@@ -14820,7 +14819,7 @@ window.SHIPPED_PLAYS_JSON = {
           "paths": [
             {
               "ball": false,
-              "delayMs": 500,
+              "delayMs": 620,
               "player": 1,
               "points": [
                 [
@@ -15079,7 +15078,6 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 1000,
               "handoffIndex": 3
             },
             {
