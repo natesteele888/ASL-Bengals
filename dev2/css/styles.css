@@ -186,7 +186,19 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .topSections{position:sticky;top:var(--header-h, 63px);z-index:280;display:flex;background:var(--bengal-black);border-bottom:2px solid var(--bengal-orange)}
 .topSections .modeBtn{color:rgba(255,255,255,.55)}
 .topSections .modeBtn.active{color:#fff;border-bottom-color:var(--bengal-orange)}
-.modeTabs{position:sticky;top:var(--subnav-h, 113px);z-index:270;display:flex;background:#fff;border-bottom:2px solid var(--bengal-black)}
+/* Nathan (2026-08-25): "The 2 Minute Drill is now ready to be unleashed...
+   needs to be available on the navigation bar... I don't want them hidden
+   under more, but need a way to show them... the words need to stack or
+   something to be sure its not too crammed and its ledgible." Reverses the
+   earlier equal-width-squeeze-then-"More"-dropdown design (see git history
+   for the old .modeMoreWrap/.modeMoreToggle/.modeMoreMenu rules this
+   replaced) -- six fixed-width tabs now sit directly on the row, scrolling
+   horizontally instead of shrinking to fit, with labels allowed to wrap to
+   a second line instead of getting truncated with an ellipsis. */
+.modeTabs{position:sticky;top:var(--subnav-h, 113px);z-index:270;display:flex;background:#fff;
+  border-bottom:2px solid var(--bengal-black);overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none}
+.modeTabs::-webkit-scrollbar{display:none}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
   background:none;cursor:pointer}
@@ -194,34 +206,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .modeBtn.active{color:var(--accent);border-bottom-color:var(--accent)}
-
-/* ---- "More" tab dropdown (Nathan: "too busy to find things... don't love
-   always having rows of tabs") -- Timed/Play Quiz/Edit live here instead of
-   as three more equal-width buttons crammed onto the row above. See
-   index.html's #modeMoreWrap markup and study-quiz.js's setMode() for the
-   active-icon/label swap. */
-.modeMoreWrap{position:relative;flex:1;min-width:0;display:flex}
-.modeMoreToggle{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
-  background:none;cursor:pointer;font:inherit}
-.modeMoreToggle .modeIcon{font-size:20px;line-height:1}
-.modeMoreToggle .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.modeMoreToggle.active{color:var(--accent);border-bottom-color:var(--accent)}
-.modeMoreMenu{display:none;flex-direction:column;position:absolute;top:100%;right:0;min-width:150px;
-  background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);
-  padding:6px;z-index:271}
-.modeMoreMenu.show{display:flex}
-.modeMoreMenu .modeBtn{flex-direction:row;justify-content:flex-start;gap:8px;padding:9px 10px;
-  border:none;border-radius:8px;color:var(--ink)}
-.modeMoreMenu .modeBtn .modeIcon{font-size:16px}
-.modeMoreMenu .modeBtn .modeLabel{font-size:13px;font-weight:700;letter-spacing:0;overflow:visible;
-  white-space:nowrap;text-overflow:clip}
-.modeMoreMenu .modeBtn.active{background:rgba(255,106,19,.12);color:var(--accent)}
-.modeMoreMenu .modeBtn:active{background:var(--paper)}
-[data-theme="dark"] .modeMoreMenu{background:#1c1c1c;border-color:var(--line)}
-[data-theme="dark"] .modeMoreMenu .modeBtn{color:var(--ink)}
-[data-theme="dark"] .modeMoreMenu .modeBtn.active{background:rgba(255,106,19,.22)}
+/* #modeTabs specifically (the Play sub-nav) gets the fixed-width, scrolling,
+   wrap-instead-of-truncate treatment above -- .topSections (Play/This
+   Week/Schedule/Standings/Coach Tools) keeps the original equal-width
+   .modeBtn behavior via the shared rule above, since that row only ever
+   has a handful of items and still needs to fill the full width evenly. */
+.modeTabs .modeBtn{flex:0 0 auto;width:72px;padding:8px 4px 7px}
+.modeTabs .modeBtn .modeLabel{font-size:10px;line-height:1.15;white-space:normal;overflow:visible;
+  text-overflow:clip;overflow-wrap:break-word}
 
 .modePanel{display:none;padding:8px 10px 14px}
 .modePanel.show{display:block}
@@ -581,18 +573,23 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    rotates. Each tone is a distinct saturated gradient so different slide
    types ("you're #N", streak, schedule, leaderboard...) are readable as
    different colors at a glance, not just different text. */
+/* Nathan (2026-08-25): "The rotating banner is too big and in the way,
+   should only be visible to start and then goes away when you go to
+   another screen." Shrunk stage height/padding/fonts (~35% smaller
+   footprint) -- the show-once-then-dismiss behavior itself is JS (see
+   study-quiz.js's hideGlobalCallout(), wired into the nav click handlers). */
 .globalCallout{position:relative;margin:0;overflow:hidden}
-.gcStage{position:relative;height:64px}
-.gcSlide{position:absolute;inset:0;display:flex;align-items:center;gap:10px;
-  padding:10px 16px;opacity:0;pointer-events:none;cursor:pointer;
+.gcStage{position:relative;height:42px}
+.gcSlide{position:absolute;inset:0;display:flex;align-items:center;gap:8px;
+  padding:6px 12px;opacity:0;pointer-events:none;cursor:pointer;
   transition:opacity .45s ease}
 .gcSlide.active{opacity:1;pointer-events:auto}
-.gcIcon{font-size:24px;line-height:1;flex-shrink:0}
+.gcIcon{font-size:17px;line-height:1;flex-shrink:0}
 .gcText{flex:1;min-width:0}
-.gcTitle{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
+.gcTitle{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gcBody{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gcArrow{font-size:22px;font-weight:800;flex-shrink:0;opacity:.85}
+.gcBody{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gcArrow{font-size:16px;font-weight:800;flex-shrink:0;opacity:.85}
 .gc-gold{background:linear-gradient(135deg, #ffb703 0%, var(--bengal-orange) 100%);color:#2a1400}
 .gc-gold .gcTitle{color:#4a2600}
 .gc-green{background:linear-gradient(135deg, #4cae4c 0%, #1f7a2d 100%);color:#fff}
@@ -603,8 +600,8 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .gc-red .gcTitle{color:#fde8e8}
 .gc-navy{background:linear-gradient(135deg, #3d4f7d 0%, #1a2647 100%);color:#fff}
 .gc-navy .gcTitle{color:#e4e8f5}
-.gcDots{position:absolute;bottom:4px;left:0;right:0;display:flex;justify-content:center;gap:5px}
-.gcDot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.5)}
+.gcDots{position:absolute;bottom:2px;left:0;right:0;display:flex;justify-content:center;gap:4px}
+.gcDot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.5)}
 .gcDot.active{background:#fff}
 @media (prefers-reduced-motion: reduce){
   .gcSlide{transition:none}

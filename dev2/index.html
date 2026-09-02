@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824j">
+<link rel="stylesheet" href="css/styles.css?v=20260824k">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -413,37 +413,34 @@
      (index.html's #childPillsWrap, up in #topToolbar) covers the same
      Card/Progress access now. -->
 
-<!-- Nathan: "as things have been added they are starting to get too busy to
-     find things... I don't love always having rows of tabs." All six tabs
-     used to sit here at equal width, squeezed onto one cramped row
-     (flex:1 on six .modeBtns). Study/Quiz/Play Calls (the three used every
-     session) stay directly on the row; Timed/Play Quiz/Edit (used less
-     often) move into the "More" dropdown below -- same buttons, same
-     data-mode/ids, same click-to-setMode() wiring (setMode()'s
-     modeTabsEl.querySelectorAll('.modeBtn') finds them regardless of how
-     deep they're nested inside #modeTabs), just visually tucked away so
-     the row everyone sees every time has room to breathe. -->
+<!-- Nathan (later, 2026-08-25): "The 2 Minute Drill is now ready to be
+     unleashed... needs to be available on the navigation bar. Study should
+     have the Signals and the Play Calls, then Quiz, Timed Quiz, Play Quiz
+     and 2 Minute Drill. I don't want them hidden under more, but need a
+     way to show them." Reverses the earlier "More" dropdown (all six tabs
+     used to squeeze onto one equal-width row, then Timed/Play Quiz/Edit got
+     tucked behind a dropdown to de-clutter it) -- now all six sit directly
+     on the row in this exact order, fixed-width so labels can wrap to two
+     lines instead of getting truncated, and the row scrolls horizontally
+     (see .modeTabs/.modeBtn in styles.css) instead of shrinking every tab
+     to fit. Same data-mode/ids/click-to-setMode() wiring as before. -->
 <div class="modeTabs" id="modeTabs">
   <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
-  <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
   <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
-  <div class="modeMoreWrap" id="modeMoreWrap">
-    <!-- Deliberately NOT class="modeBtn" -- the generic
-         `modeTabsEl.querySelectorAll('.modeBtn').forEach(btn => btn.addEventListener('click', ()=> setMode(btn.dataset.mode)))`
-         wiring in study-quiz.js would otherwise treat this as a real mode
-         tab and call setMode(undefined) on click (no data-mode here).
-         study-quiz.js's setMode() updates this button's own icon/label/
-         active state directly instead, so it reads as "whichever hidden
-         tab is currently open" rather than staying a static "More". -->
-    <button type="button" class="modeMoreToggle" id="modeMoreBtn" aria-haspopup="true" aria-expanded="false">
-      <span class="modeIcon">⋯</span><span class="modeLabel">More</span>
-    </button>
-    <div class="modeMoreMenu" id="modeMoreMenu">
-      <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
-      <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
-      <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
-    </div>
-  </div>
+  <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
+  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed Quiz</span></button>
+  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
+  <!-- Nathan (earlier, 2026-08-24): "every single page has 2 minute drill
+       at the bottom... remove it immediately" -- pulled off every page and
+       reachable only via a hidden long-press-the-logo gesture
+       (window.openTwoMinDrillOverlay, see study-quiz.js's headerLogo
+       handler and js/two-minute-drill.js). Now reversed: it's a normal,
+       discoverable tab again, just here on the Play row instead of on
+       every page. It opens the same full-screen overlay (not a modePanel),
+       so its click is special-cased in study-quiz.js's modeBtn wiring
+       rather than going through setMode(). -->
+  <button class="modeBtn" data-mode="twominute" id="twoMinuteTabBtn"><span class="modeIcon">🏈⏱️</span><span class="modeLabel">2 Minute Drill</span></button>
+  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
 </div>
 
 <!-- Nathan: "when a coach logs in, they can click their profile and choose
@@ -1973,7 +1970,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260825b';
+  const BUILD_V = '20260825c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

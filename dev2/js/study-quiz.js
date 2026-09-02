@@ -52,52 +52,25 @@ function setMode(mode){
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
   if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
 
-  // Nathan: "too busy to find things... don't love always having rows of
-  // tabs" -- Timed/Play Quiz/Edit moved off the row into the "More"
-  // dropdown (see index.html's #modeMoreWrap), so the row itself never
-  // shows any of them as visually active anymore. Swap the More button's
-  // own icon/label to whichever of those three is actually open (and
-  // highlight it the same way an active tab highlights) so it still reads
-  // as "you're here", not just a static, unhelpful "More".
-  const moreBtn = document.getElementById('modeMoreBtn');
-  if (moreBtn) {
-    const MOVED_TAB_DISPLAY = { timed: ['⏱️', 'Timed'], playcallsquiz: ['🧠', 'Play Quiz'], editplays: ['✏️', 'Edit'] };
-    const hit = MOVED_TAB_DISPLAY[mode];
-    moreBtn.classList.toggle('active', !!hit);
-    const iconEl = moreBtn.querySelector('.modeIcon');
-    const labelEl = moreBtn.querySelector('.modeLabel');
-    if (iconEl) iconEl.textContent = hit ? hit[0] : '⋯';
-    if (labelEl) labelEl.textContent = hit ? hit[1] : 'More';
-  }
 }
+// Nathan: "I don't want them hidden under more, but need a way to show
+// them" -- reverses the earlier "More" dropdown; all six Play tabs are
+// plain .modeBtns directly on the row now (index.html's #modeTabs), no
+// separate dropdown wiring needed. 2 Minute Drill is the one exception --
+// it's a full-screen overlay (js/two-minute-drill.js), not a modePanel, so
+// its click is special-cased here instead of going through setMode()/
+// lastPlaySubMode like every other tab.
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
-  btn.addEventListener('click', ()=> { lastPlaySubMode = btn.dataset.mode; setMode(btn.dataset.mode); });
+  btn.addEventListener('click', ()=> {
+    hideGlobalCallout(); // Nathan: "goes away when you go to another screen"
+    if (btn.dataset.mode === 'twominute') {
+      if (window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay();
+      return;
+    }
+    lastPlaySubMode = btn.dataset.mode;
+    setMode(btn.dataset.mode);
+  });
 });
-
-// ---- "More" dropdown open/close (see index.html's #modeMoreWrap) ----
-// Deliberately separate from the generic .modeBtn click wiring just above --
-// those buttons already call setMode() on click regardless of where they
-// live in the DOM; this only handles the dropdown's own show/hide chrome
-// (toggle button, click-a-tab-inside-it closes it, click-outside closes it).
-(function initModeMoreDropdown(){
-  const wrap = document.getElementById('modeMoreWrap');
-  const toggleBtn = document.getElementById('modeMoreBtn');
-  const menu = document.getElementById('modeMoreMenu');
-  if (!wrap || !toggleBtn || !menu) return;
-  function closeMenu(){
-    menu.classList.remove('show');
-    toggleBtn.setAttribute('aria-expanded', 'false');
-  }
-  toggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const open = menu.classList.toggle('show');
-    toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  menu.querySelectorAll('.modeBtn').forEach(btn => btn.addEventListener('click', closeMenu));
-  document.addEventListener('click', (e) => {
-    if (menu.classList.contains('show') && !wrap.contains(e.target)) closeMenu();
-  });
-})();
 
 /* ============================================================
    TOP-LEVEL SECTIONS -- Play (the sub-tab bar above, unchanged) vs This
@@ -120,7 +93,7 @@ function setSection(section){
 }
 if (topSectionsEl) {
   topSectionsEl.querySelectorAll('.modeBtn').forEach(btn=>{
-    btn.addEventListener('click', ()=> setSection(btn.dataset.section));
+    btn.addEventListener('click', ()=> { hideGlobalCallout(); setSection(btn.dataset.section); });
   });
 }
 
@@ -209,18 +182,6 @@ window.refreshCoachToolsVisibility = function(){
   // point at it -- clicking into Play would then land a parent on a panel
   // whose own tab button is hidden. Fall back to Study for a parent in
   // that case.
-  // Nathan's "More" dropdown (Timed/Play Quiz/Edit) can end up with every
-  // single item inside it hidden at once -- e.g. a parent session hides
-  // Timed + Play Quiz above, and Edit just got hidden by the approvedCoach
-  // check a few lines up, leaving nothing in the menu. Hide the toggle
-  // itself in that case rather than showing a "More" button that opens an
-  // empty popup.
-  const modeMoreWrapEl = document.getElementById('modeMoreWrap');
-  const modeMoreMenuEl = document.getElementById('modeMoreMenu');
-  if (modeMoreWrapEl && modeMoreMenuEl) {
-    const anyVisible = [...modeMoreMenuEl.querySelectorAll('.modeBtn')].some(b => b.style.display !== 'none');
-    modeMoreWrapEl.style.display = anyVisible ? '' : 'none';
-  }
   if (isParent && (lastPlaySubMode === 'quiz' || lastPlaySubMode === 'timed' || lastPlaySubMode === 'playcallsquiz')) {
     lastPlaySubMode = 'study';
   }
@@ -1124,6 +1085,26 @@ async function renderOverallLeaderboard(){
       ? '<div class="lbEmpty">Nobody\'s finished a Quiz Scores, Timed Quiz, or Play Calls Quiz run yet this week!</div>'
       : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
   overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
+  // Nathan: "The 2 Minute Drill is now ready to be unleashed. A score
+  // section should be added to the overall leaderboard." The drill already
+  // has its own internal Leaderboard screen (js/two-minute-drill.js's
+  // #twoMinLbScreen) -- this pulls the same data into a section here too,
+  // so it shows up alongside Quiz/Timed/Play Calls on the one leaderboard
+  // everyone already knows to check, not just inside the drill itself.
+  if (typeof window.fetchTwoMinDrillLeaderboardData === 'function') {
+    try {
+      const { players: drillPlayers, coaches: drillCoaches } = await window.fetchTwoMinDrillLeaderboardData();
+      const drillScoreFn = e => `${e.score || 0} TD${(e.score || 0) === 1 ? '' : 's'} • ${e.totalYards || 0} yds`;
+      overallLbList.innerHTML += '<div class="lbSectionHeader" style="margin-top:18px;">🏈 2 Minute Drill</div>' +
+        (drillPlayers.length
+          ? drillPlayers.map((e, i) => lbRowHtml(e, i, null, drillScoreFn(e))).join('')
+          : '<div class="lbEmpty">No drives yet — finish a 2 Minute Drill to be the first!</div>') +
+        coachSectionHtml(drillCoaches, drillScoreFn);
+    } catch (e) {
+      // Same "nice-to-have, never worth breaking the whole leaderboard
+      // over" reasoning as renderEngagementCallout's own try/catch below.
+    }
+  }
 }
 const overallLbRangeToggleEl = document.getElementById('overallLbRangeToggle');
 if(overallLbRangeToggleEl){
@@ -1187,6 +1168,21 @@ function renderGlobalCalloutDom(){
     });
   });
 }
+// Nathan: "The rotating banner is too big and in the way, should only be
+// visible to start and then goes away when you go to another screen."
+// Wired into the topSections/modeTabs click handlers above (function
+// declarations hoist, so it's callable from earlier in the file even
+// though it's defined down here next to the rest of the callout code) --
+// a real tap on a nav tab dismisses it for the rest of the session; it
+// does NOT come back on its own, since the ask was "goes away", not
+// "reappears every time you're back on the home screen".
+function hideGlobalCallout(){
+  if(globalCalloutTimer){ clearInterval(globalCalloutTimer); globalCalloutTimer = null; }
+  const host = document.getElementById('globalCallout');
+  if(host){ host.style.display = 'none'; host.innerHTML = ''; }
+}
+window.hideGlobalCallout = hideGlobalCallout;
+
 function startGlobalCalloutRotation(){
   if(globalCalloutTimer) clearInterval(globalCalloutTimer);
   if(globalCalloutSlides.length < 2) return;

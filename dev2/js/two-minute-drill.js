@@ -2186,6 +2186,19 @@
       state.bestStreak = Math.max(state.bestStreak, state.streak);
       state.correctCount++;
       const gain = resolveGain(correctCall, pickElapsedMs);
+      // Nathan: "make sure you know where they are on the field. If they
+      // are at the 5, they can't get a 22 yard gain out of bounds, it
+      // would be a 5 yard TD run." resolveGain() has no idea where the
+      // ball actually is (it's just rolling a random gain for the call
+      // made), so a big play rolled deep in opponent territory could claim
+      // more yards than there's actually field left to gain -- clamp it to
+      // the real distance to the goal line before it touches totalYards,
+      // fieldPos, the drive log, or the banner text, so every number shown
+      // downstream reflects what could really happen (a play that reaches
+      // the end zone with distance to spare is still a touchdown, just for
+      // the real yardage, not the raw roll).
+      const distanceToGoal = 100 - state.fieldPos;
+      if (gain.totalYards > distanceToGoal) gain.totalYards = distanceToGoal;
       state.totalYards += gain.totalYards;
       state.fieldPos += gain.totalYards;
       // Out of bounds stops the clock dead, same open-ended hold a
@@ -2348,6 +2361,12 @@
     const { players, coaches } = splitByCoach(deduped);
     return { players: players.slice(0, TWO_MIN_LB_MAX), coaches: coaches.slice(0, TWO_MIN_LB_MAX), offline: offline };
   }
+  // Nathan: "A score section should be added to the overall leaderboard."
+  // Exposed so study-quiz.js's renderOverallLeaderboard() can pull the same
+  // drill results into a section on the main team leaderboard, not just
+  // the drill's own internal Leaderboard screen (#twoMinLbScreen above).
+  window.fetchTwoMinDrillLeaderboardData = fetchTwoMinDrillLeaderboardData;
+
   async function renderTwoMinDrillLeaderboard() {
     const list = el.twoMinLbList;
     if (!list) return;
