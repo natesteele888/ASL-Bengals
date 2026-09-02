@@ -126,6 +126,9 @@
   const BUNDLED_LOGOS = {
     clinton: 'assets/images/opponents/clinton.png',
     leominster: 'assets/images/opponents/leominster.png',
+    // normalizeOpponentKey("Leicester/Spencer") -- no space in the name, so
+    // the whole thing counts as one "word", then the slash gets stripped.
+    leicesterspencer: 'assets/images/opponents/leicesterspencer.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
