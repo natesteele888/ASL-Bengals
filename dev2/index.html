@@ -420,15 +420,18 @@
      way to show them." Reverses the earlier "More" dropdown (all six tabs
      used to squeeze onto one equal-width row, then Timed/Play Quiz/Edit got
      tucked behind a dropdown to de-clutter it) -- now all six sit directly
-     on the row in this exact order, fixed-width so labels can wrap to two
-     lines instead of getting truncated, and the row scrolls horizontally
-     (see .modeTabs/.modeBtn in styles.css) instead of shrinking every tab
-     to fit. Same data-mode/ids/click-to-setMode() wiring as before. -->
+     on the row in this exact order. Nathan (follow-up): "I don't love that
+     you have to scroll - lets rename and resize the icons so 6 can fit" --
+     back to one equal-width row (like the original three-tab version), just
+     with shorter labels (Signals/Plays/Timed/2 Min Drill) and smaller
+     icons/type so all six actually fit without scrolling (see
+     .modeTabs/.modeBtn in styles.css). Same data-mode/ids/click-to-setMode()
+     wiring as before. -->
 <div class="modeTabs" id="modeTabs">
-  <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Study</span></button>
-  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Play Calls</span></button>
+  <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Signals</span></button>
+  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Plays</span></button>
   <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
-  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed Quiz</span></button>
+  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
   <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
   <!-- Nathan (earlier, 2026-08-24): "every single page has 2 minute drill
        at the bottom... remove it immediately" -- pulled off every page and
@@ -438,8 +441,10 @@
        discoverable tab again, just here on the Play row instead of on
        every page. It opens the same full-screen overlay (not a modePanel),
        so its click is special-cased in study-quiz.js's modeBtn wiring
-       rather than going through setMode(). -->
-  <button class="modeBtn" data-mode="twominute" id="twoMinuteTabBtn"><span class="modeIcon">🏈⏱️</span><span class="modeLabel">2 Minute Drill</span></button>
+       rather than going through setMode(). Nathan: "make sure we call out
+       2 min drill as a new game" -- .modeNewBadge below (auto-hidden after
+       someone actually opens it once, see openTwoMinDrillOverlay). -->
+  <button class="modeBtn" data-mode="twominute" id="twoMinuteTabBtn"><span class="modeIcon">🏈⏱️</span><span class="modeLabel">2 Min Drill</span><span class="modeNewBadge" id="twoMinuteNewBadge">NEW</span></button>
   <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
 </div>
 

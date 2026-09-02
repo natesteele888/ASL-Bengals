@@ -350,12 +350,18 @@ function normalizePlayData(playTypes) {
 // repair below (never caught by any existing test, since none of them
 // exercised normalizePlayData against a play carrying its own signalCardId
 // until the Sweep bug was diagnosed).
+// Nathan: "we are adding another play with signal #23, shuffle pass." Card
+// 23 in data/cards.json ("SHUFFLE PASS") already existed in the signal deck
+// before this play's diagram did -- this is what actually links the new
+// shuffle_pass playType (data/plays.json) to that signal.
 const PLAY_TYPE_SIGNAL_ID = {
   inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
+  shuffle_pass: 23,
 };
 const PLAY_TYPE_SIGNAL_LABEL = {
   inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
   option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
+  shuffle_pass: 'Shuffle Pass',
 };
 
 // Split's Houston/Seattle/Florida routes (DATA.splitRoutes, saved

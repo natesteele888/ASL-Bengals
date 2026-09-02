@@ -188,32 +188,35 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .topSections .modeBtn.active{color:#fff;border-bottom-color:var(--bengal-orange)}
 /* Nathan (2026-08-25): "The 2 Minute Drill is now ready to be unleashed...
    needs to be available on the navigation bar... I don't want them hidden
-   under more, but need a way to show them... the words need to stack or
-   something to be sure its not too crammed and its ledgible." Reverses the
-   earlier equal-width-squeeze-then-"More"-dropdown design (see git history
-   for the old .modeMoreWrap/.modeMoreToggle/.modeMoreMenu rules this
-   replaced) -- six fixed-width tabs now sit directly on the row, scrolling
-   horizontally instead of shrinking to fit, with labels allowed to wrap to
-   a second line instead of getting truncated with an ellipsis. */
+   under more, but need a way to show them." Reverses the earlier
+   equal-width-squeeze-then-"More"-dropdown design (see git history for the
+   old .modeMoreWrap/.modeMoreToggle/.modeMoreMenu rules this replaced).
+   First pass made this a fixed-width horizontally-scrolling row; Nathan's
+   follow-up -- "I don't love that you have to scroll - lets rename and
+   resize the icons so 6 can fit" -- undid that in favor of shorter labels
+   (see index.html) plus smaller icons/type here, back to one equal-width
+   row with no scrolling, same as the original three-tab version. */
 .modeTabs{position:sticky;top:var(--subnav-h, 113px);z-index:270;display:flex;background:#fff;
-  border-bottom:2px solid var(--bengal-black);overflow-x:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none}
-.modeTabs::-webkit-scrollbar{display:none}
+  border-bottom:2px solid var(--bengal-black)}
 .modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
-  background:none;cursor:pointer}
+  background:none;cursor:pointer;position:relative}
 .modeBtn .modeIcon{font-size:20px;line-height:1}
 .modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .modeBtn.active{color:var(--accent);border-bottom-color:var(--accent)}
-/* #modeTabs specifically (the Play sub-nav) gets the fixed-width, scrolling,
-   wrap-instead-of-truncate treatment above -- .topSections (Play/This
-   Week/Schedule/Standings/Coach Tools) keeps the original equal-width
-   .modeBtn behavior via the shared rule above, since that row only ever
-   has a handful of items and still needs to fill the full width evenly. */
-.modeTabs .modeBtn{flex:0 0 auto;width:72px;padding:8px 4px 7px}
-.modeTabs .modeBtn .modeLabel{font-size:10px;line-height:1.15;white-space:normal;overflow:visible;
-  text-overflow:clip;overflow-wrap:break-word}
+/* #modeTabs specifically (the six-item Play sub-nav) gets smaller icons/
+   type than .topSections' four-or-so items so all six fit one row without
+   crowding or scrolling. */
+.modeTabs .modeBtn{padding:7px 1px 6px}
+.modeTabs .modeBtn .modeIcon{font-size:16px}
+.modeTabs .modeBtn .modeLabel{font-size:8.5px}
+/* Nathan: "make sure we call out 2 min drill as a new game" -- small
+   attention-getting pill in the tab's top-right corner; hidden for good
+   once someone's actually opened the drill (see study-quiz.js's
+   openTwoMinDrillOverlay click handler / localStorage flag). */
+.modeNewBadge{position:absolute;top:2px;right:2px;background:#e0201a;color:#fff;font-size:7px;
+  font-weight:800;letter-spacing:.02em;padding:1.5px 3px;border-radius:5px;line-height:1.2}
 
 .modePanel{display:none;padding:8px 10px 14px}
 .modePanel.show{display:block}
