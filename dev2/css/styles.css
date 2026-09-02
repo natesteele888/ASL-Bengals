@@ -2336,3 +2336,16 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .twoMinSpark { position: fixed; z-index: 1949; font-size: 18px; line-height: 1; pointer-events: none;
   transform: translate(-50%, -50%); text-shadow: 0 0 6px currentColor; }
 
+/* ---- League Standings (js/standings.js) -- pasted in under Coach Tools,
+   shown read-only on the top-level Standings tab. ---- */
+.standingsTableWrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.standingsTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.standingsTable th, .standingsTable td { padding: 8px 10px; text-align: left; white-space: nowrap; }
+.standingsTable th { background: var(--paper); color: var(--muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .03em; border-bottom: 1px solid var(--line); }
+.standingsTable td { border-bottom: 1px solid var(--line); color: var(--ink); }
+.standingsTable tr:last-child td { border-bottom: none; }
+.standingsTable td:first-child, .standingsTable th:first-child { text-align: center; color: var(--muted); }
+.standingsRowUs td { background: rgba(230, 111, 45, .1); font-weight: 800; }
+.standingsDivTag { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; white-space: normal; }
+

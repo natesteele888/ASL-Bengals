@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260824h">
+<link rel="stylesheet" href="css/styles.css?v=20260824i">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -390,6 +390,14 @@
   <button class="modeBtn active" data-section="play" id="playSectionBtn"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
   <button class="modeBtn" data-section="thisweek" id="thisweekSectionBtn" style="display:none;"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
   <button class="modeBtn" data-section="schedule" id="scheduleSectionBtn" style="display:none;"><span class="modeIcon">📅</span><span class="modeLabel">Schedule</span></button>
+  <!-- Nathan: "did you add in the functionality where I can copy the
+       standing from the coaches app and drop it in so you can display
+       standings on a new tab?" League standings, pasted in by a coach
+       under Coach Tools (js/standings.js), shown read-only here to
+       everyone -- same visibility as Schedule (players/parents included),
+       not gated behind isCoachSession/approvedCoach like This Week/Coach
+       Tools are. -->
+  <button class="modeBtn" data-section="standings" id="standingsSectionBtn" style="display:none;"><span class="modeIcon">🏆</span><span class="modeLabel">Standings</span></button>
   <!-- Coach-only top-level section (Drive Builder now, Coach Dashboard
        later) -- hidden by default, only shown to an approved coach profile
        (window.isApprovedCoachProfile(), see auth.js) once a name/session is
@@ -547,6 +555,18 @@
       <button class="navBtn" id="coachPrintCallSheetBtn" style="flex:1 1 210px;">📋 Print Play Sheet</button>
       <button class="navBtn" id="coachPrintBlankStatsBtn" style="flex:1 1 210px;">🏈 Print Blank Stat Sheet</button>
     </div>
+  </div>
+
+  <!-- ---- Standings: paste in the league standings table, shown read-only
+       on the new top-level Standings tab (js/standings.js). Nathan: "a
+       place where I can copy standing from the coaches app and drop it
+       directly into a field under Coaching Tools to paste in to update the
+       standings. It should show the record for opponents and update them
+       as the season goes on." ---- -->
+  <div id="coachStandingsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🏆 Standings</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Paste the league standings table here (copy straight from the coaches' league site -- Team, Record, PF, PA columns) to update the Standings tab everyone sees.</div>
+    <div id="coachStandingsWrap" style="max-width:640px;margin:0 auto;"></div>
   </div>
 
   <!-- ---- Stats: pick a game, enter its stats, see the leaderboard ---- -->
@@ -782,6 +802,20 @@
       <div id="scheduleFullList"></div>
     </div>
   </div>
+</div>
+
+<!-- Nathan: "did you add in the functionality where I can copy the standing
+     from the coaches app and drop it in so you can display standings on a
+     new tab?" Read-only league standings table, visible to everyone --
+     data comes from the paste box under Coach Tools > Standings
+     (js/standings.js owns both). -->
+<div id="standingsMode" class="modePanel">
+  <div class="lbHeroHeader">
+    <div class="lbHeroTrophy">🏆</div>
+    <h3>League Standings</h3>
+    <div class="lbSub">Posted by a coach from the league's standings page -- updates as the season goes on.</div>
+  </div>
+  <div id="standingsTableWrap" style="max-width:640px;margin:0 auto;"></div>
 </div>
 
 <div id="editPlaysMode" class="modePanel">
@@ -1923,7 +1957,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824y';
+  const BUILD_V = '20260824z';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -1987,7 +2021,7 @@ if (window.ResizeObserver) {
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   for (const src of scripts) {
     await loadScript(withV(src));
   }

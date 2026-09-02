@@ -22,6 +22,7 @@ const editPlaysModeEl = document.getElementById('editPlaysMode');
 const thisweekModeEl = document.getElementById('thisweekMode');
 const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 const scheduleModeEl = document.getElementById('scheduleMode');
+const standingsModeEl = document.getElementById('standingsMode');
 function setMode(mode){
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   studyModeEl.classList.toggle('show', mode==='study');
@@ -33,6 +34,7 @@ function setMode(mode){
   if (thisweekModeEl) thisweekModeEl.classList.toggle('show', mode==='thisweek');
   if (coachtoolsModeEl) coachtoolsModeEl.classList.toggle('show', mode==='coachtools');
   if (scheduleModeEl) scheduleModeEl.classList.toggle('show', mode==='schedule');
+  if (standingsModeEl) standingsModeEl.classList.toggle('show', mode==='standings');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -48,6 +50,7 @@ function setMode(mode){
   if(mode==='thisweek' && typeof window.initThisWeek === 'function') window.initThisWeek();
   if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
+  if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
 
   // Nathan: "too busy to find things... don't love always having rows of
   // tabs" -- Timed/Play Quiz/Edit moved off the row into the "More"
@@ -107,7 +110,7 @@ const topSectionsEl = document.getElementById('topSections');
 let lastPlaySubMode = 'study';
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule') {
+  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
     modeTabsEl.style.display = 'none';
     setMode(section);
   } else {
@@ -166,6 +169,12 @@ window.refreshCoachToolsVisibility = function(){
   if (thisweekBtn) thisweekBtn.style.display = isPlayerOrCoach ? '' : 'none';
   const scheduleBtn = document.getElementById('scheduleSectionBtn');
   if (scheduleBtn) scheduleBtn.style.display = ''; // visible to everyone
+  // Nathan: standings should be visible to players/parents/coaches alike,
+  // same as Schedule -- not gated behind isCoachSession/approvedCoach like
+  // This Week/Coach Tools are (only the paste-in editing lives behind Coach
+  // Tools' own approvedCoach gate).
+  const standingsBtn = document.getElementById('standingsSectionBtn');
+  if (standingsBtn) standingsBtn.style.display = ''; // visible to everyone
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 

@@ -9,6 +9,11 @@
 
   const TABS = [
     { key: 'resources', label: '🖨️ Resources', panel: 'coachResourcesPanel', init: () => window.initCoachToolsPrint && window.initCoachToolsPrint() },
+    // Nathan: "a place where I can copy standing from the coaches app and
+    // drop it directly into a field under Coaching Tools to paste in to
+    // update the standings." See js/standings.js -- also feeds the
+    // read-only Standings top-level tab everyone sees.
+    { key: 'standings', label: '🏆 Standings', panel: 'coachStandingsPanel', init: () => window.initCoachToolsStandings && window.initCoachToolsStandings() },
     { key: 'stats', label: '📊 Stats', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
     // Nathan: "add a coaching staff section to go with the roster so we can
     // link log ins to coaches" -- js/coaching-staff.js, rendered right below
