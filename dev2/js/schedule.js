@@ -1186,7 +1186,7 @@
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
-        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch Game Film of our Upcoming Opponent</a>` : ''}
+        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(current.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch Game Film of our Upcoming Opponent</a>` : ''}
         ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>

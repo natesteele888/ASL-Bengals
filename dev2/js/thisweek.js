@@ -638,6 +638,12 @@
         watchFootageBtn.style.display = 'block';
         watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
         watchFootageBtn.href = linkedGame.opponentFilmUrl;
+        // Nathan: "let me know who is watching film" -- js/film-views.js's
+        // document-level click listener reads this attribute off whatever
+        // was actually clicked, so it works here and on Schedule's own
+        // Watch Footage button (schedule.js) without either file needing to
+        // know about the other.
+        watchFootageBtn.dataset.filmGameId = linkedGame.id;
       } else {
         watchFootageBtn.style.display = 'none';
         watchFootageBtn.removeAttribute('href');

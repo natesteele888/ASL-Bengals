@@ -580,36 +580,25 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    should only be visible to start and then goes away when you go to
    another screen." Shrunk stage height/padding/fonts (~35% smaller
    footprint) -- the show-once-then-dismiss behavior itself is JS (see
-   study-quiz.js's hideGlobalCallout(), wired into the nav click handlers). */
-.globalCallout{position:relative;margin:0;overflow:hidden}
-.gcStage{position:relative;height:42px}
-.gcSlide{position:absolute;inset:0;display:flex;align-items:center;gap:8px;
-  padding:6px 12px;opacity:0;pointer-events:none;cursor:pointer;
-  transition:opacity .45s ease}
-.gcSlide.active{opacity:1;pointer-events:auto}
-.gcIcon{font-size:17px;line-height:1;flex-shrink:0}
-.gcText{flex:1;min-width:0}
-.gcTitle{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gcBody{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gcArrow{font-size:16px;font-weight:800;flex-shrink:0;opacity:.85}
-.gc-gold{background:linear-gradient(135deg, #ffb703 0%, var(--bengal-orange) 100%);color:#2a1400}
-.gc-gold .gcTitle{color:#4a2600}
-.gc-green{background:linear-gradient(135deg, #4cae4c 0%, #1f7a2d 100%);color:#fff}
-.gc-green .gcTitle{color:#eafbe7}
-.gc-blue{background:linear-gradient(135deg, #3a8fd6 0%, #1f5fa8 100%);color:#fff}
-.gc-blue .gcTitle{color:#e6f2fd}
-.gc-red{background:linear-gradient(135deg, #ef5350 0%, #b71c1c 100%);color:#fff}
-.gc-red .gcTitle{color:#fde8e8}
-.gc-navy{background:linear-gradient(135deg, #3d4f7d 0%, #1a2647 100%);color:#fff}
-.gc-navy .gcTitle{color:#e4e8f5}
-.gcDots{position:absolute;bottom:2px;left:0;right:0;display:flex;justify-content:center;gap:4px}
-.gcDot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.5)}
-.gcDot.active{background:#fff}
+   study-quiz.js's hideGlobalCallout(), wired into the nav click handlers).
+   Nathan (2026-09-01, follow-up): "Instead of changing banner - it should
+   be a scrolling ticker - basic details of next game on schedule, top 3 on
+   the all time leaderboard, weekly call out for weeks most improved."
+   Replaces the card-fade carousel above with a single continuous
+   marquee-style scroll -- one navy strip, plain text items separated by a
+   dot, looping seamlessly (the JS renders the item list twice back-to-back
+   and the keyframe scrolls exactly one copy's width). */
+.globalCallout{position:relative;margin:0;overflow:hidden;cursor:pointer;background:linear-gradient(135deg, #3d4f7d 0%, #1a2647 100%)}
+.gcTickerTrack{display:flex;align-items:center;width:max-content;white-space:nowrap;
+  padding:7px 0;animation:gcTickerScroll linear infinite;animation-duration:var(--gcDur, 26s)}
+.gcTickerItem{display:inline-flex;align-items:center;gap:5px;padding:0 20px;flex-shrink:0;
+  font-size:11px;font-weight:700;color:#fff}
+.gcTickerIcon{font-size:13px;line-height:1}
+.gcTickerSep{padding:0 4px;opacity:.4;color:#fff}
+@keyframes gcTickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion: reduce){
-  .gcSlide{transition:none}
+  .gcTickerTrack{animation:none}
 }
-[data-theme="dark"] .gcDot{background:rgba(255,255,255,.35)}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with

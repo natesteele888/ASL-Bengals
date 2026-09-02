@@ -271,7 +271,7 @@
     const nav = document.getElementById('coachStatsSubNav');
     if (!nav) return;
     nav.innerHTML = '';
-    [['enter', '✏️ Enter Stats'], ['leaderboard', '🏆 Leaderboard'], ['tendencies', '🧭 Tendencies']].forEach(([key, label]) => {
+    [['enter', '✏️ Enter Stats'], ['leaderboard', '🏆 Leaderboard'], ['tendencies', '🧭 Tendencies'], ['filmviews', '🎥 Film Views']].forEach(([key, label]) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'gameplanChip' + (subTab === key ? ' active' : '');
@@ -563,10 +563,56 @@
     return h;
   }
 
+  // ---- Film Views -- Nathan: "On coaching tools stats, let me know who is
+  // watching film." js/film-views.js logs a view every time anyone clicks a
+  // "Watch Game Film" link/button (This Week, Schedule's game detail, or an
+  // Opponent Page) -- this just reads that back and lists it per game,
+  // newest game first, viewers within a game newest-view first.
+  function timeAgoStr(ts) {
+    const diffMs = Date.now() - (ts || 0);
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
+  async function renderFilmViews() {
+    const wrap = document.getElementById('coachStatsBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="lbSub" style="text-align:center;">Loading…</div>';
+    const filmGames = sortedGames().filter(g => g.opponentFilmUrl);
+    const viewsByGame = window.fetchFilmViews ? await window.fetchFilmViews() : {};
+    wrap.innerHTML = '';
+    if (!filmGames.length) {
+      wrap.innerHTML = '<div class="lbEmpty">No games have opponent film linked yet -- add a film link under a game in Schedule to start tracking who watches it.</div>';
+      return;
+    }
+    filmGames.slice().reverse().forEach(g => {
+      const viewers = viewsByGame[g.id] || [];
+      const card = document.createElement('div');
+      card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;margin-bottom:12px;';
+      const label = `${g.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(g.opponent || 'TBD')}${g.date ? ' — ' + escapeHtml(g.date) : ''}`;
+      const rows = viewers.length
+        ? viewers.map(v => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+             <span>${v.isCoach ? '🧑‍🏫 ' : ''}${escapeHtml(v.name)}</span>
+             <span style="color:#888;font-size:12px;">${timeAgoStr(v.ts)}</span>
+           </div>`).join('')
+        : '<div class="lbSub" style="padding:4px 0;">No one has watched yet</div>';
+      card.innerHTML = `<div style="font-weight:800;font-size:13px;margin-bottom:6px;">${label}</div>
+        <div style="color:#666;font-size:12px;margin-bottom:6px;">${viewers.length} viewer${viewers.length === 1 ? '' : 's'}</div>
+        ${rows}`;
+      wrap.appendChild(card);
+    });
+  }
+
   function renderAll() {
     renderSubNav();
     if (subTab === 'leaderboard') renderLeaderboard();
     else if (subTab === 'tendencies') { const wrap = document.getElementById('coachStatsBody'); if (wrap) { wrap.innerHTML = ''; renderTendencies(wrap); } }
+    else if (subTab === 'filmviews') renderFilmViews();
     else renderEnterStats();
   }
 

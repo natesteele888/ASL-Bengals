@@ -1158,36 +1158,6 @@ if(overallLbRangeToggleEl){
 // dynamic and colorful." That moved this from a Study-only static 2-card
 // block into index.html's #globalCallout -- a single auto-rotating,
 // clickable, colorful carousel visible on every section, below the header.
-const GLOBAL_CALLOUT_ROTATE_MS = 6000;
-let globalCalloutSlides = [];
-let globalCalloutIndex = 0;
-let globalCalloutTimer = null;
-
-function globalCalloutSlideHtml(slide, isActive){
-  return `<div class="gcSlide gc-${slide.tone}${isActive ? ' active' : ''}" data-idx="${slide.idx}">
-    <div class="gcIcon">${slide.icon}</div>
-    <div class="gcText">
-      <div class="gcTitle">${slide.title}</div>
-      <div class="gcBody">${slide.body}</div>
-    </div>
-    <div class="gcArrow">›</div>
-  </div>`;
-}
-function renderGlobalCalloutDom(){
-  const host = document.getElementById('globalCallout');
-  if(!host) return;
-  if(!globalCalloutSlides.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
-  host.style.display = '';
-  host.innerHTML = `<div class="gcStage">${globalCalloutSlides.map((s,i)=>globalCalloutSlideHtml(s, i===globalCalloutIndex)).join('')}</div>` +
-    (globalCalloutSlides.length > 1 ? `<div class="gcDots">${globalCalloutSlides.map((s,i)=>`<span class="gcDot${i===globalCalloutIndex?' active':''}"></span>`).join('')}</div>` : '');
-  host.querySelectorAll('.gcSlide').forEach(el => {
-    el.addEventListener('click', () => {
-      const idx = Number(el.dataset.idx);
-      const slide = globalCalloutSlides[idx];
-      if(slide && typeof slide.onClick === 'function') slide.onClick();
-    });
-  });
-}
 // Nathan: "The rotating banner is too big and in the way, should only be
 // visible to start and then goes away when you go to another screen."
 // Wired into the topSections/modeTabs click handlers above (function
@@ -1197,76 +1167,115 @@ function renderGlobalCalloutDom(){
 // does NOT come back on its own, since the ask was "goes away", not
 // "reappears every time you're back on the home screen".
 function hideGlobalCallout(){
-  if(globalCalloutTimer){ clearInterval(globalCalloutTimer); globalCalloutTimer = null; }
   const host = document.getElementById('globalCallout');
   if(host){ host.style.display = 'none'; host.innerHTML = ''; }
 }
 window.hideGlobalCallout = hideGlobalCallout;
-
-function startGlobalCalloutRotation(){
-  if(globalCalloutTimer) clearInterval(globalCalloutTimer);
-  if(globalCalloutSlides.length < 2) return;
-  globalCalloutTimer = setInterval(() => {
-    globalCalloutIndex = (globalCalloutIndex + 1) % globalCalloutSlides.length;
-    renderGlobalCalloutDom();
-  }, GLOBAL_CALLOUT_ROTATE_MS);
-}
-function goToTimedQuiz(){ lastPlaySubMode = 'timed'; if (typeof setSection === 'function') setSection('play'); else setMode('timed'); }
 function goToThisWeek(){ if(typeof setSection === 'function') setSection('thisweek'); }
 function openLeaderboardOverlay(){ const btn = document.getElementById('openLeaderboardBtn'); if(btn) btn.click(); }
 
+function gcEscapeHtml(s){ const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function gcTickerItemHtml(icon, text){
+  return `<span class="gcTickerItem"><span class="gcTickerIcon">${icon}</span>${text}</span><span class="gcTickerSep">•</span>`;
+}
+// Same "not yet happened" logic as schedule.js's own hasEventPassed (that
+// one's private to schedule.js's IIFE, so it's not reusable directly) --
+// picks the single soonest game whose date/time (or just date, if no
+// gameTime is set) hasn't passed yet.
+function gcNextUpcomingGame(games){
+  const now = Date.now();
+  const withTimes = (games || []).filter(g => g.date).map(g => {
+    const parts = g.date.split('-').map(Number);
+    if(parts.length !== 3 || parts.some(isNaN)) return null;
+    const tm = (g.gameTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const d = tm
+      ? new Date(parts[0], parts[1]-1, parts[2], Number(tm[1]), Number(tm[2]))
+      : new Date(parts[0], parts[1]-1, parts[2], 23, 59, 59);
+    return { g, t: d.getTime() };
+  }).filter(Boolean);
+  withTimes.sort((a,b)=>a.t-b.t);
+  const upcoming = withTimes.find(x => x.t >= now);
+  return upcoming ? upcoming.g : null;
+}
+function gcFmtDate(dateStr){
+  const parts = (dateStr || '').split('-').map(Number);
+  if(parts.length !== 3 || parts.some(isNaN)) return dateStr || '';
+  const d = new Date(parts[0], parts[1]-1, parts[2]);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function gcTo12h(str){
+  const m = (str || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return str || '';
+  let h = Number(m[1]); const min = m[2];
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if(h === 0) h = 12;
+  return `${h}:${min} ${ap}`;
+}
+
+// ---------------------------------------------------------------------------
+// Global ticker (Nathan, 2026-09-01): "some users are not doing a lot so we
+// need to promote taking the timed quiz, promote moving up the leaderboard
+// ... callouts to everyone who opens the app ... calling out top users who
+// are setting the example." Renders every time a session is confirmed (see
+// player-identity.js's gate()), regardless of whether the player has done
+// anything at all this session.
+//
+// This went through two earlier shapes -- a static 2-card block under Study,
+// then a colorful auto-rotating card carousel just below the header -- before
+// Nathan's latest ask: "Instead of changing banner - it should be a scrolling
+// ticker - basic details of next game on schedule, top 3 on the all time
+// leaderboard, weekly call out for weeks most improved." That's exactly the
+// three things rendered below, as one continuous scrolling strip (a real
+// ticker, not cards) rather than the personalized "you're #N"/streak slides
+// the carousel version had -- simpler, and matches what was actually asked
+// for this time.
 async function renderEngagementCallout(){
-  globalCalloutSlides = [];
-  if(globalCalloutTimer){ clearInterval(globalCalloutTimer); globalCalloutTimer = null; }
   const host = document.getElementById('globalCallout');
   if(!host) return;
   // Nothing here is relevant to a parent session (Schedule is their whole
   // app -- see refreshCoachToolsVisibility's comment on isParentSession).
   if(window.isParentSession){ host.innerHTML = ''; host.style.display = 'none'; return; }
-  const { name } = currentPlayerTag();
-  const isCoach = !!window.isCoachSession || isCoachEntryName(name);
-  const slides = [];
+  const items = [];
   try {
-    const [{ players }, mostImproved, ownRecord] = await Promise.all([
+    const [{ players }, mostImproved, games] = await Promise.all([
       computeOverallStandings(),
       computeMostImproved().catch(() => null),
-      (!isCoach && window.PlayerIdentity && typeof window.PlayerIdentity.getSession === 'function' && window.PlayerIdentity.getSession())
-        ? window.PlayerIdentity.getPlayerRecord(window.PlayerIdentity.getSession().playerId).catch(() => null)
-        : Promise.resolve(null),
+      Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
     ]);
-    const leader = players[0];
-    if(leader){
-      slides.push({ tone: 'gold', icon: '🏆', title: 'Top of the leaderboard', body: `${leader.name} — ${leader.points} pt${leader.points===1?'':'s'}`, onClick: openLeaderboardOverlay });
+    // "basic details of next game on schedule"
+    const next = gcNextUpcomingGame(games || []);
+    if(next){
+      const when = gcFmtDate(next.date) + (next.gameTime ? ' • ' + gcTo12h(next.gameTime) : '');
+      items.push(gcTickerItemHtml('📅', `Next Game: ${next.homeAway === 'Away' ? '@' : 'vs'} ${gcEscapeHtml(next.opponent || 'TBD')} — ${when}`));
     }
+    // "top 3 on the all time leaderboard"
+    if(players && players.length){
+      const top3 = players.slice(0,3).map((p,i)=> `${i+1}. ${gcEscapeHtml(p.name)} (${p.points} pt${p.points===1?'':'s'})`).join('   ');
+      items.push(gcTickerItemHtml('🏆', `Top of the Leaderboard: ${top3}`));
+    }
+    // "weekly call out for weeks most improved"
     if(mostImproved){
-      slides.push({ tone: 'green', icon: '📈', title: "This week's most improved", body: `${mostImproved.name} climbed +${mostImproved.gain} pt${mostImproved.gain===1?'':'s'}`, onClick: openLeaderboardOverlay });
-    }
-    if(name && !isCoach){
-      const { rank } = findEntryAndRank(players, name);
-      if(!rank){
-        slides.push({ tone: 'blue', icon: '🎯', title: "You're not on the leaderboard yet", body: 'Take a Quiz, Timed Quiz, or Play Calls Quiz to get on the board', onClick: goToTimedQuiz });
-      } else if(rank === 1){
-        slides.push({ tone: 'blue', icon: '🎯', title: "You're #1 on the leaderboard", body: `${players[0].points} pt${players[0].points===1?'':'s'} — keep it up!`, onClick: openLeaderboardOverlay });
-      } else {
-        const ahead = players[rank-2];
-        const gap = ahead.points - players[rank-1].points;
-        slides.push({ tone: 'blue', icon: '🎯', title: `You're #${rank} on the leaderboard`, body: `${gap} pt${gap===1?'':'s'} behind ${ahead.name} — take the Timed Quiz`, onClick: goToTimedQuiz });
-      }
-      const streak = (ownRecord && ownRecord.loginStreak) || 0;
-      if(streak > 1){
-        slides.push({ tone: 'red', icon: '🔥', title: `${streak}-day streak`, body: "Don't break it — come back tomorrow to keep it alive", onClick: goToTimedQuiz });
-      }
+      items.push(gcTickerItemHtml('📈', `This Week's Most Improved: ${gcEscapeHtml(mostImproved.name)} (+${mostImproved.gain} pt${mostImproved.gain===1?'':'s'})`));
     }
   } catch(e) {
-    // Nice-to-have promo banner -- never worth breaking the app over a
-    // failed leaderboard fetch (offline sideline wifi, etc.).
+    // Nice-to-have ticker -- never worth breaking the app over a failed
+    // leaderboard/schedule fetch (offline sideline wifi, etc.).
   }
-  slides.push({ tone: 'navy', icon: '📅', title: "This week's schedule", body: 'See upcoming practices and games', onClick: goToThisWeek });
-  slides.push({ tone: 'gold', icon: '🏆', title: 'Leaderboard', body: 'See where the whole team stands', onClick: openLeaderboardOverlay });
-  globalCalloutSlides = slides.map((s,i)=>Object.assign({idx:i}, s));
-  globalCalloutIndex = 0;
-  renderGlobalCalloutDom();
-  startGlobalCalloutRotation();
+  if(!items.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
+  host.style.display = '';
+  // Rendered twice back-to-back so the CSS animation (translateX(-50%)) can
+  // loop seamlessly -- the instant the first copy has scrolled fully
+  // offscreen, the second copy is sitting exactly where the first started.
+  const track = document.createElement('div');
+  track.className = 'gcTickerTrack';
+  track.innerHTML = items.join('') + items.join('');
+  // Rough duration so longer content doesn't feel rushed and short content
+  // doesn't crawl -- ~90px/second reads comfortably either way.
+  const approxWidth = items.length * 260;
+  track.style.setProperty('--gcDur', Math.max(18, Math.round(approxWidth / 90)) + 's');
+  host.innerHTML = '';
+  host.appendChild(track);
+  host.onclick = openLeaderboardOverlay;
 }
 window.renderEngagementCallout = renderEngagementCallout;
 
