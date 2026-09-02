@@ -1973,6 +1973,25 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .h2hBar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
 .h2hBarUs { background: var(--bengal-orange); }
 
+/* ---- Split (center-diverging) comparison bars -- Nathan: "a comparison
+   for penalties, penalty yards, and all in a split screen style where the
+   length of the bar from center shows how much they got." Unlike .h2hBar
+   above (one bar, split proportionally between the two teams' SHARE of a
+   combined total), each side here grows independently out from a shared
+   center line, sized relative to whichever side's own value is bigger --
+   so e.g. a 10-9 penalty count reads as two nearly-equal bars, not one bar
+   arbitrarily split down the middle. ---- */
+.splitBarRow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.splitBarHalf { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; display: flex; }
+.splitBarHalf.left { justify-content: flex-end; }
+.splitBarHalf.right { justify-content: flex-start; }
+.splitBarFillUs { height: 100%; background: var(--bengal-orange); }
+.splitBarFillThem { height: 100%; }
+.splitBarLabel { flex: 0 0 auto; min-width: 78px; text-align: center; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.splitBarVal { flex: 0 0 auto; min-width: 30px; font-size: 14px; font-weight: 900; color: var(--ink); }
+.splitBarVal.us { text-align: right; color: var(--bengal-orange); }
+.splitBarVal.them { text-align: left; }
+
 /* ---- Season Leaders -- Nathan: "showing their profile image with name
    under it, even placeholders before stats are there." Same colored-
    initials-circle fallback used for opponent badges when there's no real

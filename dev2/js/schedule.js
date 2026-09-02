@@ -532,6 +532,42 @@
     const perPlayer = window.computeGamePlayerStats(game.statSheet);
     return Object.values(perPlayer).reduce((s, r) => s + (r.fd || 0), 0);
   }
+  // Nathan: "make sure you have a comparison for penalties, penalty yards,
+  // and all in a split screen style where the length of the bar from
+  // center shows how much they got, something like the samples shown" --
+  // a genuinely bidirectional bar (both sides grow OUT FROM a shared
+  // center line, each length proportional to that side's own value
+  // relative to whichever side is bigger) rather than h2hBarHtml's single
+  // bar split proportionally between the two (which shows SHARE of a
+  // combined total, not each side's real magnitude next to the other's).
+  function splitBarHtml(label, us, them, oppName, fmt) {
+    fmt = fmt || formatNum;
+    const maxVal = Math.max(Math.abs(us), Math.abs(them), 1);
+    const usPct = Math.min(100, Math.round((Math.abs(us) / maxVal) * 100));
+    const themPct = Math.min(100, Math.round((Math.abs(them) / maxVal) * 100));
+    return `
+      <div class="splitBarRow">
+        <span class="splitBarVal us">${fmt(us)}</span>
+        <div class="splitBarHalf left"><span class="splitBarFillUs" style="width:${usPct}%;"></span></div>
+        <span class="splitBarLabel">${escapeHtml(label)}</span>
+        <div class="splitBarHalf right"><span class="splitBarFillThem" style="width:${themPct}%;background:${hashColor(oppName)};"></span></div>
+        <span class="splitBarVal them">${fmt(them)}</span>
+      </div>`;
+  }
+  // Nathan: "penalties, penalty yards" -- pulled straight from the same
+  // penaltyTotals shape Stat Keeper's compileStatSheet/translatePlaysForLive
+  // already push into game.statSheet (see stat-keeper.html), so no manual
+  // entry field is needed the way oppYards/oppFirstDowns/oppTurnovers are --
+  // this one's already symmetric (us AND opponent) straight from the log.
+  function penaltyTotalsFor(game) {
+    const pt = game && game.statSheet && game.statSheet.penaltyTotals;
+    return {
+      usCount: (pt && pt.us && pt.us.count) || 0,
+      usYds: (pt && pt.us && pt.us.yds) || 0,
+      oppCount: (pt && pt.opponent && pt.opponent.count) || 0,
+      oppYds: (pt && pt.opponent && pt.opponent.yds) || 0,
+    };
+  }
   function h2hBarHtml(label, us, them, oppName) {
     const total = us + them;
     const usPct = total > 0 ? Math.round((us / total) * 100) : 50;
@@ -559,10 +595,13 @@
     const oppFD = Number(current.oppFirstDowns) || 0;
     const ourTOs = current.ourTurnovers === '' || current.ourTurnovers == null ? null : Number(current.ourTurnovers);
     const oppTOs = current.oppTurnovers === '' || current.oppTurnovers == null ? null : Number(current.oppTurnovers);
+    const pen = penaltyTotalsFor(current);
     const bars = [];
-    if (ourYards > 0 || oppYards > 0) bars.push(h2hBarHtml('Total Yards', ourYards, oppYards, current.opponent));
-    if (ourFD > 0 || oppFD > 0) bars.push(h2hBarHtml('First Downs', ourFD, oppFD, current.opponent));
-    if (ourTOs != null || oppTOs != null) bars.push(h2hBarHtml('Turnovers', ourTOs || 0, oppTOs || 0, current.opponent));
+    if (ourYards > 0 || oppYards > 0) bars.push(splitBarHtml('Total Yards', ourYards, oppYards, current.opponent));
+    if (ourFD > 0 || oppFD > 0) bars.push(splitBarHtml('First Downs', ourFD, oppFD, current.opponent));
+    if (ourTOs != null || oppTOs != null) bars.push(splitBarHtml('Turnovers', ourTOs || 0, oppTOs || 0, current.opponent));
+    if (pen.usCount || pen.oppCount) bars.push(splitBarHtml('Penalties', pen.usCount, pen.oppCount, current.opponent));
+    if (pen.usYds || pen.oppYds) bars.push(splitBarHtml('Penalty Yards', pen.usYds, pen.oppYds, current.opponent));
     if (!bars.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     wrap.style.display = '';
     wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>`;
