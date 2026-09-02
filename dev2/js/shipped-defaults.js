@@ -14281,8 +14281,7 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 9
             },
             {
-              "ball": false,
-              "isBlocking": true,
+              "ball": true,
               "player": 5,
               "points": [
                 [
@@ -14290,21 +14289,29 @@ window.SHIPPED_PLAYS_JSON = {
                   204
                 ],
                 [
-                  438.6,
-                  119.39999999999999
-                ]
-              ],
-              "points4x4": [
-                [
-                  462,
-                  204
+                  419,
+                  185
                 ],
                 [
-                  496.2,
-                  2.4000000000000057
+                  626,
+                  345
+                ],
+                [
+                  911,
+                  415
+                ],
+                [
+                  1191,
+                  380
+                ],
+                [
+                  1401,
+                  300
                 ]
               ],
-              "width": 7
+              "width": 7,
+              "lineThenCurve": true,
+              "delayMs": 500
             },
             {
               "ball": false,
@@ -14463,37 +14470,20 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 7
             },
             {
-              "ball": true,
-              "lineThenCurve": true,
+              "ball": false,
               "player": 4,
-              "delayMs": 500,
               "points": [
                 [
-                  1251,
+                  360,
                   269
                 ],
                 [
-                  1192,
-                  185
-                ],
-                [
-                  985,
-                  345
-                ],
-                [
-                  700,
-                  415
-                ],
-                [
-                  420,
-                  380
-                ],
-                [
-                  210,
-                  300
+                  311,
+                  200
                 ]
               ],
-              "width": 9
+              "width": 9,
+              "isBlocking": true
             }
           ],
           "defense4x4": [
@@ -15011,8 +15001,7 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 7
             },
             {
-              "ball": false,
-              "isBlocking": true,
+              "ball": true,
               "player": 6,
               "points": [
                 [
@@ -15020,59 +15009,51 @@ window.SHIPPED_PLAYS_JSON = {
                   204
                 ],
                 [
-                  1179.6,
-                  119.39999999999999
-                ]
-              ],
-              "points4x4": [
-                [
-                  1149,
-                  204
-                ],
-                [
-                  1179.6,
-                  119.39999999999999
-                ]
-              ],
-              "width": 7
-            },
-            {
-              "ball": true,
-              "lineThenCurve": true,
-              "player": 4,
-              "delayMs": 500,
-              "points": [
-                [
-                  360,
-                  269
-                ],
-                [
-                  419,
+                  1192,
                   185
                 ],
                 [
-                  626,
+                  985,
                   345
                 ],
                 [
-                  911,
+                  700,
                   415
                 ],
                 [
-                  1191,
+                  420,
                   380
                 ],
                 [
-                  1401,
+                  210,
                   300
                 ]
               ],
-              "width": 9
+              "width": 7,
+              "lineThenCurve": true,
+              "delayMs": 500
+            },
+            {
+              "ball": false,
+              "player": 4,
+              "points": [
+                [
+                  1251,
+                  269
+                ],
+                [
+                  1300,
+                  200
+                ]
+              ],
+              "width": 9,
+              "isBlocking": true
             }
           ]
         }
       },
-      "wingOnly": true
+      "wingOnly": true,
+      "p4StartsOpposite": true
     }
   ]
 };

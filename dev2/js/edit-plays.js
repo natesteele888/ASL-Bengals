@@ -227,10 +227,23 @@ wireToggle(bootToggle, () => (bootOn ? 'on' : 'off'), v => bootOn = (v === 'on')
 // opposite one if Motion is on. Every player-4-specific point computation
 // (route start, block-relative offset anchor, seam-route offset anchor)
 // reads from this instead of the raw wing spot.
-function p4Anchor() {
-  const wingPos = DATA.wing[wingSide];
-  if (!motionOn) return wingPos;
+// Nathan (Shuffle Pass): "the 4 should actually be on the opposite side."
+// Kept in sync with play-calls.js/two-minute-drill.js's own p4StartsOpposite
+// handling in their renderCardDiagram (see that comment for the full
+// explanation) -- without this, the editor's own preview/point-picker would
+// still show #4 anchored on the coach's literal Wing L/R side even for a
+// play whose real anchor is the opposite one, so a coach editing routes
+// for a decoy-wing play like this would be dragging points relative to the
+// wrong spot on the field.
+function p4HomeSide() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
   const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
+  return (playType && playType.p4StartsOpposite) ? oppositeSide : wingSide;
+}
+function p4Anchor() {
+  const homeSide = p4HomeSide();
+  if (!motionOn) return DATA.wing[homeSide];
+  const oppositeSide = homeSide === 'Left' ? 'Right' : 'Left';
   return DATA.wing[oppositeSide];
 }
 // Which side #4 is ACTUALLY standing on -- his set wing side, or the
@@ -240,8 +253,9 @@ function p4Anchor() {
 // p4Anchor() whenever Motion was on, which sent block assignments miles
 // off their intended spot (occasionally clear off screen).
 function p4Side() {
-  if (!motionOn) return wingSide;
-  return wingSide === 'Left' ? 'Right' : 'Left';
+  const homeSide = p4HomeSide();
+  if (!motionOn) return homeSide;
+  return homeSide === 'Left' ? 'Right' : 'Left';
 }
 
 // 4x3 removed as an option -- everything is 4x4 now, most teams played are
@@ -1505,11 +1519,13 @@ function render() {
   circlesLayer.appendChild(c6);
   playerCircles['6'] = c6;
 
-  // wing (#4) -- position depends on wingSide, independent of play direction.
-  // Motion is a pure playback choice (like Wing/Dir) -- if it's on, he's
-  // drawn at the opposite wing spot instead, and everything below anchors
-  // off that same spot so his route/blocking math stays correct.
-  const wingPos = DATA.wing[wingSide];
+  // wing (#4) -- position depends on wingSide, independent of play direction
+  // (or the opposite of wingSide, for a p4StartsOpposite play like Shuffle
+  // Pass -- see p4HomeSide() above). Motion is a pure playback choice (like
+  // Wing/Dir) -- if it's on, he's drawn at the opposite of THAT spot
+  // instead, and everything below anchors off that same spot so his
+  // route/blocking math stays correct.
+  const wingPos = DATA.wing[p4HomeSide()];
   const p4Pos = p4Anchor();
   const wingDim = anyPlayerSelected && selectedPlayer !== 4;
   const c4 = drawCircle(p4Pos[0], p4Pos[1], '4', '#111111', 34, wingDim, null, 4);
