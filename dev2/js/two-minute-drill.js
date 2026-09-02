@@ -470,8 +470,27 @@
     const ballEntry = lastRenderedPaths.find(p => p.isBall);
     const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
     const OFFY = 50;
-    if (ballEntry && ballEntry.circleEl) {
-      let carrier = ballEntry.circleEl;
+    // Nathan: "the ball needs to reach him at the same time [as the
+    // handoff mark] ... he receives it much earlier, as soon as he turns
+    // at the line instead of half way through the route." Shuffle Pass has
+    // no separate ball:true passer path -- the catch is marked with
+    // handoffIndex directly on the receiver's OWN route (see
+    // hasHandoffSplit above), which forces isBall:false on both of that
+    // route's halves. That left ballEntry undefined for this play, so this
+    // whole block used to be skipped (the `else` below) and the ball icon
+    // just sat frozen at the snap spot the entire play. Falling back to
+    // handoffEntry as the thing to track -- but only once ITS OWN marked
+    // point's timed fraction has actually elapsed, not from t=0 -- means
+    // the ball now visibly waits out the receiver's drift/turn and only
+    // eases onto him right at the marked spot, same as a real handoff
+    // would. See the matching block/comment in js/play-calls.js.
+    const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+      : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
+    const initialDelay = !initialEntry ? 0
+      : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
+      : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+    if (initialEntry) {
+      let carrier = initialEntry.circleEl;
       let cx = qbPos.x, cy = qbPos.y;
       let catchingUp = true;
       let easing = true;
@@ -499,7 +518,11 @@
         ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
         requestAnimationFrame(track);
       }
-      if (handoffEntry && handoffEntry.circleEl !== carrier) {
+      // Only a genuinely separate initial carrier (ballEntry) can hand off
+      // mid-play -- if handoffEntry is what we're ALREADY starting from
+      // (initialEntry === handoffEntry, the Shuffle Pass case above),
+      // there's no second carrier left to switch to.
+      if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
         const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
         wait(handoffDelay).then(() => {
           if (!tracking) return;
@@ -509,7 +532,7 @@
           catchUpFrame();
         });
       }
-      await wait((ballEntry.delayMs || 0) * speedMultiplier);
+      await wait(initialDelay);
       tracking = true;
       catchUpFrame();
       await wait(animMs);

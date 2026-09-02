@@ -1610,8 +1610,28 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // path here -- animatePathDraw strokes linearly over its duration).
   const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
   const OFFY = 50;
-  if (ballEntry && ballEntry.circleEl) {
-    let carrier = ballEntry.circleEl;
+  // Nathan: "the ball needs to reach him at the same time [as the handoff
+  // mark] ... he receives it much earlier, as soon as he turns at the
+  // line instead of half way through the route." Shuffle Pass has no
+  // separate ball:true passer path at all -- the catch is marked with
+  // handoffIndex directly on the receiver's OWN route (see hasHandoffSplit
+  // above), which forces isBall:false on both of that route's halves. That
+  // left ballEntry undefined for this play, so this whole block used to be
+  // skipped (the `else` below) and the ball icon just sat frozen at the
+  // snap spot for the entire play -- looking like it arrived "whenever",
+  // in practice as soon as anything else visually read as the catch (the
+  // route line itself turning red at the marked point). Falling back to
+  // handoffEntry as the thing to track -- but only once ITS OWN marked
+  // point's timed fraction has actually elapsed, not from t=0 -- means the
+  // ball now visibly waits out the receiver's drift/turn and only eases
+  // onto him right at the marked spot, same as a real handoff would.
+  const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+    : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
+  const initialDelay = !initialEntry ? 0
+    : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
+    : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+  if (initialEntry) {
+    let carrier = initialEntry.circleEl;
     // ease toward the carrier's LIVE position every frame (never a stale
     // snapshot target) -- the carrier is already moving along his own path
     // by this point, so tweening to a fixed captured point goes stale and
@@ -1652,7 +1672,11 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     // it lines up with when #4's own path drawing actually reaches the
     // marked point, independent of whatever delay the ORIGINAL carrier
     // happens to start with.
-    if (handoffEntry && handoffEntry.circleEl !== carrier) {
+    // Only a genuinely separate initial carrier (ballEntry) can hand off
+    // mid-play -- if handoffEntry is what we're ALREADY starting from
+    // (initialEntry === handoffEntry, the Shuffle Pass case above), there's
+    // no second carrier left to switch to.
+    if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
       const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
       wait(handoffDelay).then(() => {
         if (!tracking) return; // play already ended (or never started) -- nothing to hand off
@@ -1663,7 +1687,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
       });
     }
 
-    await wait((ballEntry.delayMs || 0) * speedMultiplier);
+    await wait(initialDelay);
     tracking = true;
     catchUpFrame();
     await wait(animMs);
