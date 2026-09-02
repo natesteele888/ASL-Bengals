@@ -70,7 +70,7 @@
   // playoffs) get a visible tag.
   const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff'];
 
-  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl}]
+  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl, opponentFilmNote}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
   // Nathan: "would be awesome if we could include an image of the field
@@ -1022,7 +1022,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '' };
+      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -1070,10 +1070,17 @@
     // after the fact, possibly several clips). This is scouting footage
     // OF THE OPPONENT (from Hudl, Drive, wherever it already lives), so
     // it's a single link, entered ahead of the game like Scouting Report,
-    // not a growing list. Surfaced as a "Watch Footage" button both here
-    // on the game's own Schedule preview and on This Week (js/thisweek.js),
-    // which reads it straight off whichever game is linked as saved.gameId.
+    // not a growing list. Surfaced as a "Watch Game Film of our Upcoming
+    // Opponent" button both here on the game's own Schedule preview and on
+    // This Week (js/thisweek.js), which reads it straight off whichever
+    // game is linked as saved.gameId.
     current.opponentFilmUrl = current.opponentFilmUrl || '';
+    // Nathan: "include a write-in spot for the footage to say something
+    // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
+    // - Merrimack Valley 6'" -- a short caption shown right under the Watch
+    // Footage button, same linking (saved.gameId -> upcomingGames) as the
+    // URL itself.
+    current.opponentFilmNote = current.opponentFilmNote || '';
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
@@ -1151,7 +1158,8 @@
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
-        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:12px;">🎥 Watch Footage</a>` : ''}
+        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch Game Film of our Upcoming Opponent</a>` : ''}
+        ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
@@ -1271,8 +1279,10 @@
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
       <div class="lbSectionHeader" style="margin-top:12px;">🎥 Opponent Film</div>
-      <div class="lbSub" style="margin:2px 0 8px;">Link to game film of this opponent (Hudl share link, Google Drive, YouTube, etc.) -- shows a "Watch Footage" button here and on This Week once a game is linked to it.</div>
-      <input type="text" id="schedOpponentFilmUrl" placeholder="https://…" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:4px;">
+      <div class="lbSub" style="margin:2px 0 8px;">Link to game film of this opponent (Hudl share link, Google Drive, YouTube, etc.) -- shows a "Watch Game Film of our Upcoming Opponent" button here and on This Week once a game is linked to it.</div>
+      <input type="text" id="schedOpponentFilmUrl" placeholder="https://…" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <input type="text" id="schedOpponentFilmNote" placeholder="e.g. &quot;Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6&quot;" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:4px;">
+      <div class="lbSub" style="margin:2px 0 8px;">Optional note shown right under the film button -- jersey colors, final score, anything worth flagging before they hit play.</div>
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div id="gameCancelSection"></div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
@@ -1300,6 +1310,7 @@
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
     document.getElementById('schedOpponentFilmUrl').value = current.opponentFilmUrl || '';
+    document.getElementById('schedOpponentFilmNote').value = current.opponentFilmNote || '';
     const fillHighlightsBtn = document.getElementById('schedFillHighlightsBtn');
     if (fillHighlightsBtn) {
       fillHighlightsBtn.addEventListener('click', () => {

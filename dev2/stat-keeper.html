@@ -1320,8 +1320,26 @@
 
     plays.forEach(function(p){
       if (p.type === 'quarterEnd') return;
-      if (p.side === 'offense') offSnaps++;
-      else if (p.side === 'defense') defSnaps++;
+      // Nathan: "punts, penalties, kick offs and things like that are
+      // still counting towards offensive snaps." A snap specifically
+      // means a real play from scrimmage -- only run/pass entries are
+      // one. Punts and kickoffs are special-teams plays with their own
+      // separate snap that doesn't customarily count toward
+      // offensive/defensive snap totals; penalties, turnovers, and
+      // defextra (INT/PBU/Sack) are logged as their own standalone
+      // entries ON TOP OF whatever run/pass snap they happened during (or,
+      // for some penalties, aren't tied to a snap at all) -- counting
+      // them here would double up or wrongly inflate the real snap count
+      // for whichever side was on the field. `side` here is from the
+      // Bengals' perspective either way: 'offense' means the Bengals had
+      // the ball (our offensive snap), 'defense' means the opponent did
+      // (their offensive snap) -- so this one pair of counters already
+      // covers "offensive snaps for both teams" once it's limited to
+      // real snaps, see the Snap Counts label below.
+      if (p.type === 'run' || p.type === 'pass') {
+        if (p.side === 'offense') offSnaps++;
+        else if (p.side === 'defense') defSnaps++;
+      }
 
       if (p.type==='run'){
         const isUsRun = p.runTeam !== 'Opponent';
@@ -1494,8 +1512,8 @@
     const s = compileStatSheet();
     const sc = s.scoring;
     let html = '';
-    html += '<div class="statSectionTitle">Snap Counts</div>' +
-      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🏈 Offense: '+s.snaps.offense+' plays &nbsp;·&nbsp; 🛡️ Defense: '+s.snaps.defense+' plays</div>';
+    html += '<div class="statSectionTitle">Offensive Snap Counts</div>' +
+      '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🏈 Bengals Offense: '+s.snaps.offense+' snaps &nbsp;·&nbsp; 🛡️ Opponent Offense: '+s.snaps.defense+' snaps</div>';
     html += '<div class="statSectionTitle">Scoring Summary</div>' +
       '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🏆 TD: '+sc.touchdowns+
       ' &nbsp;·&nbsp; PAT: '+sc.patGood+'/'+(sc.patGood+sc.patNoGood)+
@@ -1548,7 +1566,7 @@
     const s = compileStatSheet();
     const sc = s.scoring;
     let txt = 'STAT SUMMARY — ' + s.game + '\n\n';
-    txt += 'SNAP COUNTS\n  Offense: '+s.snaps.offense+' plays · Defense: '+s.snaps.defense+' plays\n\n';
+    txt += 'OFFENSIVE SNAP COUNTS\n  Bengals Offense: '+s.snaps.offense+' snaps · Opponent Offense: '+s.snaps.defense+' snaps\n\n';
     txt += 'SCORING\n  TD: '+sc.touchdowns+' · PAT: '+sc.patGood+'/'+(sc.patGood+sc.patNoGood)+
       ' · 2PT: '+sc.twoPtGood+'/'+(sc.twoPtGood+sc.twoPtNoGood)+' · Safety: '+sc.safety+'\n\n';
     txt += 'PENALTIES\n  Us: '+s.penaltyTotals.us.count+' for '+s.penaltyTotals.us.yds+' yds · Opponent: '+
