@@ -492,31 +492,13 @@ function logQuizStart(kind){
 }
 
 /* ============================================================
-   2 MINUTE DRILL LAUNCH -- Nathan (2026-08-24): "should only be
-   accessible through the 5 clicks of the logo" -- replaces two earlier
-   designs in one move: the 3-second press-and-hold gesture this used to
-   be ("press and hold the logo for 3 seconds launches it... remove the
-   5 tap back door, make it 3 second hold for all logins") is gone, and
-   the 5-tap gesture's older job (jumping to Coach Tools > Dashboard --
-   see the removed COACH DASHBOARD SHORTCUT comment this replaced) is
-   gone too, since Coach Tools is already its own top-level nav tab now
-   and doesn't need a logo-tap muscle-memory shortcut anymore. 5 taps on
-   the header logo is now the ONE way to open the drill, no PIN, no
-   account check, same as the long-press it replaces.
+   2 MINUTE DRILL LAUNCH -- was a hidden "5 clicks of the logo" gesture
+   (before that, a 3-second press-and-hold, and before THAT, this same
+   5-tap gesture jumped to Coach Tools > Dashboard). Nathan (2026-09-01):
+   "remove the 5 clicks of the Logo launching the 2 min drill" -- now that
+   the drill has its own regular, discoverable nav tab (#twoMinuteTabBtn in
+   index.html's #modeTabs), the secret back door has no job left to do.
    ============================================================ */
-let _logoTapCount = 0;
-let _logoTapTimer = null;
-const headerLogoEl = document.getElementById('headerLogo');
-headerLogoEl.addEventListener('click', ()=>{
-  _logoTapCount++;
-  clearTimeout(_logoTapTimer);
-  _logoTapTimer = setTimeout(()=>{ _logoTapCount = 0; }, 3000);
-  if(_logoTapCount >= 5){
-    _logoTapCount = 0;
-    clearTimeout(_logoTapTimer);
-    if(window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay();
-  }
-});
 
 function getLeaderboard(){
   try { const raw = localStorage.getItem(LEADERBOARD_KEY); return raw ? JSON.parse(raw) : []; } catch(e) { return []; }

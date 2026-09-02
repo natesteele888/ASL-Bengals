@@ -315,4 +315,38 @@
       console.log('ASL Bengals: added Houston route note to What\'s New.');
     } catch(e){ console.error('Could not add Houston route What\'s New note:', e); }
   };
+
+  // ---- One-time batch of feature announcements -- Nathan (2026-09-01):
+  // "Add the callouts of all the new things to the What's New section. Call
+  // out the new features." What's New had earlier been narrowed back down
+  // to plays-only ("i don't like the whats new section - needs to be just
+  // new plays"), but this explicitly re-opens it to real feature news too --
+  // same idempotent read-modify-write PUT pattern as the Houston note above,
+  // one fixed id per feature so this never double-posts no matter how many
+  // times boot() runs it.
+  // Nathan: whats-new.js's/coachtools-updates.js's render both prefix every
+  // row with a plain 🏈, same as a real new play -- no icon needed here,
+  // same as how the Houston route note above reads.
+  const SEPT2026_FEATURE_NOTES = [
+    { id: 'feature-standings-opponent-pages-20260901', label: 'League Standings tab added -- tap any team (including an upcoming opponent) to see their game film, notes, and scouting info.' },
+    { id: 'feature-opponent-film-cta-20260901', label: 'Watch Game Film of our upcoming opponent -- now front and center on This Week, Schedule, and the new Opponent Page.' },
+    { id: 'feature-two-minute-drill-nav-20260901', label: '2 Minute Drill is live! Find it right on the Play tab bar, with its own section on the main Leaderboard.' },
+    { id: 'feature-shuffle-pass-play-20260901', label: 'New play added: Wing Right, Shuffle Pass Right (signal #23) -- study it under Play Calls.' },
+  ];
+  window.__addSept2026FeatureWhatsNewNotes = async function(){
+    if(!window.hasGateSession || !window.hasGateSession()) return;
+    try {
+      const url = await window.firebaseAuthed(WHATS_NEW_URL);
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const list = Array.isArray(existing) ? existing : [];
+      const existingIds = new Set(list.map(e => e && e.id));
+      const toAdd = SEPT2026_FEATURE_NOTES.filter(n => !existingIds.has(n.id));
+      if(!toAdd.length) return; // already added
+      const now = new Date().toISOString();
+      toAdd.forEach(n => list.push({ id: n.id, label: n.label, addedAt: now, addedBy: 'Coach Staff' }));
+      await fetch(url, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(list) });
+      console.log('ASL Bengals: added Sept 2026 feature notes to What\'s New.');
+    } catch(e){ console.error('Could not add Sept 2026 feature What\'s New notes:', e); }
+  };
 })();
