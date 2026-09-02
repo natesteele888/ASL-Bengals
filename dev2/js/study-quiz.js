@@ -1216,7 +1216,7 @@ function gcNextUpcomingGame(games){
   const withTimes = (games || []).filter(g => g.date).map(g => {
     const parts = g.date.split('-').map(Number);
     if(parts.length !== 3 || parts.some(isNaN)) return null;
-    const tm = (g.gameTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const tm = (g.gameTime || '').trim().match(/^(\d{1,2}):(\d{2})/);
     const d = tm
       ? new Date(parts[0], parts[1]-1, parts[2], Number(tm[1]), Number(tm[2]))
       : new Date(parts[0], parts[1]-1, parts[2], 23, 59, 59);
@@ -1289,11 +1289,11 @@ async function renderEngagementCallout(){
       computeMostImproved().catch(() => null),
       Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
     ]);
-    // "basic details of next game on schedule"
+    // "basic details of next game on schedule" -- exact format Nathan asked
+    // for: "Sat. Sep 5th, 12:45pm Home vs. Nipmuc" (see gcFmtGameLine).
     const next = gcNextUpcomingGame(games || []);
     if(next){
-      const when = gcFmtDate(next.date) + (next.gameTime ? ' • ' + gcTo12h(next.gameTime) : '');
-      items.push(gcTickerItemHtml('📅', `Next Game: ${next.homeAway === 'Away' ? '@' : 'vs'} ${gcEscapeHtml(next.opponent || 'TBD')} — ${when}`));
+      items.push(gcTickerItemHtml('📅', gcFmtGameLine(next)));
     }
     // "top 3 on the all time leaderboard"
     if(players && players.length){
