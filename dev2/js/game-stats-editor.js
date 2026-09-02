@@ -77,7 +77,17 @@
     return out;
   }
   function playCallLabelFor(pc) {
-    if (!pc || !pc.key) return '';
+    if (!pc) return '';
+    // Nathan: "adding the play call to the plays we ran on offense" -- Stat
+    // Keeper's live entry form (stat-keeper.html) stores the play call it
+    // logged as a plain string (its own PLAYBOOK list, or free text under
+    // "Other / Not Sure"), not this file's {key, direction} shape tied to
+    // window.DATA.playTypes. Rather than force a fragile string->key match
+    // between two separate playbook vocabularies, just show the string
+    // as-is when that's what came through statkeeper-import.js/
+    // translatePlaysForLive.
+    if (typeof pc === 'string') return pc;
+    if (!pc.key) return '';
     const families = window.playbookLiveFamilies ? window.playbookLiveFamilies() : [];
     const fam = families.find(f => f.key === pc.key);
     return fam ? `${fam.label}${pc.direction ? ' • ' + pc.direction : ''}` : pc.key;

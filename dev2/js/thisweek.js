@@ -603,6 +603,7 @@
     const gridEl = document.getElementById('thisweekCardsGrid');
     const gameLinkEl = document.getElementById('thisweekGameLink');
     const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
+    const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
     if (!keysBox || !keysList || !gridEl) return;
 
     const linkedGame = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
@@ -628,6 +629,19 @@
       } else {
         watchFootageBtn.style.display = 'none';
         watchFootageBtn.removeAttribute('href');
+      }
+    }
+    // Nathan: "include a write-in spot for the footage to say something
+    // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
+    // - Merrimack Valley 6'" -- same opponentFilmNote a coach sets on the
+    // game itself (schedule.js), only shown alongside the button above.
+    if (watchFootageNoteEl) {
+      if (linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote) {
+        watchFootageNoteEl.style.display = '';
+        watchFootageNoteEl.textContent = linkedGame.opponentFilmNote;
+      } else {
+        watchFootageNoteEl.style.display = 'none';
+        watchFootageNoteEl.textContent = '';
       }
     }
 

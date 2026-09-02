@@ -1534,6 +1534,7 @@
     current.scouting = document.getElementById('schedScouting').value.trim();
     current.infoUrl = document.getElementById('schedInfoUrl').value.trim();
     current.opponentFilmUrl = document.getElementById('schedOpponentFilmUrl').value.trim();
+    current.opponentFilmNote = document.getElementById('schedOpponentFilmNote').value.trim();
     current.fieldPhoto = pendingFieldPhoto;
     return true;
   }
