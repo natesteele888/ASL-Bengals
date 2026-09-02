@@ -548,6 +548,34 @@ function isCoachEntryName(name){
   return !!(n && window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf(n) !== -1);
 }
 function coachSortWeight(entry){ return isCoachEntryName(entry.name) ? 1 : 0; }
+// Nathan: "just the players should be visible. Parents shouldn't show on
+// the leaderboard." Coaches are recognized above via a fixed allowlist
+// (COACH_PROFILE_NAMES -- there are only ever 5 named coaches), but there's
+// no equivalent fixed list of parents; instead every player record already
+// carries role:'parent'/'coach'/'player' (see player-identity.js's
+// createPlayer), so this keeps its own small name->role lookup, built from
+// PlayerIdentity.fetchAllPlayers() and refreshed each time the Leaderboard
+// overlay opens (see openLeaderboardBtn's click handler below) plus once
+// early after login (see gate()'s onReady in player-identity.js) so it's
+// already warm by the time anyone actually looks at a board. Best-effort
+// like the rest of this file's cloud reads -- if the fetch hasn't resolved
+// yet, a parent just doesn't get filtered on that one render, same "good
+// enough, not perfectly live" spirit as everything else here.
+let parentNamesCache = new Set();
+async function refreshParentNamesCache(){
+  if(!window.PlayerIdentity || typeof window.PlayerIdentity.fetchAllPlayers !== 'function') return;
+  try {
+    const all = await window.PlayerIdentity.fetchAllPlayers();
+    const names = new Set();
+    Object.values(all || {}).forEach(p => { if(p && p.role === 'parent' && p.name) names.add(normName(p.name)); });
+    parentNamesCache = names;
+  } catch(e) { /* keep whatever was cached before -- never worth breaking a board over */ }
+}
+window.refreshParentNamesCache = refreshParentNamesCache;
+function isParentEntryName(name){
+  const n = normName(name);
+  return !!(n && parentNamesCache.has(n));
+}
 // Nathan (follow-up to the sink-to-bottom request above): "coaches
 // shouldn't be awarded points with the kids -- they can be completely
 // separate." Sorting coaches to the bottom of one shared list still let a
@@ -560,7 +588,10 @@ function coachSortWeight(entry){ return isCoachEntryName(entry.name) ? 1 : 0; }
 function splitByCoach(sortedList){
   const players = [];
   const coaches = [];
-  sortedList.forEach(e => (isCoachEntryName(e.name) ? coaches : players).push(e));
+  sortedList.forEach(e => {
+    if(isParentEntryName(e.name)) return; // Nathan: parents shouldn't show on the leaderboard at all
+    (isCoachEntryName(e.name) ? coaches : players).push(e);
+  });
   return { players, coaches };
 }
 function dedupeBestByName(list, isBetter){
@@ -1134,26 +1165,16 @@ async function renderOverallLeaderboard(){
       ? '<div class="lbEmpty">Nobody\'s finished a Quiz Scores, Timed Quiz, or Play Calls Quiz run yet this week!</div>'
       : '<div class="lbEmpty">No points yet — finish a Quiz Scores, Timed Quiz, or Play Calls Quiz run to get on the board!</div>';
   overallLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
-  // Nathan: "The 2 Minute Drill is now ready to be unleashed. A score
-  // section should be added to the overall leaderboard." The drill already
-  // has its own internal Leaderboard screen (js/two-minute-drill.js's
-  // #twoMinLbScreen) -- this pulls the same data into a section here too,
-  // so it shows up alongside Quiz/Timed/Play Calls on the one leaderboard
-  // everyone already knows to check, not just inside the drill itself.
-  if (typeof window.fetchTwoMinDrillLeaderboardData === 'function') {
-    try {
-      const { players: drillPlayers, coaches: drillCoaches } = await window.fetchTwoMinDrillLeaderboardData();
-      const drillScoreFn = e => `${e.score || 0} TD${(e.score || 0) === 1 ? '' : 's'} • ${e.totalYards || 0} yds`;
-      overallLbList.innerHTML += '<div class="lbSectionHeader" style="margin-top:18px;">🏈 2 Minute Drill</div>' +
-        (drillPlayers.length
-          ? drillPlayers.map((e, i) => lbRowHtml(e, i, null, drillScoreFn(e))).join('')
-          : '<div class="lbEmpty">No drives yet — finish a 2 Minute Drill to be the first!</div>') +
-        coachSectionHtml(drillCoaches, drillScoreFn);
-    } catch (e) {
-      // Same "nice-to-have, never worth breaking the whole leaderboard
-      // over" reasoning as renderEngagementCallout's own try/catch below.
-    }
-  }
+  // Nathan (2026-09-02): "those stats shouldn't be at the bottom of the
+  // Overall tab." This used to also append a raw "2 Minute Drill" section
+  // (TDs/yards) here -- that was fine back when the drill had no other
+  // presence on the main Leaderboard overlay, but it's redundant now that
+  // (a) the drill's points already flow into the Overall total above via
+  // computeOverallStandings, and (b) the drill has its own full-standings
+  // tab right on this same overlay (see the "drill" entry in
+  // LB_TAB_LIST_IDS / renderDrillLbTab). Removed rather than left as
+  // duplicate information at the bottom of a tab that's supposed to be
+  // points-only.
 }
 const overallLbRangeToggleEl = document.getElementById('overallLbRangeToggle');
 if(overallLbRangeToggleEl){
@@ -1983,9 +2004,13 @@ async function renderSpotlight(){
 }
 
 const lbOverlay = document.getElementById('lbOverlay');
-document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
+document.getElementById('openLeaderboardBtn').addEventListener('click', async ()=>{
   lbOverlay.classList.add('show');
   showLbTab('overall');
+  // Refresh the parent-name cache before any board renders, so a parent
+  // account never flashes onto a list even for a moment (see
+  // refreshParentNamesCache's comment above splitByCoach).
+  await refreshParentNamesCache();
   renderOverallLeaderboard();
   renderTimedLeaderboard(null);
   renderLeaderboard(null);

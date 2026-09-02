@@ -1293,6 +1293,12 @@
       // trigger point as the other post-session checks here -- see
       // js/study-quiz.js's renderEngagementCallout.
       if (typeof window.renderEngagementCallout === 'function') window.renderEngagementCallout();
+      // Nathan: "parents shouldn't show on the leaderboard." Warms
+      // study-quiz.js's parent-name cache as early as possible after login
+      // (fire-and-forget -- openLeaderboardBtn's own click handler awaits a
+      // fresh copy of this again right before rendering, this is just a
+      // head start so that first render is already correct too).
+      if (typeof window.refreshParentNamesCache === 'function') window.refreshParentNamesCache();
       // Nathan: drone footage "push" notifications (see js/drone-footage.js)
       // -- same trigger point as the What's New badge/notify check above,
       // now that a session is actually known.
