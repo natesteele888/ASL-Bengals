@@ -193,13 +193,33 @@
       }
 
       if (p.type === 'kick') {
+        // Nathan: "add kicking/receiving team + spotting" -- kickoffs no
+        // longer carry a flat returner/yards pair for the non-onside case,
+        // they carry real Kicked From/Caught/Brought To spots (same shape
+        // punt already used above), plus a kickTeam so a kick THE OPPONENT
+        // made can be told apart from one WE made. Onside kicks are
+        // untouched (still returner/yards when recovered by us).
+        const isUsKick = p.kickTeam !== 'Opponent';
         if (p.onside) {
           if (p.recoveredByTeam === 'Opponent') ss.onside.opponent += 1; else ss.onside.us += 1;
-        }
-        if (p.returner) {
+          if (p.recoveredByTeam === 'Us' && p.returner) {
+            const num = numFor(p.returner);
+            if (num != null) ensureAttemptRow('kickoffs', num).attempts.push({ yds: Number(p.yards) || 0, td: !!p.td });
+          }
+        } else if (!isUsKick && p.returner) {
+          // Opponent kicked, WE returned it -- a real named player, credited
+          // the same way a punt return against us credits our returner.
           const num = numFor(p.returner);
-          if (num != null) ensureAttemptRow('kickoffs', num).attempts.push({ yds: Number(p.yards) || 0, td: !!p.td });
+          if (num != null) {
+            const catchAbs = absoluteSpot(p.catchSide, p.catchYard);
+            const endAbs = absoluteSpot(p.endSide, p.endYard);
+            const retYds = (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : 0;
+            ensureAttemptRow('kickoffs', num).attempts.push({ yds: retYds, td: !!p.td });
+          }
         }
+        // We-kicked-opponent-returned has no named opponent player to credit
+        // (same as forcedPunts not naming an opponent punter) -- nothing
+        // further to push into this box-score shape for that case.
       }
 
       if (p.type === 'punt') {

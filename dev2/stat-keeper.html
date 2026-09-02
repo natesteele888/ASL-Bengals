@@ -316,8 +316,9 @@
   const TYPE_DEFS = {
     run:      {label:'🏃 Run',        sides:['offense','defense']},
     pass:     {label:'🎯 Pass',       sides:['offense','defense']},
-    kick:     {label:'🦵 Kick Ret.',  sides:['offense']},
+    kick:     {label:'🦵 Kickoff',    sides:['offense','defense']},
     punt:     {label:'🦶 Punt',       sides:['offense','defense']},
+    kneel:    {label:'🕐 Kneel/Spike',sides:['offense','defense']},
     tackle:   {label:'💥 Tackle',     sides:['defense']},
     defextra: {label:'🛡️ Def Extra', sides:['defense']},
     turnover: {label:'🔄 Turnover',   sides:['offense','defense']},
@@ -728,10 +729,63 @@
     return wrap;
   }
 
+  // Nathan: "having a way of setting the ball to the yard marker at the
+  // start of the play and end of the play is key." Shared by Run and Pass
+  // (a completed one) -- the start spot is never re-typed by hand, it's
+  // just wherever the persistent Ball Position control already has the
+  // ball (or, if editing an older play, the exact spot that play was
+  // originally logged at -- see startEditPlay/draft.spot below, same
+  // "frozen at creation time" idea the punt/kickoff spots already rely on).
+  // Only the end spot is a real decision, made by watching where the ball
+  // ended up on film. Yards Gained is derived from the two spots instead of
+  // typed in by hand, using signedYardsFromSpots so it's correct regardless
+  // of which team has the ball. Returns an array of the two field rows to
+  // append (fieldBlock only takes one control at a time).
+  function snapSpotFields(isUsTeam){
+    const startAbs = (draft.spot != null) ? draft.spot : currentSpot;
+    if (draft.endSide == null){
+      const sy = sideYardFromAbs(startAbs);
+      draft.endSide = sy.side; draft.endYard = sy.yard;
+    }
+    const endAbs = absoluteSpot(draft.endSide, draft.endYard);
+    draft.yards = signedYardsFromSpots(startAbs, endAbs, isUsTeam);
+
+    const startRow = document.createElement('div');
+    startRow.style.cssText = 'color:var(--dim);font-size:13px;';
+    startRow.textContent = spotLabelAbs(startAbs);
+
+    const endWrap = spotPicker('endSide', 'endYard', sideYardFromAbs(startAbs).yard);
+    const gainedTag = document.createElement('span');
+    gainedTag.style.cssText = 'font-weight:800;color:' + (draft.yards >= 0 ? 'var(--cyan)' : '#e0201a') + ';';
+    gainedTag.textContent = (draft.yards >= 0 ? '+' : '') + draft.yards + ' yds';
+    endWrap.appendChild(gainedTag);
+
+    return [ fieldBlock('Ball Spot to Start', startRow), fieldBlock('Ball Spot at End of Play', endWrap) ];
+  }
+
   function spotLabelAbs(spot){
     const y = Math.round(spot <= 50 ? spot : (100 - spot));
     if (Math.round(spot) === 50) return 'Midfield (the 50)';
     return (spot <= 50 ? 'OWN ' : 'OPP ') + y;
+  }
+  // Reverse of absoluteSpot -- turns a 0-100 absolute position back into the
+  // OWN/OPP + yard-line shape spotPicker's chips/stepper expect, so a spot
+  // that's only known as an absolute number (currentSpot, or a play's own
+  // frozen `spot`) can seed a sensible default the first time its end-spot
+  // picker renders.
+  function sideYardFromAbs(abs){
+    const y = Math.round(abs <= 50 ? abs : (100 - abs));
+    return { side: abs <= 50 ? 'OWN' : 'OPP', yard: y };
+  }
+  // Nathan: "setting the ball to the yard marker at the start of the play
+  // and end of the play is key." Two absolute (0-100, OWN goal to OPP goal)
+  // spots always describe real net yardage on their own -- which one gets
+  // subtracted from which just depends on which team is actually moving the
+  // ball forward: the Bengals' forward direction is toward 100 (see
+  // absoluteSpot's own comment), the opponent's is toward 0.
+  function signedYardsFromSpots(startAbs, endAbs, isUsTeam){
+    if (startAbs == null || endAbs == null) return 0;
+    return isUsTeam ? (endAbs - startAbs) : (startAbs - endAbs);
   }
   // Nathan: "add in the field yardage markage." Unlike spotPicker (bound to
   // one play's draft fields), this is bound directly to the persistent
@@ -873,7 +927,7 @@
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Ball Carrier (optional)', textInput('oppCarrier', "Opponent's ball carrier, if known")));
       }
-      fieldsArea.appendChild(fieldBlock('Yards Gained', yardStepper('yards', 0)));
+      snapSpotFields(isUsRun).forEach(function(row){ fieldsArea.appendChild(row); });
       fieldsArea.appendChild(fieldBlock('Direction', optChips('dir', ['Left','Middle','Right'])));
       const toggles = document.createElement('div'); toggles.className='toggleRow';
       toggles.appendChild(chipToggle('firstDown', isUsRun ? '1st Down' : 'Opponent 1st Down'));
@@ -899,7 +953,7 @@
       }
       fieldsArea.appendChild(fieldBlock('Result', optChips('result', ['Complete','Incomplete'])));
       if (draft.result === 'Complete'){
-        fieldsArea.appendChild(fieldBlock('Yards Gained', yardStepper('yards', 0)));
+        snapSpotFields(isUsPass).forEach(function(row){ fieldsArea.appendChild(row); });
         const toggles = document.createElement('div'); toggles.className='toggleRow';
         toggles.appendChild(chipToggle('firstDown', isUsPass ? '1st Down' : 'Opponent 1st Down'));
         toggles.appendChild(chipToggle('td','🏆 Touchdown'));
@@ -912,6 +966,18 @@
       }
     }
     else if (currentType === 'kick'){
+      // Nathan: "account for all play types to mark it for the whole
+      // game" -- kickoff used to have no Kicking Team field at all (just a
+      // bare "Returner", implicitly always us), unlike Run/Pass/Punt which
+      // all say who has the ball. Same Us/Opponent split + real spotting
+      // as Punt now (Kicked From / Caught At / Brought To -- three spots
+      // instead of two, same reason Punt has three: the kick's own flight
+      // distance and the actual RETURN distance are two different numbers,
+      // and only separating "caught at" from "kicked from" lets both be
+      // measured correctly).
+      if (draft.kickTeam == null) draft.kickTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
+      const isUsKick = draft.kickTeam !== 'Opponent';
+      fieldsArea.appendChild(fieldBlock('Kicking Team', optChips('kickTeam', ['Us','Opponent'])));
       fieldsArea.appendChild(fieldBlock('', chipToggle('onside','⚡ Onside Kick')));
       if (draft.onside){
         fieldsArea.appendChild(fieldBlock('Recovered By', optChips('recoveredByTeam', ['Us','Opponent'])));
@@ -921,8 +987,14 @@
           fieldsArea.appendChild(fieldBlock('Return Yards', yardStepper('yards', 0)));
         }
       } else {
-        fieldsArea.appendChild(fieldBlock('Returner', playerPicker('returner')));
-        fieldsArea.appendChild(fieldBlock('Return Yards', yardStepper('yards', 0)));
+        if (isUsKick){
+          fieldsArea.appendChild(fieldBlock('Returner (optional, opponent)', textInput('oppReturner', "Opponent's returner, if known")));
+        } else {
+          fieldsArea.appendChild(fieldBlock('Returner', playerPicker('returner')));
+        }
+        fieldsArea.appendChild(fieldBlock('Kicked From (spot)', spotPicker('startSide', 'startYard', isUsKick ? 40 : 35)));
+        fieldsArea.appendChild(fieldBlock('Caught/Fielded At (spot, optional)', spotPicker('catchSide', 'catchYard', isUsKick ? 20 : 15)));
+        fieldsArea.appendChild(fieldBlock('Brought Ball To (final spot)', spotPicker('endSide', 'endYard', isUsKick ? 30 : 40)));
         fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown')));
       }
     }
@@ -956,6 +1028,22 @@
         fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
       } else {
         fieldsArea.appendChild(fieldBlock('Ball Spot (optional)', spotPicker('endSide', 'endYard', 20)));
+      }
+    }
+    else if (currentType === 'kneel'){
+      // Nathan: "add a quick Kneel/Spike log" -- a real snap from scrimmage
+      // (clock-killing kneel, or a spike to stop the clock) that's worth
+      // counting toward the snap totals and keeping in the play order, but
+      // isn't a designed run/pass and doesn't need yardage/spot tracking
+      // ("not worried about time of possession").
+      if (draft.kneelTeam == null) draft.kneelTeam = (currentSide === 'defense') ? 'Opponent' : 'Us';
+      const isUsKneel = draft.kneelTeam !== 'Opponent';
+      fieldsArea.appendChild(fieldBlock('Team', optChips('kneelTeam', ['Us','Opponent'])));
+      fieldsArea.appendChild(fieldBlock('Type', optChips('kneelType', ['Kneel','Spike'])));
+      if (isUsKneel){
+        fieldsArea.appendChild(fieldBlock('QB (optional)', playerPicker('qb')));
+      } else {
+        fieldsArea.appendChild(fieldBlock('Opponent QB (optional)', textInput('oppQb', "Opponent's QB, if known")));
       }
     }
     else if (currentType === 'tackle'){
@@ -1040,12 +1128,27 @@
         (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
     if (p.type==='kick'){
+      const isUsKick = p.kickTeam !== 'Opponent';
       if (p.onside){
-        let base = '⚡ Onside Kick — recovered by ' + (p.recoveredByTeam||'?') + (p.recoverPlayer ? ' ('+p.recoverPlayer+')' : '');
+        let base = (isUsKick ? '' : '🛡️ ') + '⚡ Onside Kick (' + (isUsKick?'Us':'Opponent') + ') — recovered by ' + (p.recoveredByTeam||'?') + (p.recoverPlayer ? ' ('+p.recoverPlayer+')' : '');
         if (p.recoveredByTeam==='Us' && p.returner) base += ', ' + p.returner + ' brought it ' + (p.yards||0) + ' yds';
         return base;
       }
-      return (p.td?'🏆 ':'') + 'Kick Return — ' + (p.returner||'?') + ', ' + p.yards + ' yds' + (p.td?' · TD':'');
+      const fromTxt = spotLabel(p.startSide, p.startYard);
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const toTxt = spotLabel(p.endSide, p.endYard);
+      const returnerTxt = isUsKick ? ('Opponent' + (p.oppReturner ? ' ('+p.oppReturner+')' : '')) : (p.returner||'?');
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      const kickDist = (startAbs != null && catchAbs != null) ? (isUsKick ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUsKick ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      let base = (isUsKick ? '' : '🛡️ ') + 'Kickoff (' + (isUsKick?'Us':'Opponent') + ')' + (fromTxt ? ', from '+fromTxt : '') +
+        ', returned by ' + returnerTxt;
+      if (catchTxt) base += ', caught at '+catchTxt;
+      base += (toTxt ? ' to '+toTxt : '');
+      if (p.td) base += ' · 🏆 TD';
+      if (kickDist != null) base += ' · '+kickDist+' yd kick';
+      if (retYds != null) base += ' · '+retYds+' return yds';
+      return base;
     }
     if (p.type==='punt'){
       const isUs = p.puntTeam !== 'Opponent';
@@ -1084,6 +1187,11 @@
       if (net != null) base += ' · net ' + net + ' yds';
       return base;
     }
+    if (p.type==='kneel'){
+      const isUsKneel = p.kneelTeam !== 'Opponent';
+      const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt;
+    }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
       if (!p.tackler && assists.length) return 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ');
@@ -1115,8 +1223,21 @@
       currentSpot = clampSpot(currentSpot + (entry.runTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
     } else if (entry.type === 'pass' && entry.result === 'Complete'){
       currentSpot = clampSpot(currentSpot + (entry.passTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
-    } else if (entry.type === 'kick' && !entry.onside){
-      currentSpot = clampSpot(currentSpot + Number(entry.yards||0)); // kick return type is always us returning
+    } else if (entry.type === 'kick'){
+      if (entry.onside){
+        // Onside kicks don't carry their own spot fields (short, chaotic,
+        // recovered right around the kick spot) -- leave currentSpot as-is,
+        // same simplification already made for the old design.
+        if (entry.recoveredByTeam === 'Us' && Number(entry.yards||0)){
+          currentSpot = clampSpot(currentSpot + Number(entry.yards||0));
+        }
+      } else {
+        // Non-onside kickoffs now carry real Kicked From/Caught/Brought To
+        // spots, same as Punt -- sync currentSpot from the actual final spot
+        // rather than a manually-typed return-yards number.
+        const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+        if (endAbs != null) currentSpot = clampSpot(endAbs);
+      }
     } else if (entry.type === 'punt'){
       const endAbs = absoluteSpot(entry.endSide, entry.endYard);
       if (endAbs != null) currentSpot = clampSpot(endAbs);
@@ -1144,7 +1265,7 @@
       return;
     }
     const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
-    if (entry.type === 'run' || entry.type === 'pass' || entry.type === 'kick') entry.spot = currentSpot;
+    if (entry.type === 'run' || entry.type === 'pass') entry.spot = currentSpot;
     insertPlay(entry);
     advanceSpotForPlay(entry);
     persist();
@@ -1317,14 +1438,16 @@
     // score (both teams' rushing AND passing) is possible from Stat Keeper
     // alone, not just our own offense.
     let oppRushAtt = 0, oppRushYds = 0, oppRushTd = 0;
+    let oppKickRetCount = 0, oppKickRetYds = 0;
 
     plays.forEach(function(p){
       if (p.type === 'quarterEnd') return;
       // Nathan: "punts, penalties, kick offs and things like that are
       // still counting towards offensive snaps." A snap specifically
-      // means a real play from scrimmage -- only run/pass entries are
-      // one. Punts and kickoffs are special-teams plays with their own
-      // separate snap that doesn't customarily count toward
+      // means a real play from scrimmage -- run/pass/kneel entries are
+      // one (a kneel-down or spike is still a real snap, just not a
+      // designed run/pass). Punts and kickoffs are special-teams plays
+      // with their own separate snap that doesn't customarily count toward
       // offensive/defensive snap totals; penalties, turnovers, and
       // defextra (INT/PBU/Sack) are logged as their own standalone
       // entries ON TOP OF whatever run/pass snap they happened during (or,
@@ -1336,7 +1459,7 @@
       // (their offensive snap) -- so this one pair of counters already
       // covers "offensive snaps for both teams" once it's limited to
       // real snaps, see the Snap Counts label below.
-      if (p.type === 'run' || p.type === 'pass') {
+      if (p.type === 'run' || p.type === 'pass' || p.type === 'kneel') {
         if (p.side === 'offense') offSnaps++;
         else if (p.side === 'defense') defSnaps++;
       }
@@ -1385,12 +1508,38 @@
         }
       }
       if (p.type==='kick'){
+        const isUsKick = p.kickTeam !== 'Opponent';
         if (p.onside){
           if (p.recoveredByTeam === 'Opponent') onsideOpp++; else onsideUs++;
-        }
-        if (p.returner){
-          const k = kickoffs[p.returner] || (kickoffs[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
-          k.ret++; k.yds += Number(p.yards||0); if (p.td){ k.td++; scoring.touchdowns++; }
+          // Old onside-recovered-by-us-with-a-return shape is untouched by
+          // the kickoff spotting rework, so it still just uses returner/yards.
+          if (p.recoveredByTeam === 'Us' && p.returner){
+            const k = kickoffs[p.returner] || (kickoffs[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
+            k.ret++; k.yds += Number(p.yards||0); if (p.td){ k.td++; scoring.touchdowns++; }
+          }
+        } else {
+          // Non-onside kicks now carry real Kicked From/Caught/Brought To
+          // spots (see snapSpotFields-style kick branch above) instead of a
+          // flat yards number, so return yardage is derived the same way
+          // Punt Return already does it.
+          const catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+          if (!isUsKick && p.returner){
+            // Opponent kicked, WE returned it -- a real named player, same
+            // treatment as a punt return credited to our own guy.
+            const k = kickoffs[p.returner] || (kickoffs[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
+            k.ret++;
+            const retYds = (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : null;
+            if (retYds != null) k.yds += retYds;
+            if (p.td){ k.td++; scoring.touchdowns++; }
+          } else if (isUsKick){
+            // We kicked, opponent returned -- no individual opponent name is
+            // tracked (same convention as forced punts / oppRush / oppPass),
+            // just the aggregate return-yardage impact on field position.
+            oppKickRetCount++;
+            const retYds = (catchAbs != null && endAbs != null) ? (catchAbs - endAbs) : null;
+            if (retYds != null) oppKickRetYds += retYds;
+            if (p.td) scoring.touchdowns++;
+          }
         }
       }
       if (p.type==='punt'){
@@ -1475,7 +1624,8 @@
         return Object.assign({}, r, { ypc: r.att ? Math.round(r.yds / r.att * 10) / 10 : null });
       }),
       passing: Object.values(passing), receiving: Object.values(receiving),
-      kickoffs: Object.values(kickoffs), tackles: Object.values(tackles), defExtra: Object.values(defExtra),
+      kickoffs: Object.values(kickoffs), oppKickReturns: { count: oppKickRetCount, yds: oppKickRetYds },
+      tackles: Object.values(tackles), defExtra: Object.values(defExtra),
       turnovers: turnoverNotes,
       scoring: scoring,
       snaps: { offense: offSnaps, defense: defSnaps },
@@ -1531,6 +1681,10 @@
       html += '<div class="statSectionTitle">Forced Punts</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🚩 Opponent forced to punt: '+s.forcedPunts+'</div>';
     }
+    if (s.oppKickReturns.count){
+      html += '<div class="statSectionTitle">Opponent Kick Returns (vs. our kickoffs)</div>' +
+        '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppKickReturns.count+' returns for '+s.oppKickReturns.yds+' yds</div>';
+    }
     if (s.oppRushing.att){
       html += '<div class="statSectionTitle">Opponent Rushing (allowed)</div>' +
         '<div style="font-size:12.5px;color:#ccd3dd;margin-bottom:10px">🛡️ '+s.oppRushing.att+' att for '+s.oppRushing.yds+' yds'+(s.oppRushing.td?' · '+s.oppRushing.td+' TD':'')+'</div>';
@@ -1576,6 +1730,9 @@
     }
     if (s.forcedPunts){
       txt += 'FORCED PUNTS\n  Opponent forced to punt: '+s.forcedPunts+'\n\n';
+    }
+    if (s.oppKickReturns.count){
+      txt += 'OPPONENT KICK RETURNS (VS. OUR KICKOFFS)\n  '+s.oppKickReturns.count+' returns for '+s.oppKickReturns.yds+' yds\n\n';
     }
     if (s.oppRushing.att){
       txt += 'OPPONENT RUSHING (ALLOWED)\n  '+s.oppRushing.att+' att for '+s.oppRushing.yds+' yds'+(s.oppRushing.td?' · '+s.oppRushing.td+' TD':'')+'\n\n';
@@ -1887,10 +2044,28 @@
         }
       }
       if (p.type === 'kick'){
-        if (p.onside){ if (p.recoveredByTeam==='Opponent') ss.onside.opponent += 1; else ss.onside.us += 1; }
-        if (p.returner){
-          const num = numFor(p.returner);
-          if (num != null) ensureAttemptRow('kickoffs', num).attempts.push({ yds: Number(p.yards)||0, td: !!p.td });
+        const isUsKick = p.kickTeam !== 'Opponent';
+        if (p.onside){
+          if (p.recoveredByTeam==='Opponent') ss.onside.opponent += 1; else ss.onside.us += 1;
+          if (p.recoveredByTeam === 'Us' && p.returner){
+            const num = numFor(p.returner);
+            if (num != null) ensureAttemptRow('kickoffs', num).attempts.push({ yds: Number(p.yards)||0, td: !!p.td });
+          }
+        } else {
+          // Non-onside kicks now carry Kicked From/Caught/Brought To spots
+          // instead of a flat yards number -- same derivation as Punt just
+          // above. Opponent-kicked-we-returned gets a real named credit;
+          // we-kicked-opponent-returned has no per-player name (nothing new
+          // to push live for that side, mirrors forcedPunts not crediting a
+          // named opponent punter either).
+          const catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+          if (!isUsKick && p.returner){
+            const num = numFor(p.returner);
+            if (num != null){
+              const retYds = (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : 0;
+              ensureAttemptRow('kickoffs', num).attempts.push({ yds: retYds, td: !!p.td });
+            }
+          }
         }
       }
       if (p.type === 'punt'){
