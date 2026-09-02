@@ -251,7 +251,7 @@
       practiceCount,
       filmCount,
       walkthroughCount,
-      weekStart: start, // this week's Monday -- used to pick a stable-per-week hype closer, see weekAheadHypeLine
+      weekStart: start, // this week's Monday -- used to pick a stable-per-week hype closer, see weekAheadWriteupText
     };
   }
 
@@ -323,48 +323,67 @@
   }
 
   // Nathan: "also keep a short write up in there with a little
-  // motivation. First game action of the year, scrimmage Wednesday and
-  // Jamboree on Sunday, should be exciting." Then: "hype line is weak -
-  // move it to the top and have it be worth having there." v1 only named
-  // the game TYPE + day ("Game Wednesday") -- this version names the
-  // actual opponent(s) too (real content, not a generic label) and closes
-  // with one of a small rotating set of lines instead of the same
-  // "should be exciting!" every single week. The closer is picked off
-  // data.weekStart (this week's Monday) rather than Math.random() so it's
-  // stable for the whole week -- reloading the page mid-week shouldn't
-  // change the sentence, only a new week should. "First game action of
-  // the year" is detected off data.record: bengalsRecord() only counts
-  // games with an entered score (see resultFor), so an empty record
-  // string across the WHOLE season (not just this week) plus a game this
-  // week means nothing's been played yet.
+  // motivation." Then: "hype line is weak - move it to the top and have
+  // it be worth having there." Then (2026-09-01): "don't need the pump up
+  // copy to be in that orange CTA style bar, just have it as an AI write
+  // up of the week ahead with more context." So this moved from a single
+  // punchy banner line to an actual short paragraph -- still no backend/
+  // API key (composed client-side straight off the same games/practices
+  // data the stat cards below use, see the header comment above
+  // buildWeekAheadData), but now reads like a couple of real sentences: who
+  // the Bengals play, when, home or away, and what's on deck in practice
+  // before then, plus the same rotating closer line as before instead of a
+  // one-line hype banner. The closer is picked off data.weekStart (this
+  // week's Monday) rather than Math.random() so it's stable for the whole
+  // week -- reloading the page mid-week shouldn't change the write-up,
+  // only a new week should. "First game action of the year" is detected
+  // off data.record: bengalsRecord() only counts games with an entered
+  // score (see resultFor), so an empty record string across the WHOLE
+  // season (not just this week) plus a game this week means nothing's
+  // been played yet.
   const HYPE_CLOSERS = ["Let's go, Bengals!", 'Bring the energy!', "Time to bring it!", "Let's make it count!", 'Get after it!'];
   function pickHypeCloser(weekStart) {
     const weekIndex = Math.floor(weekStart.getTime() / (7 * 86400000));
     return HYPE_CLOSERS[Math.abs(weekIndex) % HYPE_CLOSERS.length];
   }
-  function weekAheadHypeLine(data) {
+  function weekAheadWriteupText(data) {
     if (!data.hasAny) return '';
     const closer = pickHypeCloser(data.weekStart);
+    const practiceParts = [];
+    if (data.practiceCount) practiceParts.push(`${data.practiceCount} practice${data.practiceCount === 1 ? '' : 's'}`);
+    if (data.filmCount) practiceParts.push(`${data.filmCount} film night${data.filmCount === 1 ? '' : 's'}`);
+    if (data.walkthroughCount) practiceParts.push(`${data.walkthroughCount} walk-through${data.walkthroughCount === 1 ? '' : 's'}`);
+
     const gameParts = data.gameEntries.map(({ d, g }) => {
-      const label = (g.gameType && g.gameType !== 'Regular Season') ? g.gameType : 'game';
+      const label = (g.gameType && g.gameType !== 'Regular Season') ? g.gameType.toLowerCase() : 'game';
       const dayName = d.toLocaleDateString(undefined, { weekday: 'long' });
-      if (!g.opponent) return `the ${label} ${dayName}`;
-      const verb = g.homeAway === 'Away' ? 'at' : 'vs.';
-      return `the ${label} ${verb} ${g.opponent} on ${dayName}`;
+      const timeStr = to12h(g.gameTime || g.time || '');
+      const timeBit = timeStr ? ` at ${timeStr}` : '';
+      if (!g.opponent) return `a ${label} ${dayName}${timeBit}`;
+      const where = g.homeAway === 'Away' ? `on the road against ${g.opponent}` : `at home against ${g.opponent}`;
+      return `a ${label} ${dayName}${timeBit} ${where}`;
     });
-    if (!gameParts.length) {
-      // Practice-only week -- no game to hype up, so lean into the grind.
-      const practiceParts = [];
-      if (data.practiceCount) practiceParts.push(`${data.practiceCount} practice${data.practiceCount === 1 ? '' : 's'}`);
-      if (data.filmCount) practiceParts.push(`${data.filmCount} film night${data.filmCount === 1 ? '' : 's'}`);
-      if (data.walkthroughCount) practiceParts.push(`${data.walkthroughCount} walk-through${data.walkthroughCount === 1 ? '' : 's'}`);
-      return `No game this week, but ${joinList(practiceParts)} on the schedule to get sharper for the next one. ${closer}`;
+
+    const sentences = [];
+    const hasGame = gameParts.length > 0;
+    if (hasGame) {
+      const isSeasonOpener = !data.record;
+      const intro = isSeasonOpener
+        ? "It's finally here -- the Bengals kick off the season this week with"
+        : data.gameEntries.length > 1
+          ? `The Bengals (${data.record}) have a busy week on tap, with`
+          : `The Bengals (${data.record}) are back in action this week with`;
+      sentences.push(`${intro} ${joinList(gameParts)}.`);
+    } else {
+      sentences.push('No game on the schedule this week, but the team is still putting in the work.');
     }
-    const isSeasonOpener = !data.record;
-    const hook = isSeasonOpener ? "It's finally here — first game action of the year"
-      : data.gameEntries.length > 1 ? 'Big week on tap'
-      : 'Gameday is coming';
-    return `${hook}: ${joinList(gameParts)}. ${closer}`;
+    if (practiceParts.length) {
+      sentences.push(hasGame
+        ? `Between now and then, look for ${joinList(practiceParts)} to get everyone sharp and ready.`
+        : `This week brings ${joinList(practiceParts)} to keep sharpening up for what's next.`);
+    }
+    sentences.push(closer);
+    return sentences.join(' ');
   }
 
   // Nathan: "callouts for number of games and practices... just make it a
@@ -378,9 +397,11 @@
   // other.
   // Nathan (later): "hype line is weak - move it to the top and have it
   // be worth having there" -- now the very first thing in the box, ahead
-  // of the stat cards, with a bolder banner-style look (see .weekAheadHype
-  // in css/styles.css) so it reads as a real headline instead of a small
-  // caption under the numbers.
+  // of the stat cards. Nathan (later still, 2026-09-01): "don't need the
+  // pump up copy to be in that orange CTA style bar, just have it as an
+  // AI write up of the week ahead with more context" -- see
+  // .weekAheadWriteup in css/styles.css for the current plain-paragraph
+  // treatment (was a bold orange banner before).
   function weekAheadInfographicHtml(data) {
     if (!data.hasAny) {
       return '<div class="lbEmpty">Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they\'ll show up here.</div>';
@@ -395,7 +416,7 @@
     const practicesHtml = data.practiceEntries.map(({ d, p }) => weekAheadPracticeCardHtml(d, p)).join('');
 
     return `
-      <div class="weekAheadHype">${escapeHtml(weekAheadHypeLine(data))}</div>
+      <div class="weekAheadWriteup">${escapeHtml(weekAheadWriteupText(data))}</div>
       <div class="weekAheadStats">${statCards.join('')}</div>
       <div class="weekAheadColumns">
         ${gamesHtml ? `<div class="weekAheadCol"><div class="lbSectionHeader">🏈 Games this week</div>${gamesHtml}</div>` : ''}
