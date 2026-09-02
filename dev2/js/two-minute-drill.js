@@ -406,7 +406,7 @@
         }
         pathsLayer.appendChild(wrap);
 
-        lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+        lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
           circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
       }
 
@@ -467,7 +467,11 @@
       animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
         (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
 
-    const ballEntry = lastRenderedPaths.find(p => p.isBall);
+    // isBallStart (p.ballStart) marks who the floating ball icon visually
+    // starts with, which can differ from isBall/p.ball (the real, credited
+    // carrier -- read by Boot's swap logic etc.). See the matching
+    // block/comment in js/play-calls.js for the full Shuffle Pass story.
+    const ballEntry = lastRenderedPaths.find(p => p.isBallStart) || lastRenderedPaths.find(p => p.isBall);
     const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
     const OFFY = 50;
     // Nathan: "the ball needs to reach him at the same time [as the

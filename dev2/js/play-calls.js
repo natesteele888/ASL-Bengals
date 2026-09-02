@@ -1158,7 +1158,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       }
       pathsLayer.appendChild(wrap);
 
-      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
         circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
     }
 
@@ -1602,7 +1602,17 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
       (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
 
-  const ballEntry = lastRenderedPaths.find(p => p.isBall);
+  // isBallStart (p.ballStart in the data) marks "who the floating ball icon
+  // visually starts with," which can be a DIFFERENT path than isBall/p.ball
+  // ("who's actually credited as the ball carrier" -- read by Boot's swap
+  // logic, quiz answer keys, etc.). Shuffle Pass is the case that needs
+  // both: the QB briefly carries/shuffles the ball before pitching it to
+  // the TE, who is still the real, credited ball carrier throughout (his
+  // own path keeps p.ball:true, unchanged) -- see p.ballStart's own comment
+  // in data/plays.json for the full story. Every other play only ever sets
+  // p.ball, never p.ballStart, so this falls straight through to the old
+  // behavior for all of them.
+  const ballEntry = lastRenderedPaths.find(p => p.isBallStart) || lastRenderedPaths.find(p => p.isBall);
   // The red (second) half of a "Ball Starts Here" split, if any -- see
   // handoffIndex/hasHandoffSplit above. handoffFraction is that segment's
   // startFrac: how far into the FULL animMs timeline #4's own path drawing
@@ -1610,21 +1620,15 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // path here -- animatePathDraw strokes linearly over its duration).
   const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
   const OFFY = 50;
-  // Nathan: "the ball needs to reach him at the same time [as the handoff
-  // mark] ... he receives it much earlier, as soon as he turns at the
-  // line instead of half way through the route." Shuffle Pass has no
-  // separate ball:true passer path at all -- the catch is marked with
-  // handoffIndex directly on the receiver's OWN route (see hasHandoffSplit
-  // above), which forces isBall:false on both of that route's halves. That
-  // left ballEntry undefined for this play, so this whole block used to be
-  // skipped (the `else` below) and the ball icon just sat frozen at the
-  // snap spot for the entire play -- looking like it arrived "whenever",
-  // in practice as soon as anything else visually read as the catch (the
-  // route line itself turning red at the marked point). Falling back to
-  // handoffEntry as the thing to track -- but only once ITS OWN marked
-  // point's timed fraction has actually elapsed, not from t=0 -- means the
-  // ball now visibly waits out the receiver's drift/turn and only eases
-  // onto him right at the marked spot, same as a real handoff would.
+  // Nathan: "when the TE gets to the spot right before the handoff point,
+  // that is when the QB should start moving along his path with the ball
+  // following him. Right after he starts moving ball should slowly move to
+  // the TE at the handoff spot." QB's path now carries p.ballStart (see
+  // above) with delayMs timed to when the TE's OWN route-draw reaches the
+  // point just before his handoffIndex mark -- so the ball starts riding
+  // along with the QB at that moment, then the existing carrier-switch
+  // logic below (ballEntry && handoffEntry, different circleEl) eases it
+  // over to the TE exactly when his route reaches the real handoff point.
   const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
     : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
   const initialDelay = !initialEntry ? 0

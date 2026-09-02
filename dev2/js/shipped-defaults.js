@@ -14254,7 +14254,8 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "ball": false,
-              "delayMs": 620,
+              "ballStart": true,
+              "delayMs": 315,
               "player": 1,
               "points": [
                 [
@@ -14819,7 +14820,8 @@ window.SHIPPED_PLAYS_JSON = {
           "paths": [
             {
               "ball": false,
-              "delayMs": 620,
+              "ballStart": true,
+              "delayMs": 315,
               "player": 1,
               "points": [
                 [
