@@ -1253,7 +1253,19 @@ function updateEditUI(variant) {
   if (p.isBlocking) {
     assignPanel.style.display = 'flex';
     const who = editTarget.player !== undefined ? `#${editTarget.player}` : editTarget.id;
-    assignLabel.textContent = `${who} blocks: tap a defender on the field`;
+    // Nathan: "as soon as I set 4 as the blocker without Motion, it keeps
+    // the same blocking assignment when going With Motion. I switch it
+    // back and they both go to the same assignment." The underlying data
+    // IS independent per Motion state (motionIndependentBaseKey/
+    // getMotionIndependentTarget below) -- but with no on-screen cue that
+    // Motion's toggle even matters here, tapping a defender while Motion
+    // was already showing "the same" (its intentional default -- see the
+    // big comment on motionIndependentBaseKey) looks exactly like nothing
+    // happened, whether or not the tap actually landed. Spelling out which
+    // Motion state a tap is about to set removes that ambiguity -- for
+    // every OTHER isBlocking path this label is unchanged.
+    const motionQualifier = p.motionIndependentBlock ? (motionOn ? ' (Motion ON)' : ' (Motion OFF)') : '';
+    assignLabel.textContent = `${who} blocks${motionQualifier}: tap a defender on the field`;
     [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
   } else if ([4,5,6].includes(editTarget.player)) {
     // a real route (going out for a pass) -- offer a quick chip block on
