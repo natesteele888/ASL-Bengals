@@ -309,6 +309,38 @@ function normalizePlayData(playTypes) {
         });
       });
     }
+    // Same "cloud always wins" problem as the two repairs above, for
+    // Shuffle Pass specifically. Nathan: "still can't set #4's blocking
+    // assignment to different people on the same play" after the
+    // blockRelative -> motionIndependentBlock rework shipped in code --
+    // root cause is identical to the option/outside_zone Counter fix
+    // above: any coach's prior "Save to Cloud" on this play (it's been
+    // edited before -- see the #4 block-assignment history on this play)
+    // freezes a full snapshot with the OLD p.blockRelative flag, and that
+    // snapshot loads and wins over shipped data on every visit regardless
+    // of what data/plays.json now says -- "Admin: Sync Shipped Defaults to
+    // Cloud" does NOT fix this either, since (per its own confirm dialog)
+    // it deliberately never touches a coach's saved snapshot. Field names
+    // (sameSidePoints/crossPoints/...4x4) are unchanged between the two
+    // modes, so this is a pure flag flip, not a data restructure. Also
+    // force-heals #1's ballStart delayMs the same way -- a stale snapshot
+    // would otherwise keep serving the old 315 (or original pre-fix
+    // timing) forever instead of the current 450.
+    if (pt.key === 'shuffle_pass') {
+      ['Left', 'Right'].forEach(dirKey => {
+        const dv = pt.directions && pt.directions[dirKey];
+        if (!dv || !dv.paths) return;
+        dv.paths.forEach(p => {
+          if (p.player === 4 && p.isBlocking && p.blockRelative && !p.motionIndependentBlock) {
+            delete p.blockRelative;
+            p.motionIndependentBlock = true;
+          }
+          if (p.player === 1 && p.ballStart) {
+            p.delayMs = 450;
+          }
+        });
+      });
+    }
     Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {
       const variants = collectLeafVariants(dirVal);
       variants.forEach(variant => {
