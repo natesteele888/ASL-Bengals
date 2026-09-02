@@ -14463,18 +14463,59 @@ window.SHIPPED_PLAYS_JSON = {
             {
               "ball": false,
               "player": 4,
+              "width": 7,
+              "isBlocking": true,
+              "blockRelative": true,
               "points": [
                 [
-                  1251,
-                  269
+                  0,
+                  0
                 ],
                 [
-                  1311,
-                  200
+                  -60,
+                  -69
                 ]
               ],
-              "width": 9,
-              "isBlocking": true
+              "sameSidePoints": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "crossPoints": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "sameSidePoints4x4": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "crossPoints4x4": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ]
             }
           ],
           "defense4x4": [
@@ -15034,18 +15075,59 @@ window.SHIPPED_PLAYS_JSON = {
             {
               "ball": false,
               "player": 4,
+              "width": 7,
+              "isBlocking": true,
+              "blockRelative": true,
               "points": [
                 [
-                  360,
-                  269
+                  0,
+                  0
                 ],
                 [
-                  300,
-                  200
+                  -60,
+                  -69
                 ]
               ],
-              "width": 9,
-              "isBlocking": true
+              "sameSidePoints": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "crossPoints": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "sameSidePoints4x4": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ],
+              "crossPoints4x4": [
+                [
+                  0,
+                  0
+                ],
+                [
+                  -60,
+                  -69
+                ]
+              ]
             }
           ]
         }
