@@ -970,21 +970,38 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // route/blocking math below is anchored from wherever he actually ends
   // up standing.
   const oppositeWingSide = wingSide === 'Left' ? 'Right' : 'Left';
-  const p4Anchor = motionOn ? DATA.wing[oppositeWingSide] : wingPos;
+  // Nathan (Shuffle Pass): "the 4 should actually be on the opposite side."
+  // Every other play has #4 stand on the wing side the coach actually set,
+  // moving to the opposite side only if Motion is toggled on. Shuffle Pass
+  // is a decoy-wing play by design -- #4 is meant to line up AWAY from
+  // wherever the coach set the wing, with Motion (if used) bringing him
+  // back home instead. playType.p4StartsOpposite flips which side counts
+  // as "home" vs "motioned to" for exactly this one play, everything else
+  // about Motion/wing math below is unchanged.
+  const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
+  const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
+  const p4Anchor = motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide];
   // Which side #4 is ACTUALLY standing on -- used to mirror his
   // block/seam offsets correctly. Using raw wingSide here (ignoring
   // Motion) left the mirror sign out of sync with p4Anchor whenever
   // Motion was on, sending block assignments miles off their intended
   // spot, occasionally clear off screen.
-  const p4Side = motionOn ? oppositeWingSide : wingSide;
+  const p4Side = motionOn ? p4MotionedSide : p4HomeSide;
 
   const wingSelected = selectedPlayer === 4;
   const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingSelected, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
   if (motionOn) {
+    // Nathan (Shuffle Pass): draws from wherever #4 actually lines up
+    // pre-snap to wherever Motion sends him -- DATA.wing[p4HomeSide]
+    // instead of the raw wingPos/wingSide, so a p4StartsOpposite play's
+    // motion arrow is drawn from his real (opposite-side) starting spot
+    // instead of the coach's literal Wing L/R setting, which for this kind
+    // of play is the opposite end of the same line.
+    const p4HomeAnchor = DATA.wing[p4HomeSide];
     circlesLayer.appendChild(svgEl('path', {
-      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
+      d: `M ${p4HomeAnchor[0]} ${p4HomeAnchor[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
       fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
     }));
   }

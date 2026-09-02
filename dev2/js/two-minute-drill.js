@@ -279,15 +279,22 @@
     circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
     const oppositeWingSide = wingSide === 'Left' ? 'Right' : 'Left';
-    const p4Anchor = motionOn ? DATA.wing[oppositeWingSide] : wingPos;
-    const p4Side = motionOn ? oppositeWingSide : wingSide;
+    // Nathan (Shuffle Pass): "the 4 should actually be on the opposite
+    // side." Same p4StartsOpposite flip as play-calls.js's
+    // renderCardDiagram (kept in sync -- see that file's own comment on
+    // this same block for the full explanation).
+    const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
+    const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
+    const p4Anchor = motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide];
+    const p4Side = motionOn ? p4MotionedSide : p4HomeSide;
 
     const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, selectedPlayer === 4, null);
     circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
     if (motionOn) {
+      const p4HomeAnchor = DATA.wing[p4HomeSide];
       circlesLayer.appendChild(svgEl('path', {
-        d: `M ${wingPos[0]} ${wingPos[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
+        d: `M ${p4HomeAnchor[0]} ${p4HomeAnchor[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
         fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
       }));
     }
