@@ -1151,6 +1151,7 @@
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
+        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:12px;">🎥 Watch Footage</a>` : ''}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
@@ -1169,7 +1170,6 @@
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
           ${current.infoUrl ? `<a href="${escapeHtml(current.infoUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🔗 More Info</a>` : ''}
-          ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="lbLinkBtn">🎥 Watch Footage</a>` : ''}
         </div>
         ${current.fieldPhoto ? `<img src="${current.fieldPhoto}" alt="Field/venue photo" style="width:100%;border-radius:10px;margin-bottom:8px;display:block;">` : ''}
         ${current.location ? `<a href="${mapSearchUrl(current.location)}" target="_blank" rel="noopener" class="lbLinkBtn">📍 View on Map</a><iframe src="${mapUrl(current.location)}" style="width:100%;height:140px;border:0;border-radius:8px;margin-top:6px;" loading="lazy"></iframe>` : ''}
