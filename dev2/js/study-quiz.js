@@ -459,14 +459,31 @@ async function cloudPush(path, entry){
     return res.ok;
   } catch(e) { return false; }
 }
-async function cloudFetch(path){
+// Nathan: "sometimes it shows the updated 80 points for Desmond #76 and
+// other times it shows 60 points" -- Overall's 4 contributing boards
+// (Timed/PCQ/Quiz/Drill) are each worth up to 20 rank-based points, and a
+// board that fails to load falls back to THIS DEVICE's own local cache
+// (see fetchTwoMinDrillLeaderboardData etc.), which won't have another
+// player's scores at all -- so one transient network/Firebase blip on a
+// single board silently drops exactly that board's up-to-20 points from
+// everyone's Overall total, with nothing on screen to say it happened. A
+// couple of quick retries absorbs almost all of those blips before this
+// falls back to null for real.
+async function cloudFetch(path, attempt){
+  attempt = attempt || 1;
   try {
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/${path}.json`);
     const res = await fetch(url);
-    if(!res.ok) return null;
+    if(!res.ok) throw new Error('cloudFetch: ' + res.status);
     const data = await res.json();
     return data ? Object.values(data) : [];
-  } catch(e) { return null; } // null means "could not reach it", distinct from an empty board
+  } catch(e) {
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, 350 * attempt));
+      return cloudFetch(path, attempt + 1);
+    }
+    return null; // null means "could not reach it" after retrying, distinct from an empty board
+  }
 }
 
 /* Nathan: "once players start to register with name and pin, keep all
