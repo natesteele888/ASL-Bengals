@@ -175,7 +175,11 @@
   const CIRCLE_R = 36;
 
   function getVariant(playType, direction, insideOutside, readPosition, counterOn, twSweepOn) {
-    let v = playType.directions[direction];
+    // Same defensive fallback as play-calls.js's copy of this function --
+    // see its comment. Not load-bearing for the drill's own random call
+    // generation (shuffle_pass is deliberately excluded from
+    // ELIGIBLE_PLAY_KEYS above), just cheap insurance.
+    let v = playType.directions[direction] || playType.directions.Right || playType.directions.Left;
     if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
     if (playType.hasReadToggle) v = v[readPosition || 'A'];
     if (playType.hasCounter) {
@@ -942,11 +946,17 @@
   //   - hasInsideOutside plays (Blast/Double Blast) require a pick.
   // Counter itself only exists on Option/Outside Zone (hasCounter).
   // ================================================================
-  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" -- added
-  // to the drill's call pool. Not in PASSING_PLAY_KEYS below: it's a
-  // pitch/misdirection gadget play like the run game, not a real drop-back
-  // pass, for resolveGain's yardage-engine purposes.
-  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option', 'shuffle_pass'];
+  // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right" --
+  // deliberately NOT added here. This generator picks wingSide/direction
+  // independently at random (see generateCorrectCall below) and getVariant
+  // does an unguarded playType.directions[direction] lookup -- fine for
+  // every other play here since each has both Left and Right authored, but
+  // shuffle_pass only has a Right variant so far (only "Wing Right,
+  // Shuffle Pass Right" was ever described), and it's also Wing-only with
+  // no Split data at all. Picking it randomly would crash the diagram the
+  // moment Left, or the Split branch, came up. Safe to add once a coach
+  // mirrors a Left variant (and, if wanted, a Split one) via Edit Plays.
+  const ELIGIBLE_PLAY_KEYS = ['inside_zone', 'outside_zone', 'blast', 'double_blast', 'option_pass', 'sweep', 'option'];
   // "Passing plays which are more difficult to call out will gain you
   // more yardage" -- Option Pass is the only real drop-back pass among
   // these 7 plays on Wing (Split's independent Pass toggle, checked via
@@ -977,10 +987,7 @@
     inside_zone: ['outside_zone'], outside_zone: ['inside_zone', 'sweep'],
     blast: ['double_blast'], double_blast: ['blast'],
     option: ['option_pass'], option_pass: ['option'],
-    sweep: ['outside_zone', 'shuffle_pass'],
-    // Nathan: "similar to the counter play" -- same misdirection family as
-    // Sweep, so it's a natural decoy pairing with it.
-    shuffle_pass: ['sweep'],
+    sweep: ['outside_zone'],
   };
 
   function playFlags(key) {
