@@ -14310,7 +14310,6 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "lineThenCurve": true,
               "delayMs": 500
             },
             {
@@ -15030,7 +15029,6 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "lineThenCurve": true,
               "delayMs": 500
             },
             {

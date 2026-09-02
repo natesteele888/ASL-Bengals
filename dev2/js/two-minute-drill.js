@@ -385,7 +385,11 @@
             startFrac: startFracRight, lenFrac: 1 - startFracRight, handoffFraction: startFracRight });
         }
       } else {
-        const d = p.lineThenCurve ? lineThenCurvePathD(points)
+        // Nathan: "if i remove 3 or more points from a route in play edits
+        // it gets rid of the entire play, it all goes blank." Same
+        // 4-point-only guard as play-calls.js/edit-plays.js -- see their
+        // matching comment for the full explanation.
+        const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
           : points.length === 5 ? multiCurvePathD(points)
           : points.length === 2 ? straightPathD(points)
           : points.length === 3 ? quadPathD(points)
@@ -703,7 +707,10 @@
     function drawPath(p) {
       const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
       const points = p.points;
-      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+      // Nathan: same 4-point-only guard as the other lineThenCurve dispatch
+      // above (and in play-calls.js/edit-plays.js) -- prevents a route
+      // whose point count has changed away from 4 from crashing render().
+      const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
         : points.length === 5 ? multiCurvePathD(points)
         : points.length === 2 ? straightPathD(points)
         : points.length === 3 ? quadPathD(points)

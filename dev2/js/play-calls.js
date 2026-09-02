@@ -1129,7 +1129,19 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
           startFrac: startFracRight, lenFrac: 1 - startFracRight, handoffFraction: startFracRight });
       }
     } else {
-      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+      // Nathan: "if i remove 3 or more points from a route in play edits it
+      // gets rid of the entire play, it all goes blank." Root cause:
+      // lineThenCurvePathD hard-destructures exactly 4 points -- once Edit
+      // Plays' point add/remove buttons changed a lineThenCurve route's
+      // actual point count away from 4, this threw (destructuring
+      // undefined) and crashed render() partway through, leaving the whole
+      // stage blank since it had already been cleared. The `points.length
+      // === 4` guard here (and everywhere else this same dispatch is
+      // duplicated -- edit-plays.js, two-minute-drill.js) makes the
+      // lineThenCurve shape opt-in only while it actually has the 4 points
+      // it needs, falling through to the length-appropriate generic
+      // handler otherwise instead of crashing.
+      const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
         : points.length === 5 ? multiCurvePathD(points)
         : points.length === 2 ? straightPathD(points)
         : points.length === 3 ? quadPathD(points)
@@ -1414,7 +1426,11 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   function drawPath(p) {
     const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
     const points = p.points;
-    const d = p.lineThenCurve ? lineThenCurvePathD(points)
+    // Nathan: see the matching guard/comment in renderCardDiagram above --
+    // same fix, same reason (a lineThenCurve route whose point count has
+    // since changed away from 4 must not hit lineThenCurvePathD's hard
+    // 4-point destructure).
+    const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
       : points.length === 5 ? multiCurvePathD(points)
       : points.length === 2 ? straightPathD(points)
       : points.length === 3 ? quadPathD(points)

@@ -1722,7 +1722,16 @@ function render() {
           startFrac: startFracRight, lenFrac: 1 - startFracRight});
       }
     } else {
-      const d = p.lineThenCurve ? lineThenCurvePathD(points)
+      // Nathan: "if i remove 3 or more points from a route in play edits it
+      // gets rid of the entire play, it all goes blank." Root cause:
+      // lineThenCurvePathD hard-destructures exactly 4 points, so once a
+      // point add/remove above changed a lineThenCurve route's actual
+      // count away from 4, this threw and crashed render() mid-draw,
+      // leaving the whole stage blank (it had already been cleared).
+      // Gating on the real current point count -- not just the authored
+      // flag -- falls through to the length-appropriate generic handler
+      // instead of crashing whenever the count no longer matches.
+      const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
         : points.length === 5 ? multiCurvePathD(points)
         : points.length === 2 ? straightPathD(points)
         : points.length === 3 ? quadPathD(points)
