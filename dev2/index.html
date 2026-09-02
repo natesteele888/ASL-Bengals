@@ -484,12 +484,18 @@
        film from the upcoming opponent." Same link this week's linked game
        carries on its own Schedule page (schedule.js's opponentFilmUrl) --
        only shown once a coach has actually set one on that game. -->
-  <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;box-sizing:border-box;">🎥 Watch Game Film of our Upcoming Opponent</a>
+  <!-- Nathan: "I still don't see the full column width CTA on the This Week
+       section to watch the upcoming opponents footage" -- matches the big
+       full-width .navBtn treatment schedule.js's read-only game view uses
+       for this same button (Nathan: "it should be a big full column CTA
+       like the Cancel Due to Weather CTA"), not the small .lbLinkBtn text
+       link this used before. -->
+  <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:0 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
   <!-- Nathan: "include a write-in spot for the footage to say something underneath it.
        example is 'Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6'" --
        optional coach-entered caption (schedule.js's opponentFilmNote), shown only when
        the button above is also shown. -->
-  <div id="thisweekWatchFootageNote" class="hint" style="display:none;max-width:600px;margin:-8px auto 12px;text-align:center;"></div>
+  <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 12px;"></div>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
   </div>
@@ -1920,7 +1926,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824w';
+  const BUILD_V = '20260824x';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

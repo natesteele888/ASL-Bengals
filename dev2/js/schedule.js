@@ -976,7 +976,20 @@
     }
     const recordStr = bengalsRecord(games);
     const recordHtml = recordStr ? `<span class="scheduleTeamRecord">${escapeHtml(recordStr)}</span>` : '';
-    games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')).forEach(g => {
+    // Nathan: "when going to schedule - the next game should show at the
+    // pinned at the top of the view. older dates should be listed below it
+    // in the history." Pulls out the single soonest game that hasn't been
+    // played yet (same hasEventPassed() the Upcoming badge above already
+    // uses) and pins it first, then lists everything else newest-first so
+    // it reads as a history feed working backward in time underneath it --
+    // matches how every other list in this app (This Week, leaderboard)
+    // puts the most current thing at the top.
+    const sortedByDate = games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+    const nextGame = sortedByDate.find(g => !hasEventPassed(g.date, g.gameTime || g.time));
+    const rest = sortedByDate.filter(g => g !== nextGame)
+      .sort((a, b) => (b.date || '0000').localeCompare(a.date || '0000'));
+    const orderedGames = nextGame ? [nextGame].concat(rest) : rest;
+    orderedGames.forEach(g => {
       const result = resultFor(g);
       const row = document.createElement('button');
       row.type = 'button';

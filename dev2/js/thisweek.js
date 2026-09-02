@@ -622,9 +622,11 @@
     // Same opponentFilmUrl a coach sets on the game itself (schedule.js) --
     // only shown once one's actually set on whichever game This Week is
     // currently linked to.
+    const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
     if (watchFootageBtn) {
       if (linkedGame && linkedGame.opponentFilmUrl) {
         watchFootageBtn.style.display = 'block';
+        watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
         watchFootageBtn.href = linkedGame.opponentFilmUrl;
       } else {
         watchFootageBtn.style.display = 'none';
@@ -636,7 +638,7 @@
     // - Merrimack Valley 6'" -- same opponentFilmNote a coach sets on the
     // game itself (schedule.js), only shown alongside the button above.
     if (watchFootageNoteEl) {
-      if (linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote) {
+      if (hasFootageNote) {
         watchFootageNoteEl.style.display = '';
         watchFootageNoteEl.textContent = linkedGame.opponentFilmNote;
       } else {
