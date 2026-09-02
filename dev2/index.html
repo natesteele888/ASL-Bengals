@@ -1308,6 +1308,11 @@
       <button class="lbTabBtn" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
       <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz</button>
       <button class="lbTabBtn" id="lbTabPCQ" data-lbtab="pcq">🧠 Play Quiz</button>
+      <!-- Nathan: "the 2 min drill should be another icon in the row with
+           overall, timed, quiz, play quiz, and then 2 min drill" -- its own
+           full standings tab here, same as the other three boards, separate
+           from the points it already contributes to the Overall tab above. -->
+      <button class="lbTabBtn" id="lbTabDrill" data-lbtab="drill">🏈 2 Min Drill</button>
     </div>
     <!-- Nathan: "I don't think we take away the all time leaderboard but
          add a weekly leaderboard that resets." A second lens on the same
@@ -1325,6 +1330,7 @@
     <div class="lbList" id="timedLbList" style="display:none"></div>
     <div class="lbList" id="lbList" style="display:none"></div>
     <div class="lbList" id="pcqLbList" style="display:none"></div>
+    <div class="lbList" id="drillLbList" style="display:none"></div>
     <button class="navBtn secondary" id="historyBtn" style="width:calc(100% - 36px);margin:0 18px 14px">📜 View History</button>
   </div>
 </div>

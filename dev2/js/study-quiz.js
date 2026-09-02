@@ -935,6 +935,29 @@ async function renderPCQLeaderboard(){
     : '<div class="lbEmpty">No Play Calls Quiz scores yet — finish a run to be the first!</div>';
   pcqLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
 }
+// Nathan: "the 2 min drill should be another icon in the row with overall,
+// timed, quiz, play quiz, and then 2 min drill" -- its own full-standings
+// tab on the main Leaderboard overlay, same shape as the three boards
+// above, sitting alongside (not replacing) the points it already
+// contributes to the Overall tab. Reuses two-minute-drill.js's own
+// fetchTwoMinDrillLeaderboardData() (window-exposed for exactly this) and
+// mirrors that file's own internal renderTwoMinDrillLeaderboard() scoreFn
+// so the two "TDs • yds" displays read identically everywhere in the app.
+async function renderDrillLbTab(){
+  const drillLbList = document.getElementById('drillLbList');
+  if(!drillLbList) return;
+  drillLbList.innerHTML = '<div class="lbEmpty">Loading team drives…</div>';
+  if(typeof window.fetchTwoMinDrillLeaderboardData !== 'function'){ drillLbList.innerHTML = '<div class="lbEmpty">Loading…</div>'; return; }
+  const { players, coaches, offline } = await window.fetchTwoMinDrillLeaderboardData();
+  const scoreFn = e => `${e.score || 0} TD${(e.score || 0) === 1 ? '' : 's'} • ${e.totalYards || 0} yds`;
+  drillLbList.innerHTML = players.length === 0
+    ? '<div class="lbEmpty">No drives yet — finish a 2 Minute Drill to be the first!</div>'
+    : players.map((e,i)=> lbRowHtml(e, i, null, scoreFn(e))).join('');
+  drillLbList.innerHTML += coachSectionHtml(coaches, scoreFn);
+  if(offline){
+    drillLbList.innerHTML += '<div class="lbOfflineNote">⚠️ Showing drives saved on this device only — could not reach the team server.</div>';
+  }
+}
 
 // ---- Overall: rank-based points (20 for 1st down to 1 for 20th) on each
 // contributing board, summed by name. Quiz Scores used to be left out
@@ -1203,19 +1226,37 @@ function gcNextUpcomingGame(games){
   const upcoming = withTimes.find(x => x.t >= now);
   return upcoming ? upcoming.g : null;
 }
-function gcFmtDate(dateStr){
-  const parts = (dateStr || '').split('-').map(Number);
-  if(parts.length !== 3 || parts.some(isNaN)) return dateStr || '';
-  const d = new Date(parts[0], parts[1]-1, parts[2]);
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+// Nathan: "the ticker is missing the upcoming game. Should be like: Sat.
+// Sep 5th, 12:45pm Home vs. Nipmuc" -- exact requested shape: abbreviated
+// weekday + period, month + ordinal day, comma, lowercase 12-hour time with
+// no space before am/pm, Home/Away spelled out, then "vs." + opponent.
+// Replaces the earlier gcFmtDate/gcTo12h pair (which produced a
+// "Sat, Sep 5 • 12:45 PM" style line) -- kept as one combined helper since
+// every piece of this format is specific to this one ticker line.
+function gcOrdinalSuffix(n){
+  const v = n % 100;
+  if(v >= 11 && v <= 13) return 'th';
+  switch(n % 10){ case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
 }
-function gcTo12h(str){
-  const m = (str || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-  if(!m) return str || '';
-  let h = Number(m[1]); const min = m[2];
-  const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12; if(h === 0) h = 12;
-  return `${h}:${min} ${ap}`;
+function gcFmtGameLine(next){
+  const parts = (next.date || '').split('-').map(Number);
+  let dateStr = next.date || '';
+  if(parts.length === 3 && !parts.some(isNaN)){
+    const d = new Date(parts[0], parts[1]-1, parts[2]);
+    const weekday = d.toLocaleDateString(undefined, { weekday: 'short' });
+    const month = d.toLocaleDateString(undefined, { month: 'short' });
+    dateStr = `${weekday}. ${month} ${parts[2]}${gcOrdinalSuffix(parts[2])}`;
+  }
+  let timeStr = '';
+  const tm = (next.gameTime || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if(tm){
+    let h = Number(tm[1]); const min = tm[2];
+    const ap = h >= 12 ? 'pm' : 'am';
+    h = h % 12; if(h === 0) h = 12;
+    timeStr = `, ${h}:${min}${ap}`;
+  }
+  const homeAway = next.homeAway === 'Away' ? 'Away' : 'Home';
+  return `${dateStr}${timeStr} ${homeAway} vs. ${gcEscapeHtml(next.opponent || 'TBD')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1878,7 +1919,7 @@ window.showChildQuizProgress = async function(childName, explicitPlayerId){
     <div class="lbSub" style="margin-top:10px;">Based on quiz attempts logged since they signed in with their own name + code.</div>`;
 };
 
-const LB_TAB_LIST_IDS = { overall: 'overallLbList', timed: 'timedLbList', quiz: 'lbList', pcq: 'pcqLbList' };
+const LB_TAB_LIST_IDS = { overall: 'overallLbList', timed: 'timedLbList', quiz: 'lbList', pcq: 'pcqLbList', drill: 'drillLbList' };
 function showLbTab(tabKey){
   document.querySelectorAll('.lbTabBtn').forEach(b => b.classList.toggle('active', b.dataset.lbtab === tabKey));
   Object.keys(LB_TAB_LIST_IDS).forEach(key => {
@@ -1949,6 +1990,7 @@ document.getElementById('openLeaderboardBtn').addEventListener('click', ()=>{
   renderTimedLeaderboard(null);
   renderLeaderboard(null);
   renderPCQLeaderboard();
+  renderDrillLbTab();
   renderSpotlight();
 });
 [...document.querySelectorAll('.lbTabBtn')].forEach(btn => {
