@@ -472,30 +472,27 @@
     <div id="thisweekAheadText"></div>
     <div class="lbSub" style="margin-top:8px;text-align:center;">Auto-generated from this week's Schedule -- tap a card to open it</div>
   </div>
-  <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
-       the upcoming games so players can check them out and be prepared."
-       This Week stays one shared page, but can point at a specific
-       upcoming Schedule game -- shown as a tappable link here, and pulled
-       onto that game's own Schedule detail page too (see schedule.js). -->
-  <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
   <!-- Nathan: "We also have footage from the other teams we play. I need an
        option to add in Opponent Film on the Upcoming Game. When you click
        into This Week it should have a Watch Footage button that opens the
        film from the upcoming opponent." Same link this week's linked game
        carries on its own Schedule page (schedule.js's opponentFilmUrl) --
-       only shown once a coach has actually set one on that game. -->
-  <!-- Nathan: "I still don't see the full column width CTA on the This Week
-       section to watch the upcoming opponents footage" -- matches the big
-       full-width .navBtn treatment schedule.js's read-only game view uses
-       for this same button (Nathan: "it should be a big full column CTA
-       like the Cancel Due to Weather CTA"), not the small .lbLinkBtn text
-       link this used before. -->
+       only shown once a coach has actually set one on that game. Nathan
+       (later): "it should show this footage CTA right below or above the
+       preview write up" -- moved to sit directly under the Week Ahead box
+       above, ahead of the This-Week-game link/empty-state below it. -->
   <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:0 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
   <!-- Nathan: "include a write-in spot for the footage to say something underneath it.
        example is 'Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6'" --
        optional coach-entered caption (schedule.js's opponentFilmNote), shown only when
        the button above is also shown. -->
   <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 12px;"></div>
+  <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
+       the upcoming games so players can check them out and be prepared."
+       This Week stays one shared page, but can point at a specific
+       upcoming Schedule game -- shown as a tappable link here, and pulled
+       onto that game's own Schedule detail page too (see schedule.js). -->
+  <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
   </div>
@@ -1926,7 +1923,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260824x';
+  const BUILD_V = '20260824y';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
