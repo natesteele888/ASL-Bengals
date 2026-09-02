@@ -89,9 +89,33 @@
       penaltyTotals: { us: { count: 0, yds: 0 }, opponent: { count: 0, yds: 0 } },
       onside: { us: 0, opponent: 0 },
       oppPassing: { att: 0, comp: 0, yds: 0 },
+      oppRushing: { att: 0, yds: 0, td: 0 },
       forcedPunts: 0,
     };
     ss.roster = (liveRoster || []).map(p => ({ num: p.num, name: p.name }));
+    // Nathan: "the plays are coming up in alphabetical order instead of the
+    // order in which they were called out in the game" -- ss.rushing/
+    // .passing/.receiving are organized by PLAYER row, not by time, so
+    // without a stamp on each attempt there's no way to later put a whole
+    // game's offensive snaps back in true order when re-opening this game
+    // in Stat Keeper (see its reconstructPlaysFromStatSheet/seqOf, and
+    // game-stats-editor.js's commitAttempt which stamps this same way for
+    // the manual entry screen). exportData.plays is newest-first (Stat
+    // Keeper's insertPlay unshifts), so seq has to count up from the OLDEST
+    // play, not forEach's own index order.
+    const chronological = (exportData.plays || []).slice().reverse();
+    const seqByPlay = new Map();
+    chronological.forEach((p, i) => seqByPlay.set(p, i + 1));
+    function playOrderExtra(p) {
+      const extra = { seq: seqByPlay.get(p), spot: p.spot != null ? p.spot : null };
+      // Nathan: "adding the play call to the plays we ran on offense" --
+      // Stat Keeper's own PLAYBOOK picker stores a plain string, resolving
+      // "Other / Not Sure" to its free-text field the same way Stat
+      // Keeper's own playRunTxt() does for its on-screen play log.
+      const callName = p.playCall === 'Other / Not Sure' ? (p.playCallOther || null) : (p.playCall || null);
+      if (callName) extra.playCall = callName;
+      return extra;
+    }
 
     function ensureAttemptRow(sectionKey, num) {
       let row = ss[sectionKey].find(r => String(r.num) === String(num));
@@ -122,10 +146,24 @@
     (exportData.plays || []).forEach(p => {
       if (!p || p.type === 'quarterEnd') return;
 
-      if (p.type === 'run' && p.carrier) {
-        const num = numFor(p.carrier);
-        if (num != null) {
-          ensureAttemptRow('rushing', num).attempts.push({ yds: Number(p.yards) || 0, fd: !!p.firstDown, dir: p.dir || null, td: !!p.td });
+      if (p.type === 'run') {
+        if (p.runTeam !== 'Opponent') {
+          if (p.carrier) {
+            const num = numFor(p.carrier);
+            if (num != null) {
+              ensureAttemptRow('rushing', num).attempts.push(Object.assign({ yds: Number(p.yards) || 0, fd: !!p.firstDown, dir: p.dir || null, td: !!p.td }, playOrderExtra(p)));
+            }
+          }
+        } else {
+          // Nathan: "I need to add the details for the other teams so we
+          // know yardage on plays" -- opponent runs only ever carry a name
+          // in the optional "Opponent Ball Carrier" field (p.oppCarrier),
+          // not p.carrier, and there's no live-roster row to credit it to
+          // anyway (they're not on our roster) -- so this is tracked as a
+          // straight team total, same as oppPassing right below.
+          ss.oppRushing.att += 1;
+          ss.oppRushing.yds += Number(p.yards) || 0;
+          if (p.td) ss.oppRushing.td += 1;
         }
       }
 
@@ -135,13 +173,13 @@
           if (p.passer) {
             const num = numFor(p.passer);
             if (num != null) {
-              ensureAttemptRow('passing', num).attempts.push({ yds: p.result === 'Complete' ? (Number(p.yards) || 0) : 0, comp: p.result === 'Complete', fd: !!p.firstDown, td: !!p.td });
+              ensureAttemptRow('passing', num).attempts.push(Object.assign({ yds: p.result === 'Complete' ? (Number(p.yards) || 0) : 0, comp: p.result === 'Complete', fd: !!p.firstDown, td: !!p.td }, playOrderExtra(p)));
             }
           }
           if (p.result === 'Complete' && p.target) {
             const num = numFor(p.target);
             if (num != null) {
-              ensureAttemptRow('receiving', num).attempts.push({ yds: Number(p.yards) || 0, fd: !!p.firstDown, td: !!p.td });
+              ensureAttemptRow('receiving', num).attempts.push(Object.assign({ yds: Number(p.yards) || 0, fd: !!p.firstDown, td: !!p.td }, playOrderExtra(p)));
             }
           }
         } else {

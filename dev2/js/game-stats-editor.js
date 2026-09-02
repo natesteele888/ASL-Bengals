@@ -106,6 +106,14 @@
       penaltyTotals: { us: { count: 0, yds: 0 }, opponent: { count: 0, yds: 0 } },
       onside: { us: 0, opponent: 0 },
       oppPassing: { att: 0, comp: 0, yds: 0 },
+      // Nathan: "I need to add the details for the other teams so we know
+      // yardage on plays" -- opponent rushing was only ever tracked as a
+      // total inside Stat Keeper's own prototype (ss.oppRushing there);
+      // added here too so js/statkeeper-import.js has somewhere real to put
+      // it instead of silently dropping it, same shape as oppPassing above.
+      // normalizeStatSheet()'s generic key-by-key backfill below picks this
+      // up automatically for every already-saved game.
+      oppRushing: { att: 0, yds: 0, td: 0 },
       forcedPunts: 0,
     };
   }
