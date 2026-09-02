@@ -970,10 +970,22 @@ function combinePoints(...ptsMaps){
 // against other coaches on Timed/PCQ, never against the team) -- two
 // entirely separate points pools, not one shared one with coaches just
 // sorted to the bottom.
+// Nathan (2026-09-01, follow-up): "the main leaderboard needs to have 2
+// minute drill in there as well with the same 20 points to 1st and on down
+// to 20." A 4th contributing board, same pointsForRank/combinePoints
+// treatment as the other three -- window.fetchTwoMinDrillLeaderboardData
+// (js/two-minute-drill.js) already returns players/coaches sorted
+// best-first (score, then yards, then streak), exactly the shape
+// pointsForRank expects. Falls back to empty boards if that function isn't
+// loaded for some reason (e.g. an older cached build) rather than throwing.
+async function fetchDrillDataForStandings(){
+  if(typeof window.fetchTwoMinDrillLeaderboardData !== 'function') return { players: [], coaches: [] };
+  try { return await window.fetchTwoMinDrillLeaderboardData(); } catch(e) { return { players: [], coaches: [] }; }
+}
 async function computeOverallStandings(){
-  const [timedData, pcqData, quizData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData()]);
-  const players = combinePoints(pointsForRank(timedData.players), pointsForRank(pcqData.players), pointsForRank(quizData.players));
-  const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches), pointsForRank(quizData.coaches));
+  const [timedData, pcqData, quizData, drillData] = await Promise.all([fetchTimedLeaderboardData(), fetchPCQLeaderboardData(), fetchQuizLeaderboardData(), fetchDrillDataForStandings()]);
+  const players = combinePoints(pointsForRank(timedData.players), pointsForRank(pcqData.players), pointsForRank(quizData.players), pointsForRank(drillData.players));
+  const coaches = combinePoints(pointsForRank(timedData.coaches), pointsForRank(pcqData.coaches), pointsForRank(quizData.coaches), pointsForRank(drillData.coaches));
   return { players, coaches };
 }
 
@@ -1033,19 +1045,31 @@ function bestFromRawLog(rawList, predicate, isBetterFn, sortFn){
   best.sort(sortFn);
   return best;
 }
+// Nathan: same "20 points to 1st, on down to 20" treatment for 2 Minute
+// Drill as the other three boards get here -- window.fetchTwoMinDrillRawHistory
+// (js/two-minute-drill.js) hands back the raw, timestamped, never-overwritten
+// per-drive log (same shape/durability as analytics/standardResults etc.),
+// so it can be date-filtered by `predicate` exactly the same way.
+function fetchDrillRawHistory(){
+  if(typeof window.fetchTwoMinDrillRawHistory !== 'function') return Promise.resolve([]);
+  return window.fetchTwoMinDrillRawHistory().catch(() => []);
+}
 async function standingsFromRawHistory(predicate){
-  const [rawStandard, rawTimed, rawPcq] = await Promise.all([
-    cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'),
+  const [rawStandard, rawTimed, rawPcq, rawDrill] = await Promise.all([
+    cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'), cloudFetch('analytics/pcqResults'), fetchDrillRawHistory(),
   ]);
   const stdBest = bestFromRawLog(rawStandard, predicate, quizIsBetter,
     (a,b)=> b.score - a.score || (b.bestStreak||0) - (a.bestStreak||0) || new Date(a.date) - new Date(b.date));
   const timedBest = bestFromRawLog(rawTimed, predicate, timedIsBetter,
     (a,b)=> a.timeMs - b.timeMs || a.mistakes - b.mistakes || new Date(a.date) - new Date(b.date));
   const pcqBest = bestFromRawLog(rawPcq, predicate, (a,b)=> a.score > b.score, (a,b)=> b.score - a.score);
-  const stdSplit = splitByCoach(stdBest), timedSplit = splitByCoach(timedBest), pcqSplit = splitByCoach(pcqBest);
+  const drillBest = bestFromRawLog(rawDrill, predicate,
+    (a,b)=> (a.score||0) !== (b.score||0) ? (a.score||0) > (b.score||0) : (a.totalYards||0) > (b.totalYards||0),
+    (a,b)=> (b.score||0) - (a.score||0) || (b.totalYards||0) - (a.totalYards||0) || (b.bestStreak||0) - (a.bestStreak||0));
+  const stdSplit = splitByCoach(stdBest), timedSplit = splitByCoach(timedBest), pcqSplit = splitByCoach(pcqBest), drillSplit = splitByCoach(drillBest);
   return {
-    players: combinePoints(pointsForRank(timedSplit.players), pointsForRank(pcqSplit.players), pointsForRank(stdSplit.players)),
-    coaches: combinePoints(pointsForRank(timedSplit.coaches), pointsForRank(pcqSplit.coaches), pointsForRank(stdSplit.coaches)),
+    players: combinePoints(pointsForRank(timedSplit.players), pointsForRank(pcqSplit.players), pointsForRank(stdSplit.players), pointsForRank(drillSplit.players)),
+    coaches: combinePoints(pointsForRank(timedSplit.coaches), pointsForRank(pcqSplit.coaches), pointsForRank(stdSplit.coaches), pointsForRank(drillSplit.coaches)),
   };
 }
 function computeWeeklyStandings(){

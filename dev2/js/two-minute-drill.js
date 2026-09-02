@@ -2390,6 +2390,22 @@
   // the drill's own internal Leaderboard screen (#twoMinLbScreen above).
   window.fetchTwoMinDrillLeaderboardData = fetchTwoMinDrillLeaderboardData;
 
+  // Nathan (follow-up): "the main leaderboard needs to have 2 minute drill
+  // in there as well with the same 20 points to 1st and on down to 20." --
+  // study-quiz.js's Overall points system (computeOverallStandings) needs
+  // this board's raw per-attempt history, not just the already-deduped
+  // "best per person" shape fetchTwoMinDrillLeaderboardData returns above,
+  // so its This Week/Most Improved math (standingsFromRawHistory) can
+  // date-filter it exactly like it already does for Quiz/Timed/Play Calls
+  // Quiz. cloudPush(TWO_MIN_LB_PATH, ...) above already writes in that same
+  // shape -- a Firebase POST per completed drive, never overwritten, every
+  // entry timestamped -- so this just hands that raw list straight back;
+  // study-quiz.js does its own filtering/dedupe/scoring on it.
+  window.fetchTwoMinDrillRawHistory = async function () {
+    const cloudList = await cloudFetch(TWO_MIN_LB_PATH);
+    return cloudList === null ? getTwoMinLeaderboardLocal() : cloudList;
+  };
+
   async function renderTwoMinDrillLeaderboard() {
     const list = el.twoMinLbList;
     if (!list) return;
