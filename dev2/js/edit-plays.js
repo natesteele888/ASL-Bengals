@@ -382,7 +382,7 @@ function sanitizeBlockingDistances(playTypes) {
           // an offset FROM the wing position, not an absolute field coordinate --
           // comparing those against defenders' absolute positions doesn't mean
           // anything, so only points/points4x4 (which are absolute) belong here.
-          if (p.blockRelative) return;
+          if (p.blockRelative || p.motionIndependentBlock) return;
           [['points', variant.defense], ['points4x4', variant.defense4x4]].forEach(([field, defenders]) => {
             if (!p[field] || !defenders || !defenders.length) return;
             const start = p[field][0];
@@ -921,6 +921,45 @@ function getBlockFieldKey() {
   return (defenseMode === '4x4') ? base + '4x4' : base;
 }
 
+// ---- Motion-independent blocking (p.motionIndependentBlock) ----
+// Nathan (Shuffle Pass): "I can set the 4 as a blocker but as soon as I
+// swap him to the other side, it blocks his assignment on the other side."
+// followed up once the normal same/cross split (which mirrors #4's block
+// the instant MOTION changes which physical side he's standing on, exactly
+// like it does for a raw Wing L/R change -- see getBlockFieldKey/p4Side
+// above) turned out not to be what he wanted here: "It's more to [a fixed
+// target #4 chases back across the field to, regardless of Motion] by
+// default. But I need the option to reassign per variant and hit it save
+// and stick. With and without motion should be considered different
+// versions that can be altered from the default."
+//
+// So this is a second, opt-in blocking mode (set via p.motionIndependentBlock
+// instead of p.blockRelative) with a different rule: the SAME/CROSS bucket
+// is still chosen by wing side (mirrors correctly for Wing L vs Wing R, same
+// as ever), but that choice deliberately ignores Motion -- p4HomeSide(), not
+// p4Side() -- so by default toggling Motion just changes where #4 physically
+// draws from (p4Anchor()), not which target he's headed to. A coach can
+// still explicitly override the Motion-on case: tapping a defender while
+// Motion is on writes into a separate `...Motion` field (an absolute point,
+// since by then #4's anchor has already moved and there's no more mirroring
+// left to do) that takes over for that bucket going forward, independent of
+// the no-motion assignment.
+function motionIndependentBaseKey() {
+  const homeSide = p4HomeSide(); // wing-based only -- ignores Motion on purpose
+  const sameSide = homeSide === direction;
+  const base = (sameSide ? 'sameSidePoints' : 'crossPoints') + '4x4';
+  return { homeSide, base, motionKey: base + 'Motion' };
+}
+function getMotionIndependentTarget(p) {
+  const { homeSide, base, motionKey } = motionIndependentBaseKey();
+  if (motionOn && p[motionKey]) return p[motionKey][1]; // explicit per-variant override, absolute
+  const noMotionAnchor = DATA.wing[homeSide];
+  const stored = p[base] || p.points;
+  const [dx, dy] = stored[1];
+  const sign = homeSide === 'Left' ? 1 : -1;
+  return [noMotionAnchor[0] + sign * dx, noMotionAnchor[1] + dy];
+}
+
 // Old saved data (from before same-side/cross-side blocking was independent)
 // only has points/points4x4. Rather than crash on the missing field, migrate
 // it in-memory the first time it's touched, so old cloud saves keep working.
@@ -965,7 +1004,9 @@ function getAbsolutePoints(p) {
   }
   if (p.player === 4 && !p.optionLine) {
     const anchor = p4Anchor();
-    if (p.blockRelative) {
+    if (p.motionIndependentBlock) {
+      return [anchor, getMotionIndependentTarget(p)];
+    } else if (p.blockRelative) {
       const [dx, dy] = getBlockPoints(p)[1];
       const sign = p4Side() === 'Left' ? 1 : -1;
       return [anchor, [anchor[0] + sign * dx, anchor[1] + dy]];
@@ -1005,6 +1046,19 @@ function writeBackPoint(p, idx, absX, absY) {
     getBlockPoints(p); // ensures the field exists (migrates old data if needed)
     const fieldKey = getBlockFieldKey();
     p[fieldKey][idx] = [absX, absY];
+  } else if (p.motionIndependentBlock) {
+    if (idx === 0) return; // start always tracks #4's live position
+    const { homeSide, base, motionKey } = motionIndependentBaseKey();
+    if (motionOn) {
+      // Explicit per-variant override -- absolute, no mirroring needed
+      // (there's nothing left to un-mirror once the coach has tapped a
+      // real point on screen with Motion already on).
+      p[motionKey] = [[0, 0], [absX, absY]];
+    } else {
+      const sign = homeSide === 'Left' ? 1 : -1;
+      const noMotionAnchor = DATA.wing[homeSide]; // === anchor here, Motion is off
+      p[base] = [[0, 0], [(absX - noMotionAnchor[0]) / sign, absY - noMotionAnchor[1]]];
+    }
   } else if (p.blockRelative) {
     if (idx === 0) return; // start always tracks the wing circle itself
     const sign = p4Side() === 'Left' ? 1 : -1;
@@ -1027,7 +1081,7 @@ function writeBackPoint(p, idx, absX, absY) {
 
 function getEditablePointsArray(p) {
   // returns the actual mutable array backing this path's points, for add/remove
-  if (p.blockRelative || p.dualSideBlock || (p.player === 4 && p.wingSeamRelative)) return null; // structurally fixed, no add/remove
+  if (p.blockRelative || p.dualSideBlock || p.motionIndependentBlock || (p.player === 4 && p.wingSeamRelative)) return null; // structurally fixed, no add/remove
   return p.points;
 }
 
@@ -1066,9 +1120,20 @@ function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
   const d = getActiveDefenseArr(variant).find(d => d.id === defenderId);
   if (!d) return;
   const frac = 0.9;
-  const actualStart = p.blockRelative ? p4Anchor() : blockerStart;
+  const actualStart = (p.blockRelative || p.motionIndependentBlock) ? p4Anchor() : blockerStart;
   const end = [actualStart[0] + frac*(d.pos[0]-actualStart[0]), actualStart[1] + frac*(d.pos[1]-actualStart[1])];
-  if (p.blockRelative) {
+  if (p.motionIndependentBlock) {
+    const { homeSide, base, motionKey } = motionIndependentBaseKey();
+    if (motionOn) {
+      // Explicit per-variant override, saved independently of the no-motion
+      // assignment -- see the comment on motionIndependentBaseKey() above.
+      p[motionKey] = [[0, 0], end];
+    } else {
+      const sign = homeSide === 'Left' ? 1 : -1;
+      const noMotionAnchor = DATA.wing[homeSide]; // === actualStart here, Motion is off
+      p[base] = [[0, 0], [(end[0]-noMotionAnchor[0])/sign, end[1]-noMotionAnchor[1]]];
+    }
+  } else if (p.blockRelative) {
     const anchor = p4Anchor();
     const sign = p4Side() === 'Left' ? 1 : -1;
     const fieldKey = getBlockFieldKey();
@@ -1492,7 +1557,7 @@ function render() {
       defCircle.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (isAssignableBlock) {
-          const blockerStart = assignablePath.blockRelative ? [0,0] : assignablePath.points[0];
+          const blockerStart = (assignablePath.blockRelative || assignablePath.motionIndependentBlock) ? [0,0] : assignablePath.points[0];
           assignBlockerToDefender(assignablePath, blockerStart, d.id, variant);
         } else {
           applyChipBlock(assignablePath, d.id, variant);
@@ -1579,14 +1644,16 @@ function render() {
     // actually standing, not a coordinate baked into the play. Blocking
     // paths for #4 also need their END point computed relative to his live
     // position, since which defender he's nearest to depends on wing side.
-    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
     if (p.dualSideBlock) {
       // Fixed-position blocker (e.g. the Option play's playside TE) whose
       // block target depends on whether the wing is on the same side as the
       // play's direction or the opposite side -- see getBlockFieldKey().
       points = getBlockPoints(p);
     } else if (p.player === 4 && !p.optionLine) {
-      if (p.blockRelative) {
+      if (p.motionIndependentBlock) {
+        points = [p4Pos, getMotionIndependentTarget(p)];
+      } else if (p.blockRelative) {
         const [dx, dy] = getBlockPoints(p)[1];
         const sign = p4Side() === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
         points = [p4Pos, [p4Pos[0] + sign * dx, p4Pos[1] + dy]];

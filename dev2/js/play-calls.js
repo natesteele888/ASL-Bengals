@@ -1025,7 +1025,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const isSelected = selectedPlayer !== null && (isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer));
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
 
-    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
     // Set below when this path is a dualSideBlock currently showing its
     // cross-side target AND has a crossNote -- Nathan: "On the play call
     // Option, when the call is option left and the wing is to the right,
@@ -1051,7 +1051,27 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       points = p[fieldKey] || p.points;
       if (!sameSide && p.crossNote) readNoteToShow = p.crossNote;
     } else if (p.player === 4 && !p.optionLine) {
-      if (p.wingSeamRelative) {
+      if (p.motionIndependentBlock) {
+        // See the matching (much longer) comment in edit-plays.js's
+        // motionIndependentBaseKey()/getMotionIndependentTarget() -- same
+        // rule here: which of sameSidePoints4x4/crossPoints4x4 applies is
+        // chosen by p4HomeSide (wing side only, ignores Motion) so the
+        // default target doesn't re-mirror the instant Motion moves #4 to
+        // a new physical spot; an explicit "...Motion" override (absolute,
+        // tapped with Motion already on) takes over for that bucket once set.
+        const sameSide = p4HomeSide === direction;
+        const baseKey = (sameSide ? 'sameSidePoints' : 'crossPoints') + '4x4';
+        const motionKey = baseKey + 'Motion';
+        if (motionOn && p[motionKey]) {
+          points = [p4Anchor, p[motionKey][1]];
+        } else {
+          const noMotionAnchor = DATA.wing[p4HomeSide];
+          const stored = p[baseKey] || p.points;
+          const [dx, dy] = stored[1];
+          const sign = p4HomeSide === 'Left' ? 1 : -1;
+          points = [p4Anchor, [noMotionAnchor[0] + sign * dx, noMotionAnchor[1] + dy]];
+        }
+      } else if (p.wingSeamRelative) {
         const sameSide = p4Side === direction;
         const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
         const sign = p4Side === 'Left' ? 1 : -1;

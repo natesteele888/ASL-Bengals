@@ -311,7 +311,7 @@
       const isSelected = selectedPlayer !== null && (isLineSelected ? (p.id === selectedPlayer) : (p.player === selectedPlayer));
       const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
 
-      let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && p.points4x4) ? p.points4x4 : p.points;
+      let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
       let readNoteToShow = null;
       if (p.dualSideBlock) {
         const sameSide = p4Side === direction;
@@ -320,7 +320,24 @@
         points = p[fieldKey] || p.points;
         if (!sameSide && p.crossNote) readNoteToShow = p.crossNote;
       } else if (p.player === 4 && !p.optionLine) {
-        if (p.wingSeamRelative) {
+        if (p.motionIndependentBlock) {
+          // See the matching comment in edit-plays.js/play-calls.js -- same
+          // rule: bucket picked by p4HomeSide (wing only, ignores Motion),
+          // default target doesn't re-mirror when Motion moves #4, and an
+          // explicit "...Motion" override (absolute) takes over once set.
+          const sameSide = p4HomeSide === direction;
+          const baseKey = (sameSide ? 'sameSidePoints' : 'crossPoints') + '4x4';
+          const motionKey = baseKey + 'Motion';
+          if (motionOn && p[motionKey]) {
+            points = [p4Anchor, p[motionKey][1]];
+          } else {
+            const noMotionAnchor = DATA.wing[p4HomeSide];
+            const stored = p[baseKey] || p.points;
+            const [dx, dy] = stored[1];
+            const sign = p4HomeSide === 'Left' ? 1 : -1;
+            points = [p4Anchor, [noMotionAnchor[0] + sign * dx, noMotionAnchor[1] + dy]];
+          }
+        } else if (p.wingSeamRelative) {
           const sameSide = p4Side === direction;
           const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
           const sign = p4Side === 'Left' ? 1 : -1;
