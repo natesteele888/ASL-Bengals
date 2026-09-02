@@ -51,6 +51,16 @@
   // this field. Optional/undefined on any practice with no drone footage.
   let current = null; // item open in the detail view, or null (list view)
   let loaded = false;
+  // Nathan: "when you go to this week ahead, and you click on a game or
+  // practice, it brings me to the edit screen instead of the info screen."
+  // Same race as js/schedule.js's gamesReadyPromise fix -- openPracticeDetail
+  // (used by This Week's cards) triggers initPractices() synchronously via
+  // showSchedulePracticesTab(), which sets `loaded = true` and kicks off
+  // loadItems() (async, unawaited), then immediately called openDetail()
+  // before `items` was actually populated -- so it couldn't find the
+  // practice and forced edit mode. itemsReadyPromise is shared by both so
+  // whichever one starts the fetch, the other waits on the real result.
+  let itemsReadyPromise = null;
   // Nathan: "when I am logged in as a coach, I cant see it how the players
   // see it. Give me an edit button." Same fix as js/schedule.js -- see the
   // comment there. Existing practices open read-only by default (even for
@@ -654,7 +664,7 @@
     wireControls();
     if (!loaded) {
       loaded = true;
-      loadItems();
+      itemsReadyPromise = loadItems();
     } else {
       document.getElementById('practicesDetail').style.display = 'none';
       document.getElementById('practicesListWrap').style.display = '';
@@ -690,8 +700,17 @@
   window.openPracticeDetail = function (id) {
     if (window.showSchedulePracticesTab) window.showSchedulePracticesTab();
     wireControls();
-    document.getElementById('practicesListWrap').style.display = 'none';
-    document.getElementById('practicesDetail').style.display = '';
-    openDetail(id);
+    function actuallyOpen() {
+      document.getElementById('practicesListWrap').style.display = 'none';
+      document.getElementById('practicesDetail').style.display = '';
+      openDetail(id);
+    }
+    if (itemsReadyPromise) {
+      itemsReadyPromise.then(actuallyOpen);
+    } else {
+      loaded = true;
+      itemsReadyPromise = loadItems();
+      itemsReadyPromise.then(actuallyOpen);
+    }
   };
 })();

@@ -73,6 +73,21 @@
   let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl, opponentFilmNote}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
+  // Nathan: "when you go to this week ahead, and you click on a game or
+  // practice, it brings me to the edit screen instead of the info screen."
+  // Root cause: openScheduleGame() (used by This Week's cards) calls
+  // window.setSection('schedule') first, which synchronously runs
+  // initSchedule() -> sets `loaded = true` and kicks off loadGames() (async,
+  // not awaited) -- so by the time openScheduleGame's own `if (!loaded)`
+  // check ran, `loaded` was already true (just set by initSchedule a
+  // moment ago), and it opened the detail view immediately, before `games`
+  // had actually been fetched. openDetail() then couldn't find the game by
+  // id, treated it as a brand-new unsaved one, and forced edit mode --
+  // exactly the symptom reported. gamesReadyPromise is the fix: both
+  // initSchedule() and openScheduleGame() share the same in-flight promise,
+  // so whichever one starts the fetch, the other always waits on the real
+  // result instead of racing a flag.
+  let gamesReadyPromise = null;
   // Nathan: "would be awesome if we could include an image of the field
   // we are playing at - also include links for more info such as the
   // jamboree." fieldPhoto is a downscaled data URL (same pattern as the
@@ -1507,11 +1522,12 @@
       document.getElementById('scheduleDetail').style.display = '';
       openDetail(gameId);
     }
-    if (!loaded) {
-      loaded = true;
-      loadGames().then(actuallyOpen);
+    if (gamesReadyPromise) {
+      gamesReadyPromise.then(actuallyOpen);
     } else {
-      actuallyOpen();
+      loaded = true;
+      gamesReadyPromise = loadGames();
+      gamesReadyPromise.then(actuallyOpen);
     }
   };
 
@@ -1586,7 +1602,7 @@
     wireControls();
     if (!loaded) {
       loaded = true;
-      loadGames();
+      gamesReadyPromise = loadGames();
     } else {
       document.getElementById('scheduleDetail').style.display = 'none';
       document.getElementById('scheduleListWrap').style.display = '';
@@ -1597,9 +1613,15 @@
   // Used by Full Schedule (js/schedule-full.js) to merge games in without
   // needing the Games tab to have been opened first.
   window.getGamesCached = () => games;
+  // Same gamesReadyPromise fix as openScheduleGame above -- `loaded` alone
+  // isn't safe to branch on here since something else (initSchedule,
+  // openScheduleGame) may have already set it true while its own fetch is
+  // still in flight; waiting on the shared promise instead of the flag
+  // guarantees `games` is actually populated before resolving.
   window.ensureGamesLoaded = function () {
-    if (loaded) return Promise.resolve(games);
+    if (gamesReadyPromise) return gamesReadyPromise.then(() => games);
     loaded = true;
-    return loadGames().then(() => games);
+    gamesReadyPromise = loadGames();
+    return gamesReadyPromise.then(() => games);
   };
 })();

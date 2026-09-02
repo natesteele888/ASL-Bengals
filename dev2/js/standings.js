@@ -104,10 +104,52 @@
     return /bengal/i.test(t.team || '');
   }
 
+  // ---- Opponent Page (Nathan: "I want to develop a opponent page where
+  // you click on their logo or their name in the standings and you see
+  // game footage from them, notes, key players and things like that.")
+  // Scoped to teams actually on our own Schedule -- everyone else in the
+  // league has nothing real to show (no film link, no scouting notes,
+  // since we've never played them), so they stay plain text. Reuses
+  // whatever's already on that Schedule game (opponentFilmUrl/Note,
+  // scouting) rather than a separate data store to keep in sync.
+  //
+  // League standings names ("Ayer/Shirley/Lunenburg") and our own
+  // schedule's opponent field (whatever a coach actually typed there,
+  // e.g. "Ayer Shirley") aren't guaranteed to match exactly, so this
+  // compares normalized word tokens instead of the raw strings -- a
+  // shared distinctive word (ignoring division/league boilerplate like
+  // "Tackle"/"11U"/"Regional"/"Youth Football") counts as a match.
+  const IGNORED_TEAM_WORDS = new Set(['tackle', '11u', 'regional', 'youth', 'football', 'high', 'school', 'the', 'jr', 'sr']);
+  function teamTokens(s) {
+    return String(s || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(t => t.length > 2 && !IGNORED_TEAM_WORDS.has(t));
+  }
+  function matchScheduleOpponent(teamName, games) {
+    const tTokens = teamTokens(teamName);
+    if (!tTokens.length) return null;
+    return (games || []).find(g => {
+      const gTokens = teamTokens(g.opponent);
+      return gTokens.length && tTokens.some(t => gTokens.includes(t));
+    }) || null;
+  }
+
   async function loadStandings(force) {
     if (loaded && !force) return standingsData;
     try {
-      const res = await fetch(STANDINGS_URL);
+      // Nathan: "if I add standings, save, it shows. But once I leave the
+      // app, it doesn't store the standings and they are gone when I
+      // reenter." Root cause: this read was a plain unauthenticated fetch,
+      // but the Firebase rules on this project require an auth token on
+      // every read/write (see schedule.js's loadGames -- it wraps its GET
+      // in firebaseAuthed() too, not just its saves). An unauthenticated
+      // GET here was silently getting rejected, so standingsData came back
+      // null on every fresh page load -- the paste box only ever looked
+      // like it worked because it re-rendered from the in-memory `teams`
+      // array right after a successful save, not from an actual re-read.
+      const url = await window.firebaseAuthed(STANDINGS_URL);
+      const res = await fetch(url);
       standingsData = res.ok ? await res.json() : null;
     } catch (e) {
       standingsData = null;
@@ -136,7 +178,7 @@
     }
   }
 
-  function renderTable(container, data) {
+  function renderTable(container, data, games) {
     if (!container) return;
     if (!data || !Array.isArray(data.teams) || !data.teams.length) {
       container.innerHTML = '<div class="lbEmpty">No standings posted yet.</div>';
@@ -153,23 +195,89 @@
     ordered.forEach((t, i) => {
       const diff = t.pf - t.pa;
       const diffStr = (diff > 0 ? '+' : '') + diff;
+      const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
+      const nameCell = matchedGame
+        ? `<button type="button" class="standingsTeamLink" data-open-opponent="${escapeHtml(matchedGame.id)}">${escapeHtml(t.team)} ›</button>`
+        : escapeHtml(t.team);
       html += `<tr class="${isBengalsRow(t) ? 'standingsRowUs' : ''}">` +
         `<td>${i + 1}</td>` +
-        `<td>${escapeHtml(t.team)}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +
+        `<td>${nameCell}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +
         `<td>${escapeHtml(recordStr(t))}</td>` +
         `<td>${t.pf}</td><td>${t.pa}</td><td>${diffStr}</td></tr>`;
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
+    if (games) {
+      container.querySelectorAll('[data-open-opponent]').forEach(btn => {
+        btn.addEventListener('click', () => showOpponentPage(btn.dataset.openOpponent, data.teams, games));
+      });
+    }
   }
+
+  function opponentPageHtml(game, teamRow) {
+    const diff = teamRow ? teamRow.pf - teamRow.pa : null;
+    const diffStr = diff != null ? (diff > 0 ? '+' : '') + diff : '';
+    const hasFootage = !!game.opponentFilmUrl;
+    let html = `<div class="lbHeroHeader">
+        <div class="lbHeroTrophy">🏈</div>
+        <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
+        ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; PF ${teamRow.pf} / PA ${teamRow.pa} (${escapeHtml(diffStr)})</div>` : ''}
+      </div>`;
+    if (hasFootage) {
+      html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
+      if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
+    }
+    if (game.scouting) {
+      html += `<div class="lbSectionHeader">🔎 Scouting Report</div>
+        <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
+    }
+    if (!hasFootage && !game.scouting) {
+      html += '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>';
+    }
+    html += `<div style="text-align:center;margin-top:16px;">
+        <button type="button" class="lbLinkBtn" id="standingsOpponentScheduleLink">View this game on Schedule ›</button>
+      </div>`;
+    return html;
+  }
+
+  function showOpponentPage(gameId, teams, games) {
+    const listPanel = document.getElementById('standingsListPanel');
+    const detailPanel = document.getElementById('standingsOpponentDetail');
+    const body = document.getElementById('standingsOpponentBody');
+    const game = (games || []).find(g => g.id === gameId);
+    if (!game || !listPanel || !detailPanel || !body) return;
+    const teamRow = (teams || []).find(t => matchScheduleOpponent(t.team, [game]));
+    body.innerHTML = opponentPageHtml(game, teamRow);
+    listPanel.style.display = 'none';
+    detailPanel.style.display = '';
+    const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
+    if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(gameId); });
+  }
+
+  function showStandingsList() {
+    const listPanel = document.getElementById('standingsListPanel');
+    const detailPanel = document.getElementById('standingsOpponentDetail');
+    if (listPanel) listPanel.style.display = '';
+    if (detailPanel) detailPanel.style.display = 'none';
+  }
+
+  let backBtnWired = false;
 
   // ---- Read-only Standings tab (everyone) ----
   window.initStandingsNav = async function () {
     const container = document.getElementById('standingsTableWrap');
     if (!container) return;
+    if (!backBtnWired) {
+      const backBtn = document.getElementById('standingsOpponentBackBtn');
+      if (backBtn) { backBtn.addEventListener('click', showStandingsList); backBtnWired = true; }
+    }
+    showStandingsList();
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';
-    const data = await loadStandings();
-    renderTable(container, data);
+    const [data, games] = await Promise.all([
+      loadStandings(),
+      window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
+    ]);
+    renderTable(container, data, games);
   };
 
   // ---- Coach Tools paste box ----

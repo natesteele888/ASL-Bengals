@@ -606,7 +606,17 @@
     const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
     if (!keysBox || !keysList || !gridEl) return;
 
-    const linkedGame = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
+    // Nathan: "column width CTA under the Week Ahead write up on the This
+    // Week tab is still missing. Should have the same CTA... that is
+    // available on the game card when you click into the schedule." The
+    // manually-set saved.gameId link (Weekly Goals' own game picker) often
+    // isn't set even when Week Ahead is already showing this week's game
+    // automatically (buildWeekAheadData scans the same upcomingGames list
+    // by date, no manual link required) -- fall back to that same
+    // auto-detected game so the footage CTA doesn't depend on a coach
+    // separately linking the game a second time.
+    const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
+    const linkedGame = (saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null) || autoWeekGame;
     if (gameLinkEl) {
       if (linkedGame) {
         gameLinkEl.style.display = '';
