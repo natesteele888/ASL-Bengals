@@ -14306,7 +14306,7 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 500,
+              "delayMs": 1000,
               "handoffIndex": 3
             },
             {
@@ -15079,7 +15079,7 @@ window.SHIPPED_PLAYS_JSON = {
                 ]
               ],
               "width": 7,
-              "delayMs": 500,
+              "delayMs": 1000,
               "handoffIndex": 3
             },
             {
