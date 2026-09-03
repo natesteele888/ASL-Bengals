@@ -396,6 +396,17 @@
   let currentSpot = 50;
 
   function localCacheKey(gameId){ return 'statKeeperGame_' + gameId; }
+  // Nathan: "it keeps resetting back to default when I reenter the page."
+  // The game dropdown always came back blank on a fresh page load -- your
+  // actual play log was never gone (that part already saved), but with no
+  // game auto-selected it LOOKED wiped until you picked it again, and the
+  // reselect itself re-fetches from the cloud (see selectGame below), so
+  // if that fetch ever raced a save still in flight it really could show
+  // something stale. Remembering the last game you had open and
+  // re-selecting it automatically on boot (see boot() near the bottom)
+  // closes both: less "did this actually save" doubt, and no manual
+  // reselect to trigger that race in the first place.
+  const LAST_GAME_KEY = 'statKeeperLastGameId';
   function blankGameState(){ return { plays: [], quarter: 1, spot: 50, finalUs: '', finalOpp: '' }; }
   function currentGameStateObj(){
     return { plays: plays, quarter: currentQuarter, spot: currentSpot,
@@ -1552,6 +1563,23 @@
       saveGameToCloud().catch(function(e){ setGameLoadStatus('⚠️ Cloud save failed: ' + e.message + ' (still saved locally on this device)'); });
     }, 600);
   }
+  // Nathan: "it keeps resetting back to default when I reenter the page --
+  // need to make sure changes are staying." The 600ms debounce above is
+  // fine while you're actively logging plays back-to-back, but if you
+  // background the tab or navigate away inside that window, the timer can
+  // get frozen or killed before it ever fires -- the change sat safely in
+  // localStorage, but the CLOUD copy (what selectGame's fetch above
+  // actually reads on the way back in, and what any other device sees at
+  // all) never got it. Flushing immediately the moment the page is about
+  // to go away or out of view closes that window instead of hoping 600ms
+  // of idle time happens to land before it does.
+  function flushCloudSaveNow(){
+    if (!selectedGame) return;
+    clearTimeout(cloudSaveTimer);
+    saveGameToCloud().catch(function(){ /* best-effort on the way out -- nothing left to show the user at this point */ });
+  }
+  document.addEventListener('visibilitychange', function(){ if (document.hidden) flushCloudSaveNow(); });
+  window.addEventListener('pagehide', flushCloudSaveNow);
   // FIREBASE_DB_URL/firebaseAuthedUrl are declared further down (same
   // coach-gate auth block "Push to Live Stats" already used) -- safe to
   // reference here since this only ever runs after a game's been picked,
@@ -2838,6 +2866,7 @@
   async function selectGame(gameId){
     clearTimeout(cloudSaveTimer);
     selectedGame = liveGamesCache.find(function(g){ return g.id === gameId; }) || null;
+    try{ localStorage.setItem(LAST_GAME_KEY, selectedGame ? selectedGame.id : ''); }catch(e){}
     if (!selectedGame){
       applyGameState(blankGameState());
       setGameControlsEnabled(false);
@@ -2935,6 +2964,15 @@
     }
     populateGameSelect();
     setGameLoadStatus(liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.');
+    // Nathan: "make sure changes are staying" -- re-select whatever game
+    // was open last time instead of always coming back to a blank
+    // dropdown (see LAST_GAME_KEY above).
+    let lastId = '';
+    try{ lastId = localStorage.getItem(LAST_GAME_KEY) || ''; }catch(e){}
+    if (lastId && liveGamesCache.some(function(g){ return g.id === lastId; })){
+      gameSelect.value = lastId;
+      selectGame(lastId);
+    }
   }
   boot();
 })();
