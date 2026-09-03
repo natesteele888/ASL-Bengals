@@ -1427,6 +1427,19 @@
       // spot above.
       const endAbs = absoluteSpot(entry.endSide, entry.endYard);
       if (endAbs != null) currentSpot = clampSpot(endAbs);
+    } else if (entry.type === 'penalty' && !entry.declined){
+      // Nathan (follow-up): "the play should automatically pull in the end
+      // spot from the previous play" -- Penalty was the one type with real
+      // yardage on it that never touched currentSpot at all, so logging one
+      // (False Start, Holding, etc.) silently left the NEXT play starting
+      // from the pre-penalty spot until someone caught it and fixed the
+      // Ball Position control by hand. Yardage always moves the penalized
+      // team back toward their OWN goal regardless of who was on offense --
+      // on Us pushes currentSpot toward 0, on Opponent pushes it toward 100
+      // -- same true-regardless-of-side logic as kneel's loss above. A
+      // declined penalty (guarded above) never moves the ball at all.
+      const yds = Number(entry.penYards || 0);
+      currentSpot = clampSpot(currentSpot + (entry.penTeam === 'Us' ? -yds : yds));
     }
   }
 
