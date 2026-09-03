@@ -1332,12 +1332,17 @@
       const isUs = p.puntTeam !== 'Opponent';
       const catchTxt = spotLabel(p.catchSide, p.catchYard);
       const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
-      // "net" is always our field-position swing (positive = good for us) regardless of
-      // who punted, since it's just start vs. final spot. But puntDist/retYds describe an
-      // actual direction of travel, and whoever is running the ball after the catch is
-      // moving the OPPOSITE way on our OWN→OPP scale from whoever kicked it — so which
-      // spot gets subtracted from which has to flip depending on who punted.
-      const net = (startAbs != null && endAbs != null) ? (endAbs - startAbs) : null;
+      // Nathan: "the starting spot was our own 31 and the ball went to our
+      // 5, but it says a net -26 yards?" -- net used to always be endAbs
+      // minus startAbs (our own field-position swing), while puntDist/
+      // retYds right next to it on the same line were already flipped to
+      // read as a positive distance from whoever's actually punting. That
+      // mismatch is exactly what looked broken here: a punt that traveled
+      // a clean 26 yards read as "-26" just because the Opponent (not Us)
+      // punted it. Net now uses that same isUs flip, so it's always a
+      // positive "how good was this punt" number for the punting team,
+      // consistent with puntDist/retYds instead of contradicting them.
+      const net = (startAbs != null && endAbs != null) ? (isUs ? (endAbs - startAbs) : (startAbs - endAbs)) : null;
       const puntDist = (startAbs != null && catchAbs != null) ? (isUs ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
       const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
       const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
