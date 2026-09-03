@@ -135,6 +135,32 @@
     }) || null;
   }
 
+  // Nathan (follow-up): "Teams on your schedule should also have their
+  // record shown under their name like ours. They are on the standings to
+  // reference." Same token-overlap matching as matchScheduleOpponent just
+  // above, entered from the other direction -- given an opponent's name as
+  // typed on a Schedule game, find its standings row -- so js/schedule.js's
+  // game cards can show it without needing to know anything about how
+  // standings are parsed/stored. One self-contained async function (loads +
+  // caches standings internally via loadStandings) rather than exposing the
+  // teams array/token helpers separately, same shape as
+  // window.fetchTwoMinDrillRawHistory etc. elsewhere in the app. Returns
+  // null (not an empty string) when there's no standings data yet or no
+  // matching row, so a caller can tell "nothing to show" apart from a
+  // genuine 0-0 record.
+  window.getOpponentRecordText = async function (opponentName) {
+    if (!opponentName) return null;
+    const data = await loadStandings();
+    if (!data || !Array.isArray(data.teams) || !data.teams.length) return null;
+    const oTokens = teamTokens(opponentName);
+    if (!oTokens.length) return null;
+    const row = data.teams.find(t => {
+      const tTokens = teamTokens(t.team);
+      return tTokens.length && oTokens.some(tok => tTokens.includes(tok));
+    });
+    return row ? recordStr(row) : null;
+  };
+
   async function loadStandings(force) {
     if (loaded && !force) return standingsData;
     try {

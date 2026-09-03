@@ -1149,6 +1149,18 @@
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
+      // Nathan (follow-up): "Teams on your schedule should also have their
+      // record shown under their name like ours. They are on the standings
+      // to reference." Empty/hidden placeholder filled in after the row is
+      // on the page -- same fire-and-forget, fill-in-after-append pattern
+      // as the weather chip just below (window.loadCompactWeatherInto),
+      // rather than making this whole function wait on a standings fetch
+      // before it can show anything. window.getOpponentRecordText
+      // (js/standings.js) does the actual name-matching against whatever's
+      // been pasted into Coach Tools > Standings; it resolves to nothing if
+      // that opponent isn't on the pasted standings yet, in which case the
+      // placeholder just stays hidden.
+      const oppRecordId = `scheduleOppRecord-${g.id}`;
       row.innerHTML = `
         ${weekBadge}
         <div class="scheduleRowTop">
@@ -1162,11 +1174,18 @@
             ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
             ${badge}
           </span>
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
+          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span>${themScore}</span>
         </span>
         <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>`;
       row.addEventListener('click', () => openDetail(g.id));
       listEl.appendChild(row);
+      if (g.opponent && typeof window.getOpponentRecordText === 'function') {
+        window.getOpponentRecordText(g.opponent).then(txt => {
+          if (!txt) return; // not on the pasted standings (yet) -- placeholder just stays hidden
+          const el = document.getElementById(oppRecordId);
+          if (el) { el.textContent = txt; el.style.display = ''; }
+        }).catch(() => {});
+      }
       // Nathan: "add that little weather icon in the bottom of the center
       // of the Game card." Same fired-after-append pattern as practice
       // rows (js/practices.js) -- compact chip, hidden by default until
@@ -1261,6 +1280,20 @@
     renderList();
   }
 
+  // Nathan (follow-up): "Teams on your schedule should also have their
+  // record shown under their name like ours." Same fire-and-forget
+  // fill-after-render as the Games list's per-row version above, just
+  // targeting the one hero on this detail page (a fixed id is fine here --
+  // only ever one hero on screen at a time, unlike the list's many rows).
+  function fillHeroOpponentRecord(opponentName) {
+    if (!opponentName || typeof window.getOpponentRecordText !== 'function') return;
+    window.getOpponentRecordText(opponentName).then(txt => {
+      if (!txt) return;
+      const el = document.getElementById('scheduleHeroOppRecord');
+      if (el) { el.textContent = txt; el.style.display = ''; }
+    }).catch(() => {});
+  }
+
   function renderDetail() {
     const body = document.getElementById('scheduleDetailBody');
     const editControls = document.getElementById('scheduleDetailEditControls');
@@ -1310,7 +1343,7 @@
               ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
               ${badgeHtml}
             </span>
-            <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span>${themScore}</span>
+            <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
           </div>
         </div>`;
     })();
@@ -1361,6 +1394,7 @@
         <div class="lbSectionHeader" style="margin-top:16px;">🎥 Game Footage</div>
         ${gameFootageReadOnlyHtml(current)}
         <div class="scheduleFinePrint">${gameIsFinal ? "Game Recap is auto-generated from this game's stats (Coach Tools &gt; Stats)." : "Game Preview is auto-generated from this game's Schedule info."}</div>`;
+      fillHeroOpponentRecord(current.opponent);
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
       wireAddToCalendar();
@@ -1468,6 +1502,7 @@
       <div class="lbSub" style="margin:2px 0 8px;">Link to wherever the footage already lives (Google Drive, Hudl, YouTube, etc.) -- visible to the whole team. To "cast" it, just open the link on whatever screen you want (a tablet or a smart TV's browser); most video players (Drive included) already have their own cast button once the video is open.</div>
       <div id="schedFootageWrap" style="margin-bottom:8px;"></div>
       <div class="scheduleFinePrint">${gameIsFinal ? 'Game Recap is auto-generated -- updates once you save.' : 'Game Preview is auto-generated -- updates once you save.'}</div>`;
+    fillHeroOpponentRecord(current.opponent);
 
     document.getElementById('schedOpponent').value = current.opponent || '';
     document.getElementById('schedWeek').value = current.week === null || current.week === undefined ? '' : current.week;
