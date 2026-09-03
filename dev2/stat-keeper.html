@@ -1473,13 +1473,28 @@
       const idx = plays.findIndex(function(p){ return p.id === editingId; });
       if (idx !== -1){
         const original = plays[idx];
-        plays[idx] = Object.assign({}, draft, { type: currentType, id: original.id, side: currentSide, quarter: original.quarter, spot: original.spot });
+        const merged = Object.assign({}, draft, { type: currentType, id: original.id, side: currentSide, quarter: original.quarter, spot: original.spot });
+        plays[idx] = merged;
+        // Nathan (follow-up): "that works on one play, but as soon as I
+        // did it on the next, it wouldn't update." Saving an edit used to
+        // only ever touch that one play's own record -- it never told the
+        // running Ball Position tracker about the correction, so nothing
+        // logged (or opened for editing) afterward ever saw it. Same sync
+        // a brand-new play already gets below, just also applied here.
+        // Note this only really makes sense when you're correcting the
+        // MOST RECENTLY logged play -- editing something further back in
+        // the log moves the tracker to that play's end spot too, which
+        // you'd then want to fix again via the Ball Position control (or
+        // by re-editing whatever comes right after it) if it doesn't match
+        // what actually happened next.
+        advanceSpotForPlay(merged);
       }
       editingId = null;
       updateEditModeUI();
       persist();
       renderLog();
       renderStats();
+      renderBallPositionControl();
       resetDraft();
       return;
     }
