@@ -68,7 +68,12 @@
   // 'Regular Season' is the default and deliberately shown nowhere -- most
   // games ARE that, so only the exceptions (scrimmages, jamborees,
   // playoffs) get a visible tag.
-  const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff'];
+  // Nathan: "Week 3 we have a bye, let's put one in there to call out the
+  // bye." Added as its own game type (rather than a normal game with a
+  // blank opponent) so the Games list can special-case it into a plain
+  // "Bye Week" callout instead of drawing a whole empty matchup -- see
+  // renderList below.
+  const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff', 'Bye'];
 
   let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl, opponentFilmNote}]
   let current = null; // game open in the detail view, or null (list view)
@@ -301,7 +306,7 @@
   // on their own game card elsewhere in this file -- this is specifically
   // the season *record* tally.
   function countsTowardRecord(g) {
-    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree';
+    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree' && g.gameType !== 'Bye';
   }
   function bengalsRecord(list) {
     let w = 0, l = 0, t = 0;
@@ -1112,10 +1117,29 @@
       ((a.week === null || a.week === undefined ? 999 : a.week) - (b.week === null || b.week === undefined ? 999 : b.week))
     );
     orderedGames.forEach(g => {
-      const result = resultFor(g);
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'scheduleRow';
+      // Nathan: "have the Week shown in the top right corner, like Week 1,
+      // Week 8." Absolutely positioned so it doesn't add a line of its own
+      // to the card -- sits on top of the existing top-left location line
+      // instead of stacking under it. Games without a week number (older
+      // manually-added games, scrimmages entered before the importer
+      // tagged them) just skip the badge.
+      const weekBadge = (g.week !== null && g.week !== undefined && g.week !== '') ? `<span class="scheduleWeekBadge">Week ${escapeHtml(String(g.week))}</span>` : '';
+      // Nathan: "Week 3 we have a bye, let's call that out." A bye has no
+      // opponent/score/location to show, so it gets a plain one-line
+      // callout instead of the full matchup card -- still clickable into
+      // the normal detail/edit view (e.g. to jot a note) like any other
+      // entry.
+      if (g.gameType === 'Bye') {
+        row.className = 'scheduleRow scheduleRowBye';
+        row.innerHTML = `${weekBadge}<span class="scheduleByeText">Bye Week</span>`;
+        row.addEventListener('click', () => openDetail(g.id));
+        listEl.appendChild(row);
+        return;
+      }
+      const result = resultFor(g);
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
@@ -1125,13 +1149,6 @@
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
-      // Nathan: "have the Week shown in the top right corner, like Week 1,
-      // Week 8." Absolutely positioned so it doesn't add a line of its own
-      // to the card -- sits on top of the existing top-left location line
-      // instead of stacking under it. Games without a week number (older
-      // manually-added games, scrimmages entered before the importer
-      // tagged them) just skip the badge.
-      const weekBadge = (g.week !== null && g.week !== undefined && g.week !== '') ? `<span class="scheduleWeekBadge">Week ${escapeHtml(String(g.week))}</span>` : '';
       row.innerHTML = `
         ${weekBadge}
         <div class="scheduleRowTop">
@@ -1167,7 +1184,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
+      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -1398,6 +1415,11 @@
       </div>
       <div id="schedFieldPhotoPreviewWrap" style="margin-bottom:8px;"></div>
       <input type="text" id="schedInfoUrl" placeholder="More info link (e.g. https://hudsonyouthfootball.com/jamboree/)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <span class="lbSub" style="margin:0;">Week #:</span>
+        <input type="number" id="schedWeek" placeholder="e.g. 1" min="1" style="width:70px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <span class="lbSub" style="margin:0;">(shown in the corner of the game card -- leave blank for scrimmages/jamborees you don't want numbered)</span>
+      </div>
       <div class="lbSub" style="margin:0 0 4px;">Game type:</div>
       <div class="gameplanPickerGrid" id="schedGameTypeGrid" style="margin-bottom:12px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
@@ -1448,6 +1470,7 @@
       <div class="scheduleFinePrint">${gameIsFinal ? 'Game Recap is auto-generated -- updates once you save.' : 'Game Preview is auto-generated -- updates once you save.'}</div>`;
 
     document.getElementById('schedOpponent').value = current.opponent || '';
+    document.getElementById('schedWeek').value = current.week === null || current.week === undefined ? '' : current.week;
     document.getElementById('schedDate').value = current.date || '';
     document.getElementById('schedArriveTime').value = to24h(current.arriveTime);
     document.getElementById('schedWarmupTime').value = to24h(current.warmupTime);
@@ -1667,8 +1690,12 @@
   function syncFormToCurrent() {
     if (!current) return false;
     const opponent = document.getElementById('schedOpponent').value.trim();
-    if (!opponent) return false;
-    current.opponent = opponent;
+    // Nathan: "Week 3 we have a bye." A bye has no opponent to name, so it's
+    // the one game type exempt from the opponent-required check below.
+    if (!opponent && current.gameType !== 'Bye') return false;
+    current.opponent = opponent || (current.gameType === 'Bye' ? 'Bye' : '');
+    const weekRaw = document.getElementById('schedWeek').value.trim();
+    current.week = weekRaw === '' ? null : Number(weekRaw);
     current.date = document.getElementById('schedDate').value;
     current.arriveTime = document.getElementById('schedArriveTime').value.trim();
     current.warmupTime = document.getElementById('schedWarmupTime').value.trim();
