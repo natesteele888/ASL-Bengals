@@ -588,13 +588,15 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    marquee-style scroll -- one navy strip, plain text items separated by a
    dot, looping seamlessly (the JS renders the item list twice back-to-back
    and the keyframe scrolls exactly one copy's width). */
-/* Nathan (follow-up x2): "side to side gradient is tough, maybe it's top
-   to bottom and it's not black but a dark orange so the text is still
-   legible." Vertical instead of diagonal, and the bottom stop is now a
-   deep burnt orange (no hex for that dark a shade exists as a shared
-   variable yet, so it's spelled out here) instead of black -- still dark
-   enough for white text to read clearly, without going monochrome. */
-.globalCallout{position:relative;margin:0;overflow:hidden;cursor:grab;background:linear-gradient(180deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 55%, #6b2600 100%)}
+/* Nathan (follow-up x3): "the banner is really hard to see with the
+   orange -- change it to black with a slight gradient to dark grey at the
+   top and bottom." White text over solid orange wasn't reading well;
+   dark grey top/bottom fading into black in the middle gives the text
+   contrast everywhere across the strip without going flat black. Drag-to-
+   slide is still there (cursor:grab), just no longer clickable to open
+   the Leaderboard -- see study-quiz.js's gcSetupTicker. */
+.globalCallout{position:relative;margin:0;overflow:hidden;cursor:grab;background:linear-gradient(180deg, #2b2e33 0%, #0d0e10 50%, #2b2e33 100%)}
+.globalCallout:active{cursor:grabbing}
 .globalCallout:active{cursor:grabbing}
 /* Nathan: "make it so you can slide it with your finger" -- js/study-quiz.js's
    gcSetupTicker() now drives the scroll itself via requestAnimationFrame +

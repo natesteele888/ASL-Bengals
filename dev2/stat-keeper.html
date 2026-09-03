@@ -228,6 +228,16 @@
 
   <section class="panel">
     <h2>Play Log <span id="playCount" style="color:var(--cyan)">0 plays</span></h2>
+    <!-- Nathan: "have the ability to save progress so I can come back to
+         it, but saving without having to push to live stats until I am
+         complete." That's already exactly how this works -- every edit
+         auto-saves to this game's OWN Stat Keeper log (locally right away,
+         then to the cloud a moment later), completely separate from the
+         live schedule/statSheet that "Push to Live Stats" writes to
+         further down. This status line just makes that visible, since
+         there was previously no way to actually SEE that an edit had been
+         saved short of trusting it and moving on. -->
+    <div id="autoSaveStatus" style="font-size:11px;color:var(--dim2);margin:-4px 0 10px;"></div>
     <div class="insertPosRow">
       <label>New entry happened right after (in game time)</label>
       <select id="insertPosSel"></select>
@@ -797,19 +807,34 @@
   }
 
   // Nathan: "having a way of setting the ball to the yard marker at the
-  // start of the play and end of the play is key." Shared by Run and Pass
-  // (a completed one) -- the start spot is never re-typed by hand, it's
-  // just wherever the persistent Ball Position control already has the
-  // ball (or, if editing an older play, the exact spot that play was
-  // originally logged at -- see startEditPlay/draft.spot below, same
-  // "frozen at creation time" idea the punt/kickoff spots already rely on).
-  // Only the end spot is a real decision, made by watching where the ball
-  // ended up on film. Yards Gained is derived from the two spots instead of
-  // typed in by hand, using signedYardsFromSpots so it's correct regardless
-  // of which team has the ball. Returns an array of the two field rows to
-  // append (fieldBlock only takes one control at a time).
+  // start of the play and end of the play is key."
+  // Nathan (follow-up): "I had edited some of these plays but they aren't
+  // being retained... have to show the ball spot in yellow for every
+  // line." The start spot used to be a read-only label (see the old
+  // comment this replaced) with nothing to actually edit -- that's exactly
+  // why trying to fix a Run/Pass's start spot never seemed to "take."
+  // Both ends are now real, directly-editable pickers, same as Tackle's
+  // already are. Yards Gained is still derived from the two spots rather
+  // than typed in by hand (using signedYardsFromSpots so it's correct
+  // regardless of which team has the ball) -- shown as a live tag next to
+  // the end picker so changing either spot updates it immediately. Returns
+  // an array of the two field rows to append (fieldBlock only takes one
+  // control at a time).
   function snapSpotFields(isUsTeam){
-    const startAbs = (draft.spot != null) ? draft.spot : currentSpot;
+    // Nathan (follow-up): "I had edited some of these plays but they
+    // aren't being retained." Plays logged before this round only ever
+    // got the old, unlabeled `spot` number -- seed from THAT (not today's
+    // live tracker) the first time an old play like that gets opened for
+    // editing, same as it always did, just converted into the new
+    // side+yard shape so it's now an actually-editable picker instead of
+    // a frozen label. A brand-new play (no spot recorded yet at all)
+    // still falls back to the live tracker as before.
+    if (draft.startSide == null){
+      const seedAbs = (draft.spot != null) ? draft.spot : currentSpot;
+      const sy = sideYardFromAbs(seedAbs);
+      draft.startSide = sy.side; draft.startYard = sy.yard;
+    }
+    const startAbs = absoluteSpot(draft.startSide, draft.startYard);
     if (draft.endSide == null){
       const sy = sideYardFromAbs(startAbs);
       draft.endSide = sy.side; draft.endYard = sy.yard;
@@ -817,17 +842,14 @@
     const endAbs = absoluteSpot(draft.endSide, draft.endYard);
     draft.yards = signedYardsFromSpots(startAbs, endAbs, isUsTeam);
 
-    const startRow = document.createElement('div');
-    startRow.style.cssText = 'color:var(--dim);font-size:13px;';
-    startRow.textContent = spotLabelAbs(startAbs);
-
-    const endWrap = spotPicker('endSide', 'endYard', sideYardFromAbs(startAbs).yard);
+    const startWrap = spotPicker('startSide', 'startYard', draft.startYard);
+    const endWrap = spotPicker('endSide', 'endYard', draft.endYard);
     const gainedTag = document.createElement('span');
     gainedTag.style.cssText = 'font-weight:800;color:' + (draft.yards >= 0 ? 'var(--cyan)' : '#e0201a') + ';';
     gainedTag.textContent = (draft.yards >= 0 ? '+' : '') + draft.yards + ' yds';
     endWrap.appendChild(gainedTag);
 
-    return [ fieldBlock('Ball Spot to Start', startRow), fieldBlock('Ball Spot at End of Play', endWrap) ];
+    return [ fieldBlock('Ball Spot to Start', startWrap), fieldBlock('Ball Spot at End of Play', endWrap) ];
   }
 
   function spotLabelAbs(spot){
@@ -876,6 +898,23 @@
     row.style.cssText = 'color:var(--dim);font-size:13px;';
     row.textContent = spotLabelAbs(absoluteSpot(draft[sideKey], draft[yardKey]));
     return row;
+  }
+  // Nathan: "show the ball spot in yellow for every line." Shared
+  // single-spot picker for play types that happen AT one spot rather than
+  // moving between two (Kneel, Penalty, Defensive Extra, Turnover, Score)
+  // -- same directly-editable side+yard control as everywhere else,
+  // defaulting from the running Ball Position tracker on a fresh entry
+  // (or the play's own historical spot when editing one, since it's
+  // already sitting in draft.spotSide/spotYard by then).
+  function singleSpotField(label){
+    // Same "seed from this play's own old `spot` if it has one, not
+    // today's live tracker" reasoning as snapSpotFields above.
+    if (draft.spotSide == null){
+      const seedAbs = (draft.spot != null) ? draft.spot : currentSpot;
+      const sy = sideYardFromAbs(seedAbs);
+      draft.spotSide = sy.side; draft.spotYard = sy.yard;
+    }
+    return fieldBlock(label, spotPicker('spotSide', 'spotYard', draft.spotYard));
   }
   // Nathan: "Kickoffs to start the halves are from the team's own 40 yard
   // line." Unlike Punt (which genuinely depends on wherever the prior
@@ -1095,6 +1134,11 @@
         if (draft.incReason === 'Broken Up'){
           fieldsArea.appendChild(fieldBlock('Broken Up By (optional)', playerPicker('pbuBy')));
         }
+        // Nathan: "show the ball spot in yellow for every line." An
+        // incomplete doesn't move the ball (same line of scrimmage next
+        // snap), so it only needs the one spot, not a start+end pair like
+        // a completion gets from snapSpotFields.
+        fieldsArea.appendChild(singleSpotField('Line of Scrimmage (spot)'));
       }
     }
     else if (currentType === 'kick'){
@@ -1184,6 +1228,7 @@
         if (draft.kneelYards == null) draft.kneelYards = 5;
         fieldsArea.appendChild(fieldBlock('Yards Lost (shotgun kneel)', optChips('kneelYards', [4, 5])));
       }
+      fieldsArea.appendChild(singleSpotField('Snapped At (spot)'));
     }
     else if (currentType === 'tackle'){
       fieldsArea.appendChild(fieldBlock('Tackler (solo)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
@@ -1206,7 +1251,8 @@
       // pickers -- still defaults from the tracker for a fresh entry, but
       // always overridable by hand, on a new play or an edit.
       if (draft.startSide == null){
-        const sy = sideYardFromAbs(currentSpot);
+        const seedAbs = (draft.spot != null) ? draft.spot : currentSpot;
+        const sy = sideYardFromAbs(seedAbs);
         draft.startSide = sy.side; draft.startYard = sy.yard;
       }
       fieldsArea.appendChild(fieldBlock('Play Started At (spot)', spotPicker('startSide', 'startYard', draft.startYard)));
@@ -1220,12 +1266,14 @@
     else if (currentType === 'defextra'){
       fieldsArea.appendChild(fieldBlock('Player', playerPicker('player')));
       fieldsArea.appendChild(fieldBlock('Type', optChips('extraType', ['INT','PBU','Sack'])));
+      fieldsArea.appendChild(singleSpotField('Spot (where it happened)'));
       fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
     }
     else if (currentType === 'turnover'){
       fieldsArea.appendChild(fieldBlock('Type', optChips('toType', ['Fumble','Interception'])));
       fieldsArea.appendChild(fieldBlock('Lost By (offense)', playerPicker('lostBy')));
       fieldsArea.appendChild(fieldBlock('Recovered By (defense, optional)', playerPicker('recoveredBy')));
+      fieldsArea.appendChild(singleSpotField('Spot (where recovered)'));
       fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
       const note = document.createElement('textarea'); note.className='noteInput';
       note.placeholder = 'Quick note (optional) — e.g. "strip sack, 2nd quarter"';
@@ -1237,6 +1285,7 @@
       fieldsArea.appendChild(fieldBlock('Kind', optChips('scoreKind', ['PAT Good','PAT No Good','2PT Good','2PT No Good','Safety'])));
       fieldsArea.appendChild(fieldBlock('Team', optChips('scoreTeam', ['Us','Opponent'])));
       fieldsArea.appendChild(fieldBlock('Player (optional)', playerPicker('scorePlayer')));
+      fieldsArea.appendChild(singleSpotField('Spot (optional)'));
     }
     else if (currentType === 'penalty'){
       fieldsArea.appendChild(fieldBlock('Penalty On', optChips('penTeam', ['Us','Opponent'])));
@@ -1247,6 +1296,7 @@
       }
       fieldsArea.appendChild(fieldBlock('Yards', yardStepper('penYards', 5)));
       fieldsArea.appendChild(fieldBlock('Player (optional)', playerPicker('penPlayer')));
+      fieldsArea.appendChild(singleSpotField('Spot (where it happened)'));
       const toggles = document.createElement('div'); toggles.className='toggleRow';
       toggles.appendChild(chipToggle('declined','Declined'));
       toggles.appendChild(chipToggle('firstDown','Automatic 1st Down'));
@@ -1288,7 +1338,12 @@
       if (!a || !b) return '';
       return a === b ? a : (a + ' → ' + b);
     }
-    if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot);
+    // Nathan: "show the ball spot in yellow for every line." Kneel,
+    // Penalty, Defensive Extra, Turnover, and Score all get their own
+    // directly-editable spotSide/spotYard now (singleSpotField above)
+    // instead of the old silent, unlabeled `spot` number.
+    if (p.spotSide != null) return spotLabel(p.spotSide, p.spotYard);
+    if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot); // legacy plays logged before spotSide existed
     return '';
   }
 
@@ -1452,8 +1507,15 @@
       // Nathan: "we are in shotgun so it will be a 4 or 5 yard loss each
       // time" -- same direction convention as a run for a loss: whichever
       // team is kneeling gets pushed back toward THEIR OWN goal.
+      // Nathan (follow-up): "show the ball spot in yellow for every line."
+      // Now anchored to the play's own editable spotSide/spotYard (see
+      // singleSpotField) instead of blindly using whatever currentSpot
+      // happens to be at commit time -- matters when EDITING a kneel to
+      // correct where it actually happened, not just logging a new one.
+      const baseAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      const base = baseAbs != null ? baseAbs : currentSpot; // legacy plays with no spotSide yet
       const loss = Number(entry.kneelYards || 0);
-      currentSpot = clampSpot(currentSpot + (entry.kneelTeam !== 'Opponent' ? -loss : loss));
+      currentSpot = clampSpot(base + (entry.kneelTeam !== 'Opponent' ? -loss : loss));
     } else if (entry.type === 'tackle'){
       // Nathan: "add starting ball spot and ending ball spot while
       // recording defense" -- a Tackle usually stands in for the whole
@@ -1474,8 +1536,22 @@
       // on Us pushes currentSpot toward 0, on Opponent pushes it toward 100
       // -- same true-regardless-of-side logic as kneel's loss above. A
       // declined penalty (guarded above) never moves the ball at all.
+      // Anchored to the penalty's own editable spot (singleSpotField),
+      // same reasoning as kneel just above.
+      const baseAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      const base = baseAbs != null ? baseAbs : currentSpot;
       const yds = Number(entry.penYards || 0);
-      currentSpot = clampSpot(currentSpot + (entry.penTeam === 'Us' ? -yds : yds));
+      currentSpot = clampSpot(base + (entry.penTeam === 'Us' ? -yds : yds));
+    } else if (entry.type === 'defextra' || entry.type === 'turnover'){
+      // Nathan (follow-up): "show the ball spot in yellow for every line."
+      // An interception, sack, or fumble recovery hands the ball over (or
+      // moves it) right at wherever it happened -- now that these have
+      // their own explicit spot (singleSpotField), sync currentSpot
+      // straight to it, same as every other type that carries real
+      // position data forward. Legacy entries with no spotSide yet just
+      // leave currentSpot untouched, as before.
+      const spotAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      if (spotAbs != null) currentSpot = clampSpot(spotAbs);
     }
   }
 
@@ -1515,13 +1591,14 @@
       return;
     }
     const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
-    // Nathan: "add [field position] on each line" -- was only stamped for
-    // run/pass before (the two types this file already advanced currentSpot
-    // for). Broadened to every type describePlay() now prints a spot for;
-    // kick/punt are deliberately left out since those already carry their
-    // own explicit start/catch/end spot fields instead of this single
-    // shared one.
-    if (['run','pass','kneel','tackle','penalty','defextra','turnover','score'].indexOf(entry.type) !== -1) entry.spot = currentSpot;
+    // Nathan (follow-up): "show the ball spot in yellow for every line."
+    // Every type now carries its own explicit, directly-editable spot
+    // field (startSide/endSide for Run/Pass/Tackle/Kick/Punt; spotSide for
+    // Kneel/Penalty/Defensive Extra/Turnover/Score -- see singleSpotField),
+    // already folded into `draft` above. The single blanket `entry.spot =
+    // currentSpot` this used to do for all of those is gone; it only ever
+    // duplicated what these dedicated fields already capture, and unlike
+    // them it couldn't be corrected later.
     insertPlay(entry);
     advanceSpotForPlay(entry);
     persist();
@@ -1552,15 +1629,26 @@
   // below) -- the cloud copy is what actually makes "go back and edit"
   // possible from any device/browser, not just this one's local storage.
   let cloudSaveTimer = null;
+  function setAutoSaveStatus(t){ const el = document.getElementById('autoSaveStatus'); if (el) el.textContent = t || ''; }
   function persist(){
     try{ localStorage.setItem(localCacheKey(selectedGame ? selectedGame.id : 'unsaved'), JSON.stringify(currentGameStateObj())); }catch(e){}
+    setAutoSaveStatus('Saving…');
     scheduleCloudSave();
   }
   function scheduleCloudSave(){
     if (!selectedGame) return; // nothing to sync until a real game is picked
     clearTimeout(cloudSaveTimer);
     cloudSaveTimer = setTimeout(function(){
-      saveGameToCloud().catch(function(e){ setGameLoadStatus('⚠️ Cloud save failed: ' + e.message + ' (still saved locally on this device)'); });
+      saveGameToCloud().then(function(){
+        // Nathan: "have the ability to save progress ... but saving
+        // without having to push to live stats until I am complete."
+        // Confirms this auto-save (this game's own Stat Keeper log) is
+        // done, and spells out that it's separate from Push to Live Stats
+        // so there's no doubt those are two different things.
+        setAutoSaveStatus('✓ Saved ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) + ' (not pushed to live stats yet)');
+      }).catch(function(e){
+        setAutoSaveStatus('⚠️ Cloud save failed: ' + e.message + ' (still saved locally on this device)');
+      });
     }, 600);
   }
   // Nathan: "it keeps resetting back to default when I reenter the page --
