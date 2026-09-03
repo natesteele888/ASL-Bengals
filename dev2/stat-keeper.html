@@ -1126,6 +1126,15 @@
     if (draft.playCall === 'Other / Not Sure'){
       wrap.appendChild(textInput('playCallOther', 'Type the call if known, or leave blank'));
     }
+    // Nathan: "we need to be able to add left and right to the formation
+    // and play calls -- right now we just have Wing or Split but no
+    // indication what direction we called or ran." A play name alone
+    // (e.g. "Blast") doesn't say which side it actually went to -- the
+    // same play run the opposite way is a different play on film. Its own
+    // Left/Right chip rather than folding it into the play name itself
+    // (PLAYBOOK) keeps that list from doubling in size, and stays
+    // independently correctable from the play name.
+    wrap.appendChild(optChips('playCallDir', ['Left','Right']));
     return wrap;
   }
 
@@ -1134,7 +1143,13 @@
   // for the opponent's snaps) -- shown alongside Play Run on run/pass plays
   // where we have the ball. Represents what the team actually lined up in.
   function formationField(){
-    return optChips('formation', FORMATIONS);
+    const wrap = document.createElement('div');
+    wrap.appendChild(optChips('formation', FORMATIONS));
+    // Nathan (follow-up): "add left and right to the formation" -- which
+    // side the strength/wing actually lines up on (Wing Right vs. Wing
+    // Left is a real distinction, not just cosmetic).
+    wrap.appendChild(optChips('formationDir', ['Left','Right']));
+    return wrap;
   }
 
   // Nathan: "I want to attach the formation and play call to say what play
@@ -1144,10 +1159,17 @@
   // separately (often later, after watching the game footage back and
   // actually spotting/hearing the sideline signal) from what the log
   // already captured about what got run. Deliberately its own set of
-  // fields (coachFormation/coachCall/coachCallOther) rather than reusing
-  // formation/playCall, since the two can legitimately disagree.
+  // fields (coachFormation/coachCall/coachCallOther, now also
+  // coachFormationDir/coachCallDir below) rather than reusing
+  // formation/playCall, since the two can legitimately disagree -- left vs.
+  // right included, since a called Blast Right that came out as a Blast
+  // Left on film is exactly the kind of mismatch this second set exists to
+  // catch.
   function coachFormationField(){
-    return optChips('coachFormation', FORMATIONS);
+    const wrap = document.createElement('div');
+    wrap.appendChild(optChips('coachFormation', FORMATIONS));
+    wrap.appendChild(optChips('coachFormationDir', ['Left','Right']));
+    return wrap;
   }
   function coachCallField(){
     const wrap = document.createElement('div');
@@ -1155,6 +1177,7 @@
     if (draft.coachCall === 'Other / Not Sure'){
       wrap.appendChild(textInput('coachCallOther', 'Type the call if known, or leave blank'));
     }
+    wrap.appendChild(optChips('coachCallDir', ['Left','Right']));
     return wrap;
   }
 
@@ -1407,15 +1430,15 @@
   function playRunTxt(p){
     if (!p.playCall) return '';
     const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
-    return ' [Ran: ' + name + ']';
+    return ' [Ran: ' + name + (p.playCallDir ? ' ' + p.playCallDir : '') + ']';
   }
-  function formationTxt(p){ return p.formation ? ' ['+p.formation+']' : ''; }
+  function formationTxt(p){ return p.formation ? ' ['+p.formation + (p.formationDir ? ' '+p.formationDir : '') +']' : ''; }
   function coachCallTxt(p){
     if (!p.coachCall) return '';
     const name = p.coachCall === 'Other / Not Sure' ? (p.coachCallOther || 'unknown call') : p.coachCall;
-    return ' [Called: ' + name + ']';
+    return ' [Called: ' + name + (p.coachCallDir ? ' ' + p.coachCallDir : '') + ']';
   }
-  function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation+']' : ''; }
+  function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation + (p.coachFormationDir ? ' '+p.coachFormationDir : '') +']' : ''; }
 
   // Nathan: "I am also still missing the visual of what the yard spot of
   // the play is. It can be added to the play bar." The plain-English spot
