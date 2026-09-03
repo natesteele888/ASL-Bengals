@@ -1101,19 +1101,16 @@
     }
     const recordStr = bengalsRecord(games);
     const recordHtml = recordStr ? `<span class="scheduleTeamRecord">${escapeHtml(recordStr)}</span>` : '';
-    // Nathan: "when going to schedule - the next game should show at the
-    // pinned at the top of the view. older dates should be listed below it
-    // in the history." Pulls out the single soonest game that hasn't been
-    // played yet (same hasEventPassed() the Upcoming badge above already
-    // uses) and pins it first, then lists everything else newest-first so
-    // it reads as a history feed working backward in time underneath it --
-    // matches how every other list in this app (This Week, leaderboard)
-    // puts the most current thing at the top.
-    const sortedByDate = games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
-    const nextGame = sortedByDate.find(g => !hasEventPassed(g.date, g.gameTime || g.time));
-    const rest = sortedByDate.filter(g => g !== nextGame)
-      .sort((a, b) => (b.date || '0000').localeCompare(a.date || '0000'));
-    const orderedGames = nextGame ? [nextGame].concat(rest) : rest;
+    // Nathan: "the Games tab should list every game first to last" --
+    // replaces the earlier next-game-pinned/history-feed order (see git
+    // history) with a plain chronological ascending sort: opening week at
+    // the top, most recent/future game at the bottom. Games sharing a date
+    // (a same-day makeup, say) fall back to week number so the order still
+    // makes sense even then.
+    const orderedGames = games.slice().sort((a, b) =>
+      (a.date || '9999').localeCompare(b.date || '9999') ||
+      ((a.week === null || a.week === undefined ? 999 : a.week) - (b.week === null || b.week === undefined ? 999 : b.week))
+    );
     orderedGames.forEach(g => {
       const result = resultFor(g);
       const row = document.createElement('button');
@@ -1128,9 +1125,19 @@
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
+      // Nathan: "have the Week shown in the top right corner, like Week 1,
+      // Week 8." Absolutely positioned so it doesn't add a line of its own
+      // to the card -- sits on top of the existing top-left location line
+      // instead of stacking under it. Games without a week number (older
+      // manually-added games, scrimmages entered before the importer
+      // tagged them) just skip the badge.
+      const weekBadge = (g.week !== null && g.week !== undefined && g.week !== '') ? `<span class="scheduleWeekBadge">Week ${escapeHtml(String(g.week))}</span>` : '';
       row.innerHTML = `
-        ${gameTypeTag}
-        <span class="scheduleRowDate">${locLine}</span>
+        ${weekBadge}
+        <div class="scheduleRowTop">
+          ${gameTypeTag}
+          <span class="scheduleRowDate">${locLine}</span>
+        </div>
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}${usScore}</span>
           <span class="scheduleRowCenter">

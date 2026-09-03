@@ -1878,22 +1878,34 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    dark (independent of the app's own light/dark theme toggle) -- a
    scoreboard reads like a scoreboard, matching the reference screenshots,
    which stay dark regardless of the host app's theme too. ---- */
-.scheduleRow { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.scheduleRow { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .scheduleRow:active { filter: brightness(1.12); }
 /* Nathan: "Date and time should appear in the middle of the upcoming game
    card - small team name under the logo - location can stay at the top."
    Top line = location (+ home/away) only; center column = date/time +
    result status; each team side is now a vertical stack (badge, small
    name, score) instead of a horizontal row. */
-.scheduleRowDate { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; }
+/* Nathan: "the game cards are so tall it requires scrolling -- make it
+   shorter to fit more in less space." Location + game-type tag now share
+   one flex row instead of stacking as two separate lines, and the row
+   reserves space on the right so long location text truncates instead of
+   running under the Week badge (see .scheduleWeekBadge below). */
+.scheduleRowTop { display: flex; align-items: center; gap: 8px; padding-right: 76px; }
+.scheduleRowDate { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduleRowMatchup { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Nathan: "have the Week shown in the top right corner, like Week 1, Week
+   8." Absolutely positioned within the (now position:relative) card so it
+   sits on top of the top line rather than adding a line of its own. */
+.scheduleWeekBadge { position: absolute; top: 10px; right: 12px; font-size: 9.5px; font-weight: 900; color: #cfd7de; background: rgba(255,255,255,.08); border: 1px solid #333c45; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 /* Nathan: "can we do PNG logos for the teams instead of having them in the
    little circles? I would also like the logo to appear bigger so we can
    make the cards larger if needed." Base size bumped 34px -> 56px; real
    team PNGs (.hasLogo) drop the circle crop entirely and show full via
    object-fit:contain so nothing gets cut off, while the auto-generated
-   initials fallback (no logo on file yet) keeps the colored circle. */
-.scheduleTeamBadge { width: 56px; height: 56px; min-width: 56px; min-height: 56px; max-width: 56px; max-height: 56px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: #fff; background: var(--bengal-orange); overflow: hidden; }
+   initials fallback (no logo on file yet) keeps the colored circle.
+   Nathan later asked for shorter cards overall -- trimmed to 44px so the
+   list fits more games per screen without losing the logo treatment. */
+.scheduleTeamBadge { width: 44px; height: 44px; min-width: 44px; min-height: 44px; max-width: 44px; max-height: 44px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; color: #fff; background: var(--bengal-orange); overflow: hidden; }
 .scheduleTeamBadge.hasLogo { border-radius: 10px; background: transparent; }
 .scheduleTeamBadge img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .scheduleTeamSide { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; flex: 1 1 0; min-width: 0; max-width: 100%; text-align: center; }
@@ -1928,7 +1940,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    Centered (not right-aligned like .practiceRowWeather above) since these
    cards' layout doesn't have a natural "right side" slot the way a
    practice row's single date/time line does. */
-.scheduleRowWeatherCenter { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-top: 8px; width: 100%; }
+.scheduleRowWeatherCenter { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-top: 2px; width: 100%; }
 .scheduleRowWeatherCenter .weatherIcon { font-size: 15px; }
 /* Nathan: "we dont need to say this so big and bold... can be fine print
    at the bottom of the page." True fine print, not just a smaller .lbSub. */
