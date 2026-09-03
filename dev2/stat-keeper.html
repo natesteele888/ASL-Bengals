@@ -1172,6 +1172,23 @@
     else if (currentType === 'tackle'){
       fieldsArea.appendChild(fieldBlock('Tackler (solo)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
       fieldsArea.appendChild(fieldBlock('Assist (optional, select all who assisted)', playerPicker('assist', {multi:true, hotFn: function(){ return topTacklers(3); }})));
+      // Nathan: "I need the ability to add starting ball spot and ending
+      // ball spot while recording defense. I also need the option of
+      // saying if it was a first down." A Tackle is how a defensive stop
+      // usually gets logged here on its own (no separate Run/Pass entry
+      // for the opponent's play alongside it), so -- unlike solo Run/Pass,
+      // which already had this -- Tackle had no way to say where that
+      // stop actually happened or whether it moved the sticks. Same
+      // start-is-shown/end-is-picked split as every other play type here:
+      // start is wherever the Ball Position tracker already has it (fix it
+      // above before logging if it's wrong), end is the real decision.
+      fieldsArea.appendChild(fieldBlock('Play Started At (spot)', startSpotLabelRow('startSide', 'startYard')));
+      if (draft.endSide == null){
+        const sy = sideYardFromAbs(absoluteSpot(draft.startSide, draft.startYard));
+        draft.endSide = sy.side; draft.endYard = sy.yard;
+      }
+      fieldsArea.appendChild(fieldBlock('Tackled At (spot)', spotPicker('endSide', 'endYard', draft.endYard)));
+      fieldsArea.appendChild(fieldBlock('', chipToggle('firstDown', 'Opponent 1st Down')));
     }
     else if (currentType === 'defextra'){
       fieldsArea.appendChild(fieldBlock('Player', playerPicker('player')));
@@ -1333,8 +1350,23 @@
     }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
-      if (!p.tackler && assists.length) return 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ') + spotAtTxt(p);
-      return 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)') + spotAtTxt(p);
+      const base = (!p.tackler && assists.length)
+        ? 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ')
+        : 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
+      // Nathan: "add starting ball spot and ending ball spot ... option of
+      // saying if it was a first down." Older tackles logged before this
+      // change only ever got the single generic `spot` (see spotAtTxt) --
+      // this richer from/to/yards/1st-down line only shows once a tackle
+      // actually has both explicit spots on it.
+      if (p.startSide != null && p.endSide != null){
+        const fromTxt = spotLabel(p.startSide, p.startYard);
+        const toTxt = spotLabel(p.endSide, p.endYard);
+        const startAbs = absoluteSpot(p.startSide, p.startYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, false); // the opponent is always the ball carrier on a tackle
+        return base + (fromTxt && toTxt ? ', ' + fromTxt + ' to ' + toTxt + ', ' + yards + ' yds' : '') +
+          (p.firstDown ? ' · Opponent 1st down' : '');
+      }
+      return base + spotAtTxt(p);
     }
     if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'') + spotAtTxt(p);
     if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
@@ -1386,6 +1418,15 @@
       // team is kneeling gets pushed back toward THEIR OWN goal.
       const loss = Number(entry.kneelYards || 0);
       currentSpot = clampSpot(currentSpot + (entry.kneelTeam !== 'Opponent' ? -loss : loss));
+    } else if (entry.type === 'tackle'){
+      // Nathan: "add starting ball spot and ending ball spot while
+      // recording defense" -- a Tackle usually stands in for the whole
+      // defensive snap on its own (no separate opponent Run/Pass entry
+      // alongside it), so its own end spot is what should carry forward
+      // into the next play, same as Punt/Kickoff sync from their final
+      // spot above.
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      if (endAbs != null) currentSpot = clampSpot(endAbs);
     }
   }
 
