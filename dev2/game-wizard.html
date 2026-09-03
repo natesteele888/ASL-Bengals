@@ -55,6 +55,20 @@
   .altChip{padding:6px 10px;border-radius:16px;border:1px solid var(--line-bright);font-size:12px;color:var(--dim);cursor:pointer}
   .altChip:hover{color:#fff;border-color:var(--cyan)}
   .chipRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  /* Nathan: "we are on the sideline, so show a field display so I can
+     choose left or right side." A real (if simple) field strip instead of
+     "Near end/Far end" text buttons -- standing on the actual sideline,
+     left/right relative to how you're already facing the field is
+     immediate; "near/far" makes you translate first. */
+  .sideFieldStrip{display:flex;height:64px;border-radius:10px;overflow:hidden;border:1px solid var(--line-bright);margin-top:4px}
+  .sideFieldHalf{flex:1;background:#1e5c2e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;border:2px solid transparent;position:relative}
+  .sideFieldHalf:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px;background:repeating-linear-gradient(90deg,#1e5c2e 0,#1e5c2e 14px,#24692f 14px,#24692f 28px)}
+  .sideFieldHalf:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px;background:repeating-linear-gradient(90deg,#24692f 0,#24692f 14px,#1e5c2e 14px,#1e5c2e 28px)}
+  .sideFieldHalf.active{border-color:var(--cyan)}
+  .sideFieldHalf .sideLabel{font-family:inherit;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .sideFieldHalf .sideShield{font-size:20px;opacity:0;transition:opacity .15s}
+  .sideFieldHalf.active .sideShield{opacity:1}
+  .sideFieldMid{width:2px;background:rgba(255,255,255,.5)}
   .optChip{padding:10px 16px;border-radius:10px;border:1px solid var(--line-bright);background:#12161c;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer;flex:1;text-align:center;min-width:100px}
   .optChip.active{background:var(--cyan);color:#04222b;border-color:var(--cyan)}
   .fieldLabel{font-size:11px;color:var(--dim2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
@@ -238,7 +252,7 @@
   }
 
   // ---- Wizard shell ----
-  const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Done'];
+  const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Playing'];
   const wiz = { step: 0, state: {} };
   function renderDots(){
     document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
@@ -253,7 +267,7 @@
     if (wiz.step === 0) renderStartersStep(area);
     else if (wiz.step === 1) renderCoinTossStep(area);
     else if (wiz.step === 2) renderKickoffStep(area);
-    else renderDoneStep(area);
+    else renderPlayLoopStep(area);
   }
 
   // ---- Step 1: Confirm Starters ----
@@ -266,7 +280,7 @@
   function renderStartersStep(area){
     const byNum = rosterByNum();
     const card = document.createElement('div'); card.className = 'card';
-    card.innerHTML = '<h2>Confirm Starters</h2><div class="sub">From Coach Tools &gt; Depth Chart -- tap anyone to swap in a backup if this isn\'t who\'s actually starting today.</div>';
+    card.innerHTML = '<h2>Confirm Starters</h2><div class="sub">Auto-filled from Coach Tools &gt; Depth Chart -- tap anyone to swap in whoever\'s actually starting today. Backups rotate in a lot, so swapping isn\'t limited to that position\'s own depth list -- it\'s the whole roster.</div>';
     ['offense','defense'].forEach(function(section){
       const groups = depthGroups.filter(function(g){ return g.section === section; });
       if (!groups.length) return;
@@ -289,23 +303,79 @@
           altsOpen = !altsOpen;
           let alts = row.querySelector('.altList');
           if (alts) { alts.remove(); if (!altsOpen) return; }
-          const candidates = (g.players || []).map(function(n){ return byNum[String(n)]; }).filter(Boolean);
+          // Nathan: "since backups also play a lot to rotate, we need the
+          // ability to choose whomever." Used to only offer this
+          // position's OWN depth-chart backups (g.players) -- a rotation
+          // sub is often someone who isn't even listed at this position at
+          // all, so the full roster is the right candidate list, not a
+          // narrower one. This position's own listed players still show
+          // first since they're the likeliest picks, then everyone else,
+          // with a filter box since the full roster is a lot of chips to
+          // scan on a phone.
+          const ownNums = (g.players || []).map(String);
+          const own = ownNums.map(function(n){ return byNum[n]; }).filter(Boolean);
+          const rest = liveRoster.filter(function(p){ return ownNums.indexOf(String(p.num)) === -1; })
+            .slice().sort(function(a,b){ return Number(a.num) - Number(b.num); });
           const wrap = document.createElement('div'); wrap.className = 'altList';
-          candidates.forEach(function(p){
-            const chip = document.createElement('div'); chip.className = 'altChip'; chip.textContent = playerLabel(p);
+          wrap.style.flexDirection = 'column'; wrap.style.alignItems = 'stretch';
+          const filterInput = document.createElement('input');
+          filterInput.className = 'writeIn'; filterInput.type = 'text'; filterInput.placeholder = '🔍 Filter by name or number…';
+          filterInput.style.marginTop = '0'; filterInput.style.marginBottom = '8px';
+          wrap.appendChild(filterInput);
+          const chipWrap = document.createElement('div'); chipWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+          wrap.appendChild(chipWrap);
+          function renderChips(filterText){
+            chipWrap.innerHTML = '';
+            const ft = (filterText || '').trim().toLowerCase();
+            function matches(p){
+              if (!ft) return true;
+              // Same number-precision fix as the play-loop's player chooser.
+              return /^\d+$/.test(ft) ? String(p.num).indexOf(ft) === 0 : p.name.toLowerCase().indexOf(ft) !== -1;
+            }
+            own.filter(matches).forEach(function(p){ chipWrap.appendChild(altChip(p, true)); });
+            rest.filter(matches).forEach(function(p){ chipWrap.appendChild(altChip(p, false)); });
+            const noneChip = document.createElement('div'); noneChip.className = 'altChip'; noneChip.textContent = 'None';
+            noneChip.addEventListener('click', function(){ wiz.state.starters[key] = null; renderWizard(); });
+            chipWrap.appendChild(noneChip);
+          }
+          function altChip(p, isOwn){
+            const chip = document.createElement('div'); chip.className = 'altChip';
+            chip.textContent = playerLabel(p) + (isOwn ? '' : ' ·'); // subtle marker so "this position's own list" vs "rest of roster" is still distinguishable once combined
+            chip.title = isOwn ? 'Listed at ' + g.label + ' on the depth chart' : 'Rest of roster';
             chip.addEventListener('click', function(){ wiz.state.starters[key] = String(p.num); renderWizard(); });
-            wrap.appendChild(chip);
-          });
-          const noneChip = document.createElement('div'); noneChip.className = 'altChip'; noneChip.textContent = 'None';
-          noneChip.addEventListener('click', function(){ wiz.state.starters[key] = null; renderWizard(); });
-          wrap.appendChild(noneChip);
+            return chip;
+          }
+          filterInput.addEventListener('input', function(){ renderChips(filterInput.value); });
+          renderChips('');
           row.appendChild(wrap);
+          filterInput.focus();
         });
         card.appendChild(row);
       });
     });
+    // Nathan: "it should start to auto populate a selection from the
+    // roster that you can confirm." A team with no depth chart saved yet
+    // used to just show a "nothing to pick from" note here -- now it
+    // falls back to the roster itself, auto-checking nobody but making
+    // every player available to mark as starting today, so there's always
+    // something to confirm/adjust instead of an empty step.
     if (!depthGroups.length){
-      card.innerHTML += '<div class="sub" style="margin-top:10px;">No depth chart saved yet (Coach Tools &gt; Depth Chart) -- you can still continue, there just won\'t be a quick-pick list for who\'s starting.</div>';
+      const sec = document.createElement('div'); sec.className = 'groupSection'; sec.textContent = 'Whole Roster (no depth chart saved yet)';
+      card.appendChild(sec);
+      if (!wiz.state.rosterStarters) wiz.state.rosterStarters = {};
+      const rosterWrap = document.createElement('div'); rosterWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+      liveRoster.slice().sort(function(a,b){ return Number(a.num) - Number(b.num); }).forEach(function(p){
+        const on = !!wiz.state.rosterStarters[p.num];
+        const chip = document.createElement('div'); chip.className = 'altChip' + (on ? ' active' : '');
+        if (on) chip.style.cssText = 'border-color:var(--cyan);color:#fff;background:rgba(61,220,255,.12)';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ wiz.state.rosterStarters[p.num] = !on; renderWizard(); });
+        rosterWrap.appendChild(chip);
+      });
+      card.appendChild(rosterWrap);
+      const note = document.createElement('div'); note.className = 'sub'; note.style.marginTop = '10px';
+      note.textContent = 'Tap everyone starting today. For a real position-by-position quick-pick list, set one up in Coach Tools > Depth Chart.';
+      card.appendChild(note);
     }
     const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Confirm Starters →';
     btn.addEventListener('click', function(){ wiz.step = 1; renderWizard(); });
@@ -355,13 +425,14 @@
 
       const q3 = document.createElement('div');
       q3.innerHTML = '<div class="fieldLabel">Which end do we defend first? (for the sideline -- doesn\'t change how anything gets logged)</div>';
-      const r3 = document.createElement('div'); r3.className = 'chipRow';
-      ['Near end','Far end'].forEach(function(v){
-        const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.endNote === v ? ' active' : ''); c.textContent = v;
-        c.addEventListener('click', function(){ wiz.state.endNote = v; renderWizard(); });
-        r3.appendChild(c);
+      const strip = document.createElement('div'); strip.className = 'sideFieldStrip';
+      ['Left','Right'].forEach(function(v){
+        const half = document.createElement('div'); half.className = 'sideFieldHalf' + (wiz.state.endNote === v ? ' active' : '');
+        half.innerHTML = '<span class="sideShield">🛡️</span><span class="sideLabel">' + v + '</span>';
+        half.addEventListener('click', function(){ wiz.state.endNote = v; renderWizard(); });
+        strip.appendChild(half);
       });
-      q3.appendChild(r3);
+      q3.appendChild(strip);
       card.appendChild(q3);
 
       const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Continue to Kickoff →';
@@ -418,13 +489,24 @@
     card.appendChild(lbl2);
     card.appendChild(spotPicker(k, 'endSide', 'endYard', isUsKick ? 30 : 40, renderWizard));
 
-    const lbl3 = document.createElement('div'); lbl3.className = 'fieldLabel'; lbl3.textContent = 'Returner' + (isUsKick ? ' (optional, opponent -- if known)' : '');
-    card.appendChild(lbl3);
-    const input = document.createElement('input'); input.className = 'writeIn'; input.type = 'text';
-    input.placeholder = isUsKick ? "Opponent's returner, if known" : 'Who returned it';
-    input.value = k.returner || '';
-    input.addEventListener('input', function(){ k.returner = input.value; });
-    card.appendChild(input);
+    if (isUsKick){
+      const lbl3 = document.createElement('div'); lbl3.className = 'fieldLabel'; lbl3.textContent = 'Returner (optional, opponent -- if known)';
+      card.appendChild(lbl3);
+      // Opponent returner -- not on our roster, so a plain write-in field
+      // is the right tool here, not roster pills.
+      const input = document.createElement('input'); input.className = 'writeIn'; input.type = 'text';
+      input.placeholder = "Opponent's returner, if known";
+      input.value = k.returner || '';
+      input.addEventListener('input', function(){ k.returner = input.value; });
+      card.appendChild(input);
+    } else {
+      // Nathan: "as I start to enter the name in the field, it should auto
+      // recommend players on the roster. Or give me some pills under the
+      // bar with common players." Our own returner IS on the roster, so
+      // this gets the same starters-first, full-roster-searchable chooser
+      // as everywhere else in the play loop (it renders its own label).
+      renderPlayerChooser(card, 'Returner', k, 'returner', {optional:true});
+    }
 
     const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = '✅ Log Kickoff & Start Game';
     btn.addEventListener('click', commitKickoff);
@@ -472,30 +554,639 @@
       const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
       const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      // Nathan: "the wizard should walk you through continuously." Seeds
+      // the running game state the play loop uses from here on --
+      // possession starts with whoever just received.
+      wiz.game = {
+        spot: gameState.spot, down: 1, distance: 10, quarter: 1,
+        scoreUs: 0, scoreOpp: 0, possession: wiz.state.receivingTeam,
+        // Nathan: "It will automatically flip the field and retain down,
+        // distance and possession" for end of 2nd/3rd quarter (and, same
+        // rule, every quarter -- teams switch ends every quarter, not
+        // just at halftime). This is purely the sideline-orientation
+        // indicator from the coin toss, carried into the game header
+        // below; it never touches spot/down/distance/possession, which
+        // is exactly why those stay untouched across a quarter change --
+        // see logEvent('quarterEnd').
+        defendingEnd: wiz.state.endNote || 'Left',
+      };
+      wiz.play = { phase: 'callCheck' };
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
     wiz.step = 3;
     renderWizard();
   }
 
-  // ---- Step 4: Handoff ----
-  // Nathan: "The STATKEEPER site will eventually become the back end tool
-  // to fine tune game details." For now (before the snap-by-snap wizard
-  // exists), Stat Keeper IS still where the rest of the game gets logged
-  // -- this just hands off into it with the right game already selected.
-  function renderDoneStep(area){
+  // ---- Step 4+: Continuous Play Loop ----
+  // Nathan: "the wizard should walk you through continuously... Since we
+  // already know we are scoring for the Bengals, we automatically get the
+  // Offense Play Options." wiz.game tracks the running spot/down/distance/
+  // score/possession (same shape stat-keeper.html's own state does);
+  // wiz.play is the ONE play currently being built, phase by phase, reset
+  // after every commit. Reuses stat-keeper.html's exact play-type fields
+  // and math (formations, playbook, spot/down-distance advance) rather
+  // than inventing a second version of any of it.
+  const PLAYBOOK = ['Inside Zone','Outside Zone','Option','Blast','Double Blast','Option Pass','Sweep','Shuffle Pass'];
+  const FORMATIONS = ['Wing','Split'];
+  const PLAY_TAGS = ['Motion','Counter','Boot/Naked','Play-Action'];
+
+  function getQuickPickPlayers(){
+    const nums = {};
+    Object.keys(wiz.state.starters || {}).forEach(function(k){ if (wiz.state.starters[k]) nums[wiz.state.starters[k]] = true; });
+    Object.keys(wiz.state.rosterStarters || {}).forEach(function(n){ if (wiz.state.rosterStarters[n]) nums[n] = true; });
+    const byNum = rosterByNum();
+    return Object.keys(nums).map(function(n){ return byNum[n]; }).filter(Boolean).sort(function(a,b){ return Number(a.num)-Number(b.num); });
+  }
+  // Nathan (follow-up): "since backups also play a lot to rotate, we need
+  // the ability to choose whomever." Same starters-first-then-full-roster-
+  // with-a-filter shape as the Confirm Starters swap picker -- confirmed
+  // starters are the fast path, but nobody's locked out.
+  function renderPlayerChooser(container, label, stateObj, key, opts){
+    opts = opts || {};
+    const multi = !!opts.multi;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + (opts.optional ? ' (optional)' : '') + '</div>';
+    const quick = getQuickPickPlayers();
+    // Nathan: "it should auto recommend players on the roster, or give me
+    // pills under the bar with common players." Stores the player's NAME
+    // (not their number) -- same as Stat Keeper's own playerPicker, since
+    // describePlay everywhere just prints whatever's in this field as the
+    // display text directly. Storing the number here was a real bug: it
+    // would have shown a bare jersey number instead of a name on every
+    // carrier/passer/tackler in the whole play loop, not just here.
+    function selected(){ return multi ? (stateObj[key] || []) : (stateObj[key] ? [stateObj[key]] : []); }
+    if (quick.length){
+      const hotRow = document.createElement('div'); hotRow.className = 'chipRow';
+      quick.forEach(function(p){
+        const chip = document.createElement('div');
+        chip.className = 'optChip' + (selected().indexOf(p.name) !== -1 ? ' active' : '');
+        chip.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ togglePick(p.name); });
+        hotRow.appendChild(chip);
+      });
+      wrap.appendChild(hotRow);
+    }
+    const filterInput = document.createElement('input'); filterInput.className = 'writeIn';
+    filterInput.placeholder = '🔍 Search full roster, or type a name…';
+    // Nathan: "as I start to enter the name in the field, it should auto
+    // recommend players." Typing now does double duty: it filters the
+    // roster into matching pills below AND, on anyone not on the roster
+    // at all (a sub), just typing and moving on saves that free-text name
+    // directly -- same "write in a name" escape hatch Stat Keeper has.
+    if (!multi && stateObj[key] && quick.every(function(p){ return p.name !== stateObj[key]; })){
+      filterInput.value = stateObj[key]; // a previously written-in name that isn't a quick-pick chip
+    }
+    wrap.appendChild(filterInput);
+    const fullWrap = document.createElement('div'); fullWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;';
+    wrap.appendChild(fullWrap);
+    function renderMatches(){
+      const ft = filterInput.value.trim().toLowerCase();
+      fullWrap.innerHTML = '';
+      if (!ft) return;
+      // Nathan: "it would be great to reference either the player # or the
+      // name." Typing was already searching the combined "#5 Will J"
+      // label, but that meant a plain "5" also matched #15, #25, #45,
+      // #50... anyone with a 5 anywhere in their number. A purely numeric
+      // query now matches jersey numbers that START WITH those digits
+      // (so "5" narrows to 5, then "51" narrows further) instead of
+      // matching loosely anywhere in the combined label; anything else is
+      // still a normal name search.
+      const isNumeric = /^\d+$/.test(ft);
+      liveRoster.filter(function(p){
+        return isNumeric ? String(p.num).indexOf(ft) === 0 : p.name.toLowerCase().indexOf(ft) !== -1;
+      }).slice(0,14).forEach(function(p){
+        const chip = document.createElement('div'); chip.className = 'optChip' + (selected().indexOf(p.name) !== -1 ? ' active' : '');
+        chip.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ filterInput.value = ''; fullWrap.innerHTML = ''; togglePick(p.name); });
+        fullWrap.appendChild(chip);
+      });
+    }
+    filterInput.addEventListener('input', renderMatches);
+    if (!multi){
+      filterInput.addEventListener('blur', function(){ stateObj[key] = filterInput.value.trim() || null; });
+      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); stateObj[key] = filterInput.value.trim() || null; renderWizard(); } });
+    } else {
+      filterInput.placeholder = '🔍 Search, or type a name and press Enter…';
+      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); const v = filterInput.value.trim(); if (v) togglePick(v); filterInput.value = ''; fullWrap.innerHTML = ''; } });
+    }
+    function togglePick(name){
+      if (multi){
+        const arr = stateObj[key] || (stateObj[key] = []);
+        const idx = arr.indexOf(name);
+        if (idx === -1) arr.push(name); else arr.splice(idx,1);
+      } else {
+        stateObj[key] = name;
+      }
+      renderWizard();
+    }
+    container.appendChild(wrap);
+  }
+  function chipGroupField(container, label, stateObj, key, options, onSelect){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + '</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    options.forEach(function(opt){
+      const val = Array.isArray(opt) ? opt[0] : opt;
+      const lbl = Array.isArray(opt) ? opt[1] : opt;
+      const c = document.createElement('div'); c.className = 'optChip' + (stateObj[key] === val ? ' active' : '');
+      c.textContent = lbl;
+      c.addEventListener('click', function(){ stateObj[key] = val; if (onSelect) onSelect(val); else renderWizard(); });
+      row.appendChild(c);
+    });
+    wrap.appendChild(row);
+    container.appendChild(wrap);
+  }
+
+  function renderGameHeaderHtml(){
+    const g = wiz.game;
+    const spotTxt = spotLabelAbs(g.spot);
+    const oppAbbrev = ((selectedGame && selectedGame.opponent) || 'OPP').replace(/\(.*?\)/g,'').trim().split(/\s+/)[0].slice(0,3).toUpperCase() || 'OPP';
+    return '<div class="scoreBug" style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">BENGALS</div><div style="font-size:24px;font-weight:900;">' + g.scoreUs + '</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">' + quarterLbl(g.quarter) + '</div><div style="font-size:12px;color:var(--dim);margin-top:2px;">' + (g.possession === 'Us' ? '🏈 We have the ball' : '🛡️ They have the ball') + '</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">' + escapeHtml(oppAbbrev) + '</div><div style="font-size:24px;font-weight:900;">' + g.scoreOpp + '</div></div>' +
+      '</div>' +
+      '<div class="ddPanel" style="display:flex;justify-content:space-around;background:var(--console);border:1px solid var(--line-bright);border-radius:12px;padding:10px;margin-bottom:14px;text-align:center;">' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Down</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + ['1st','2nd','3rd','4th'][g.down-1] + '</div></div>' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Ball On</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + spotTxt + '</div></div>' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Distance</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + g.distance + ' to go</div></div>' +
+      '</div>' +
+      '<div style="text-align:center;font-size:10.5px;color:var(--dim2);margin:-8px 0 12px;">🛡️ We defend the <b style="color:var(--dim);">' + g.defendingEnd + '</b> end this quarter</div>';
+  }
+  function quarterLbl(n){ return n <= 4 ? ('Q'+n) : ('OT'+(n-4)); }
+
+  // ---- Spot/down-distance math -- ported from stat-keeper.html/game-playback.html ----
+  function signedYardsFromSpots(startAbs, endAbs, isUsTeam){
+    if (startAbs == null || endAbs == null) return 0;
+    return isUsTeam ? (endAbs - startAbs) : (startAbs - endAbs);
+  }
+  function sideYardFromAbs(abs){ const y = Math.round(abs <= 50 ? abs : (100 - abs)); return { side: abs <= 50 ? 'OWN' : 'OPP', yard: y }; }
+
+  function renderPlayLoopStep(area){
+    const header = document.createElement('div');
+    header.innerHTML = renderGameHeaderHtml();
+    area.appendChild(header);
+
+    const utilRow = document.createElement('div'); utilRow.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;';
+    const toBtn = document.createElement('button'); toBtn.className = 'ghostBtn'; toBtn.style.margin = '0'; toBtn.textContent = '⏱ Timeout';
+    toBtn.addEventListener('click', function(){ logEvent('timeout'); });
+    const eqBtn = document.createElement('button'); eqBtn.className = 'ghostBtn'; eqBtn.style.margin = '0'; eqBtn.textContent = '🏁 End Quarter';
+    eqBtn.addEventListener('click', function(){ logEvent('quarterEnd'); });
+    utilRow.appendChild(toBtn); utilRow.appendChild(eqBtn);
+    area.appendChild(utilRow);
+
     const card = document.createElement('div'); card.className = 'card';
-    card.innerHTML = '<div class="handoffIcon">🎉</div><h2 style="text-align:center;">Game log started</h2>' +
-      '<div class="sub" style="text-align:center;">The opening kickoff is saved. Continue logging plays in Stat Keeper -- the snap-by-snap wizard (formations, motion/counter/boot tags, auto down &amp; distance, timeouts) is next on the plan.</div>';
-    const cta = document.createElement('a'); cta.className = 'primaryBtn'; cta.style.display = 'block'; cta.style.textAlign = 'center'; cta.style.textDecoration = 'none';
-    cta.textContent = '📋 Continue in Stat Keeper →';
+    const phase = wiz.play.phase;
+    if (phase === 'firstDownToast') renderPhaseFirstDownToast(card);
+    else if (wiz.game.possession === 'Us' && phase === 'callCheck') renderPhaseCallCheck(card);
+    else if (wiz.game.possession === 'Us' && phase === 'calledPlay') renderPhaseCalledPlay(card);
+    else if (phase === 'playType') renderPhasePlayType(card);
+    else if (phase === 'runDetail') renderPhaseRunDetail(card);
+    else if (phase === 'passDetail') renderPhasePassDetail(card);
+    else if (phase === 'penaltyDetail') renderPhasePenaltyDetail(card);
+    else if (phase === 'turnoverDetail') renderPhaseTurnoverDetail(card);
+    else if (phase === 'puntDetail') renderPhasePuntDetail(card);
+    else if (phase === 'resultSpot') renderPhaseResultSpot(card);
+    else if (phase === 'tackler') renderPhaseTackler(card);
+    else if (phase === 'touchdown') renderPhaseTouchdown(card);
+    area.appendChild(card);
+
+    const fixLink = document.createElement('a');
+    fixLink.href = 'stat-keeper.html?game=' + encodeURIComponent(selectedGame.id);
+    fixLink.className = 'ghostBtn'; fixLink.style.cssText = 'display:block;text-align:center;text-decoration:none;';
+    fixLink.textContent = '📋 Open in Stat Keeper (fix a mistake)';
+    area.appendChild(fixLink);
+  }
+
+  function backBtn(container, toPhase){
+    const b = document.createElement('button'); b.className = 'ghostBtn'; b.textContent = '← Back';
+    b.addEventListener('click', function(){ wiz.play.phase = toPhase; renderWizard(); });
+    container.appendChild(b);
+  }
+
+  // Nathan: "First is if we can see the play call. If yes, then select the
+  // call. If no, then it proceeds to the play."
+  function renderPhaseCallCheck(card){
+    card.innerHTML = '<h2>🏈 We\'re on Offense</h2><div class="sub">Can you see the play call from the sideline?</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    [['yes','Yes, I can see it'], ['no',"No, just log what happened"]].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip'; c.textContent = pair[1];
+      c.addEventListener('click', function(){
+        wiz.play.phase = pair[0] === 'yes' ? 'calledPlay' : 'playType';
+        renderWizard();
+      });
+      row.appendChild(c);
+    });
+    card.appendChild(row);
+  }
+  function renderPhaseCalledPlay(card){
+    card.innerHTML = '<h2>📣 Coach\'s Call</h2><div class="sub">What got signaled in.</div>';
+    chipGroupField(card, 'Formation', wiz.play, 'coachFormation', FORMATIONS);
+    if (wiz.play.coachFormation) chipGroupField(card, 'Formation Direction', wiz.play, 'coachFormationDir', ['Left','Right']);
+    chipGroupField(card, 'Play', wiz.play, 'coachCall', PLAYBOOK);
+    if (wiz.play.coachCall) chipGroupField(card, 'Play Direction', wiz.play, 'coachCallDir', ['Left','Right']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){ wiz.play.phase = 'playType'; renderWizard(); });
+    card.appendChild(next);
+    backBtn(card, 'callCheck');
+  }
+
+  // Nathan: "You choose Run, Pass, Penalty, Turnover... On 4th down, it
+  // should display an option for Punt... On defense, we won't have
+  // anything to do with play calls, just if the offense did a run, pass or
+  // punt."
+  function renderPhasePlayType(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>' + (onOffense ? '🏈 Choose the Play' : '🛡️ What Did They Run?') + '</h2>';
+    const opts = onOffense ? ['Run','Pass','Penalty','Turnover'] : ['Run','Pass','Punt','Penalty','Turnover'];
+    if (onOffense && wiz.game.down === 4) opts.push('Punt');
+    const row = document.createElement('div'); row.className = 'chipRow';
+    opts.forEach(function(t){
+      const c = document.createElement('div'); c.className = 'optChip'; c.textContent = t;
+      c.addEventListener('click', function(){
+        wiz.play.type = t;
+        wiz.play.phase = t === 'Run' ? 'runDetail' : t === 'Pass' ? 'passDetail' : t === 'Penalty' ? 'penaltyDetail' : t === 'Turnover' ? 'turnoverDetail' : 'puntDetail';
+        renderWizard();
+      });
+      row.appendChild(c);
+    });
+    card.appendChild(row);
+    if (onOffense) backBtn(card, wiz.play.coachCall !== undefined || wiz.play.calledSkipped ? 'calledPlay' : 'callCheck');
+  }
+
+  function renderPhaseRunDetail(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🏃 Run</h2>';
+    if (onOffense){
+      chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
+      if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
+      chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
+      if (wiz.play.playCall) chipGroupField(card, 'Play Direction', wiz.play, 'playCallDir', ['Left','Right']);
+      const tagsWrap = document.createElement('div'); tagsWrap.innerHTML = '<div class="fieldLabel">Add-ons (optional)</div>';
+      const tagsRow = document.createElement('div'); tagsRow.className = 'chipRow';
+      PLAY_TAGS.forEach(function(t){
+        const c = document.createElement('div'); c.className = 'optChip' + ((wiz.play.tags||[]).indexOf(t) !== -1 ? ' active' : '');
+        c.textContent = t;
+        c.addEventListener('click', function(){
+          const arr = wiz.play.tags || (wiz.play.tags = []);
+          const i = arr.indexOf(t); if (i === -1) arr.push(t); else arr.splice(i,1);
+          renderWizard();
+        });
+        tagsRow.appendChild(c);
+      });
+      tagsWrap.appendChild(tagsRow); card.appendChild(tagsWrap);
+      renderPlayerChooser(card, 'Ball Carrier', wiz.play, 'carrier');
+      chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
+    } else {
+      renderPlayerChooser(card, 'Opponent Ball Carrier', wiz.play, 'oppCarrier', {optional:true});
+    }
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){ wiz.play.phase = 'resultSpot'; renderWizard(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhasePassDetail(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🎯 Pass</h2>';
+    if (onOffense){
+      chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
+      if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
+      chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
+      if (wiz.play.playCall) chipGroupField(card, 'Play Direction', wiz.play, 'playCallDir', ['Left','Right']);
+      renderPlayerChooser(card, 'Passer', wiz.play, 'passer');
+      renderPlayerChooser(card, 'Target', wiz.play, 'target');
+    } else {
+      renderPlayerChooser(card, 'Opponent Passer', wiz.play, 'oppPasser', {optional:true});
+      wiz.play.oppTarget = wiz.play.oppTarget || '';
+    }
+    chipGroupField(card, 'Result', wiz.play, 'result', ['Complete','Incomplete']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){
+      if (!wiz.play.result){ alert('Pick Complete or Incomplete first.'); return; }
+      if (wiz.play.result === 'Incomplete'){ commitCurrentPlay(); return; } // Nathan: "if incomplete, ball stays in the same spot as previous play" -- nothing left to ask
+      wiz.play.phase = 'resultSpot';
+      renderWizard();
+    });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhasePenaltyDetail(card){
+    card.innerHTML = '<h2>🚩 Penalty</h2>';
+    chipGroupField(card, 'Penalty On', wiz.play, 'penTeam', ['Us','Opponent']);
+    chipGroupField(card, 'Penalty', wiz.play, 'penType', ['Holding','False Start','Offsides','Delay of Game','Pass Interference','Facemask','Unsportsmanlike Conduct','Illegal Block','Other']);
+    const yardsWrap = document.createElement('div'); yardsWrap.innerHTML = '<div class="fieldLabel">Yards</div>';
+    if (wiz.play.penYards == null) wiz.play.penYards = 5;
+    const yr = document.createElement('div'); yr.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.value = wiz.play.penYards;
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ wiz.play.penYards = Math.max(0, wiz.play.penYards-1); renderWizard(); });
+    plus.addEventListener('click', function(){ wiz.play.penYards = wiz.play.penYards+1; renderWizard(); });
+    input.addEventListener('change', function(){ wiz.play.penYards = Math.max(0, Number(input.value||0)); });
+    yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+    yardsWrap.appendChild(yr); card.appendChild(yardsWrap);
+    const toggleRow = document.createElement('div'); toggleRow.className = 'chipRow'; toggleRow.style.marginTop = '10px';
+    [['declined','Declined'], ['firstDown','Automatic 1st Down']].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (wiz.play[pair[0]] ? ' active' : '');
+      c.textContent = pair[1];
+      c.addEventListener('click', function(){ wiz.play[pair[0]] = !wiz.play[pair[0]]; renderWizard(); });
+      toggleRow.appendChild(c);
+    });
+    card.appendChild(toggleRow);
+    wiz.play.spotSide = wiz.play.spotSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.spotYard = wiz.play.spotYard != null ? wiz.play.spotYard : sideYardFromAbs(wiz.game.spot).yard;
+    const spotDisplay = document.createElement('div');
+    spotDisplay.innerHTML = '<div class="fieldLabel">Spot</div><div style="color:var(--dim);font-size:14px;">' + spotLabelAbs(wiz.game.spot) + ' (current line of scrimmage)</div>';
+    card.appendChild(spotDisplay);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Penalty & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.penTeam || !wiz.play.penType){ alert('Pick who it\'s on and the penalty type.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhaseTurnoverDetail(card){
+    card.innerHTML = '<h2>🔄 Turnover</h2>';
+    chipGroupField(card, 'Type', wiz.play, 'toType', ['Fumble','Interception']);
+    renderPlayerChooser(card, 'Lost By (offense)', wiz.play, 'lostBy', {optional:true});
+    renderPlayerChooser(card, 'Recovered By (defense)', wiz.play, 'recoveredBy', {optional: true});
+    wiz.play.spotSide = wiz.play.spotSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.spotYard = wiz.play.spotYard != null ? wiz.play.spotYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild(spotPicker(wiz.play, 'spotSide', 'spotYard', wiz.play.spotYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Turnover & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.toType){ alert('Pick Fumble or Interception.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhasePuntDetail(card){
+    const isUs = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🦵 Punt</h2><div class="sub">4th down -- ' + (isUs ? 'we\'re' : 'they\'re') + ' punting it away.</div>';
+    if (isUs) renderPlayerChooser(card, 'Punter', wiz.play, 'punter');
+    else renderPlayerChooser(card, 'Opponent Punter', wiz.play, 'oppPunter', {optional:true});
+    chipGroupField(card, 'Result', wiz.play, 'puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']);
+    if (wiz.play.puntResult === 'Returned'){
+      if (isUs) renderPlayerChooser(card, 'Returned By (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      else renderPlayerChooser(card, 'Returned By', wiz.play, 'returner');
+    }
+    wiz.play.startSide = wiz.play.startSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.startYard = wiz.play.startYard != null ? wiz.play.startYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Punted From (spot)'; const r=document.createElement('div'); r.style.cssText='color:var(--dim);font-size:14px;'; r.textContent=spotLabelAbs(wiz.game.spot); const w=document.createElement('div'); w.appendChild(l); w.appendChild(r); return w; })());
+    if (wiz.play.puntResult === 'Returned'){
+      wiz.play.catchSide = wiz.play.catchSide || sideYardFromAbs(wiz.game.spot).side;
+      wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - 25);
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Caught At'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+    }
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - (wiz.play.puntResult === 'Returned' ? 20 : 30));
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Punt & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.puntResult){ alert('Pick how it ended.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  // Nathan: "you choose the result, tackled, out of bounds, etc. You
+  // choose the spot of the ball at the end of the play." One combined
+  // screen for Run and completed Pass -- both need the same two things.
+  function renderPhaseResultSpot(card){
+    card.innerHTML = '<h2>📍 Where It Ended</h2>';
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    chipGroupField(card, 'How did it end?', wiz.play, 'resultKind', ['Tackled','Out of Bounds','Touchdown']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Play & Continue';
+    next.addEventListener('click', function(){
+      if (!wiz.play.resultKind){ alert('Pick how the play ended.'); return; }
+      wiz.play.td = wiz.play.resultKind === 'Touchdown';
+      wiz.play.oob = wiz.play.resultKind === 'Out of Bounds';
+      // Nathan: "if tackle is chosen, pick the tackler" -- only meaningful
+      // on DEFENSE (we only track OUR players' tackle credit; there's no
+      // tackler to name when it's our own guy getting tackled).
+      if (wiz.play.resultKind === 'Tackled' && wiz.game.possession === 'Opponent'){
+        wiz.play.phase = 'tackler';
+        renderWizard();
+        return;
+      }
+      commitCurrentPlay();
+    });
+    card.appendChild(next);
+    backBtn(card, wiz.play.type === 'Run' ? 'runDetail' : 'passDetail');
+  }
+
+  function renderPhaseTackler(card){
+    card.innerHTML = '<h2>🛡️ Who Made the Tackle?</h2><div class="sub">Solo tackler first -- add anyone else who assisted after.</div>';
+    renderPlayerChooser(card, 'Tackler (solo)', wiz.play, 'tackler');
+    renderPlayerChooser(card, 'Assist (optional, select all who helped)', wiz.play, 'assist', {multi:true, optional:true});
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Tackle & Continue';
+    next.addEventListener('click', function(){ commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'resultSpot');
+  }
+
+  function renderPhaseFirstDownToast(card){
+    card.innerHTML = '<div class="handoffIcon">🎉</div><h2 style="text-align:center;">First down!</h2>' +
+      '<div class="sub" style="text-align:center;">' + (wiz.game.possession === 'Us' ? 'We' : 'They') + ' moved the chains -- next play is 1st &amp; ' + wiz.game.distance + '.</div>';
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Next Play →';
+    next.addEventListener('click', startNextPlay);
+    card.appendChild(next);
+  }
+
+  function renderPhaseTouchdown(card){
+    card.innerHTML = '<div class="handoffIcon">🏆</div><h2 style="text-align:center;">Touchdown!</h2>' +
+      '<div class="sub" style="text-align:center;">Log the PAT/2-point attempt and the ensuing kickoff in Stat Keeper for now -- that combo isn\'t built into the Wizard flow yet. Everything up to the score is already saved.</div>';
+    const cta = document.createElement('a'); cta.className = 'primaryBtn'; cta.style.cssText = 'display:block;text-align:center;text-decoration:none;';
+    cta.textContent = '📋 Finish the Score in Stat Keeper →';
     cta.href = 'stat-keeper.html?game=' + encodeURIComponent(selectedGame.id);
     card.appendChild(cta);
-    const again = document.createElement('button'); again.className = 'ghostBtn'; again.textContent = 'Set Up a Different Game';
-    again.addEventListener('click', function(){ gameSelect.value = ''; wizardWrap.style.display = 'none'; emptyWrap.style.display = ''; });
-    card.appendChild(again);
-    area.appendChild(card);
   }
+
+  function startNextPlay(){
+    wiz.play = { phase: wiz.game.possession === 'Us' ? 'callCheck' : 'playType' };
+    renderWizard();
+  }
+
+  // Nathan: "we need a way of Logging a timeout to a team as an event...
+  // Same for end of quarters."
+  async function logEvent(kind){
+    if (kind === 'timeout'){
+      const team = confirm('Timeout by US? (Cancel = Opponent)') ? 'Us' : 'Opponent';
+      await pushPlayEntry({ type:'timeout', id: genId(), side: team === 'Us' ? 'offense' : 'defense', quarter: wiz.game.quarter, team: team });
+    } else {
+      const nextQ = wiz.game.quarter + 1;
+      await pushPlayEntry({ type:'quarterEnd', id: genId(), quarter: wiz.game.quarter });
+      wiz.game.quarter = nextQ;
+      // Nathan: "end of 2nd and 3rd quarters? It will automatically flip
+      // the field and retain down, distance and possession." Teams switch
+      // ends every quarter in real football, not just at halftime -- so
+      // this flips every time, uniformly, while everything else
+      // (spot/down/distance/possession) is simply never touched here at
+      // all, which is what "retain" actually means in this data: there's
+      // nothing to reset because a quarter change was never wired to
+      // reset it in the first place.
+      wiz.game.defendingEnd = wiz.game.defendingEnd === 'Left' ? 'Right' : 'Left';
+    }
+    renderWizard();
+  }
+
+  async function pushPlayEntry(entry){
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry); // oldest-last-in-array-order for pushed entries, same convention commitKickoff established
+      const gameState = {
+        plays: plays, quarter: wiz.game.quarter, spot: wiz.game.spot, down: wiz.game.down, distance: wiz.game.distance,
+        finalUs: (existing && existing.finalUs) || '', finalOpp: (existing && existing.finalOpp) || '',
+        updatedAt: new Date().toISOString(),
+      };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      loadStatus.textContent = '';
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; }
+  }
+
+  // Nathan: "If a play results in a first down, that should be recognized
+  // and the following play with be a first down." Builds the actual entry
+  // object(s) for whatever's in wiz.play, saves them, advances
+  // spot/down/distance/possession/score, then either shows the first-down
+  // toast or jumps straight into the next play.
+  async function commitCurrentPlay(){
+    const g = wiz.game;
+    const onOffense = g.possession === 'Us';
+    const wasFourthDown = g.down === 4;
+    const entries = [];
+    let type = wiz.play.type;
+    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter };
+    let startAbs = g.spot, endAbs = g.spot;
+    let converted = false;
+    let possessionFlips = false;
+
+    if (type === 'Run'){
+      const sy = sideYardFromAbs(g.spot);
+      const ey = sideYardFromAbs(clampSpot(absoluteSpotOf(wiz.play.endSide, wiz.play.endYard)));
+      startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+      const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+      converted = yards >= g.distance;
+      entries.push(Object.assign({}, base, {
+        type:'run', runTeam: onOffense ? 'Us' : 'Opponent',
+        carrier: wiz.play.carrier, oppCarrier: wiz.play.oppCarrier,
+        startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard,
+        yards: yards, dir: wiz.play.dir, formation: wiz.play.formation, formationDir: wiz.play.formationDir,
+        playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+        coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir,
+        coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+        firstDown: converted, td: !!wiz.play.td, down: g.down, distance: g.distance,
+      }));
+      if (!onOffense && wiz.play.resultKind === 'Tackled'){
+        entries.push(Object.assign({}, base, { id: genId(), type:'tackle', tackler: wiz.play.tackler, assist: wiz.play.assist || [],
+          startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, firstDown: converted }));
+      }
+    } else if (type === 'Pass'){
+      if (wiz.play.result === 'Incomplete'){
+        const sy = sideYardFromAbs(g.spot);
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Incomplete',
+          passer: wiz.play.passer, target: wiz.play.target, oppPasser: wiz.play.oppPasser, oppTarget: wiz.play.oppTarget,
+          spotSide: sy.side, spotYard: sy.yard,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          down: g.down, distance: g.distance,
+        }));
+      } else {
+        const sy = sideYardFromAbs(g.spot);
+        startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+        converted = yards >= g.distance;
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Complete',
+          passer: wiz.play.passer, target: wiz.play.target, oppPasser: wiz.play.oppPasser, oppTarget: wiz.play.oppTarget,
+          startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, yards: yards,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          firstDown: converted, td: !!wiz.play.td, down: g.down, distance: g.distance,
+        }));
+        if (!onOffense && wiz.play.resultKind === 'Tackled'){
+          entries.push(Object.assign({}, base, { id: genId(), type:'tackle', tackler: wiz.play.tackler, assist: wiz.play.assist || [],
+            startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, firstDown: converted }));
+        }
+      }
+    } else if (type === 'Penalty'){
+      entries.push(Object.assign({}, base, { type:'penalty', penTeam: wiz.play.penTeam, penType: wiz.play.penType, penOther: wiz.play.penOther,
+        penYards: wiz.play.penYards, declined: !!wiz.play.declined, firstDown: !!wiz.play.firstDown,
+        spotSide: wiz.play.spotSide, spotYard: wiz.play.spotYard, penPlayer: wiz.play.penPlayer }));
+      converted = !!wiz.play.firstDown;
+    } else if (type === 'Turnover'){
+      entries.push(Object.assign({}, base, { type:'turnover', toType: wiz.play.toType, lostBy: wiz.play.lostBy, recoveredBy: wiz.play.recoveredBy,
+        spotSide: wiz.play.spotSide, spotYard: wiz.play.spotYard }));
+      possessionFlips = true;
+    } else if (type === 'Punt'){
+      const sy = sideYardFromAbs(g.spot);
+      entries.push(Object.assign({}, base, { type:'punt', puntTeam: onOffense ? 'Us' : 'Opponent', puntResult: wiz.play.puntResult,
+        punter: wiz.play.punter, oppPunter: wiz.play.oppPunter, returner: wiz.play.returner, oppReturner: wiz.play.oppReturner,
+        startSide: sy.side, startYard: sy.yard, catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard,
+        endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
+      possessionFlips = true;
+    }
+
+    // Save all entries from this play in one round-trip.
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      entries.forEach(function(e){ plays.push(e); });
+
+      // ---- advance spot ----
+      if (type === 'Run' || (type === 'Pass' && wiz.play.result === 'Complete')){
+        g.spot = clampSpot(endAbs);
+      } else if (type === 'Punt' || type === 'Turnover'){
+        const endA = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        if (endA != null) g.spot = clampSpot(endA);
+      } else if (type === 'Penalty' && !wiz.play.declined){
+        const yds = Number(wiz.play.penYards||0);
+        g.spot = clampSpot(g.spot + (wiz.play.penTeam === 'Us' ? -yds : yds));
+      }
+
+      // ---- advance down/distance ----
+      if (type === 'Run' || (type === 'Pass' && wiz.play.result === 'Complete')){
+        if (converted){ g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot)); }
+        else { g.down = g.down + 1; g.distance = Math.max(1, g.distance - signedYardsFromSpots(startAbs, endAbs, onOffense)); }
+      } else if (type === 'Pass' && wiz.play.result === 'Incomplete'){
+        g.down = g.down + 1;
+      } else if (type === 'Penalty' && converted){
+        g.down = 1; g.distance = 10;
+      }
+
+      // ---- possession changes ----
+      if (possessionFlips || (wasFourthDown && (type === 'Run' || type === 'Pass') && !converted && g.down > 4)){
+        g.possession = g.possession === 'Us' ? 'Opponent' : 'Us';
+        g.down = 1; g.distance = 10;
+      }
+
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: (existing && existing.finalUs) || '', finalOpp: (existing && existing.finalOpp) || '', updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+
+    if (entries.some(function(e){ return e.td; })){ wiz.play.phase = 'touchdown'; renderWizard(); return; }
+    if (converted){ wiz.play.phase = 'firstDownToast'; renderWizard(); return; }
+    startNextPlay();
+  }
+  function absoluteSpotOf(side, yard){ return absoluteSpot(side, yard); }
+
 
   async function boot(){
     loadStatus.textContent = 'Signing in…';
