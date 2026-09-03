@@ -155,6 +155,11 @@
 
   .playLogItem .tag.side-offense{color:var(--cyan)}
   .playLogItem .tag.side-defense{color:var(--orange)}
+  /* Nathan: "missing the visual of what the yard spot of the play is --
+     add it to the play bar." A distinct color from the type/side tags so
+     the spot reads as its own thing at a glance while scanning down the
+     log, not just more of the same badge. */
+  .playLogItem .tag.spotTag{color:var(--yellow)}
 
   .insertPosRow{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .insertPosRow label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
@@ -1178,11 +1183,22 @@
       // usually gets logged here on its own (no separate Run/Pass entry
       // for the opponent's play alongside it), so -- unlike solo Run/Pass,
       // which already had this -- Tackle had no way to say where that
-      // stop actually happened or whether it moved the sticks. Same
-      // start-is-shown/end-is-picked split as every other play type here:
-      // start is wherever the Ball Position tracker already has it (fix it
-      // above before logging if it's wrong), end is the real decision.
-      fieldsArea.appendChild(fieldBlock('Play Started At (spot)', startSpotLabelRow('startSide', 'startYard')));
+      // stop actually happened or whether it moved the sticks.
+      // Nathan (follow-up): "even though I set the starting point at OWN
+      // 29, it's still showing up as 23." Start used to be a read-only
+      // label frozen from whatever the shared Ball Position tracker said
+      // the moment this play was first created (same as Punt/Kickoff) --
+      // fine for a brand-new play, but editing an OLD tackle later has no
+      // reason to trust today's live Ball Position for a spot that
+      // happened earlier in the game, and there was no way to just
+      // correct it directly. Both ends are now real, directly-editable
+      // pickers -- still defaults from the tracker for a fresh entry, but
+      // always overridable by hand, on a new play or an edit.
+      if (draft.startSide == null){
+        const sy = sideYardFromAbs(currentSpot);
+        draft.startSide = sy.side; draft.startYard = sy.yard;
+      }
+      fieldsArea.appendChild(fieldBlock('Play Started At (spot)', spotPicker('startSide', 'startYard', draft.startYard)));
       if (draft.endSide == null){
         const sy = sideYardFromAbs(absoluteSpot(draft.startSide, draft.startYard));
         draft.endSide = sy.side; draft.endYard = sy.yard;
@@ -1246,18 +1262,23 @@
   }
   function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation+']' : ''; }
 
-  // Nathan: "it's hard when it doesn't show me where on the field each play
-  // is set to." Kickoffs and punts already spell out real spots (from/
-  // caught at/brought to) since those have their own explicit fields --
-  // everything else (run, pass, kneel, tackle, penalty, defensive extra,
-  // turnover, score) only ever had that info sitting silently on `p.spot`
-  // (the shared running field-position tracker, stamped at the moment each
-  // of those gets logged -- see the broadened stamping condition down by
-  // logPlayBtn's click handler) without ever printing it. One shared
-  // one-liner appended to each of those types below instead of repeating
-  // the same null-check/format everywhere.
-  function spotAtTxt(p){
-    return (p.spot != null && !isNaN(p.spot)) ? ' · at ' + spotLabelAbs(p.spot) : '';
+  // Nathan: "I am also still missing the visual of what the yard spot of
+  // the play is. It can be added to the play bar." The plain-English spot
+  // mentions each describePlay() branch used to build inline (from/to/at
+  // OWN X) were easy to miss buried at the end of a long line, especially
+  // once formation/play-call bracket tags piled up too -- this now renders
+  // as its own small badge on the row instead (see renderLog below),
+  // reusing whatever spot data that play type already has: a real
+  // start+end pair for Tackle/Kickoff/Punt, or the single running-spot
+  // snapshot (`p.spot`) everything else got stamped with.
+  function spotBadgeText(p){
+    if (p.startSide != null && p.endSide != null){
+      const a = spotLabel(p.startSide, p.startYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot);
+    return '';
   }
 
   function describePlay(p){
@@ -1268,7 +1289,7 @@
       const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
       return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
         (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
-        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
@@ -1277,10 +1298,10 @@
       const prefix = isUsPass ? '' : '🛡️ ';
       if (p.result==='Incomplete'){
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
-        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
     }
     if (p.type==='kick'){
       const isUsKick = p.kickTeam !== 'Opponent';
@@ -1289,17 +1310,19 @@
         if (p.recoveredByTeam==='Us' && p.returner) base += ', ' + p.returner + ' brought it ' + (p.yards||0) + ' yds';
         return base;
       }
-      const fromTxt = spotLabel(p.startSide, p.startYard);
       const catchTxt = spotLabel(p.catchSide, p.catchYard);
-      const toTxt = spotLabel(p.endSide, p.endYard);
       const returnerTxt = isUsKick ? ('Opponent' + (p.oppReturner ? ' ('+p.oppReturner+')' : '')) : (p.returner||'?');
       const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
       const kickDist = (startAbs != null && catchAbs != null) ? (isUsKick ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
       const retYds = (catchAbs != null && endAbs != null) ? (isUsKick ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
-      let base = (isUsKick ? '' : '🛡️ ') + 'Kickoff (' + (isUsKick?'Us':'Opponent') + ')' + (fromTxt ? ', from '+fromTxt : '') +
+      // Nathan: "missing the visual of what the yard spot of the play is --
+      // added to the play bar" -- the from/to spots now show as the row's
+      // own badge (spotBadgeText/renderLog) instead of spelled out here;
+      // "caught at" stays since that's a third point (the catch) the badge
+      // doesn't cover.
+      let base = (isUsKick ? '' : '🛡️ ') + 'Kickoff (' + (isUsKick?'Us':'Opponent') + ')' +
         ', returned by ' + returnerTxt;
       if (catchTxt) base += ', caught at '+catchTxt;
-      base += (toTxt ? ' to '+toTxt : '');
       if (p.td) base += ' · 🏆 TD';
       if (kickDist != null) base += ' · '+kickDist+' yd kick';
       if (retYds != null) base += ' · '+retYds+' return yds';
@@ -1307,9 +1330,7 @@
     }
     if (p.type==='punt'){
       const isUs = p.puntTeam !== 'Opponent';
-      const fromTxt = spotLabel(p.startSide, p.startYard);
       const catchTxt = spotLabel(p.catchSide, p.catchYard);
-      const toTxt = spotLabel(p.endSide, p.endYard);
       const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
       // "net" is always our field-position swing (positive = good for us) regardless of
       // who punted, since it's just start vs. final spot. But puntDist/retYds describe an
@@ -1320,24 +1341,24 @@
       const puntDist = (startAbs != null && catchAbs != null) ? (isUs ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
       const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
       const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
-      let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss + (fromTxt ? ', from '+fromTxt : '');
+      let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss;
       if (p.puntResult === 'Returned'){
         if (isUs){
           const puntAssists = asList(p.assist);
           const tackleTxt = p.tackler ? ' · tackled by '+p.tackler+(puntAssists.length?' + '+puntAssists.join(' + ')+' (assist)':'') : '';
           base += ', returned by ' + (p.oppReturner || 'opponent');
           if (catchTxt) base += ', caught at '+catchTxt;
-          base += (toTxt ? ' to '+toTxt : '') + tackleTxt;
+          base += tackleTxt;
         } else {
           base += ', returned by ' + (p.returner||'?');
           if (catchTxt) base += ', caught at '+catchTxt;
-          base += (toTxt ? ' to '+toTxt : '') + (p.oppTackler ? ' · tackled by '+p.oppTackler : '');
+          base += (p.oppTackler ? ' · tackled by '+p.oppTackler : '');
         }
         if (p.td) base += ' · 🏆 TD';
         if (puntDist != null) base += ' · '+puntDist+' yd punt';
         if (retYds != null) base += ' · '+retYds+' return yds';
       } else {
-        base += ' (' + (p.puntResult||'?') + ')' + (toTxt ? ' at '+toTxt : '');
+        base += ' (' + (p.puntResult||'?') + ')';
       }
       if (net != null) base += ' · net ' + net + ' yds';
       return base;
@@ -1346,7 +1367,7 @@
       const isUsKneel = p.kneelTeam !== 'Opponent';
       const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
       const lossTxt = (p.kneelType !== 'Spike' && p.kneelYards) ? ', -' + p.kneelYards + ' yds' : '';
-      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt + spotAtTxt(p);
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt;
     }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
@@ -1354,29 +1375,28 @@
         ? 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ')
         : 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
       // Nathan: "add starting ball spot and ending ball spot ... option of
-      // saying if it was a first down." Older tackles logged before this
-      // change only ever got the single generic `spot` (see spotAtTxt) --
-      // this richer from/to/yards/1st-down line only shows once a tackle
-      // actually has both explicit spots on it.
+      // saying if it was a first down" -- the from/to spots themselves now
+      // show as the row's badge (spotBadgeText/renderLog); the derived
+      // yardage and 1st-down flag stay here since the badge doesn't cover
+      // those. Older tackles logged before this change never got explicit
+      // start/end spots at all -- the badge still falls back to their
+      // single generic `spot` (see spotBadgeText), so nothing to add here.
       if (p.startSide != null && p.endSide != null){
-        const fromTxt = spotLabel(p.startSide, p.startYard);
-        const toTxt = spotLabel(p.endSide, p.endYard);
         const startAbs = absoluteSpot(p.startSide, p.startYard), endAbs = absoluteSpot(p.endSide, p.endYard);
         const yards = signedYardsFromSpots(startAbs, endAbs, false); // the opponent is always the ball carrier on a tackle
-        return base + (fromTxt && toTxt ? ', ' + fromTxt + ' to ' + toTxt + ', ' + yards + ' yds' : '') +
-          (p.firstDown ? ' · Opponent 1st down' : '');
+        return base + ', ' + yards + ' yds' + (p.firstDown ? ' · Opponent 1st down' : '');
       }
-      return base + spotAtTxt(p);
+      return base;
     }
-    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'') + spotAtTxt(p);
+    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
     if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
-      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '') + spotAtTxt(p);
-    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '') + spotAtTxt(p);
+      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '');
+    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '');
     if (p.type==='penalty'){
       const penName = (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty');
       const ydsTxt = p.declined ? 'declined' : (p.penYards||0)+' yds';
       return '🚩 ' + penName + ' on ' + (p.penTeam||'?') + (p.penPlayer ? ' ('+p.penPlayer+')' : '') +
-        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '') + spotAtTxt(p);
+        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '');
     }
     return 'Play';
   }
@@ -1588,10 +1608,12 @@
           '<button class="qDelBtn" title="Remove marker">✕</button></div>';
       }
       const sideTag = p.side ? '<span class="tag side-'+p.side+'">'+(p.side==='offense'?'OFF':'DEF')+'</span>' : '';
+      const spotBadge = spotBadgeText(p);
+      const spotTag = spotBadge ? '<span class="tag spotTag">📍'+escapeHtml(spotBadge)+'</span>' : '';
       const upDisabled = i === 0 ? 'disabled' : '';
       const downDisabled = i === plays.length - 1 ? 'disabled' : '';
       return '<div class="playLogItem" data-id="'+p.id+'">'+
-        '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+escapeHtml(describePlay(p))+'</div>'+
+        '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+spotTag+escapeHtml(describePlay(p))+'</div>'+
         '<div style="display:flex;gap:4px;flex-wrap:wrap;">'+
         '<button class="btn small moveUpBtn" title="Move earlier" '+upDisabled+'>▲</button>'+
         '<button class="btn small moveDownBtn" title="Move later" '+downDisabled+'>▼</button>'+
