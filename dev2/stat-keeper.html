@@ -160,6 +160,10 @@
      the spot reads as its own thing at a glance while scanning down the
      log, not just more of the same badge. */
   .playLogItem .tag.spotTag{color:var(--yellow)}
+  /* Nathan: "show the Down and Distance on the log as well" -- a
+     different color from the spot badge right next to it so the two read
+     as two distinct pieces of info at a glance, not one long badge. */
+  .playLogItem .tag.dndTag{color:#8ab4f8}
 
   .insertPosRow{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .insertPosRow label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
@@ -213,6 +217,11 @@
          below. Auto-advances after run/pass/kick-return plays; punts sync it
          from their own explicit spot fields instead. -->
     <div id="ballPosWrap" class="fieldRow"></div>
+    <!-- Nathan: "it would make a lot more sense to also show the Down and
+         Distance on the log as well." Same always-visible/always-editable
+         treatment as Ball Position right above -- see
+         renderDownDistanceControl() below. -->
+    <div id="downDistWrap" class="fieldRow"></div>
     <div class="sideToggle" id="sideToggle">
       <div class="sideBtn off" data-side="offense">🏈 OFFENSE</div>
       <div class="sideBtn def" data-side="defense">🛡️ DEFENSE</div>
@@ -338,6 +347,7 @@
   const gameSelect = document.getElementById('gameSelect');
   const gameLoadStatus = document.getElementById('gameLoadStatus');
   const ballPosWrap = document.getElementById('ballPosWrap');
+  const downDistWrap = document.getElementById('downDistWrap');
 
   // Nathan: "things need to be collapsable at the top where you select the
   // details so it's easier to navigate." Collapsed state remembers itself
@@ -404,6 +414,15 @@
   // kick-return plays in commitPlay() below; always visible/editable via
   // renderBallPositionControl().
   let currentSpot = 50;
+  // Nathan: "it would make a lot more sense to also show the Down and
+  // Distance on the log as well." Same running-state treatment as
+  // currentSpot right above: one shared down (1-4) and distance-to-go,
+  // auto-advanced after any play that actually uses a down (see
+  // advanceDownDistanceForPlay below), but always directly editable via
+  // renderDownDistanceControl() in case the auto-advance ever needs
+  // correcting -- same philosophy as every spot field in this file by now.
+  let currentDown = 1;
+  let currentDistance = 10;
 
   function localCacheKey(gameId){ return 'statKeeperGame_' + gameId; }
   // Nathan: "it keeps resetting back to default when I reenter the page."
@@ -417,9 +436,9 @@
   // closes both: less "did this actually save" doubt, and no manual
   // reselect to trigger that race in the first place.
   const LAST_GAME_KEY = 'statKeeperLastGameId';
-  function blankGameState(){ return { plays: [], quarter: 1, spot: 50, finalUs: '', finalOpp: '' }; }
+  function blankGameState(){ return { plays: [], quarter: 1, spot: 50, down: 1, distance: 10, finalUs: '', finalOpp: '' }; }
   function currentGameStateObj(){
-    return { plays: plays, quarter: currentQuarter, spot: currentSpot,
+    return { plays: plays, quarter: currentQuarter, spot: currentSpot, down: currentDown, distance: currentDistance,
       finalUs: finalScoreUs.value, finalOpp: finalScoreOpp.value, updatedAt: new Date().toISOString() };
   }
   function applyGameState(gs){
@@ -427,6 +446,8 @@
     plays = Array.isArray(gs.plays) ? gs.plays : [];
     currentQuarter = gs.quarter || 1;
     currentSpot = (typeof gs.spot === 'number') ? gs.spot : 50;
+    currentDown = (typeof gs.down === 'number') ? gs.down : 1;
+    currentDistance = (typeof gs.distance === 'number') ? gs.distance : 10;
     finalScoreUs.value = gs.finalUs || '';
     finalScoreOpp.value = gs.finalOpp || '';
   }
@@ -916,6 +937,22 @@
     }
     return fieldBlock(label, spotPicker('spotSide', 'spotYard', draft.spotYard));
   }
+  // Nathan: "it would make a lot more sense to also show the Down and
+  // Distance on the log as well." Per-play editable down/distance, seeded
+  // from the shared currentDown/currentDistance tracker (renderBallPositionControl's
+  // sibling, renderDownDistanceControl) -- same "auto-filled but always
+  // correctable" pattern as every spot field in this file. Only attached
+  // to play types that actually consume a down (Run, Pass, Kneel, Tackle
+  // -- see each type's renderFields branch).
+  function downDistanceField(){
+    if (draft.down == null) draft.down = currentDown;
+    if (draft.distance == null) draft.distance = currentDistance;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    wrap.appendChild(optChips('down', [{value:1,label:'1st'},{value:2,label:'2nd'},{value:3,label:'3rd'},{value:4,label:'4th'}]));
+    wrap.appendChild(yardStepper('distance', draft.distance, 'to go'));
+    return fieldBlock('Down & Distance', wrap);
+  }
   // Nathan: "Kickoffs to start the halves are from the team's own 40 yard
   // line." Unlike Punt (which genuinely depends on wherever the prior
   // drive ended, so it's right to trust the tracked Ball Position for
@@ -985,6 +1022,58 @@
     stepWrap.appendChild(suffix);
     row.appendChild(stepWrap);
     ballPosWrap.appendChild(row);
+  }
+
+  // Nathan: "it would make a lot more sense to also show the Down and
+  // Distance on the log as well." Same shape as renderBallPositionControl
+  // right above -- bound directly to the persistent currentDown/
+  // currentDistance game-state variables, always visible, editable any
+  // time, auto-advanced after downs by advanceDownDistanceForPlay().
+  // "Goal to go" (distance to the actual goal line, not 10) is shown
+  // instead of the raw number whenever that's genuinely closer, same as
+  // real broadcast down-and-distance graphics.
+  function renderDownDistanceControl(){
+    if (!downDistWrap) return;
+    downDistWrap.innerHTML = '';
+    const distToGoal = 100 - currentSpot; // toward the OPPONENT's goal -- true regardless of who's actually on offense right now, same simplification the shared spot tracker already makes
+    const goalToGo = currentDistance >= distToGoal;
+    const lab = document.createElement('label');
+    lab.textContent = '🔽 Down & Distance ';
+    const cur = document.createElement('span');
+    cur.style.cssText = 'color:var(--cyan);text-transform:none;font-weight:700;letter-spacing:0;';
+    cur.textContent = ['1st','2nd','3rd','4th'][currentDown-1] + ' & ' + (goalToGo ? 'Goal' : currentDistance);
+    lab.appendChild(cur);
+    downDistWrap.appendChild(lab);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    const chipRow = document.createElement('div'); chipRow.className = 'chipRow2';
+    ['1st','2nd','3rd','4th'].forEach(function(label, i){
+      const c = document.createElement('div');
+      c.className = 'optChip' + (currentDown === i+1 ? ' active' : '');
+      c.textContent = label;
+      c.addEventListener('click', function(){ currentDown = i+1; persist(); renderDownDistanceControl(); });
+      chipRow.appendChild(c);
+    });
+    row.appendChild(chipRow);
+
+    const stepWrap = document.createElement('div'); stepWrap.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.min = 1; input.value = currentDistance;
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    function setDistance(v){
+      currentDistance = Math.max(1, Number(v) || 1);
+      persist();
+      renderDownDistanceControl();
+    }
+    minus.addEventListener('click', function(){ setDistance(currentDistance - 1); });
+    plus.addEventListener('click', function(){ setDistance(currentDistance + 1); });
+    input.addEventListener('change', function(){ setDistance(input.value); });
+    stepWrap.appendChild(minus); stepWrap.appendChild(input); stepWrap.appendChild(plus);
+    const suffix = document.createElement('span'); suffix.style.cssText = 'color:var(--dim);font-size:12px;'; suffix.textContent = 'to go';
+    stepWrap.appendChild(suffix);
+    row.appendChild(stepWrap);
+    downDistWrap.appendChild(row);
   }
 
   function textInput(key, placeholder){
@@ -1088,6 +1177,7 @@
         fieldsArea.appendChild(fieldBlock('Opponent Ball Carrier (optional)', textInput('oppCarrier', "Opponent's ball carrier, if known")));
       }
       snapSpotFields(isUsRun).forEach(function(row){ fieldsArea.appendChild(row); });
+      fieldsArea.appendChild(downDistanceField());
       fieldsArea.appendChild(fieldBlock('Direction', optChips('dir', ['Left','Middle','Right'])));
       const toggles = document.createElement('div'); toggles.className='toggleRow';
       toggles.appendChild(chipToggle('firstDown', isUsRun ? '1st Down' : 'Opponent 1st Down'));
@@ -1125,6 +1215,7 @@
       fieldsArea.appendChild(fieldBlock('Result', optChips('result', ['Complete','Incomplete'])));
       if (draft.result === 'Complete'){
         snapSpotFields(isUsPass).forEach(function(row){ fieldsArea.appendChild(row); });
+        fieldsArea.appendChild(downDistanceField());
         const toggles = document.createElement('div'); toggles.className='toggleRow';
         toggles.appendChild(chipToggle('firstDown', isUsPass ? '1st Down' : 'Opponent 1st Down'));
         toggles.appendChild(chipToggle('td','🏆 Touchdown'));
@@ -1139,6 +1230,7 @@
         // snap), so it only needs the one spot, not a start+end pair like
         // a completion gets from snapSpotFields.
         fieldsArea.appendChild(singleSpotField('Line of Scrimmage (spot)'));
+        fieldsArea.appendChild(downDistanceField());
       }
     }
     else if (currentType === 'kick'){
@@ -1229,6 +1321,7 @@
         fieldsArea.appendChild(fieldBlock('Yards Lost (shotgun kneel)', optChips('kneelYards', [4, 5])));
       }
       fieldsArea.appendChild(singleSpotField('Snapped At (spot)'));
+      fieldsArea.appendChild(downDistanceField());
     }
     else if (currentType === 'tackle'){
       fieldsArea.appendChild(fieldBlock('Tackler (solo)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
@@ -1261,6 +1354,7 @@
         draft.endSide = sy.side; draft.endYard = sy.yard;
       }
       fieldsArea.appendChild(fieldBlock('Tackled At (spot)', spotPicker('endSide', 'endYard', draft.endYard)));
+      fieldsArea.appendChild(downDistanceField());
       fieldsArea.appendChild(fieldBlock('', chipToggle('firstDown', 'Opponent 1st Down')));
     }
     else if (currentType === 'defextra'){
@@ -1555,6 +1649,57 @@
     }
   }
 
+  // Nathan: "it would make a lot more sense to also show the Down and
+  // Distance on the log as well." Same shared-tracker auto-advance pattern
+  // as advanceSpotForPlay right above -- called right alongside it (after
+  // it, so currentSpot already reflects this play's result when computing
+  // a reset distance-to-goal below). Goal-to-go is only auto-detected for
+  // Run/Pass/Kneel/Tackle, where the play type actually says which
+  // direction that team is driving (isUsRun/isUsPass/kneelTeam/opponent-
+  // always-on-a-tackle) -- a possession-change play (kick/punt/turnover/
+  // INT) doesn't carry that, so those just reset to a flat 10 rather than
+  // risk guessing the wrong direction; the Down & Distance control is
+  // always sitting right there to fix it to "Goal" by hand when it matters.
+  function advanceDownDistanceForPlay(entry){
+    function yardsAndDirFor(e){
+      if (e.type === 'run') return { yards: Number(e.yards||0), forward100: e.runTeam !== 'Opponent' };
+      if (e.type === 'pass' && e.result === 'Complete') return { yards: Number(e.yards||0), forward100: e.passTeam !== 'Opponent' };
+      if (e.type === 'tackle'){
+        const startAbs = absoluteSpot(e.startSide, e.startYard), endAbs = absoluteSpot(e.endSide, e.endYard);
+        return { yards: signedYardsFromSpots(startAbs, endAbs, false), forward100: false }; // opponent always has the ball on a tackle
+      }
+      if (e.type === 'kneel' && e.kneelType !== 'Spike'){
+        return { yards: -Number(e.kneelYards||0), forward100: e.kneelTeam !== 'Opponent' };
+      }
+      return null;
+    }
+    const info = yardsAndDirFor(entry);
+    if (info){
+      const distToGoal = info.forward100 ? (100 - currentSpot) : currentSpot;
+      if (entry.firstDown || info.yards >= currentDistance){
+        currentDown = 1;
+        currentDistance = Math.max(1, Math.min(10, distToGoal));
+      } else {
+        currentDown = Math.min(4, currentDown + 1);
+        currentDistance = Math.max(1, currentDistance - info.yards);
+      }
+    } else if ((entry.type === 'pass' && entry.result === 'Incomplete') || (entry.type === 'kneel' && entry.kneelType === 'Spike')){
+      // Doesn't move the ball -- just burns a down at the same distance.
+      currentDown = Math.min(4, currentDown + 1);
+    } else if ((entry.type === 'kick' && !entry.onside) || entry.type === 'punt' || entry.type === 'turnover' ||
+               (entry.type === 'defextra' && entry.extraType === 'INT')){
+      // Change of possession -- fresh set of downs for whoever just got it.
+      currentDown = 1;
+      currentDistance = 10;
+    } else if (entry.type === 'score'){
+      currentDown = 1;
+      currentDistance = 10;
+    } else if (entry.type === 'penalty' && entry.firstDown && !entry.declined){
+      currentDown = 1;
+      currentDistance = 10;
+    }
+  }
+
   document.getElementById('logPlayBtn').addEventListener('click', function(){
     if (editingId){
       // Nathan: "I need the ability to click into it so it can be
@@ -1580,6 +1725,7 @@
         // by re-editing whatever comes right after it) if it doesn't match
         // what actually happened next.
         advanceSpotForPlay(merged);
+        advanceDownDistanceForPlay(merged);
       }
       editingId = null;
       updateEditModeUI();
@@ -1587,6 +1733,7 @@
       renderLog();
       renderStats();
       renderBallPositionControl();
+      renderDownDistanceControl();
       resetDraft();
       return;
     }
@@ -1601,10 +1748,12 @@
     // them it couldn't be corrected later.
     insertPlay(entry);
     advanceSpotForPlay(entry);
+    advanceDownDistanceForPlay(entry);
     persist();
     renderLog();
     renderStats();
     renderBallPositionControl();
+    renderDownDistanceControl();
     resetDraft();
   });
   document.getElementById('cancelEditBtn').addEventListener('click', cancelEditPlay);
@@ -1733,6 +1882,20 @@
     persist(); renderLog();
   }
 
+  // Nathan: "it would make a lot more sense to also show the Down and
+  // Distance on the log as well." Only plays that actually carry down/
+  // distance (Run, Pass, Kneel, Tackle -- see downDistanceField) get a
+  // badge; everything else (Kickoff, Turnover, Penalty, etc.) just won't
+  // show one, same "nothing to show" handling as spotBadgeText. Always
+  // shows the plain distance number rather than guessing "Goal" after the
+  // fact -- unlike the live Down & Distance control (which knows the
+  // CURRENT spot when it renders), a logged play's own distance number
+  // alone can't reliably tell "genuinely goal-to-go" apart from "just
+  // happens to need a small number of yards mid-field."
+  function downDistBadgeText(p){
+    if (p.down == null || p.distance == null) return '';
+    return ['1st','2nd','3rd','4th'][p.down-1] + ' & ' + p.distance;
+  }
   function renderLog(){
     const realPlays = plays.filter(function(p){ return p.type !== 'quarterEnd'; });
     playCount.textContent = realPlays.length + (realPlays.length===1 ? ' play' : ' plays');
@@ -1746,10 +1909,12 @@
       const sideTag = p.side ? '<span class="tag side-'+p.side+'">'+(p.side==='offense'?'OFF':'DEF')+'</span>' : '';
       const spotBadge = spotBadgeText(p);
       const spotTag = spotBadge ? '<span class="tag spotTag">📍'+escapeHtml(spotBadge)+'</span>' : '';
+      const dndBadge = downDistBadgeText(p);
+      const dndTag = dndBadge ? '<span class="tag dndTag">'+escapeHtml(dndBadge)+'</span>' : '';
       const upDisabled = i === 0 ? 'disabled' : '';
       const downDisabled = i === plays.length - 1 ? 'disabled' : '';
       return '<div class="playLogItem" data-id="'+p.id+'">'+
-        '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+spotTag+escapeHtml(describePlay(p))+'</div>'+
+        '<div class="desc">'+sideTag+'<span class="tag">'+p.type+'</span>'+dndTag+spotTag+escapeHtml(describePlay(p))+'</div>'+
         '<div style="display:flex;gap:4px;flex-wrap:wrap;">'+
         '<button class="btn small moveUpBtn" title="Move earlier" '+upDisabled+'>▲</button>'+
         '<button class="btn small moveDownBtn" title="Move later" '+downDisabled+'>▼</button>'+
@@ -1794,7 +1959,7 @@
     if (!confirm('Clear the play log for this game? This can\'t be undone -- export or push it first if you need a copy.')) return;
     applyGameState(blankGameState());
     persist();
-    renderLog(); renderStats(); renderBallPositionControl(); populateEndQuarterSel();
+    renderLog(); renderStats(); renderBallPositionControl(); renderDownDistanceControl(); populateEndQuarterSel();
   });
 
   // ---- Compile plays into the same shape as the live app's statSheet ----
@@ -2936,6 +3101,7 @@
     renderLog();
     renderStats();
     renderBallPositionControl();
+    renderDownDistanceControl();
   }
 
   let liveGamesCache = [];
@@ -3029,6 +3195,7 @@
     renderTypeGrid();
     resetDraft();
     renderBallPositionControl();
+    renderDownDistanceControl();
     setGameControlsEnabled(false);
     setGameLoadStatus('Signing in…');
     let ok = false;
