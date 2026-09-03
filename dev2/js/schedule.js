@@ -1161,6 +1161,26 @@
       // that opponent isn't on the pasted standings yet, in which case the
       // placeholder just stays hidden.
       const oppRecordId = `scheduleOppRecord-${g.id}`;
+      // Nathan (follow-up): "I only want it visible to Coach Nate profile
+      // specifically for now." Stat Keeper/the wizard/playback are new
+      // enough that Nathan wants them scoped to just his own profile
+      // while they're still being worked out, not every coach who shares
+      // the one team coach code -- window.isApprovedCoachProfile() can't
+      // tell coaches apart (it just checks "is this ANY of the named coach
+      // profiles"), so this checks the session's own name against 'coach
+      // nate' specifically, same lowercased/trimmed comparison
+      // COACH_PROFILE_NAMES itself uses (js/auth.js). A plain span rather
+      // than a nested <button>, since `row` itself is already a <button>
+      // (nested buttons are invalid HTML and bubble clicks unreliably);
+      // its own click handler below stops the tap from also opening the
+      // game detail underneath it.
+      const isCoachNate = (function(){
+        if (!window.isCoachSession) return false;
+        const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+        const name = session && session.name ? session.name.trim().toLowerCase() : '';
+        return name === 'coach nate';
+      })();
+      const keepStatsBtn = isCoachNate ? `<span class="scheduleKeepStatsBtn" data-keepstats="${g.id}">🎯 Keep Stats</span>` : '';
       row.innerHTML = `
         ${weekBadge}
         <div class="scheduleRowTop">
@@ -1176,9 +1196,19 @@
           </span>
           <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span>${themScore}</span>
         </span>
-        <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>`;
+        <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>
+        ${keepStatsBtn}`;
       row.addEventListener('click', () => openDetail(g.id));
       listEl.appendChild(row);
+      if (isCoachNate) {
+        const ksBtn = row.querySelector('.scheduleKeepStatsBtn');
+        if (ksBtn) {
+          ksBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.location.href = 'game-wizard.html?game=' + encodeURIComponent(g.id);
+          });
+        }
+      }
       if (g.opponent && typeof window.getOpponentRecordText === 'function') {
         window.getOpponentRecordText(g.opponent).then(txt => {
           if (!txt) return; // not on the pasted standings (yet) -- placeholder just stays hidden

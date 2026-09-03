@@ -1953,6 +1953,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    cards' layout doesn't have a natural "right side" slot the way a
    practice row's single date/time line does. */
 .scheduleRowWeatherCenter { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-top: 2px; width: 100%; }
+/* Nathan: "a KEEP STATS CTA on the game card which allows me to launch the
+   STATKEEPER and score the game." Coach-only -- see renderList's
+   `approved` gate in schedule.js. A block-level pill under the rest of
+   the card rather than squeezed into the existing rows, so it reads as
+   its own action rather than another piece of game info. */
+.scheduleKeepStatsBtn { display: block; text-align: center; margin-top: 8px; padding: 8px; border-radius: 10px; background: linear-gradient(135deg, var(--bengal-orange), var(--bengal-orange-dark)); color: #fff; font-size: 11.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; cursor: pointer; }
+.scheduleKeepStatsBtn:active { filter: brightness(1.12); }
 .scheduleRowWeatherCenter .weatherIcon { font-size: 15px; }
 /* Nathan: "we dont need to say this so big and bold... can be fine print
    at the bottom of the page." True fine print, not just a smaller .lbSub. */

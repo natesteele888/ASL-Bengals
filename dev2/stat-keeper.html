@@ -3242,6 +3242,20 @@
     }
     populateGameSelect();
     setGameLoadStatus(liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.');
+    // Nathan: "I want this to be tied into Coach Nate profile where I have
+    // a KEEP STATS CTA on the game card which allows me to launch the
+    // STATKEEPER." A ?game=<id> in the URL (from that card, or from
+    // game-wizard.html's handoff after logging the opening kickoff) wins
+    // over the last-opened-game memory below -- someone followed a link to
+    // a SPECIFIC game on purpose, that should never lose to "whatever was
+    // open last time."
+    const params = new URLSearchParams(location.search);
+    const urlGameId = params.get('game');
+    if (urlGameId && liveGamesCache.some(function(g){ return g.id === urlGameId; })){
+      gameSelect.value = urlGameId;
+      selectGame(urlGameId);
+      return;
+    }
     // Nathan: "make sure changes are staying" -- re-select whatever game
     // was open last time instead of always coming back to a blank
     // dropdown (see LAST_GAME_KEY above).

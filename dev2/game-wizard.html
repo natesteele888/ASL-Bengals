@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASL Bengals — Keep Stats</title>
+<!--
+  Nathan: "I want to see about reconfiguring the STATKEEPER so it is more
+  like the GameChanger game logging where its more of a wizard choosing
+  the play... So again, it's like a wizard leading you through the
+  selections. The STATKEEPER site will eventually become the back end
+  tool to fine tune game details if they were entered wrong. Will add
+  more to the plan as we go."
+
+  This is PHASE 1 of that plan, not the whole thing: Confirm Starters →
+  Coin Toss → Opening Kickoff, then a handoff into stat-keeper.html for
+  the rest of the game (the snap-by-snap wizard -- formation/play/
+  direction/motion-counter-boot tags, auto down & distance, timeouts,
+  quarter-end events, a live searchable box score -- is the planned next
+  phase, deliberately not attempted here untested in one shot).
+
+  Everything this DOES write goes into the exact same statKeeperLogs/
+  {gameId} shape stat-keeper.html and game-playback.html already read --
+  a kickoff logged here is a real Stat Keeper play, editable there and
+  visible in a replay, not a separate parallel data format.
+
+  Duplicates rather than imports helpers from stat-keeper.html/
+  game-playback.html, same reason those duplicate from each other: no
+  build step or shared module system in this project.
+-->
+<style>
+  :root{ --console:#1b1f26; --line-bright:#2c333d; --dim:#9aa4ae; --dim2:#6b7480; --cyan:#3ddcff; --orange:#ff8a3d; --bengal-orange:#ff6a13; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0e13;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding-bottom:60px}
+  .topBar{padding:14px 16px 10px;border-bottom:1px solid var(--line-bright);position:sticky;top:0;background:#0b0e13;z-index:5}
+  .topBar h1{margin:0 0 10px;font-size:15px;font-weight:800;letter-spacing:.02em}
+  select#gameSelect{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line-bright);background:var(--console);color:#fff;font-size:14px}
+  #loadStatus{font-size:11px;color:var(--dim2);margin-top:6px;text-align:center;min-height:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:0 14px}
+  .stepDots{display:flex;justify-content:center;gap:8px;margin:16px 0}
+  .stepDot{width:8px;height:8px;border-radius:50%;background:var(--line-bright)}
+  .stepDot.active{background:var(--cyan);width:20px;border-radius:4px}
+  .stepDot.done{background:var(--dim2)}
+  .card{background:var(--console);border:1px solid var(--line-bright);border-radius:14px;padding:18px;margin-bottom:14px}
+  .card h2{margin:0 0 4px;font-size:15px;font-weight:800}
+  .card .sub{font-size:12px;color:var(--dim2);margin-bottom:14px}
+  .groupSection{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 6px}
+  .starterRow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line-bright)}
+  .starterRow:last-child{border-bottom:none}
+  .starterRow .posLabel{font-size:11px;color:var(--dim2);width:70px;flex:0 0 auto}
+  .starterRow .starterName{font-size:14px;font-weight:700;flex:1}
+  .starterRow .starterName.empty{color:var(--dim2);font-weight:400;font-style:italic}
+  .swapBtn{padding:6px 12px;border-radius:8px;border:1px solid var(--line-bright);background:#12161c;color:var(--cyan);font-size:11px;font-weight:700;cursor:pointer}
+  .altList{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line-bright)}
+  .altChip{padding:6px 10px;border-radius:16px;border:1px solid var(--line-bright);font-size:12px;color:var(--dim);cursor:pointer}
+  .altChip:hover{color:#fff;border-color:var(--cyan)}
+  .chipRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  .optChip{padding:10px 16px;border-radius:10px;border:1px solid var(--line-bright);background:#12161c;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer;flex:1;text-align:center;min-width:100px}
+  .optChip.active{background:var(--cyan);color:#04222b;border-color:var(--cyan)}
+  .fieldLabel{font-size:11px;color:var(--dim2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+  .yardRow{display:flex;align-items:center;gap:8px}
+  .stepBtn{width:34px;height:34px;border-radius:8px;background:#12161c;border:1px solid var(--line-bright);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;user-select:none}
+  .yardRow input{width:60px;text-align:center;padding:8px;border-radius:8px;border:1px solid var(--line-bright);background:#12161c;color:#fff;font-size:14px}
+  .primaryBtn{width:100%;padding:14px;border-radius:10px;border:none;background:linear-gradient(135deg,#ff8a3d,#e0570a);color:#fff;font-size:14px;font-weight:800;cursor:pointer;margin-top:8px}
+  .primaryBtn[disabled]{opacity:.4;pointer-events:none}
+  .ghostBtn{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line-bright);background:transparent;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer;margin-top:8px}
+  .writeIn{width:100%;padding:10px;border-radius:8px;border:1px dashed var(--line-bright);background:#12161c;color:#fff;font-size:13px;margin-top:8px}
+  .summaryLine{font-size:13px;color:var(--dim);margin:6px 0}
+  .summaryLine b{color:#fff}
+  .emptyState{text-align:center;color:var(--dim2);padding:40px 20px;font-size:13px}
+  .handoffIcon{font-size:40px;text-align:center;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="topBar">
+  <div class="wrap">
+    <h1>🧙 Keep Stats — Game Setup</h1>
+    <select id="gameSelect"><option value="">— Sign in to load games —</option></select>
+    <div id="loadStatus"></div>
+  </div>
+</div>
+
+<div class="wrap" id="wizardWrap" style="display:none;">
+  <div class="stepDots" id="stepDots"></div>
+  <div id="stepArea"></div>
+</div>
+
+<div class="wrap" id="emptyWrap"><div class="emptyState">Pick a game above to start setting it up.</div></div>
+
+<script>
+(function(){
+  // ---------------------------------------------------------------------
+  // Ported verbatim from dev2/stat-keeper.html -- see that file's own
+  // comment for why this project duplicates rather than shares modules.
+  // ---------------------------------------------------------------------
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const FIREBASE_API_KEY = 'AIzaSyCBvobt9qfyLoJOGUz6fIiGrFKMEQFsA3E';
+  const COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
+  const SIGNUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
+  const SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+  const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const GATE_SESSION_KEY = 'bengalsGateSession';
+  const SAFETY_MARGIN_MS = 60000;
+  let authCache = null;
+  async function sha256Hex(text){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function loadGateSession(){ try { return JSON.parse(localStorage.getItem(GATE_SESSION_KEY) || 'null'); } catch(e){ return null; } }
+  function saveGateSession(refreshToken){ try { localStorage.setItem(GATE_SESSION_KEY, JSON.stringify({refreshToken, kind:'coach'})); } catch(e){} }
+  function hasGateSession(){ const s = loadGateSession(); return !!(s && s.refreshToken); }
+  async function refreshIdToken(refreshToken){
+    const res = await fetch(REFRESH_URL, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}` });
+    if (!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
+    const data = await res.json();
+    return { idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: Date.now() + Number(data.expires_in)*1000 };
+  }
+  async function signInWithCoachGate(passwordHash){
+    const email = 'coach-gate@aslbengals.internal';
+    let res = await fetch(SIGNUP_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+    if (!res.ok){
+      const errBody = await res.json().catch(() => ({}));
+      const code = errBody.error && errBody.error.message;
+      if (code === 'EMAIL_EXISTS'){
+        res = await fetch(SIGNIN_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+        if (!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+      } else { throw new Error('Gate account setup failed: ' + (code || res.status)); }
+    }
+    const data = await res.json();
+    authCache = { idToken: data.idToken, refreshToken: data.refreshToken, expiresAt: Date.now() + Number(data.expiresIn)*1000 };
+    saveGateSession(authCache.refreshToken);
+    return authCache;
+  }
+  async function getFirebaseIdToken(){
+    if (authCache && authCache.expiresAt - SAFETY_MARGIN_MS > Date.now()) return authCache.idToken;
+    if (authCache && authCache.refreshToken){ authCache = await refreshIdToken(authCache.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    const saved = loadGateSession();
+    if (saved && saved.refreshToken){ authCache = await refreshIdToken(saved.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    throw new Error('Not signed in');
+  }
+  async function firebaseAuthedUrl(url){
+    const token = await getFirebaseIdToken();
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    return `${url}${sep}auth=${encodeURIComponent(token)}`;
+  }
+  async function ensureCoachAuth(){
+    if (hasGateSession()){ try { await getFirebaseIdToken(); return true; } catch(e){} }
+    let code = null;
+    try { code = prompt('Enter the coach code to set up this game:'); } catch(e){ return false; }
+    if (!code) return false;
+    const hash = await sha256Hex(code);
+    if (hash !== COACH_CODE_HASH){ alert('Incorrect code.'); return false; }
+    try { await signInWithCoachGate(hash); return true; } catch(e){ alert("Couldn't sign in: " + e.message); return false; }
+  }
+
+  function absoluteSpot(side, yard){
+    if (!side || yard === '' || yard == null) return null;
+    const y = Number(yard);
+    if (isNaN(y)) return null;
+    return side === 'OWN' ? y : (100 - y);
+  }
+  function spotLabelAbs(spot){
+    const y = Math.round(spot <= 50 ? spot : (100 - spot));
+    if (Math.round(spot) === 50) return 'Midfield (the 50)';
+    return (spot <= 50 ? 'OWN ' : 'OPP ') + y;
+  }
+  function clampSpot(v){ return Math.max(0, Math.min(100, v)); }
+  function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+  function genId(){ return 'play_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+  // ---- Game/roster/depth chart loading ----
+  const gameSelect = document.getElementById('gameSelect');
+  const loadStatus = document.getElementById('loadStatus');
+  const wizardWrap = document.getElementById('wizardWrap');
+  const emptyWrap = document.getElementById('emptyWrap');
+  let liveGamesCache = [];
+  let liveRoster = [];
+  let depthGroups = [];
+  let selectedGame = null;
+
+  function populateGameSelect(){
+    gameSelect.innerHTML = '';
+    const topOpt = document.createElement('option'); topOpt.value=''; topOpt.textContent='— Select a game —';
+    gameSelect.appendChild(topOpt);
+    liveGamesCache.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(function(g){
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = (g.homeAway === 'Away' ? '@ ' : 'vs ') + (g.opponent || 'TBD') + (g.date ? ' — ' + g.date : '');
+      gameSelect.appendChild(opt);
+    });
+  }
+  function rosterByNum(){
+    const m = {};
+    liveRoster.forEach(function(p){ if (p && p.num != null) m[String(p.num)] = p; });
+    return m;
+  }
+  function playerLabel(p){ return p ? ('#' + p.num + ' ' + p.name) : null; }
+
+  gameSelect.addEventListener('change', function(){ loadGame(gameSelect.value); });
+
+  async function loadGame(gameId){
+    if (!gameId){ wizardWrap.style.display='none'; emptyWrap.style.display=''; return; }
+    selectedGame = liveGamesCache.find(function(g){ return g.id === gameId; }) || null;
+    if (!selectedGame){ loadStatus.textContent = 'Could not find this game.'; return; }
+    loadStatus.textContent = 'Checking for an existing log…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + gameId + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      if (existing && Array.isArray(existing.plays) && existing.plays.length){
+        loadStatus.textContent = 'This game already has ' + existing.plays.length + ' play(s) logged.';
+        if (!confirm('"' + (selectedGame.opponent||'This game') + '" already has a play log started. Run through setup again anyway? (Nothing gets deleted -- the opening kickoff will just be ADDED as one more play; use Stat Keeper directly if you just want to keep logging.)')){
+          wizardWrap.style.display = 'none'; emptyWrap.style.display = '';
+          gameSelect.value = '';
+          return;
+        }
+      }
+    } catch(e){ /* fine to proceed without knowing -- worst case the coach sees a duplicate kickoff and can delete it in Stat Keeper */ }
+    loadStatus.textContent = 'Loading roster & depth chart…';
+    try {
+      const rosterUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
+      const rosterRes = await fetch(rosterUrl);
+      liveRoster = rosterRes.ok ? (await rosterRes.json() || []) : [];
+      liveRoster = Array.isArray(liveRoster) ? liveRoster.filter(function(p){ return p && p.id; }) : [];
+      const depthUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/depthChart.json');
+      const depthRes = await fetch(depthUrl);
+      const depthData = depthRes.ok ? await depthRes.json() : null;
+      depthGroups = (depthData && Array.isArray(depthData.groups)) ? depthData.groups : [];
+    } catch(e){ loadStatus.textContent = '⚠️ Could not load roster/depth chart: ' + e.message; return; }
+    loadStatus.textContent = '';
+    wizardWrap.style.display = ''; emptyWrap.style.display = 'none';
+    wiz.state = { starters: {}, tossWinner: null, tossChoice: null, receivingTeam: null, endNote: null };
+    wiz.step = 0;
+    renderWizard();
+  }
+
+  // ---- Wizard shell ----
+  const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Done'];
+  const wiz = { step: 0, state: {} };
+  function renderDots(){
+    document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
+      const cls = i === wiz.step ? 'active' : (i < wiz.step ? 'done' : '');
+      return '<div class="stepDot ' + cls + '"></div>';
+    }).join('');
+  }
+  function renderWizard(){
+    renderDots();
+    const area = document.getElementById('stepArea');
+    area.innerHTML = '';
+    if (wiz.step === 0) renderStartersStep(area);
+    else if (wiz.step === 1) renderCoinTossStep(area);
+    else if (wiz.step === 2) renderKickoffStep(area);
+    else renderDoneStep(area);
+  }
+
+  // ---- Step 1: Confirm Starters ----
+  // Nathan: "Confirm starters for ease of picking players to assign to
+  // plays." Reads Coach Tools > Depth Chart (each position group's
+  // players[0] is its current starter) rather than inventing a second
+  // starters list -- this step is about CATCHING a stale depth chart
+  // before game day (an injury, a sub who's been starting all season that
+  // the chart was never updated for), not replacing it.
+  function renderStartersStep(area){
+    const byNum = rosterByNum();
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>Confirm Starters</h2><div class="sub">From Coach Tools &gt; Depth Chart -- tap anyone to swap in a backup if this isn\'t who\'s actually starting today.</div>';
+    ['offense','defense'].forEach(function(section){
+      const groups = depthGroups.filter(function(g){ return g.section === section; });
+      if (!groups.length) return;
+      const sec = document.createElement('div'); sec.className = 'groupSection'; sec.textContent = section === 'offense' ? 'Offense' : 'Defense';
+      card.appendChild(sec);
+      groups.forEach(function(g){
+        const starterNum = g.players && g.players[0];
+        const starter = starterNum ? byNum[String(starterNum)] : null;
+        const key = g.id;
+        if (wiz.state.starters[key] === undefined) wiz.state.starters[key] = starter ? String(starter.num) : null;
+        const row = document.createElement('div'); row.className = 'starterRow';
+        const chosenNum = wiz.state.starters[key];
+        const chosen = chosenNum ? byNum[String(chosenNum)] : null;
+        row.innerHTML = '<span class="posLabel">' + escapeHtml(g.label) + '</span>' +
+          '<span class="starterName' + (chosen ? '' : ' empty') + '">' + (chosen ? escapeHtml(playerLabel(chosen)) : 'Nobody set') + '</span>' +
+          '<span class="swapBtn">Swap</span>';
+        const swapBtn = row.querySelector('.swapBtn');
+        let altsOpen = false;
+        swapBtn.addEventListener('click', function(){
+          altsOpen = !altsOpen;
+          let alts = row.querySelector('.altList');
+          if (alts) { alts.remove(); if (!altsOpen) return; }
+          const candidates = (g.players || []).map(function(n){ return byNum[String(n)]; }).filter(Boolean);
+          const wrap = document.createElement('div'); wrap.className = 'altList';
+          candidates.forEach(function(p){
+            const chip = document.createElement('div'); chip.className = 'altChip'; chip.textContent = playerLabel(p);
+            chip.addEventListener('click', function(){ wiz.state.starters[key] = String(p.num); renderWizard(); });
+            wrap.appendChild(chip);
+          });
+          const noneChip = document.createElement('div'); noneChip.className = 'altChip'; noneChip.textContent = 'None';
+          noneChip.addEventListener('click', function(){ wiz.state.starters[key] = null; renderWizard(); });
+          wrap.appendChild(noneChip);
+          row.appendChild(wrap);
+        });
+        card.appendChild(row);
+      });
+    });
+    if (!depthGroups.length){
+      card.innerHTML += '<div class="sub" style="margin-top:10px;">No depth chart saved yet (Coach Tools &gt; Depth Chart) -- you can still continue, there just won\'t be a quick-pick list for who\'s starting.</div>';
+    }
+    const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Confirm Starters →';
+    btn.addEventListener('click', function(){ wiz.step = 1; renderWizard(); });
+    card.appendChild(btn);
+    area.appendChild(card);
+  }
+
+  // ---- Step 2: Coin Toss ----
+  function renderCoinTossStep(area){
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>🪙 Coin Toss</h2><div class="sub">Sets who gets the ball first.</div>';
+
+    const q1 = document.createElement('div');
+    q1.innerHTML = '<div class="fieldLabel">Who won the toss?</div>';
+    const r1 = document.createElement('div'); r1.className = 'chipRow';
+    ['Us','Opponent'].forEach(function(v){
+      const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.tossWinner === v ? ' active' : ''); c.textContent = v;
+      c.addEventListener('click', function(){ wiz.state.tossWinner = v; renderWizard(); });
+      r1.appendChild(c);
+    });
+    q1.appendChild(r1);
+    card.appendChild(q1);
+
+    if (wiz.state.tossWinner){
+      const q2 = document.createElement('div');
+      q2.innerHTML = '<div class="fieldLabel">What did ' + (wiz.state.tossWinner === 'Us' ? 'we' : 'they') + ' choose?</div>';
+      const r2 = document.createElement('div'); r2.className = 'chipRow';
+      [['Receive','Take the ball first'], ['Defer','Kick first, receive to open the 2nd half']].forEach(function(pair){
+        const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.tossChoice === pair[0] ? ' active' : '');
+        c.textContent = pair[0];
+        c.addEventListener('click', function(){
+          wiz.state.tossChoice = pair[0];
+          const winnerReceives = pair[0] === 'Receive';
+          wiz.state.receivingTeam = winnerReceives ? wiz.state.tossWinner : (wiz.state.tossWinner === 'Us' ? 'Opponent' : 'Us');
+          renderWizard();
+        });
+        r2.appendChild(c);
+      });
+      q2.appendChild(r2);
+      card.appendChild(q2);
+    }
+
+    if (wiz.state.receivingTeam){
+      const summary = document.createElement('div'); summary.className = 'summaryLine';
+      summary.innerHTML = '📋 <b>' + escapeHtml(wiz.state.receivingTeam) + '</b> receives the opening kickoff.';
+      card.appendChild(summary);
+
+      const q3 = document.createElement('div');
+      q3.innerHTML = '<div class="fieldLabel">Which end do we defend first? (for the sideline -- doesn\'t change how anything gets logged)</div>';
+      const r3 = document.createElement('div'); r3.className = 'chipRow';
+      ['Near end','Far end'].forEach(function(v){
+        const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.endNote === v ? ' active' : ''); c.textContent = v;
+        c.addEventListener('click', function(){ wiz.state.endNote = v; renderWizard(); });
+        r3.appendChild(c);
+      });
+      q3.appendChild(r3);
+      card.appendChild(q3);
+
+      const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Continue to Kickoff →';
+      btn.addEventListener('click', function(){ wiz.step = 2; renderWizard(); });
+      card.appendChild(btn);
+    }
+
+    const back = document.createElement('button'); back.className = 'ghostBtn'; back.textContent = '← Back';
+    back.addEventListener('click', function(){ wiz.step = 0; renderWizard(); });
+    card.appendChild(back);
+    area.appendChild(card);
+  }
+
+  // ---- Step 3: Opening Kickoff ----
+  // Nathan: "Kickoff, you can mark where the ball landed, where it ended
+  // and who carried it." Kicking team is already decided by the coin
+  // toss (whoever ISN'T receiving); starts from the kicker's own 40, same
+  // fixed-by-rule convention stat-keeper.html's kickoffStartSpotRow uses.
+  function spotPicker(state, sideKey, yardKey, defaultYard, onChange){
+    if (state[sideKey] == null) state[sideKey] = 'OWN';
+    if (state[yardKey] == null) state[yardKey] = defaultYard;
+    const wrap = document.createElement('div');
+    const chipRow = document.createElement('div'); chipRow.className = 'chipRow';
+    [['OWN','Our Side'],['OPP',"Opponent's Side"]].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (state[sideKey] === pair[0] ? ' active' : ''); c.textContent = pair[1];
+      c.addEventListener('click', function(){ state[sideKey] = pair[0]; onChange(); });
+      chipRow.appendChild(c);
+    });
+    wrap.appendChild(chipRow);
+    const yardRow = document.createElement('div'); yardRow.className = 'yardRow'; yardRow.style.marginTop = '6px';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.min = 0; input.max = 50; input.value = state[yardKey];
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ state[yardKey] = Math.max(0, Number(input.value||0) - 1); onChange(); });
+    plus.addEventListener('click', function(){ state[yardKey] = Math.min(50, Number(input.value||0) + 1); onChange(); });
+    input.addEventListener('change', function(){ state[yardKey] = Math.max(0, Math.min(50, Number(input.value||0))); onChange(); });
+    yardRow.appendChild(minus); yardRow.appendChild(input); yardRow.appendChild(plus);
+    const suffix = document.createElement('span'); suffix.style.cssText = 'color:var(--dim);font-size:12px;margin-left:4px;'; suffix.textContent = 'yard line';
+    yardRow.appendChild(suffix);
+    wrap.appendChild(yardRow);
+    return wrap;
+  }
+  function renderKickoffStep(area){
+    const isUsKick = wiz.state.receivingTeam !== 'Us'; // whoever ISN'T receiving is kicking
+    if (!wiz.state.kickoff) wiz.state.kickoff = { catchSide:null, catchYard:20, endSide:null, endYard: isUsKick ? 30 : 40, returner:'' };
+    const k = wiz.state.kickoff;
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>🏈 Opening Kickoff</h2><div class="sub"><b>' + (isUsKick ? 'We' : 'They') + '</b> kick from ' + (isUsKick ? 'our' : 'their') + ' own 40. Mark where it was caught and where the return ended.</div>';
+
+    card.innerHTML += '<div class="fieldLabel">Caught / Fielded At</div>';
+    card.appendChild(spotPicker(k, 'catchSide', 'catchYard', isUsKick ? 20 : 15, renderWizard));
+
+    const lbl2 = document.createElement('div'); lbl2.className = 'fieldLabel'; lbl2.textContent = 'Brought Ball To (final spot)';
+    card.appendChild(lbl2);
+    card.appendChild(spotPicker(k, 'endSide', 'endYard', isUsKick ? 30 : 40, renderWizard));
+
+    const lbl3 = document.createElement('div'); lbl3.className = 'fieldLabel'; lbl3.textContent = 'Returner' + (isUsKick ? ' (optional, opponent -- if known)' : '');
+    card.appendChild(lbl3);
+    const input = document.createElement('input'); input.className = 'writeIn'; input.type = 'text';
+    input.placeholder = isUsKick ? "Opponent's returner, if known" : 'Who returned it';
+    input.value = k.returner || '';
+    input.addEventListener('input', function(){ k.returner = input.value; });
+    card.appendChild(input);
+
+    const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = '✅ Log Kickoff & Start Game';
+    btn.addEventListener('click', commitKickoff);
+    card.appendChild(btn);
+    const back = document.createElement('button'); back.className = 'ghostBtn'; back.textContent = '← Back';
+    back.addEventListener('click', function(){ wiz.step = 1; renderWizard(); });
+    card.appendChild(back);
+    area.appendChild(card);
+  }
+
+  async function commitKickoff(){
+    const isUsKick = wiz.state.receivingTeam !== 'Us';
+    const k = wiz.state.kickoff;
+    const entry = {
+      type: 'kick', id: genId(), side: isUsKick ? 'offense' : 'defense', quarter: 1,
+      kickTeam: isUsKick ? 'Us' : 'Opponent', onside: false,
+      startSide: isUsKick ? 'OWN' : 'OPP', startYard: 40, // fixed kickoff spot, same convention Stat Keeper already uses
+      catchSide: k.catchSide, catchYard: k.catchYard, endSide: k.endSide, endYard: k.endYard,
+    };
+    if (isUsKick) entry.oppReturner = k.returner || ''; else entry.returner = k.returner || '';
+
+    loadStatus.textContent = 'Signing in…';
+    const ok = await ensureCoachAuth();
+    if (!ok){ loadStatus.textContent = ''; return; }
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      // Stat Keeper stores newest-first (see game-playback.html's own note
+      // on this) -- this kickoff IS the oldest play in the game, so it
+      // belongs at the very END of the array, not unshifted to the front.
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      const gameState = {
+        plays: plays,
+        quarter: 1,
+        spot: endAbs != null ? clampSpot(endAbs) : 50,
+        down: 1, distance: 10,
+        finalUs: (existing && existing.finalUs) || '',
+        finalOpp: (existing && existing.finalOpp) || '',
+        updatedAt: new Date().toISOString(),
+      };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    wiz.step = 3;
+    renderWizard();
+  }
+
+  // ---- Step 4: Handoff ----
+  // Nathan: "The STATKEEPER site will eventually become the back end tool
+  // to fine tune game details." For now (before the snap-by-snap wizard
+  // exists), Stat Keeper IS still where the rest of the game gets logged
+  // -- this just hands off into it with the right game already selected.
+  function renderDoneStep(area){
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<div class="handoffIcon">🎉</div><h2 style="text-align:center;">Game log started</h2>' +
+      '<div class="sub" style="text-align:center;">The opening kickoff is saved. Continue logging plays in Stat Keeper -- the snap-by-snap wizard (formations, motion/counter/boot tags, auto down &amp; distance, timeouts) is next on the plan.</div>';
+    const cta = document.createElement('a'); cta.className = 'primaryBtn'; cta.style.display = 'block'; cta.style.textAlign = 'center'; cta.style.textDecoration = 'none';
+    cta.textContent = '📋 Continue in Stat Keeper →';
+    cta.href = 'stat-keeper.html?game=' + encodeURIComponent(selectedGame.id);
+    card.appendChild(cta);
+    const again = document.createElement('button'); again.className = 'ghostBtn'; again.textContent = 'Set Up a Different Game';
+    again.addEventListener('click', function(){ gameSelect.value = ''; wizardWrap.style.display = 'none'; emptyWrap.style.display = ''; });
+    card.appendChild(again);
+    area.appendChild(card);
+  }
+
+  async function boot(){
+    loadStatus.textContent = 'Signing in…';
+    let ok = false;
+    try { ok = await ensureCoachAuth(); } catch(e){ ok = false; }
+    if (!ok){ loadStatus.textContent = 'Sign-in required — reload the page to try again.'; return; }
+    loadStatus.textContent = 'Loading games…';
+    try {
+      const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
+      const res = await fetch(schedUrl);
+      const games = res.ok ? (await res.json() || []) : [];
+      liveGamesCache = Array.isArray(games) ? games.filter(function(g){ return g && g.id; }) : [];
+    } catch(e){ loadStatus.textContent = '⚠️ Could not load games: ' + e.message; return; }
+    populateGameSelect();
+    loadStatus.textContent = liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.';
+    // Nathan: "I want this to be tied into Coach Nate profile where I have
+    // a KEEP STATS CTA on the game card" -- once that link exists (see
+    // schedule.js), it'll pass ?game=<id>; auto-select it here so tapping
+    // the card drops the coach straight into setup instead of the picker.
+    const params = new URLSearchParams(location.search);
+    const gid = params.get('game');
+    if (gid){ gameSelect.value = gid; loadGame(gid); }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
