@@ -588,17 +588,27 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    marquee-style scroll -- one navy strip, plain text items separated by a
    dot, looping seamlessly (the JS renders the item list twice back-to-back
    and the keyframe scrolls exactly one copy's width). */
-.globalCallout{position:relative;margin:0;overflow:hidden;cursor:pointer;background:linear-gradient(135deg, #3d4f7d 0%, #1a2647 100%)}
+/* Nathan (follow-up x2): "side to side gradient is tough, maybe it's top
+   to bottom and it's not black but a dark orange so the text is still
+   legible." Vertical instead of diagonal, and the bottom stop is now a
+   deep burnt orange (no hex for that dark a shade exists as a shared
+   variable yet, so it's spelled out here) instead of black -- still dark
+   enough for white text to read clearly, without going monochrome. */
+.globalCallout{position:relative;margin:0;overflow:hidden;cursor:grab;background:linear-gradient(180deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 55%, #6b2600 100%)}
+.globalCallout:active{cursor:grabbing}
+/* Nathan: "make it so you can slide it with your finger" -- js/study-quiz.js's
+   gcSetupTicker() now drives the scroll itself via requestAnimationFrame +
+   inline transform (paused/overridden during a drag) instead of a fixed
+   CSS @keyframes animation, so the old `animation`/`--gcDur` properties are
+   gone; touch-action:pan-y leaves vertical page scrolling alone but stops
+   the browser's own horizontal swipe handling (e.g. iOS's edge back-swipe)
+   from fighting the drag. */
 .gcTickerTrack{display:flex;align-items:center;width:max-content;white-space:nowrap;
-  padding:7px 0;animation:gcTickerScroll linear infinite;animation-duration:var(--gcDur, 26s)}
+  padding:7px 0;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .gcTickerItem{display:inline-flex;align-items:center;gap:5px;padding:0 20px;flex-shrink:0;
   font-size:11px;font-weight:700;color:#fff}
 .gcTickerIcon{font-size:13px;line-height:1}
 .gcTickerSep{padding:0 4px;opacity:.4;color:#fff}
-@keyframes gcTickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-@media (prefers-reduced-motion: reduce){
-  .gcTickerTrack{animation:none}
-}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with
