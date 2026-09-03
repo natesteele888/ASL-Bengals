@@ -56,6 +56,16 @@
     border-radius:14px;padding:12px;margin-bottom:14px}
   .entryPanel h2{margin:0 0 10px;font-size:11px;font-weight:800;color:var(--dim);
     text-transform:uppercase;letter-spacing:.06em}
+  /* Nathan: "things need to be collapsable at the top where you select the
+     details so it's easier to navigate" -- the whole "Log a Play" form
+     (ball position, side/type pickers, the fields for whatever type is
+     selected) can take up most of a phone screen; collapsing it down to
+     just its header lets the Play Log below stay reachable without
+     scrolling past all of that every time. #entryPanelToggle's own margin
+     replaces the h2's when collapsed since there's no body below it to
+     leave room for. */
+  .entryPanel.collapsed h2{margin-bottom:0}
+  .entryPanel.collapsed #entryPanelBody{display:none}
 
   .typeGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
   @media (min-width:520px){ .typeGrid{grid-template-columns:repeat(6,1fr);} }
@@ -187,8 +197,12 @@
 
   <div class="scoreboard" id="scoreboardBox">US 0 — 0 OPP</div>
 
-  <div class="entryPanel">
-    <h2>Log a Play</h2>
+  <div class="entryPanel" id="entryPanel">
+    <h2 id="entryPanelToggle" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+      <span>Log a Play</span>
+      <span id="entryPanelChevron" style="font-size:11px;color:var(--dim);">▾ Hide</span>
+    </h2>
+    <div id="entryPanelBody">
     <!-- Nathan: "add in the field yardage markage." Always-visible, always-
          editable running field position -- see renderBallPositionControl()
          below. Auto-advances after run/pass/kick-return plays; punts sync it
@@ -204,6 +218,7 @@
 
     <button class="btn primary logPlayBtn" id="logPlayBtn" disabled>✅ Log Play</button>
     <button class="btn ghost" id="cancelEditBtn" type="button" style="display:none;width:100%;margin-top:6px;justify-content:center;">✕ Cancel Edit</button>
+    </div>
   </div>
 
   <section class="panel">
@@ -308,6 +323,27 @@
   const gameSelect = document.getElementById('gameSelect');
   const gameLoadStatus = document.getElementById('gameLoadStatus');
   const ballPosWrap = document.getElementById('ballPosWrap');
+
+  // Nathan: "things need to be collapsable at the top where you select the
+  // details so it's easier to navigate." Collapsed state remembers itself
+  // across reloads (same one-line localStorage pattern the rest of this
+  // file already uses for the actual game data) so it doesn't reset back
+  // open every time this page is reloaded mid-game.
+  const entryPanel = document.getElementById('entryPanel');
+  const entryPanelChevron = document.getElementById('entryPanelChevron');
+  const ENTRY_PANEL_COLLAPSED_KEY = 'statKeeperEntryPanelCollapsed';
+  function setEntryPanelCollapsed(collapsed){
+    entryPanel.classList.toggle('collapsed', collapsed);
+    entryPanelChevron.textContent = collapsed ? '▸ Show' : '▾ Hide';
+    try{ localStorage.setItem(ENTRY_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0'); }catch(e){}
+  }
+  function expandEntryPanel(){ setEntryPanelCollapsed(false); }
+  document.getElementById('entryPanelToggle').addEventListener('click', function(){
+    setEntryPanelCollapsed(!entryPanel.classList.contains('collapsed'));
+  });
+  let entryPanelStartCollapsed = false;
+  try{ entryPanelStartCollapsed = localStorage.getItem(ENTRY_PANEL_COLLAPSED_KEY) === '1'; }catch(e){}
+  setEntryPanelCollapsed(entryPanelStartCollapsed);
 
   // Which play types are offered under each side-of-ball tab. 'turnover' can happen
   // either way (offense fumbles it away, defense forces/recovers it), so it shows on both.
@@ -1193,6 +1229,20 @@
   }
   function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation+']' : ''; }
 
+  // Nathan: "it's hard when it doesn't show me where on the field each play
+  // is set to." Kickoffs and punts already spell out real spots (from/
+  // caught at/brought to) since those have their own explicit fields --
+  // everything else (run, pass, kneel, tackle, penalty, defensive extra,
+  // turnover, score) only ever had that info sitting silently on `p.spot`
+  // (the shared running field-position tracker, stamped at the moment each
+  // of those gets logged -- see the broadened stamping condition down by
+  // logPlayBtn's click handler) without ever printing it. One shared
+  // one-liner appended to each of those types below instead of repeating
+  // the same null-check/format everywhere.
+  function spotAtTxt(p){
+    return (p.spot != null && !isNaN(p.spot)) ? ' · at ' + spotLabelAbs(p.spot) : '';
+  }
+
   function describePlay(p){
     if (p.type==='run'){
       const isUsRun = p.runTeam !== 'Opponent';
@@ -1201,7 +1251,7 @@
       const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
       return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
         (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
-        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
     }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
@@ -1210,10 +1260,10 @@
       const prefix = isUsPass ? '' : '🛡️ ';
       if (p.result==='Incomplete'){
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
-        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '') + spotAtTxt(p);
     }
     if (p.type==='kick'){
       const isUsKick = p.kickTeam !== 'Opponent';
@@ -1279,22 +1329,22 @@
       const isUsKneel = p.kneelTeam !== 'Opponent';
       const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
       const lossTxt = (p.kneelType !== 'Spike' && p.kneelYards) ? ', -' + p.kneelYards + ' yds' : '';
-      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt;
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt + spotAtTxt(p);
     }
     if (p.type==='tackle'){
       const assists = asList(p.assist);
-      if (!p.tackler && assists.length) return 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ');
-      return 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
+      if (!p.tackler && assists.length) return 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ') + spotAtTxt(p);
+      return 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)') + spotAtTxt(p);
     }
-    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
+    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'') + spotAtTxt(p);
     if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
-      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '');
-    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '');
+      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '') + spotAtTxt(p);
+    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '') + spotAtTxt(p);
     if (p.type==='penalty'){
       const penName = (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty');
       const ydsTxt = p.declined ? 'declined' : (p.penYards||0)+' yds';
       return '🚩 ' + penName + ' on ' + (p.penTeam||'?') + (p.penPlayer ? ' ('+p.penPlayer+')' : '') +
-        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '');
+        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '') + spotAtTxt(p);
     }
     return 'Play';
   }
@@ -1360,7 +1410,13 @@
       return;
     }
     const entry = Object.assign({type: currentType, id: 'play_'+Date.now(), side: currentSide, quarter: currentQuarter}, draft);
-    if (entry.type === 'run' || entry.type === 'pass') entry.spot = currentSpot;
+    // Nathan: "add [field position] on each line" -- was only stamped for
+    // run/pass before (the two types this file already advanced currentSpot
+    // for). Broadened to every type describePlay() now prints a spot for;
+    // kick/punt are deliberately left out since those already carry their
+    // own explicit start/catch/end spot fields instead of this single
+    // shared one.
+    if (['run','pass','kneel','tackle','penalty','defextra','turnover','score'].indexOf(entry.type) !== -1) entry.spot = currentSpot;
     insertPlay(entry);
     advanceSpotForPlay(entry);
     persist();
@@ -1432,6 +1488,7 @@
     renderTypeGrid();
     renderFields();
     updateEditModeUI();
+    expandEntryPanel();
     document.querySelector('.entryPanel').scrollIntoView({ behavior:'smooth', block:'start' });
   }
   function cancelEditPlay(){
