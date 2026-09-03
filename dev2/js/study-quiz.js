@@ -1427,26 +1427,95 @@ async function renderEngagementCallout(){
   }
   if(!items.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
   host.style.display = '';
-  // Rendered twice back-to-back so the CSS animation (translateX(-50%)) can
-  // loop seamlessly -- the instant the first copy has scrolled fully
-  // offscreen, the second copy is sitting exactly where the first started.
+  // Rendered twice back-to-back so the loop can wrap seamlessly -- the
+  // instant the first copy has scrolled fully offscreen, the second copy is
+  // sitting exactly where the first started.
   const track = document.createElement('div');
   track.className = 'gcTickerTrack';
   track.innerHTML = items.join('') + items.join('');
-  // Rough duration so longer content doesn't feel rushed and short content
-  // doesn't crawl -- ~90px/second reads comfortably either way.
-  const approxWidth = items.length * 260;
-  track.style.setProperty('--gcDur', Math.max(18, Math.round(approxWidth / 90)) + 's');
   host.innerHTML = '';
   host.appendChild(track);
-  host.onclick = openLeaderboardOverlay;
-  // Keep the ticker catching up on its own for as long as this tab/session
-  // stays open -- see the staleness explanation in the comment block above.
+  gcSetupTicker(host, track);
+}
+window.renderEngagementCallout = renderEngagementCallout;
+
+// Nathan: "banner needs to slow down a little, make it so you can slide it
+// with your finger." Replaces the old CSS @keyframes marquee (a fixed
+// animation nothing could interrupt) with a small requestAnimationFrame
+// loop that drives the same translateX drift by hand -- doing it in JS is
+// what makes it possible to pause on a touch/mouse-down, follow the
+// finger 1:1 while dragging, and resume auto-scrolling from wherever the
+// drag let go, instead of snapping back to a fixed animation.
+// gcAnimFrameId/gcDragHandlers are module-level (not local to one render)
+// so a re-render -- this fires again every GC_REFRESH_MS, see above -- can
+// find and tear down the PREVIOUS render's loop/listeners before starting
+// fresh ones; otherwise every refresh would leak another set of
+// window-level drag listeners for as long as the tab stays open.
+const GC_PX_PER_SEC = 60; // was an effective ~90px/s under the old CSS animation -- "slow down a little"
+let gcAnimFrameId = null;
+let gcDragHandlers = null;
+function gcSetupTicker(host, track){
+  if(gcAnimFrameId){ cancelAnimationFrame(gcAnimFrameId); gcAnimFrameId = null; }
+  if(gcDragHandlers){
+    window.removeEventListener('mousemove', gcDragHandlers.move);
+    window.removeEventListener('touchmove', gcDragHandlers.move);
+    window.removeEventListener('mouseup', gcDragHandlers.up);
+    window.removeEventListener('touchend', gcDragHandlers.up);
+    gcDragHandlers = null;
+  }
+  const halfWidth = track.scrollWidth / 2; // one copy's width -- items were rendered twice back-to-back above
+  if(!halfWidth){ return; } // nothing laid out yet (e.g. host hidden) -- no loop to run
+  let pos = 0;
+  let lastTs = null;
+  let dragging = false, dragStartX = 0, dragStartPos = 0;
+  const wrap = p => ((p % halfWidth) + halfWidth) % halfWidth;
+  const apply = () => { track.style.transform = `translateX(${-pos}px)`; };
+  // Nathan (follow-up): "no the banner needs to scroll" -- dropped the
+  // prefers-reduced-motion gate this used to have. That's normally the
+  // considerate default, but here it meant the ticker sat completely still
+  // on any device/browser with that accessibility setting on, which read
+  // as broken rather than intentional for something whose whole point is
+  // to scroll. Auto-scroll now always runs except mid-drag.
+  function tick(ts){
+    if(dragging){
+      lastTs = null; // don't let the paused-during-drag gap count as elapsed time on release
+    } else {
+      if(lastTs !== null) pos = wrap(pos + ((ts - lastTs) / 1000) * GC_PX_PER_SEC);
+      apply();
+      lastTs = ts;
+    }
+    gcAnimFrameId = requestAnimationFrame(tick);
+  }
+  gcAnimFrameId = requestAnimationFrame(tick);
+  function xOf(e){ return e.touches ? e.touches[0].clientX : e.clientX; }
+  function pointerDown(e){
+    dragging = true;
+    dragStartX = xOf(e); dragStartPos = pos;
+  }
+  function pointerMove(e){
+    if(!dragging) return;
+    pos = wrap(dragStartPos - (xOf(e) - dragStartX));
+    apply();
+  }
+  function pointerUp(){ dragging = false; }
+  track.addEventListener('mousedown', pointerDown);
+  track.addEventListener('touchstart', pointerDown, { passive: true });
+  window.addEventListener('mousemove', pointerMove);
+  window.addEventListener('touchmove', pointerMove, { passive: true });
+  window.addEventListener('mouseup', pointerUp);
+  window.addEventListener('touchend', pointerUp);
+  gcDragHandlers = { move: pointerMove, up: pointerUp };
+  // Nathan (follow-up): "it shouldn't be clickable" -- dropped the
+  // tap-to-open-Leaderboard behavior entirely. Sliding it with a finger
+  // still works (that's a drag, not a click); it just no longer navigates
+  // anywhere on a plain tap.
+  host.onclick = null;
+  // Keep the ticker's DATA catching up on its own for as long as this
+  // tab/session stays open -- see the staleness explanation further above.
   if(!gcRefreshTimer){
     gcRefreshTimer = setInterval(renderEngagementCallout, GC_REFRESH_MS);
   }
 }
-window.renderEngagementCallout = renderEngagementCallout;
 
 // ---- My Stats: a signed-in player's own bests + ranks. Deliberately
 // summary-only (best score/time + rank per board) -- no round-by-round or
