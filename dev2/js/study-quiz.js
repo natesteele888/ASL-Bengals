@@ -1297,6 +1297,51 @@ function gcFmtGameLine(next){
   return `${dateStr}${timeStr} ${homeAway} vs. ${gcEscapeHtml(next.opponent || 'TBD')}`;
 }
 
+// Nathan: "how many kids watched film" -- js/film-views.js's
+// window.fetchFilmViews() already logs every tap on a "watch opponent
+// film" link (This Week / Schedule / Opponent Page), keyed by game id.
+// This just counts the unique PLAYERS (not coaches, matching "kids") who
+// have viewed the upcoming opponent's film -- the same `next` game the
+// ticker's own "next game" item above already resolved, so the two lines
+// read as one connected story (who we're playing, whether the team's
+// actually watched the tape on them).
+async function gcFilmWatchCountFor(gameId){
+  if(!gameId || typeof window.fetchFilmViews !== 'function') return null;
+  try {
+    const views = await window.fetchFilmViews();
+    const viewers = views[gameId] || [];
+    return viewers.filter(v => v && !v.isCoach).length;
+  } catch(e) { return null; }
+}
+// Nathan: "Call outs for best 2 minute drill of the day." Same raw,
+// timestamped per-drive log the Overall standings already read
+// (window.fetchTwoMinDrillRawHistory, js/two-minute-drill.js), restricted
+// to TODAY's local calendar day rather than a rolling predicate window --
+// "today" resets at midnight the same way a real practice/game day would,
+// matching how a coach would actually say this out loud on the sideline.
+// Coaches are excluded the same way they're kept out of every other
+// competitive board in this app (splitByCoach).
+function gcIsToday(iso){
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+async function computeBestDrillToday(){
+  const raw = await fetchDrillRawHistory();
+  const todays = filterEntriesByDate(raw, gcIsToday);
+  const { players } = splitByCoach(todays);
+  if(!players.length) return null;
+  // Same "score, then yards, then streak" ordering two-minute-drill.js's
+  // own (file-private) twoMinDrillIsBetter/twoMinLbSortCompare use --
+  // duplicated locally rather than reached into that file's IIFE, same
+  // pattern standingsFromRawHistory's drillBest already follows above.
+  const isBetter = (a,b)=> (a.score||0) !== (b.score||0) ? (a.score||0) > (b.score||0) : (a.totalYards||0) > (b.totalYards||0);
+  const best = dedupeBestByName(players, isBetter).sort((a,b)=>
+    (b.score||0) - (a.score||0) || (b.totalYards||0) - (a.totalYards||0) || (b.bestStreak||0) - (a.bestStreak||0)
+  )[0];
+  return best || null;
+}
+
 // ---------------------------------------------------------------------------
 // Global ticker (Nathan, 2026-09-01): "some users are not doing a lot so we
 // need to promote taking the timed quiz, promote moving up the leaderboard
@@ -1314,6 +1359,26 @@ function gcFmtGameLine(next){
 // ticker, not cards) rather than the personalized "you're #N"/streak slides
 // the carousel version had -- simpler, and matches what was actually asked
 // for this time.
+//
+// Nathan (follow-up): "why does it keep showing an old top of leaderboard" --
+// this used to render exactly once, at the session gate (see
+// player-identity.js's gate()), and never again for the rest of however long
+// that tab stayed open. Standings kept moving (other kids finishing quizzes/
+// drills) while the ticker just sat on whatever snapshot it grabbed at
+// login, which is exactly the staleness being reported -- the Leaderboard
+// overlay looked "right" because IT recomputes fresh every time it's
+// opened; the ticker never got that same second chance. GC_REFRESH_MS below
+// re-runs this whole function on an interval so it keeps catching up on its
+// own instead of only ever reflecting one moment in time. gcRefreshTimer
+// guards against ever stacking a second interval if something calls this
+// function again before the first interval would've fired.
+const GC_REFRESH_MS = 3 * 60 * 1000; // 3 minutes -- frequent enough to feel live on a sideline/game day without hammering Firebase
+let gcRefreshTimer = null;
+// Nathan: "Call outs for best 2 minute drill of the day. Call outs for how
+// many kids watched film." Two more lines added to the same ticker, same
+// "nice-to-have, never worth breaking the app over" treatment as the
+// existing three -- each wrapped so one failing fetch (e.g. no drill data
+// yet) just skips its own line rather than losing the whole ticker.
 async function renderEngagementCallout(){
   const host = document.getElementById('globalCallout');
   if(!host) return;
@@ -1322,10 +1387,11 @@ async function renderEngagementCallout(){
   if(window.isParentSession){ host.innerHTML = ''; host.style.display = 'none'; return; }
   const items = [];
   try {
-    const [{ players }, mostImproved, games] = await Promise.all([
+    const [{ players }, mostImproved, games, bestDrillToday] = await Promise.all([
       computeOverallStandings(),
       computeMostImproved().catch(() => null),
       Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
+      computeBestDrillToday().catch(() => null),
     ]);
     // "basic details of next game on schedule" -- exact format Nathan asked
     // for: "Sat. Sep 5th, 12:45pm Home vs. Nipmuc" (see gcFmtGameLine).
@@ -1341,6 +1407,19 @@ async function renderEngagementCallout(){
     // "weekly call out for weeks most improved"
     if(mostImproved){
       items.push(gcTickerItemHtml('📈', `This Week's Most Improved: ${gcEscapeHtml(mostImproved.name)} (+${mostImproved.gain} pt${mostImproved.gain===1?'':'s'})`));
+    }
+    // "Call outs for best 2 minute drill of the day"
+    if(bestDrillToday){
+      const scoreStr = `${bestDrillToday.score||0} TD${(bestDrillToday.score||0)===1?'':'s'} \u2022 ${bestDrillToday.totalYards||0} yds`;
+      items.push(gcTickerItemHtml('🎮', `Best 2-Minute Drill Today: ${gcEscapeHtml(bestDrillToday.name)} (${scoreStr})`));
+    }
+    // "Call outs for how many kids watched film" -- only worth mentioning
+    // once there's actually opponent film linked to watch for this game.
+    if(next && next.opponentFilmUrl){
+      const filmCount = await gcFilmWatchCountFor(next.id);
+      if(filmCount !== null){
+        items.push(gcTickerItemHtml('🎥', `${filmCount} player${filmCount===1?'':'s'} watched this week's opponent film`));
+      }
     }
   } catch(e) {
     // Nice-to-have ticker -- never worth breaking the app over a failed
@@ -1361,6 +1440,11 @@ async function renderEngagementCallout(){
   host.innerHTML = '';
   host.appendChild(track);
   host.onclick = openLeaderboardOverlay;
+  // Keep the ticker catching up on its own for as long as this tab/session
+  // stays open -- see the staleness explanation in the comment block above.
+  if(!gcRefreshTimer){
+    gcRefreshTimer = setInterval(renderEngagementCallout, GC_REFRESH_MS);
+  }
 }
 window.renderEngagementCallout = renderEngagementCallout;
 
