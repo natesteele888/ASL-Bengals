@@ -260,7 +260,7 @@
   const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Playing'];
   const wiz = { step: 0, state: {} };
   function renderDots(){
-    if (wiz.step === 'resume'){ document.getElementById('stepDots').innerHTML = ''; return; }
+    if (wiz.step === 'resume' || wiz.step === 'audit'){ document.getElementById('stepDots').innerHTML = ''; return; }
     document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
       const cls = i === wiz.step ? 'active' : (i < wiz.step ? 'done' : '');
       return '<div class="stepDot ' + cls + '"></div>';
@@ -271,6 +271,7 @@
     const area = document.getElementById('stepArea');
     area.innerHTML = '';
     if (wiz.step === 'resume') renderResumeStep(area);
+    else if (wiz.step === 'audit') renderAuditStep(area);
     else if (wiz.step === 0) renderStartersStep(area);
     else if (wiz.step === 1) renderCoinTossStep(area);
     else if (wiz.step === 2) renderKickoffStep(area);
@@ -316,6 +317,16 @@
       renderWizard();
     });
     card.appendChild(cont);
+    // Nathan: "The Game Wizard was done prior to plays being added, same
+    // for starting ball spot and ending ball spot... only some of the
+    // plays are effected by it. I need to be able to open that game and
+    // update the entire existing play log... If the wizard showed the info
+    // it has on the play (saying none if it wasn't included) then I
+    // should have an option to update for that play."
+    const auditBtn = document.createElement('button'); auditBtn.className = 'primaryBtn'; auditBtn.style.background = 'linear-gradient(135deg,#3ddcff,#0a8ab0)';
+    auditBtn.textContent = '🔍 Review & Fill In Missing Info';
+    auditBtn.addEventListener('click', function(){ startAuditMode(gs); });
+    card.appendChild(auditBtn);
     const startOver = document.createElement('button'); startOver.className = 'ghostBtn'; startOver.textContent = '🔄 Start Over From Kickoff Instead';
     startOver.addEventListener('click', function(){ wiz.step = 0; renderWizard(); });
     card.appendChild(startOver);
@@ -1320,8 +1331,28 @@
         else { g.down = g.down + 1; g.distance = Math.max(1, g.distance - signedYardsFromSpots(startAbs, endAbs, onOffense)); }
       } else if (type === 'Pass' && wiz.play.result === 'Incomplete'){
         g.down = g.down + 1;
-      } else if (type === 'Penalty' && converted){
-        g.down = 1; g.distance = 10;
+      } else if (type === 'Penalty' && !wiz.play.declined){
+        // Nathan: "If a 1st down is set and then a penalty happens, it
+        // needs to update that on the down and distance." A penalty was
+        // already correctly moving the SPOT (see the block just above),
+        // but distance itself was never touched unless "Automatic 1st
+        // Down" was checked -- a plain 5-yard false start on 1st & 10
+        // should become 1st & 15, not silently stay 1st & 10. Down number
+        // itself is untouched either way (a penalty never burns a down by
+        // rule) unless the yardage happens to reach the line to gain on
+        // its own, which -- same as a real penalty -- is a first down
+        // whether or not "Automatic 1st Down" was checked.
+        const yds = Number(wiz.play.penYards||0);
+        const penalizedIsOffense = (wiz.play.penTeam === 'Us') === onOffense;
+        if (converted){
+          g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot));
+        } else if (penalizedIsOffense){
+          g.distance = g.distance + yds;
+        } else {
+          const newDist = g.distance - yds;
+          if (newDist <= 0){ converted = true; g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot)); }
+          else { g.distance = newDist; }
+        }
       }
 
       // ---- possession changes ----
@@ -1344,6 +1375,295 @@
   }
   function absoluteSpotOf(side, yard){ return absoluteSpot(side, yard); }
 
+
+  // ---- Audit Mode: review an already-logged game, play by play ----
+  // Nathan: "The Game Wizard was done prior to plays being added, same for
+  // starting ball spot and ending ball spot. With those put in place
+  // afterwards, only some of the plays are effected by it... If the wizard
+  // showed the info it has on the play (saying none if it wasn't included,
+  // same for ball placements) then I should have an option to update for
+  // that play. I would have to go through all the plays from the game to
+  // ensure they are correct."
+  //
+  // Deliberately NOT the same phase-by-phase flow as building a brand new
+  // play (renderPhaseRunDetail etc.) -- those are wired to
+  // commitCurrentPlay(), which APPENDS a new play and re-advances the
+  // running spot/down/distance/possession simulation. Reviewing an
+  // existing play needs the opposite: show everything that play might
+  // carry on ONE screen, editable right there, saved back into that exact
+  // same array slot (matched by id) without touching anything else's
+  // spot/score/possession math at all. A field-descriptor table drives one
+  // generic renderer instead of ten near-duplicate per-type screens.
+  const AUDIT_FIELDS = {
+    run: [
+      {key:'formation', label:'Formation', kind:'chip', options:FORMATIONS},
+      {key:'formationDir', label:'Formation Direction', kind:'chip', options:['Left','Right']},
+      {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
+      {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
+      {key:'dir', label:'Run Direction', kind:'chip', options:['Left','Middle','Right']},
+      {key:'carrier', label:'Carrier (us)', kind:'player'},
+      {key:'oppCarrier', label:'Carrier (opponent)', kind:'player', optional:true},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'First Down', kind:'toggle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    pass: [
+      {key:'result', label:'Complete / Incomplete', kind:'chip', options:['Complete','Incomplete']},
+      {key:'formation', label:'Formation', kind:'chip', options:FORMATIONS},
+      {key:'formationDir', label:'Formation Direction', kind:'chip', options:['Left','Right']},
+      {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
+      {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
+      {key:'passer', label:'Passer (us)', kind:'player'},
+      {key:'target', label:'Target (us)', kind:'player'},
+      {key:'oppPasser', label:'Passer (opponent)', kind:'player', optional:true},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'First Down', kind:'toggle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    tackle: [
+      {key:'tackler', label:'Tackler (solo)', kind:'player'},
+      {key:'assist', label:'Assist(s)', kind:'playerMulti'},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'Opponent 1st Down', kind:'toggle'},
+    ],
+    kick: [
+      {key:'returner', label:'Returner (us)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    punt: [
+      {key:'puntResult', label:'Result', kind:'chip', options:['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']},
+      {key:'punter', label:'Punter (us)', kind:'player', optional:true},
+      {key:'oppPunter', label:'Punter (opponent)', kind:'player', optional:true},
+      {key:'returner', label:'Returner (us)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
+    ],
+    penalty: [
+      {key:'penTeam', label:'Penalty On', kind:'chip', options:['Us','Opponent']},
+      {key:'penType', label:'Penalty', kind:'chip', options:['Holding','False Start','Offsides','Delay of Game','Pass Interference','Facemask','Unsportsmanlike Conduct','Illegal Block','Other']},
+      {key:'penYards', label:'Yards', kind:'number'},
+      {key:'penPlayer', label:'Player', kind:'player', optional:true},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+      {key:'declined', label:'Declined', kind:'toggle'},
+      {key:'firstDown', label:'Automatic 1st Down', kind:'toggle'},
+    ],
+    turnover: [
+      {key:'toType', label:'Type', kind:'chip', options:['Fumble','Interception']},
+      {key:'lostBy', label:'Lost By', kind:'player', optional:true},
+      {key:'recoveredBy', label:'Recovered By', kind:'player', optional:true},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+    ],
+    kneel: [
+      {key:'kneelType', label:'Type', kind:'chip', options:['Kneel','Spike']},
+      {key:'kneelYards', label:'Yards Lost', kind:'number'},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+    ],
+    defextra: [
+      {key:'extraType', label:'Type', kind:'chip', options:['INT','PBU','Sack']},
+      {key:'player', label:'Player', kind:'player'},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    score: [
+      {key:'scoreKind', label:'Kind', kind:'chip', options:['PAT Good','PAT No Good','2PT Good','2PT No Good','Safety']},
+      {key:'scoreTeam', label:'Team', kind:'chip', options:['Us','Opponent']},
+      {key:'scorePlayer', label:'Player', kind:'player', optional:true},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+    ],
+  };
+
+  let auditPlays = [];
+  let auditIndex = 0;
+  let auditDraft = {};
+
+  function startAuditMode(gs){
+    auditPlays = (gs.plays || []).filter(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; }).slice().reverse();
+    if (!auditPlays.length){ alert('No plays to review yet.'); return; }
+    auditIndex = 0;
+    loadAuditDraft();
+    wiz.step = 'audit';
+    renderWizard();
+  }
+  function loadAuditDraft(){ auditDraft = Object.assign({}, auditPlays[auditIndex]); }
+
+  function auditFieldValueText(play, f){
+    if (f.kind === 'spotPair'){
+      const a = spotLabel(play.startSide, play.startYard), b = spotLabel(play.endSide, play.endYard);
+      return (a && b) ? (a + ' → ' + b) : '— none —';
+    }
+    if (f.kind === 'spotSingle'){
+      const a = spotLabel(play.spotSide, play.spotYard);
+      return a || '— none —';
+    }
+    if (f.kind === 'spotTriple'){
+      const a = spotLabel(play.startSide, play.startYard), c = spotLabel(play.catchSide, play.catchYard), b = spotLabel(play.endSide, play.endYard);
+      if (!a && !c && !b) return '— none —';
+      return (a||'?') + ' → ' + (c||'(no catch spot)') + ' → ' + (b||'?');
+    }
+    if (f.kind === 'downdist'){
+      return (play.down != null && play.distance != null) ? (['1st','2nd','3rd','4th'][play.down-1] + ' & ' + play.distance) : '— none —';
+    }
+    if (f.kind === 'toggle') return play[f.key] ? 'Yes' : 'No';
+    if (f.kind === 'playerMulti') return (play[f.key] && play[f.key].length) ? play[f.key].join(', ') : '— none —';
+    return play[f.key] || '— none —';
+  }
+
+  function renderAuditFieldEditor(container, f){
+    const wrap = document.createElement('div'); wrap.style.cssText = 'margin-bottom:4px;';
+    if (f.kind === 'chip') chipGroupField(wrap, f.label, auditDraft, f.key, f.options);
+    else if (f.kind === 'player') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {optional: f.optional});
+    else if (f.kind === 'playerMulti') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {multi:true, optional:true});
+    else if (f.kind === 'toggle'){
+      chipGroupField(wrap, f.label, auditDraft, f.key, [[true,'Yes'],[false,'No']]);
+    } else if (f.kind === 'number'){
+      const lbl = document.createElement('div'); lbl.className = 'fieldLabel'; lbl.textContent = f.label;
+      wrap.appendChild(lbl);
+      const yr = document.createElement('div'); yr.className = 'yardRow';
+      const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+      const input = document.createElement('input'); input.type = 'number'; input.value = auditDraft[f.key] != null ? auditDraft[f.key] : 0;
+      const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+      minus.addEventListener('click', function(){ auditDraft[f.key] = Math.max(0, (Number(input.value)||0)-1); renderWizard(); });
+      plus.addEventListener('click', function(){ auditDraft[f.key] = (Number(input.value)||0)+1; renderWizard(); });
+      input.addEventListener('change', function(){ auditDraft[f.key] = Number(input.value)||0; });
+      yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+      wrap.appendChild(yr);
+    } else if (f.kind === 'spotPair'){
+      if (auditDraft.startSide == null){ const sy = sideYardFromAbs(50); auditDraft.startSide = sy.side; auditDraft.startYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Start Spot';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'startSide', 'startYard', auditDraft.startYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'End Spot';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'spotSingle'){
+      if (auditDraft.spotSide == null){ const sy = sideYardFromAbs(50); auditDraft.spotSide = sy.side; auditDraft.spotYard = sy.yard; }
+      const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
+      wrap.appendChild(l); wrap.appendChild(spotPicker(auditDraft, 'spotSide', 'spotYard', auditDraft.spotYard, renderWizard));
+    } else if (f.kind === 'spotTriple'){
+      if (auditDraft.startSide == null){ const sy = sideYardFromAbs(50); auditDraft.startSide = sy.side; auditDraft.startYard = sy.yard; }
+      if (auditDraft.catchSide == null){ const sy = sideYardFromAbs(50); auditDraft.catchSide = sy.side; auditDraft.catchYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Start Spot';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'startSide', 'startYard', auditDraft.startYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'Caught At (leave as-is if there was no return)';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'catchSide', 'catchYard', auditDraft.catchYard, renderWizard));
+      const l3 = document.createElement('div'); l3.className = 'fieldLabel'; l3.textContent = 'Final Spot';
+      wrap.appendChild(l3); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'downdist'){
+      if (auditDraft.down == null) auditDraft.down = 1;
+      if (auditDraft.distance == null) auditDraft.distance = 10;
+      const dWrap = document.createElement('div');
+      dWrap.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent=f.label; return l; })());
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+      row.appendChild(optChipsSimple(auditDraft, 'down', [[1,'1st'],[2,'2nd'],[3,'3rd'],[4,'4th']]));
+      const yr = document.createElement('div'); yr.className = 'yardRow';
+      const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+      const input = document.createElement('input'); input.type = 'number'; input.value = auditDraft.distance;
+      const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+      minus.addEventListener('click', function(){ auditDraft.distance = Math.max(1, auditDraft.distance-1); renderWizard(); });
+      plus.addEventListener('click', function(){ auditDraft.distance = auditDraft.distance+1; renderWizard(); });
+      input.addEventListener('change', function(){ auditDraft.distance = Math.max(1, Number(input.value)||1); });
+      yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+      row.appendChild(yr);
+      dWrap.appendChild(row);
+      wrap.appendChild(dWrap);
+    }
+    container.appendChild(wrap);
+  }
+  // Small chip helper for a plain [value,label] options list bound directly
+  // to a draft object -- same idea as chipGroupField but usable for the
+  // numeric `down` value (1-4) without it being confused for the string-
+  // valued chip fields chipGroupField normally handles.
+  function optChipsSimple(stateObj, key, options){
+    const row = document.createElement('div'); row.className = 'chipRow'; row.style.margin = '0';
+    options.forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (stateObj[key] === pair[0] ? ' active' : '');
+      c.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+      c.textContent = pair[1];
+      c.addEventListener('click', function(){ stateObj[key] = pair[0]; renderWizard(); });
+      row.appendChild(c);
+    });
+    return row;
+  }
+
+  function renderAuditStep(area){
+    const play = auditPlays[auditIndex];
+    const fields = AUDIT_FIELDS[play.type] || [];
+    const missingCount = fields.filter(function(f){ return auditFieldValueText(play, f) === '— none —'; }).length;
+
+    const progress = document.createElement('div');
+    progress.style.cssText = 'text-align:center;font-size:11px;color:var(--dim2);margin-bottom:6px;';
+    progress.textContent = 'Reviewing Play ' + (auditIndex+1) + ' of ' + auditPlays.length + (missingCount ? ' · ' + missingCount + ' field(s) blank' : ' · looks complete');
+    area.appendChild(progress);
+
+    const card = document.createElement('div'); card.className = 'card';
+    const sideTag = play.side ? (play.side === 'offense' ? 'OFF' : 'DEF') : '';
+    card.innerHTML = '<h2>' + (sideTag ? sideTag + ' · ' : '') + play.type.toUpperCase() + '</h2>' +
+      '<div class="sub">Quarter ' + (play.quarter || '?') + '</div>';
+
+    const summary = document.createElement('div'); summary.style.cssText = 'margin:10px 0;padding:10px;background:#12161c;border-radius:8px;';
+    fields.forEach(function(f){
+      const val = auditFieldValueText(play, f);
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:12.5px;';
+      row.innerHTML = '<span style="color:var(--dim2);">' + escapeHtml(f.label) + '</span><span style="color:' + (val === '— none —' ? '#e0402a' : '#fff') + ';font-weight:600;text-align:right;">' + escapeHtml(val) + '</span>';
+      summary.appendChild(row);
+    });
+    card.appendChild(summary);
+
+    const editHeader = document.createElement('div'); editHeader.className = 'fieldLabel'; editHeader.style.marginTop = '4px'; editHeader.textContent = 'Fill in / correct anything below, then save:';
+    card.appendChild(editHeader);
+    fields.forEach(function(f){ renderAuditFieldEditor(card, f); });
+
+    const saveBtn = document.createElement('button'); saveBtn.className = 'primaryBtn'; saveBtn.textContent = '💾 Save & Next Play';
+    saveBtn.addEventListener('click', function(){ saveAuditDraft(true); });
+    card.appendChild(saveBtn);
+    const skipBtn = document.createElement('button'); skipBtn.className = 'ghostBtn'; skipBtn.textContent = 'Skip (Already Correct) →';
+    skipBtn.addEventListener('click', function(){ goToNextAuditPlay(); });
+    card.appendChild(skipBtn);
+    const navRow = document.createElement('div'); navRow.style.cssText = 'display:flex;gap:8px;';
+    const prevBtn = document.createElement('button'); prevBtn.className = 'ghostBtn'; prevBtn.style.margin = '0'; prevBtn.textContent = '← Previous Play';
+    prevBtn.disabled = auditIndex === 0;
+    prevBtn.addEventListener('click', function(){ auditIndex = Math.max(0, auditIndex-1); loadAuditDraft(); renderWizard(); });
+    const exitBtn = document.createElement('button'); exitBtn.className = 'ghostBtn'; exitBtn.style.margin = '0'; exitBtn.textContent = 'Exit Review';
+    exitBtn.addEventListener('click', function(){ loadGame(selectedGame.id); });
+    navRow.appendChild(prevBtn); navRow.appendChild(exitBtn);
+    card.appendChild(navRow);
+    area.appendChild(card);
+  }
+
+  function goToNextAuditPlay(){
+    if (auditIndex >= auditPlays.length - 1){
+      alert('That was the last play -- review complete!');
+      loadGame(selectedGame.id);
+      return;
+    }
+    auditIndex += 1;
+    loadAuditDraft();
+    renderWizard();
+  }
+
+  async function saveAuditDraft(advance){
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      const idx = plays.findIndex(function(p){ return p.id === auditDraft.id; });
+      if (idx !== -1) plays[idx] = Object.assign({}, plays[idx], auditDraft);
+      const gameState = Object.assign({}, existing, { plays: plays, updatedAt: new Date().toISOString() });
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      auditPlays[auditIndex] = auditDraft; // keep the in-memory copy in sync so Previous shows the saved version
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    if (advance) goToNextAuditPlay();
+  }
 
   async function boot(){
     loadStatus.textContent = 'Signing in…';

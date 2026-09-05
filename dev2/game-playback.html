@@ -74,22 +74,39 @@
      transform, the same way the reference image's numbers actually shrink
      toward the far edge. No white anywhere -- the scene sits directly on
      the app's own dark background, only the turf itself has color. */
+  /* Nathan (follow-up): "The ball doesn't need to match the perspective."
+     Ball marker, position lines, and the movement-arrow SVG now live in
+     .fieldOverlay -- a flat, untransformed layer sitting in the exact same
+     footprint as .fieldScene, but NOT a child of it, so none of them
+     inherit the rotateX tilt. Simple, accurate left:X% placement matters
+     more here than visually matching the perspective-compressed turf
+     underneath it. */
+  .fieldOverlay{position:absolute;top:14px;left:3%;right:3%;height:118px;pointer-events:none}
   .fieldOuter{position:relative;padding:14px 0 10px;margin-bottom:12px;perspective:640px}
   .fieldScene{position:relative;height:118px;margin:0 auto;max-width:94%;transform:rotateX(48deg);transform-style:preserve-3d}
   .fieldTurf{position:relative;width:100%;height:100%;border-radius:4px;overflow:hidden;
     box-shadow:0 0 0 3px #e8e4d8, 0 0 0 5px #1a1a1a;
     background:repeating-linear-gradient(90deg, var(--field) 0, var(--field) 9.09%, #24692f 9.09%, #24692f 18.18%)}
-  .fieldTurf::after{content:'';position:absolute;inset:6px;border:1px dashed rgba(255,225,77,.55);pointer-events:none}
+  /* Nathan (follow-up): "there is a weird dotted line around the inside of
+     the field that looks bad." Dropped -- was meant to echo the reference
+     photo's outer track boundary, but reads as a rendering glitch at this
+     size rather than a design element. */
   .endzoneOwn,.endzoneOpp{position:absolute;top:0;bottom:0;width:9.09%;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .endzoneOwn{left:0} .endzoneOpp{right:0}
   .endzoneOwn::before,.endzoneOpp::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 6px, transparent 6px, transparent 14px)}
   .endzoneLabel{position:relative;font-size:9px;font-weight:800;color:rgba(255,255,255,.95);writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.05em;z-index:1}
   .endzoneGhost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(90deg);font-size:34px;font-weight:900;color:rgba(255,255,255,.14);white-space:nowrap;pointer-events:none}
-  /* Nathan's reference: real fields paint yard numbers twice (once per
-     sideline), mirrored so each reads correctly from its own side -- one
-     row near the top edge of the turf, upside-down, one near the bottom,
-     upright. */
-  .yardNumRow{position:absolute;left:9.09%;right:9.09%;display:flex;justify-content:space-between;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);padding:0 4px;pointer-events:none;z-index:2}
+  /* Nathan (follow-up): "The 10 is on the goal line - should be much more
+     accurate." A flex row with space-between put the FIRST number flush
+     against the end-zone edge (the goal line itself), when a real field's
+     10-yard line sits a full 10 yards in from it. Each number now gets
+     its own exact left:X% (computed from the actual 81.82%-wide playing
+     field between the two goal lines), not evenly spaced across the whole
+     row -- real fields paint yard numbers twice (once per sideline),
+     mirrored so each reads correctly from its own side, hence top row
+     rotated 180° and bottom row upright. */
+  .yardNumRow{position:absolute;left:0;right:0;height:11px;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);pointer-events:none;z-index:2}
+  .yardNumRow span{position:absolute;top:0;transform:translateX(-50%)}
   .yardNumRow.top{top:6px;transform:rotate(180deg)}
   .yardNumRow.bottom{bottom:6px}
   /* Nathan (follow-up): "reference where they are on the field and the
@@ -100,7 +117,7 @@
      as flat icons outside it) both missed, and without being able to see
      the actual render, a third guess isn't worth it over just dropping
      the element per Nathan's own fallback. */
-  .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
+  .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3;pointer-events:auto}
   .firstDownLine{position:absolute;top:0;bottom:0;width:2px;background:#ffe14d;opacity:.85;transition:left .5s ease;z-index:2}
   /* Nathan: "Lines on the field should show the original line of
      scrimmage, the current line of the ball, and the 1st down marker."
@@ -184,9 +201,15 @@
       <div class="fieldTurf">
         <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BENGALS</span><span class="endzoneLabel" id="endzoneOwnLabel">BENGALS</span></div>
         <div class="endzoneOpp" id="endzoneOpp"><span class="endzoneGhost" id="endzoneOppGhost">OPP</span><span class="endzoneLabel" id="endzoneOppLabel">OPP</span></div>
-        <div class="yardNumRow top"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
-        <div class="yardNumRow bottom"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
+        <div class="yardNumRow top">
+          <span style="left:17.27%;">10</span><span style="left:25.45%;">20</span><span style="left:33.64%;">30</span><span style="left:41.82%;">40</span><span style="left:50%;">50</span><span style="left:58.18%;">40</span><span style="left:66.36%;">30</span><span style="left:74.55%;">20</span><span style="left:82.73%;">10</span>
+        </div>
+        <div class="yardNumRow bottom">
+          <span style="left:17.27%;">10</span><span style="left:25.45%;">20</span><span style="left:33.64%;">30</span><span style="left:41.82%;">40</span><span style="left:50%;">50</span><span style="left:58.18%;">40</span><span style="left:66.36%;">30</span><span style="left:74.55%;">20</span><span style="left:82.73%;">10</span>
+        </div>
       </div>
+    </div>
+    <div class="fieldOverlay">
       <svg class="moveSvg" id="moveSvg" viewBox="0 0 100 74" preserveAspectRatio="none"></svg>
       <div class="losLine" id="losLine" style="display:none;"></div>
       <div class="currentLine" id="currentLine" style="display:none;"></div>
