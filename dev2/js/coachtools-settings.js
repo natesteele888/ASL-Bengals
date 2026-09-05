@@ -33,8 +33,24 @@
     });
   }
 
+  // Nathan (follow-up): "I would argue to keep it available long term as a
+  // programmable link or destination within the setting menu. Setting
+  // appears to only have 1 single thing with one setting." The
+  // press-and-hold on the header logo (js/study-quiz.js) still works and
+  // is staying, per Nathan's own "agreed on the gesture" -- this is a
+  // second, permanent, discoverable way to reach the exact same
+  // window.enterPlayerPreview() (js/auth.js), for exactly the reason
+  // Nathan gave: a whole feature living ONLY behind a secret gesture is
+  // easy to forget exists, and Settings had room for it.
+  function wirePreviewButton() {
+    const btn = document.getElementById('coachSettingsPreviewBtn');
+    if (!btn) return;
+    btn.onclick = () => { if (window.enterPlayerPreview) window.enterPlayerPreview(); };
+  }
+
   window.initCoachToolsSettings = function () {
     refreshDroneVisibilityToggle();
+    wirePreviewButton();
     // Nathan (6th pass on weather cancellation): "I also don't want it to
     // be in the Coach Tools section. It should be available to coaches
     // when they click into a scheduled game or practice." The manual
