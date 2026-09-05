@@ -152,6 +152,15 @@
     }
 
     // ---- Normal mode: category pills, then that category's own tabs. ----
+    // Nathan: "it's confusing with the second set of pill buttons before
+    // the top 5 options, need a better way of visually breaking those up."
+    // Both rows used the exact same .gameplanChip pill before -- same
+    // size, same border, same active color -- so there was nothing telling
+    // you which row was "the 5 sections" and which was "the tools inside
+    // whichever one's selected." The category row keeps the normal
+    // full-size chip; the tools underneath now sit inside a labeled,
+    // shaded panel with smaller/more muted chips, so it visibly reads as
+    // "contents of the tab above" rather than a second, equal-weight row.
     const catRow = document.createElement('div');
     catRow.className = 'gameplanPickerGrid';
     catRow.style.marginBottom = '10px';
@@ -165,17 +174,25 @@
     });
     nav.appendChild(catRow);
 
+    const activeCategoryLabel = (CATEGORIES.find(c => c.key === activeCategory) || {}).label || '';
+    const subPanel = document.createElement('div');
+    subPanel.className = 'coachToolsSubPanel';
+    const subLabel = document.createElement('div');
+    subLabel.className = 'coachToolsSubPanelLabel';
+    subLabel.textContent = 'In ' + activeCategoryLabel.replace(/^\S+\s/, '') + ':';
+    subPanel.appendChild(subLabel);
     const tabRow = document.createElement('div');
     tabRow.className = 'gameplanPickerGrid';
     tabsForCategory(activeCategory).forEach(t => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'gameplanChip' + (activeTab === t.key ? ' active' : '');
+      btn.className = 'gameplanChip coachToolsSubChip' + (activeTab === t.key ? ' active' : '');
       btn.textContent = t.label;
       btn.addEventListener('click', () => setActiveTab(t.key));
       tabRow.appendChild(btn);
     });
-    nav.appendChild(tabRow);
+    subPanel.appendChild(tabRow);
+    nav.appendChild(subPanel);
 
     if (activeCategory === 'gameday' && isCoachNateSession()) {
       const linkRow = document.createElement('div');

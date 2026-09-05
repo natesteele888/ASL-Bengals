@@ -1851,7 +1851,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    centered text gives every chip a matching floor size instead. */
 .gameplanChip { border: 2px solid var(--chip-color, var(--line)); background: #fff; color: var(--chip-color, var(--ink)); border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; min-width: 84px; text-align: center; }
 .gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
-[data-theme="dark"] .thisweekKeysBox { background: var(--card); }
+/* Nathan: "confusing with the second set of pill buttons... need a better
+   way of visually breaking those up." Coach Tools' category row (the top
+   5 sections) keeps the normal-size chip above; the specific tools inside
+   whichever category is selected now sit in this shaded, labeled panel
+   with smaller/more muted chips (.coachToolsSubChip below) -- reads as
+   "here's what's inside that tab" instead of a second row of
+   equal-weight buttons that happened to be stacked underneath. */
+.coachToolsSubPanel { background: rgba(0,0,0,.035); border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 12px; margin-bottom: 6px; }
+[data-theme="dark"] .coachToolsSubPanel { background: rgba(255,255,255,.04); }
+.coachToolsSubPanelLabel { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); text-align: center; margin-bottom: 8px; }
+.gameplanChip.coachToolsSubChip { min-width: 0; padding: 6px 12px; font-size: 11px; border-width: 1.5px; opacity: .85; }
+.gameplanChip.coachToolsSubChip.active { opacity: 1; }
 [data-theme="dark"] .thisweekKeysList li { color: var(--ink); }
 [data-theme="dark"] .gameplanCard { background: var(--card); border-color: var(--line); }
 [data-theme="dark"] .thisweekKeyInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
@@ -2146,6 +2157,33 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .depthChartRemoveBtn { color: #c62828; border-color: #c62828; }
 .depthChartAddRow { margin-top: 8px; }
 .depthChartAddRow select { width: 100%; padding: 7px; border: 1.5px solid var(--line); border-radius: 7px; font-size: 12px; font-family: inherit; background: #fff; color: var(--ink); }
+/* Nathan: "I want it to look like a depth chart with player cards in the
+   spots on the field" -- a real CSS grid instead of the auto-fill list
+   above, each card's own row/col (nudged with the arrow cluster below)
+   placing it roughly where that position lines up, same spirit as the
+   reference screenshot's Offense/Defense formations. Kept as its own
+   class (not a variant of .depthChartGrid) since a fixed-track grid and
+   an auto-fill one need genuinely different rules, not just an override
+   or two. */
+.depthChartFieldGrid { display: grid; grid-auto-rows: min-content; gap: 8px; margin-top: 6px; overflow-x: auto; padding-bottom: 4px; }
+.depthChartCard.spatial { min-width: 0; font-size: 12px; padding: 8px; position: relative; }
+.depthChartCard.spatial .depthChartCardTitle { font-size: 10.5px; margin-bottom: 4px; }
+.depthChartStarterLine { font-weight: 900; font-size: 13px; color: var(--ink); text-align: center; padding: 2px 0; }
+.depthChartStarterLine.empty { color: var(--muted); font-weight: 700; font-style: italic; font-size: 11px; }
+.depthChartBackupLine { font-size: 10.5px; color: var(--muted); text-align: center; }
+/* Compact +/- style arrow cluster (top-right corner of the card) for
+   nudging a card's grid position -- deliberately tiny and only shows on
+   the spatial layout, since the plain-list Special Teams cards have no
+   "spot" to nudge at all. */
+.depthChartNudge { position: absolute; top: 4px; right: 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: .55; }
+.depthChartNudge:hover { opacity: 1; }
+.depthChartNudgeMid { display: flex; gap: 10px; }
+.depthChartNudgeBtn { background: none; border: none; font-size: 9px; line-height: 1; cursor: pointer; color: var(--muted); padding: 1px 3px; }
+.depthChartNudgeBtn:hover { color: var(--bengal-orange-dark); }
+.depthChartDetails { margin-top: 6px; font-size: 10.5px; }
+.depthChartDetails summary { cursor: pointer; color: var(--bengal-orange-dark); font-weight: 700; list-style: none; }
+.depthChartDetails summary::-webkit-details-marker { display: none; }
+.depthChartDetails[open] summary { margin-bottom: 4px; }
 .attemptBox.tackleBox.assist { background: linear-gradient(225deg, var(--bengal-black) 50%, #fff 50%); }
 .attemptRowTotal { font-size: 11px; font-weight: 800; color: var(--bengal-orange-dark); white-space: nowrap; margin-left: auto; }
 .attemptAddWrap { display: flex; align-items: center; gap: 3px; margin-left: 4px; }
