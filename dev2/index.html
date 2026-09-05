@@ -103,6 +103,29 @@
 </script>
 <!-- BUILD_VERSION: 2026-08-13c (fix cloud data overwriting missing plays -- Sweep now survives real cloud data) -->
 
+<!--
+  Nathan: "lets make sure it's all stable and loading quickly - I noticed
+  some features not popping up on load. Or loading as straight text."
+  Real gap, not just perception: for a remembered device, auth.js hides
+  #loginScreen the MOMENT login is confirmed -- which happens well before
+  the ~39 feature scripts below (study-quiz.js, schedule.js, etc.) have
+  finished loading, since those load one at a time AFTER auth resolves.
+  In that window the raw app shell is visible with none of the JS that
+  populates/styles/wires it having run yet -- exactly "features not
+  popping up" and "straight text." This overlay sits on top of everything
+  (higher z-index than the login screen itself) and only gets removed by
+  boot()'s own script-loading loop once every last one has actually
+  finished, so there's no gap where an unfinished shell is visible either
+  behind the login screen or after it hides.
+-->
+<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+  <img src="assets/images/header-logo.png" alt="" style="width:64px;height:64px;border-radius:50%;opacity:.9;">
+  <div style="width:120px;height:4px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;">
+    <div id="appLoadingBar" style="width:0%;height:100%;background:#ff6a13;transition:width .2s ease;"></div>
+  </div>
+  <div style="font-size:12px;color:#9aa4ae;font-weight:600;">Loading…</div>
+</div>
+
 <!-- Nathan: "toolbar is not staying with the toolbar, and stays over
      everything, I don't want that" -- #topToolbar moved from here (a
      free-floating position:fixed div, independent of the header) into
@@ -2044,6 +2067,25 @@ if (window.ResizeObserver) {
   const loginBuildVEl = document.getElementById('loginBuildVersion');
   if (loginBuildVEl) loginBuildVEl.textContent = `Build ${BUILD_V}`;
 
+  // Nathan: "make sure it's all stable and loading quickly." These ~39
+  // files used to only start downloading one at a time, AFTER auth and
+  // the cards/plays data fetch had already fully finished -- so their
+  // combined network round-trip time was pure added wait on top of
+  // everything else, even though nothing about auth or the data fetch
+  // actually requires them to wait. <link rel=preload> fired this early
+  // tells the browser to start fetching all of them CONCURRENTLY, in the
+  // background, while auth/data are still in flight -- by the time the
+  // sequential loop far below actually needs each one, it's often already
+  // sitting in cache. Execution order is completely unchanged (still one
+  // at a time, awaited, further down) -- this only makes the network part
+  // faster, it doesn't touch correctness at all.
+  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  scripts.forEach(src => {
+    const link = document.createElement('link');
+    link.rel = 'preload'; link.as = 'script'; link.href = withV(src);
+    document.head.appendChild(link);
+  });
+
   function loadScript(src){
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -2078,6 +2120,20 @@ if (window.ResizeObserver) {
   await loadScript(withV('js/auth.js'));
   await window.__bengalsAuthReady;
 
+  // Nathan: "make sure it's all stable and loading quickly - I noticed
+  // some features not popping up on load. Or loading as straight text."
+  // A NEW session still needs to see and use the actual login form right
+  // now -- it doesn't depend on any of the ~39 feature scripts below at
+  // all, so there's no reason to keep #appLoadingOverlay up for that case.
+  // A REMEMBERED session, though, is about to have #loginScreen hidden
+  // (by auth.js, already done by this point) and the raw app shell
+  // revealed underneath -- THAT case keeps the overlay up until every
+  // feature script has actually finished loading, further down.
+  const appLoadingOverlay = document.getElementById('appLoadingOverlay');
+  const loginScreenEl = document.getElementById('loginScreen');
+  const stillNeedsLogin = loginScreenEl && !loginScreenEl.classList.contains('hide');
+  if (stillNeedsLogin && appLoadingOverlay) appLoadingOverlay.style.display = 'none';
+
   // One-time leaderboard cleanup + Houston route What's New note (see
   // cloud-auth.js) -- fire-and-forget so neither ever delays boot; both
   // no-op instantly once already done.
@@ -2094,10 +2150,22 @@ if (window.ResizeObserver) {
   window.ALL_CARDS = await cardsRes.json();
   window.DATA = await playsRes.json();
 
-  const scripts = ['js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const appLoadingBar = document.getElementById('appLoadingBar');
+  let loadedCount = 0;
   for (const src of scripts) {
     await loadScript(withV(src));
+    loadedCount++;
+    if (appLoadingBar) appLoadingBar.style.width = Math.round((loadedCount / scripts.length) * 100) + '%';
   }
+  // Nathan: "some features not popping up on load. Or loading as straight
+  // text." This is the actual fix for that -- the overlay (still up for a
+  // remembered session; a new session already hid it above, right when
+  // the login form itself became interactive) only comes down here, once
+  // every one of the ~39 feature scripts has genuinely finished loading
+  // and the app is actually ready to be touched, instead of the raw shell
+  // being visible and clickable for however long that loop used to take
+  // in the background.
+  if (appLoadingOverlay) appLoadingOverlay.style.display = 'none';
 })();
 </script>
 
