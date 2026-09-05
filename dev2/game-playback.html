@@ -74,7 +74,7 @@
      transform, the same way the reference image's numbers actually shrink
      toward the far edge. No white anywhere -- the scene sits directly on
      the app's own dark background, only the turf itself has color. */
-  .fieldOuter{position:relative;padding:34px 0 10px;margin-bottom:12px;perspective:640px}
+  .fieldOuter{position:relative;padding:14px 0 10px;margin-bottom:12px;perspective:640px}
   .fieldScene{position:relative;height:118px;margin:0 auto;max-width:94%;transform:rotateX(48deg);transform-style:preserve-3d}
   .fieldTurf{position:relative;width:100%;height:100%;border-radius:4px;overflow:hidden;
     box-shadow:0 0 0 3px #e8e4d8, 0 0 0 5px #1a1a1a;
@@ -92,8 +92,14 @@
   .yardNumRow{position:absolute;left:9.09%;right:9.09%;display:flex;justify-content:space-between;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);padding:0 4px;pointer-events:none;z-index:2}
   .yardNumRow.top{top:6px;transform:rotate(180deg)}
   .yardNumRow.bottom{bottom:6px}
-  .goalPostIcon{position:absolute;top:0;width:26px;height:34px;z-index:4;pointer-events:none}
-  .goalPostIcon.left{left:6%} .goalPostIcon.right{right:6%}
+  /* Nathan (follow-up): "reference where they are on the field and the
+     perspective. If it can't be fixed - I would prefer none." Getting a
+     goal post to sit correctly at the back of the end zone AND match the
+     scene's tilt without warping into a flat smear is a genuine 3D
+     placement problem -- two attempts at it (inside the tilted scene, then
+     as flat icons outside it) both missed, and without being able to see
+     the actual render, a third guess isn't worth it over just dropping
+     the element per Nathan's own fallback. */
   .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
   .firstDownLine{position:absolute;top:0;bottom:0;width:2px;background:#ffe14d;opacity:.85;transition:left .5s ease;z-index:2}
   /* Nathan: "Lines on the field should show the original line of
@@ -174,21 +180,6 @@
   <div class="tdBanner" id="tdBanner">🏆 TOUCHDOWN!</div>
 
   <div class="fieldOuter">
-    <!-- Nathan (follow-up): "Goal posts are awful, need to be fixed." They
-         were CSS shapes living inside .fieldScene, so the same rotateX
-         tilting the field also warped them into a flat, melted-looking
-         smear -- a real goal post needs to read as standing upright
-         against the tilted field, not lying flat within its plane. Drawn
-         as plain SVG lines instead (crisper than border/box-shadow
-         tricks) and moved outside .fieldScene entirely so they render
-         flat and undistorted, the same way the reference photo's posts
-         stay clean verticals against the angled turf. -->
-    <svg class="goalPostIcon left" viewBox="0 0 26 34"><g fill="none" stroke="#e8e4d8" stroke-width="2.5" stroke-linecap="round">
-      <line x1="13" y1="34" x2="13" y2="14"/><line x1="3" y1="14" x2="23" y2="14"/><line x1="3" y1="14" x2="3" y2="2"/><line x1="23" y1="14" x2="23" y2="2"/>
-    </g></svg>
-    <svg class="goalPostIcon right" viewBox="0 0 26 34"><g fill="none" stroke="#e8e4d8" stroke-width="2.5" stroke-linecap="round">
-      <line x1="13" y1="34" x2="13" y2="14"/><line x1="3" y1="14" x2="23" y2="14"/><line x1="3" y1="14" x2="3" y2="2"/><line x1="23" y1="14" x2="23" y2="2"/>
-    </g></svg>
     <div class="fieldScene" id="fieldScene">
       <div class="fieldTurf">
         <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BENGALS</span><span class="endzoneLabel" id="endzoneOwnLabel">BENGALS</span></div>
