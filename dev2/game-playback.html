@@ -62,16 +62,40 @@
   .ddPanel{display:flex;justify-content:space-around;background:var(--console);border:1px solid var(--line-bright);border-radius:12px;padding:10px;margin-bottom:12px;text-align:center}
   .ddPanel .k{font-size:9.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em}
   .ddPanel .v{font-size:15px;font-weight:800;margin-top:2px}
-  /* Field graphic -- a plain horizontal strip is plenty at this size; a
-     true yard-line-perspective diagram like the ESPN shot isn't worth the
-     complexity for how small this renders on a phone. */
-  .fieldWrap{position:relative;height:74px;border-radius:10px;overflow:hidden;border:1px solid var(--line-bright);margin-bottom:12px;
+  /* Nathan (follow-up): "would love to do something more like this for the
+     field instead of what you have. The white background can be removed."
+     Real CSS 3D this time (perspective + rotateX on the whole scene)
+     instead of a flat trapezoid-clipped background layer -- the earlier
+     version kept the ball/lines/numbers deliberately flat and unrotated
+     for readability, but that's exactly why it looked like a flat sticker
+     instead of the reference photo's genuine tilted-field look. Here
+     EVERYTHING (turf, yard numbers, end zones, goal posts, ball marker,
+     position lines) lives inside .fieldScene and shares one real 3D
+     transform, the same way the reference image's numbers actually shrink
+     toward the far edge. No white anywhere -- the scene sits directly on
+     the app's own dark background, only the turf itself has color. */
+  .fieldOuter{padding:34px 0 10px;margin-bottom:12px;perspective:640px}
+  .fieldScene{position:relative;height:118px;margin:0 auto;max-width:94%;transform:rotateX(48deg);transform-style:preserve-3d}
+  .fieldTurf{position:relative;width:100%;height:100%;border-radius:4px;overflow:hidden;
+    box-shadow:0 0 0 3px #e8e4d8, 0 0 0 5px #1a1a1a;
     background:repeating-linear-gradient(90deg, var(--field) 0, var(--field) 9.09%, #24692f 9.09%, #24692f 18.18%)}
-  .endzoneOwn,.endzoneOpp{position:absolute;top:0;bottom:0;width:9.09%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:rgba(255,255,255,.85);writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.05em}
-  .endzoneOwn{left:0}
-  .endzoneOpp{right:0}
-  .yardLabels{position:absolute;bottom:2px;left:9.09%;right:9.09%;display:flex;justify-content:space-between;font-size:8px;color:rgba(255,255,255,.6);padding:0 2px;pointer-events:none}
-  .ballMarker{position:absolute;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;transition:left .5s ease;font-size:18px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
+  .fieldTurf::after{content:'';position:absolute;inset:6px;border:1px dashed rgba(255,225,77,.55);pointer-events:none}
+  .endzoneOwn,.endzoneOpp{position:absolute;top:0;bottom:0;width:9.09%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .endzoneOwn{left:0} .endzoneOpp{right:0}
+  .endzoneOwn::before,.endzoneOpp::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 6px, transparent 6px, transparent 14px)}
+  .endzoneLabel{position:relative;font-size:9px;font-weight:800;color:rgba(255,255,255,.95);writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.05em;z-index:1}
+  .endzoneGhost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(90deg);font-size:34px;font-weight:900;color:rgba(255,255,255,.14);white-space:nowrap;pointer-events:none}
+  /* Nathan's reference: real fields paint yard numbers twice (once per
+     sideline), mirrored so each reads correctly from its own side -- one
+     row near the top edge of the turf, upside-down, one near the bottom,
+     upright. */
+  .yardNumRow{position:absolute;left:9.09%;right:9.09%;display:flex;justify-content:space-between;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);padding:0 4px;pointer-events:none;z-index:2}
+  .yardNumRow.top{top:6px;transform:rotate(180deg)}
+  .yardNumRow.bottom{bottom:6px}
+  .goalPost{position:absolute;top:-30px;width:2px;height:32px;background:#e8e4d8;z-index:4;transform-style:preserve-3d}
+  .goalPost::before{content:'';position:absolute;top:-14px;left:-13px;width:28px;height:15px;border:3px solid #e8e4d8;border-bottom:none;border-radius:8px 8px 0 0}
+  .goalPost.left{left:2%} .goalPost.right{right:2%}
+  .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
   .firstDownLine{position:absolute;top:0;bottom:0;width:2px;background:#ffe14d;opacity:.85;transition:left .5s ease;z-index:2}
   /* Nathan: "Lines on the field should show the original line of
      scrimmage, the current line of the ball, and the 1st down marker."
@@ -86,6 +110,14 @@
   .fieldLegend span{display:flex;align-items:center;gap:4px}
   .fieldLegend i{display:inline-block;width:10px;height:2px}
   .moveSvg{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+  /* Nathan: "When touchdowns are scored there should be more notification
+     that it's a score." A full-width animated banner that only appears on
+     a step where that play actually scored a TD -- punchier than the
+     small "🏆 Touchdown" text already in the play description, meant to
+     be seen even if you're glancing at the film, not reading every word. */
+  .tdBanner{display:none;text-align:center;font-size:22px;font-weight:900;letter-spacing:.04em;color:#111;background:linear-gradient(135deg,#ffe14d,#ff8a3d);border-radius:12px;padding:10px;margin-bottom:12px;text-transform:uppercase;animation:tdPop .5s cubic-bezier(.34,1.56,.64,1)}
+  .tdBanner.show{display:block}
+  @keyframes tdPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
   .boxScore{width:100%;border-collapse:collapse;margin-top:10px;font-size:11px}
   .boxScore th,.boxScore td{padding:5px 6px;text-align:center;color:var(--dim)}
   .boxScore th{color:var(--dim2);font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:.04em;border-bottom:1px solid var(--line-bright)}
@@ -140,15 +172,24 @@
     <div><div class="k">Distance</div><div class="v" id="ddDist">—</div></div>
   </div>
 
-  <div class="fieldWrap" id="fieldWrap">
-    <div class="endzoneOwn" id="endzoneOwn">BEN</div>
-    <div class="endzoneOpp" id="endzoneOpp">OPP</div>
-    <div class="yardLabels"><span>0</span><span>20</span><span>40</span><span>50</span><span>40</span><span>20</span><span>0</span></div>
-    <svg class="moveSvg" id="moveSvg" viewBox="0 0 100 74" preserveAspectRatio="none"></svg>
-    <div class="losLine" id="losLine" style="display:none;"></div>
-    <div class="currentLine" id="currentLine" style="display:none;"></div>
-    <div class="firstDownLine" id="firstDownLine" style="display:none;"></div>
-    <div class="ballMarker" id="ballMarker">🏈</div>
+  <div class="tdBanner" id="tdBanner">🏆 TOUCHDOWN!</div>
+
+  <div class="fieldOuter">
+    <div class="fieldScene" id="fieldScene">
+      <div class="fieldTurf">
+        <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BEN</span><span class="endzoneLabel">BEN</span></div>
+        <div class="endzoneOpp" id="endzoneOpp"><span class="endzoneGhost" id="endzoneOppGhost">OPP</span><span class="endzoneLabel">OPP</span></div>
+        <div class="yardNumRow top"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
+        <div class="yardNumRow bottom"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
+      </div>
+      <div class="goalPost left"></div>
+      <div class="goalPost right"></div>
+      <svg class="moveSvg" id="moveSvg" viewBox="0 0 100 74" preserveAspectRatio="none"></svg>
+      <div class="losLine" id="losLine" style="display:none;"></div>
+      <div class="currentLine" id="currentLine" style="display:none;"></div>
+      <div class="firstDownLine" id="firstDownLine" style="display:none;"></div>
+      <div class="ballMarker" id="ballMarker">🏈</div>
+    </div>
   </div>
   <div class="fieldLegend">
     <span><i style="border-top:2px dashed rgba(255,255,255,.75);background:none;"></i> Line of scrimmage</span>
@@ -323,7 +364,12 @@
     const name = (game && game.opponent) || 'Opponent';
     const abbrev = opponentAbbrev(name);
     const color = hashColor(name);
-    document.getElementById('endzoneOpp').textContent = abbrev;
+    // Nathan: "I want the endzones to be more dynamic." Text now lives in
+    // two child spans (a small vertical label, plus a big ghosted
+    // watermark letter) instead of being the end zone div's own
+    // textContent directly -- setting both here so neither gets wiped out.
+    document.getElementById('endzoneOppGhost').textContent = abbrev;
+    document.querySelector('#endzoneOpp .endzoneLabel').textContent = abbrev;
     document.getElementById('endzoneOpp').style.background = color;
     document.getElementById('endzoneOwn').style.background = 'linear-gradient(180deg, var(--bengal-orange, #ff6a13), #7a3d0f)';
     const oppLogoEl = document.getElementById('oppLogo');
@@ -780,6 +826,7 @@
       firstDownLine.style.display = 'none';
       losLine.style.display = 'none';
       currentLine.style.display = 'none';
+      document.getElementById('tdBanner').classList.remove('show');
       renderMovementSvg(null);
       renderBoxScore(-1);
       return;
@@ -804,6 +851,23 @@
     const dndTag = dndBadge ? '<span class="tag dndTag">'+escapeHtml(dndBadge)+'</span>' : '';
     document.getElementById('playTagsLine').innerHTML = sideTag + '<span class="tag">'+escapeHtml(p.type)+'</span>' + dndTag + spotTag;
     document.getElementById('playDesc').textContent = describePlay(p);
+
+    // Nathan: "When touchdowns are scored there should be more
+    // notification that it's a score." Only actual touchdowns (not PATs/
+    // 2-point tries, which also flow through scoreDeltaFor but aren't
+    // p.td) trigger this -- reusing the same delta logic the score bug and
+    // box score already compute from, so "was this a TD" never drifts out
+    // of sync with what actually changed the score.
+    const tdBanner = document.getElementById('tdBanner');
+    if (p.td){
+      const delta = scoreDeltaFor(p);
+      tdBanner.textContent = delta.us > 0 ? '🏆 BENGALS TOUCHDOWN!' : '🏆 OPPONENT TOUCHDOWN';
+      tdBanner.classList.remove('show');
+      void tdBanner.offsetWidth; // restart the pop-in animation even if the last play was also a TD
+      tdBanner.classList.add('show');
+    } else {
+      tdBanner.classList.remove('show');
+    }
 
     ballMarker.style.left = leftPctFor(after.spot) + '%';
     // Nathan: "Lines on the field should show the original line of
