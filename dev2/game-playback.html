@@ -62,62 +62,32 @@
   .ddPanel{display:flex;justify-content:space-around;background:var(--console);border:1px solid var(--line-bright);border-radius:12px;padding:10px;margin-bottom:12px;text-align:center}
   .ddPanel .k{font-size:9.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em}
   .ddPanel .v{font-size:15px;font-weight:800;margin-top:2px}
-  /* Nathan (follow-up): "would love to do something more like this for the
-     field instead of what you have. The white background can be removed."
-     Real CSS 3D this time (perspective + rotateX on the whole scene)
-     instead of a flat trapezoid-clipped background layer -- the earlier
-     version kept the ball/lines/numbers deliberately flat and unrotated
-     for readability, but that's exactly why it looked like a flat sticker
-     instead of the reference photo's genuine tilted-field look. Here
-     EVERYTHING (turf, yard numbers, end zones, goal posts, ball marker,
-     position lines) lives inside .fieldScene and shares one real 3D
-     transform, the same way the reference image's numbers actually shrink
-     toward the far edge. No white anywhere -- the scene sits directly on
-     the app's own dark background, only the turf itself has color. */
-  /* Nathan (follow-up): "The ball doesn't need to match the perspective."
-     Ball marker, position lines, and the movement-arrow SVG now live in
-     .fieldOverlay -- a flat, untransformed layer sitting in the exact same
-     footprint as .fieldScene, but NOT a child of it, so none of them
-     inherit the rotateX tilt. Simple, accurate left:X% placement matters
-     more here than visually matching the perspective-compressed turf
-     underneath it. */
-  .fieldOverlay{position:absolute;top:14px;left:3%;right:3%;height:118px;pointer-events:none}
-  .fieldOuter{position:relative;padding:14px 0 10px;margin-bottom:12px;perspective:640px}
-  .fieldScene{position:relative;height:118px;margin:0 auto;max-width:94%;transform:rotateX(48deg);transform-style:preserve-3d}
-  .fieldTurf{position:relative;width:100%;height:100%;border-radius:4px;overflow:hidden;
-    box-shadow:0 0 0 3px #e8e4d8, 0 0 0 5px #1a1a1a;
-    background:repeating-linear-gradient(90deg, var(--field) 0, var(--field) 9.09%, #24692f 9.09%, #24692f 18.18%)}
-  /* Nathan (follow-up): "there is a weird dotted line around the inside of
-     the field that looks bad." Dropped -- was meant to echo the reference
-     photo's outer track boundary, but reads as a rendering glitch at this
-     size rather than a design element. */
-  .endzoneOwn,.endzoneOpp{position:absolute;top:0;bottom:0;width:9.09%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  /* Nathan (follow-up, after several rounds trying to make a tilted 3D
+     field work): "this style and progression is way cleaner and more
+     simplified" -- pointing at the plain ESPN Gamecast drive widget: a
+     flat field bar, solid-color end zones, a soft translucent team-logo
+     "ghost" behind a small precise ball marker, yard numbers in one row
+     underneath instead of painted on the turf. Dropping the 3D
+     perspective entirely and rebuilding flat, matching that reference
+     directly instead of continuing to iterate on an approach that kept
+     introducing new problems (warped goal posts, lines running past the
+     turf, numbers in the wrong spot) each round. */
+  .fieldOuter{position:relative;margin-bottom:6px}
+  .fieldWrap{position:relative;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line-bright);
+    background:repeating-linear-gradient(90deg, var(--field) 0, var(--field) 9.09%, #256b31 9.09%, #256b31 18.18%)}
+  .endzoneOwn,.endzoneOpp{position:absolute;top:0;bottom:0;width:9.09%}
   .endzoneOwn{left:0} .endzoneOpp{right:0}
-  .endzoneOwn::before,.endzoneOpp::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0, rgba(255,255,255,.08) 6px, transparent 6px, transparent 14px)}
-  .endzoneLabel{position:relative;font-size:9px;font-weight:800;color:rgba(255,255,255,.95);writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.05em;z-index:1}
-  .endzoneGhost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(90deg);font-size:34px;font-weight:900;color:rgba(255,255,255,.14);white-space:nowrap;pointer-events:none}
-  /* Nathan (follow-up): "The 10 is on the goal line - should be much more
-     accurate." A flex row with space-between put the FIRST number flush
-     against the end-zone edge (the goal line itself), when a real field's
-     10-yard line sits a full 10 yards in from it. Each number now gets
-     its own exact left:X% (computed from the actual 81.82%-wide playing
-     field between the two goal lines), not evenly spaced across the whole
-     row -- real fields paint yard numbers twice (once per sideline),
-     mirrored so each reads correctly from its own side, hence top row
-     rotated 180° and bottom row upright. */
-  .yardNumRow{position:absolute;left:0;right:0;height:11px;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);pointer-events:none;z-index:2}
-  .yardNumRow span{position:absolute;top:0;transform:translateX(-50%)}
-  .yardNumRow.top{top:6px;transform:rotate(180deg)}
-  .yardNumRow.bottom{bottom:6px}
-  /* Nathan (follow-up): "reference where they are on the field and the
-     perspective. If it can't be fixed - I would prefer none." Getting a
-     goal post to sit correctly at the back of the end zone AND match the
-     scene's tilt without warping into a flat smear is a genuine 3D
-     placement problem -- two attempts at it (inside the tilted scene, then
-     as flat icons outside it) both missed, and without being able to see
-     the actual render, a third guess isn't worth it over just dropping
-     the element per Nathan's own fallback. */
-  .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3;pointer-events:auto}
+  .fieldNumRow{position:relative;height:16px;margin-top:4px}
+  .fieldNumRow span{position:absolute;top:0;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--dim2)}
+  .fieldNumRow span.endLabel{font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.03em}
+  /* Nathan (earlier): "The 10 is on the goal line - should be much more
+     accurate." Each number gets its own exact left:X% computed from the
+     real 81.82%-wide playing field between the two goal lines (10 yards
+     in from the line, not on it) -- unchanged by the flat rebuild, this
+     part was already correct. */
+  .ballGhost{position:absolute;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.5), rgba(255,255,255,0) 70%);transition:left .5s ease;z-index:2;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.55}
+  .ballMarker{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;transition:left .5s ease;font-size:15px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
   .firstDownLine{position:absolute;top:0;bottom:0;width:2px;background:#ffe14d;opacity:.85;transition:left .5s ease;z-index:2}
   /* Nathan: "Lines on the field should show the original line of
      scrimmage, the current line of the ball, and the 1st down marker."
@@ -131,7 +101,6 @@
   .fieldLegend{display:flex;gap:14px;justify-content:center;font-size:9.5px;color:var(--dim2);margin:-4px 0 12px}
   .fieldLegend span{display:flex;align-items:center;gap:4px}
   .fieldLegend i{display:inline-block;width:10px;height:2px}
-  .moveSvg{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
   /* Nathan: "When touchdowns are scored there should be more notification
      that it's a score." A full-width animated banner that only appears on
      a step where that play actually scored a TD -- punchier than the
@@ -197,24 +166,19 @@
   <div class="tdBanner" id="tdBanner">🏆 TOUCHDOWN!</div>
 
   <div class="fieldOuter">
-    <div class="fieldScene" id="fieldScene">
-      <div class="fieldTurf">
-        <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BENGALS</span><span class="endzoneLabel" id="endzoneOwnLabel">BENGALS</span></div>
-        <div class="endzoneOpp" id="endzoneOpp"><span class="endzoneGhost" id="endzoneOppGhost">OPP</span><span class="endzoneLabel" id="endzoneOppLabel">OPP</span></div>
-        <div class="yardNumRow top">
-          <span style="left:17.27%;">10</span><span style="left:25.45%;">20</span><span style="left:33.64%;">30</span><span style="left:41.82%;">40</span><span style="left:50%;">50</span><span style="left:58.18%;">40</span><span style="left:66.36%;">30</span><span style="left:74.55%;">20</span><span style="left:82.73%;">10</span>
-        </div>
-        <div class="yardNumRow bottom">
-          <span style="left:17.27%;">10</span><span style="left:25.45%;">20</span><span style="left:33.64%;">30</span><span style="left:41.82%;">40</span><span style="left:50%;">50</span><span style="left:58.18%;">40</span><span style="left:66.36%;">30</span><span style="left:74.55%;">20</span><span style="left:82.73%;">10</span>
-        </div>
-      </div>
-    </div>
-    <div class="fieldOverlay">
-      <svg class="moveSvg" id="moveSvg" viewBox="0 0 100 74" preserveAspectRatio="none"></svg>
+    <div class="fieldWrap" id="fieldWrap">
+      <div class="endzoneOwn" id="endzoneOwn"></div>
+      <div class="endzoneOpp" id="endzoneOpp"></div>
       <div class="losLine" id="losLine" style="display:none;"></div>
       <div class="currentLine" id="currentLine" style="display:none;"></div>
       <div class="firstDownLine" id="firstDownLine" style="display:none;"></div>
+      <div class="ballGhost" id="ballGhost"></div>
       <div class="ballMarker" id="ballMarker">🏈</div>
+    </div>
+    <div class="fieldNumRow" id="fieldNumRow">
+      <span class="endLabel" id="endzoneOwnLabel" style="left:4.545%;">BEN</span>
+      <span style="left:17.27%;">10</span><span style="left:25.45%;">20</span><span style="left:33.64%;">30</span><span style="left:41.82%;">40</span><span style="left:50%;">50</span><span style="left:58.18%;">40</span><span style="left:66.36%;">30</span><span style="left:74.55%;">20</span><span style="left:82.73%;">10</span>
+      <span class="endLabel" id="endzoneOppLabel" style="left:95.455%;">OPP</span>
     </div>
   </div>
   <div class="fieldLegend">
@@ -392,21 +356,14 @@
     const abbrev = opponentAbbrev(name);
     currentOppAbbrev = abbrev;
     const color = hashColor(name);
-    // Nathan (follow-up): "use the town name in the endzone - for ours use
-    // BENGALS." The end zone now shows the actual opponent name (not the
-    // 3-letter abbreviation -- that's still used elsewhere, like the box
-    // score column header, where space is tighter) to match how a real
-    // end zone reads the town/school name, same as BENGALS is now spelled
-    // out on our own end rather than "BEN" (see the static HTML). Font
-    // size steps down for a longer name so it doesn't run off the end
-    // zone's narrow width.
-    const townName = name.replace(/\(.*?\)/g, '').trim().toUpperCase() || 'OPPONENT';
-    const fitSize = townName.length > 10 ? '7px' : townName.length > 7 ? '8px' : '9px';
-    const ghostSize = townName.length > 10 ? '18px' : townName.length > 7 ? '24px' : '30px';
-    const oppGhost = document.getElementById('endzoneOppGhost');
-    const oppLabel = document.getElementById('endzoneOppLabel');
-    oppGhost.textContent = townName; oppGhost.style.fontSize = ghostSize;
-    oppLabel.textContent = townName; oppLabel.style.fontSize = fitSize;
+    // Nathan (follow-up): "this style and progression is way cleaner and
+    // more simplified" (pointing at the ESPN Gamecast widget, which labels
+    // each end with a short code like MIA/NE, not a spelled-out town name).
+    // The full-name-in-the-endzone treatment made sense for the old
+    // tilted design's big vertical text; this compact below-the-field
+    // label is a better fit for the short abbreviation, matching the
+    // reference directly.
+    document.getElementById('endzoneOppLabel').textContent = abbrev;
     document.getElementById('endzoneOpp').style.background = color;
     document.getElementById('endzoneOwn').style.background = 'linear-gradient(180deg, var(--bengal-orange, #ff6a13), #7a3d0f)';
     const oppLogoEl = document.getElementById('oppLogo');
@@ -718,91 +675,18 @@
 
   // ---- Rendering ----
   const ballMarker = document.getElementById('ballMarker');
+  const ballGhost = document.getElementById('ballGhost');
   const firstDownLine = document.getElementById('firstDownLine');
   const losLine = document.getElementById('losLine');
   const currentLine = document.getElementById('currentLine');
   function leftPctFor(spot){ return 9.09 + (spot/100)*(100-2*9.09); } // field graphic reserves 9.09% on each side for the end zones
 
-  // Nathan: "Lets show arrows of movement on the plays... Show an arched
-  // path of the ball showing it was a kick in the air. Show positive
-  // yardage and negative yardage in different colors." A run/pass/tackle/
-  // kneel gets a straight arrow (green = gained ground, red = lost, grey =
-  // no gain); a kickoff/punt gets a dashed arc for the kick itself (it's
-  // in the air, not carried) plus a straight arrow for any return --
-  // colored by whether the RETURNING team (the other side from whoever
-  // kicked) actually gained ground on it.
-  function movementInfo(p){
-    if (p.type === 'run' || (p.type === 'pass' && p.result === 'Complete')){
-      const startAbs = absoluteSpot(p.startSide, p.startYard), endAbs = absoluteSpot(p.endSide, p.endYard);
-      return { kind:'straight', fromAbs:startAbs, toAbs:endAbs, yards:Number(p.yards||0) };
-    }
-    if (p.type === 'tackle' && p.startSide != null && p.endSide != null){
-      const a = absoluteSpot(p.startSide, p.startYard), b = absoluteSpot(p.endSide, p.endYard);
-      return { kind:'straight', fromAbs:a, toAbs:b, yards:signedYardsFromSpots(a, b, false) };
-    }
-    if (p.type === 'kneel' && p.kneelType !== 'Spike' && p.spotSide != null){
-      const a = absoluteSpot(p.spotSide, p.spotYard);
-      const loss = Number(p.kneelYards||0);
-      const b = clampSpot(a + (p.kneelTeam !== 'Opponent' ? -loss : loss));
-      return { kind:'straight', fromAbs:a, toAbs:b, yards:-loss };
-    }
-    if ((p.type === 'kick' && !p.onside) || p.type === 'punt'){
-      const isKickingUs = (p.type === 'kick' ? p.kickTeam : p.puntTeam) !== 'Opponent';
-      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
-      let retYards = null;
-      if (catchAbs != null && endAbs != null) retYards = isKickingUs ? (catchAbs - endAbs) : (endAbs - catchAbs);
-      return { kind:'kick', startAbs, catchAbs, endAbs, retYards };
-    }
-    return null;
-  }
-  function renderMovementSvg(p){
-    const svg = document.getElementById('moveSvg');
-    const info = p ? movementInfo(p) : null;
-    if (!info){ svg.innerHTML = ''; return; }
-    // Nathan: "The line generated should be accurate to the field -- I
-    // don't like the big wedge." The SVG's viewBox used to be a fixed "0 0
-    // 100 74" stretched to fill the field by preserveAspectRatio="none" --
-    // necessary so x=leftPctFor(spot) lines up with the percentage-based
-    // ball marker/lines, but it also stretched anything drawn IN that
-    // space just as unevenly: a 6-unit-wide arrowhead became ~6 units
-    // tall but 3-4x that wide once squashed into a ~300-400px-wide field,
-    // which is exactly the flattened wedge in the screenshot. Setting the
-    // viewBox to the field's REAL current pixel width (height stays 74,
-    // matching .fieldWrap's fixed CSS height) makes 1 viewBox unit equal
-    // 1 real pixel in both directions, so a stroke/arrowhead defined in
-    // plain pixel sizes actually looks like that size instead of
-    // stretching. Read fresh each render since the field's width can
-    // change (an orientation switch, a different device).
-    const w = svg.parentElement.clientWidth || 340;
-    svg.setAttribute('viewBox', '0 0 ' + w + ' 74');
-    function px(pct){ return (pct/100) * w; } // leftPctFor() returns a 0-100 percentage; convert to this viewBox's real pixel units
-    const y = 37; // vertical center of the 74px-tall field, matching the ball marker's top:50%
-    function marker(id, color){ return `<marker id="${id}" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="${color}"/></marker>`; }
-    let html = '<defs>' + marker('arrowFwd','#3ddc7a') + marker('arrowLoss','#e0402a') + marker('arrowFlat','#9aa4ae') + marker('arrowKick','#ffe14d') + '</defs>';
-    if (info.kind === 'straight'){
-      if (info.fromAbs == null || info.toAbs == null) { svg.innerHTML = ''; return; }
-      const color = info.yards > 0 ? '#3ddc7a' : (info.yards < 0 ? '#e0402a' : '#9aa4ae');
-      const mk = info.yards > 0 ? 'arrowFwd' : (info.yards < 0 ? 'arrowLoss' : 'arrowFlat');
-      html += `<line x1="${px(leftPctFor(info.fromAbs))}" y1="${y}" x2="${px(leftPctFor(info.toAbs))}" y2="${y}" stroke="${color}" stroke-width="2.5" marker-end="url(#${mk})"/>`;
-    } else if (info.kind === 'kick'){
-      // Nathan: "show an arched path of the ball showing it was a kick in
-      // the air." A Downed/Touchback kick never gets a separate "caught
-      // at" spot recorded (nobody caught it) -- the arc should still fly
-      // all the way to wherever it was ultimately downed instead of
-      // showing nothing just because there's no catch point.
-      const landAbs = info.catchAbs != null ? info.catchAbs : info.endAbs;
-      if (info.startAbs != null && landAbs != null){
-        const x1 = px(leftPctFor(info.startAbs)), x2 = px(leftPctFor(landAbs)), midX = (x1+x2)/2;
-        html += `<path d="M${x1},${y} Q${midX},6 ${x2},${y}" fill="none" stroke="#ffe14d" stroke-width="2.2" stroke-dasharray="4,3" marker-end="url(#arrowKick)"/>`;
-      }
-      if (info.catchAbs != null && info.endAbs != null && info.catchAbs !== info.endAbs){
-        const color = info.retYards > 0 ? '#3ddc7a' : (info.retYards < 0 ? '#e0402a' : '#9aa4ae');
-        const mk = info.retYards > 0 ? 'arrowFwd' : (info.retYards < 0 ? 'arrowLoss' : 'arrowFlat');
-        html += `<line x1="${px(leftPctFor(info.catchAbs))}" y1="${y}" x2="${px(leftPctFor(info.endAbs))}" y2="${y}" stroke="${color}" stroke-width="2.5" marker-end="url(#${mk})"/>`;
-      }
-    }
-    svg.innerHTML = html;
-  }
+  // Nathan (follow-up): "green and red arrows on the Game Playback is
+  // hideous." Removed rather than re-guessed at a different style --
+  // the field itself (spot badges, down/distance, the LOS/Current/1st-down
+  // lines) already conveys where a play started and ended without needing
+  // a separate arrow overlay, and repeatedly tuning a purely aesthetic
+  // element I can't actually see render isn't a good use of more guesses.
 
   // Nathan: "Box score should be under the play description." Recomputed
   // fresh on every step from the timeline up to (and including) the
@@ -860,11 +744,11 @@
       document.getElementById('playTagsLine').innerHTML = '';
       document.getElementById('playDesc').textContent = 'Press ▶ Play or step through with the arrows below.';
       ballMarker.style.left = leftPctFor(50) + '%';
+      ballGhost.style.left = leftPctFor(50) + '%';
       firstDownLine.style.display = 'none';
       losLine.style.display = 'none';
       currentLine.style.display = 'none';
       document.getElementById('tdBanner').classList.remove('show');
-      renderMovementSvg(null);
       renderBoxScore(-1);
       return;
     }
@@ -907,6 +791,7 @@
     }
 
     ballMarker.style.left = leftPctFor(after.spot) + '%';
+    ballGhost.style.left = leftPctFor(after.spot) + '%';
     // Nathan: "Lines on the field should show the original line of
     // scrimmage, the current line of the ball, and the 1st down marker."
     // LOS is this play's OWN start spot (step.before.spot) -- for a
@@ -950,7 +835,6 @@
       firstDownLine.style.display = '';
       firstDownLine.style.left = leftPctFor(firstDownAbs) + '%';
     }
-    renderMovementSvg(p);
     renderBoxScore(stepIndex);
   }
 
