@@ -927,11 +927,22 @@
     // this team is driving (see advanceDownDistanceForPlay's own
     // forward100 reasoning); possession-change plays don't carry that, so
     // the marker just hides rather than show a guess.
-    const dir = (p.type === 'run') ? (p.runTeam !== 'Opponent')
-      : (p.type === 'pass') ? (p.passTeam !== 'Opponent')
-      : (p.type === 'tackle') ? false
-      : (p.type === 'kneel') ? (p.kneelTeam !== 'Opponent')
-      : null;
+    // Nathan: "the first down marker on the field should remain in place
+    // until a 1st down or a change of possession." It used to only know
+    // how to compute a direction for Run/Pass/Tackle/Kneel specifically
+    // (a per-type ternary that fell through to `null`, i.e. hide the
+    // marker entirely, for everything else) -- so it visibly vanished on
+    // every Penalty, Turnover, Kick, and Punt step instead of just holding
+    // its spot. `p.side` ('offense'/'defense') already exists on every
+    // play type uniformly, so deriving direction from that instead covers
+    // all of them the same way. The marker itself is just
+    // after.spot + after.distance in that direction -- which is
+    // ALWAYS the same fixed field position across an entire set of downs
+    // by definition (spot and distance move together), so it only visibly
+    // moves when a play actually resets them: a real first down, or a
+    // change of possession (kickoff/punt/turnover, or a penalty with
+    // Automatic 1st Down).
+    const dir = p.side === 'offense' ? true : p.side === 'defense' ? false : null;
     if (dir == null){
       firstDownLine.style.display = 'none';
     } else {
