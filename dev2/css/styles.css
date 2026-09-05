@@ -2157,33 +2157,27 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .depthChartRemoveBtn { color: #c62828; border-color: #c62828; }
 .depthChartAddRow { margin-top: 8px; }
 .depthChartAddRow select { width: 100%; padding: 7px; border: 1.5px solid var(--line); border-radius: 7px; font-size: 12px; font-family: inherit; background: #fff; color: var(--ink); }
-/* Nathan: "I want it to look like a depth chart with player cards in the
-   spots on the field" -- a real CSS grid instead of the auto-fill list
-   above, each card's own row/col (nudged with the arrow cluster below)
-   placing it roughly where that position lines up, same spirit as the
-   reference screenshot's Offense/Defense formations. Kept as its own
-   class (not a variant of .depthChartGrid) since a fixed-track grid and
-   an auto-fill one need genuinely different rules, not just an override
-   or two. */
-.depthChartFieldGrid { display: grid; grid-auto-rows: min-content; gap: 8px; margin-top: 6px; overflow-x: auto; padding-bottom: 4px; }
-.depthChartCard.spatial { min-width: 0; font-size: 12px; padding: 8px; position: relative; }
-.depthChartCard.spatial .depthChartCardTitle { font-size: 10.5px; margin-bottom: 4px; }
-.depthChartStarterLine { font-weight: 900; font-size: 13px; color: var(--ink); text-align: center; padding: 2px 0; }
-.depthChartStarterLine.empty { color: var(--muted); font-weight: 700; font-style: italic; font-size: 11px; }
-.depthChartBackupLine { font-size: 10.5px; color: var(--muted); text-align: center; }
-/* Compact +/- style arrow cluster (top-right corner of the card) for
-   nudging a card's grid position -- deliberately tiny and only shows on
-   the spatial layout, since the plain-list Special Teams cards have no
-   "spot" to nudge at all. */
-.depthChartNudge { position: absolute; top: 4px; right: 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: .55; }
-.depthChartNudge:hover { opacity: 1; }
-.depthChartNudgeMid { display: flex; gap: 10px; }
-.depthChartNudgeBtn { background: none; border: none; font-size: 9px; line-height: 1; cursor: pointer; color: var(--muted); padding: 1px 3px; }
-.depthChartNudgeBtn:hover { color: var(--bengal-orange-dark); }
-.depthChartDetails { margin-top: 6px; font-size: 10.5px; }
-.depthChartDetails summary { cursor: pointer; color: var(--bengal-orange-dark); font-weight: 700; list-style: none; }
-.depthChartDetails summary::-webkit-details-marker { display: none; }
-.depthChartDetails[open] summary { margin-bottom: 4px; }
+/* Nathan (follow-up): "this is used primarily on mobile so that just gives
+   me a big string of cards - not defined by spots on the field. Maybe we
+   use the basic wing formation and have that be at the top and down below
+   are the players listed in the order when a position is selected." A full
+   grid of position cards never fits a phone screen the way it fits the
+   reference image's wide printed page -- this replaces it with a small,
+   fixed-size formation map (one marker per position, label only, no
+   roster info on the marker itself) plus a single roomy detail panel below
+   showing whichever position was last tapped. Only one position's full
+   list on screen at a time is exactly what a phone can actually show well. */
+.depthChartDiagram { position: relative; width: 100%; height: 150px; background: linear-gradient(180deg, #2a6b38, #1e5c2e); border-radius: 10px; margin: 8px 0; overflow: hidden; }
+.depthChartDiagram::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0, rgba(255,255,255,.06) 1px, transparent 1px, transparent 10%); pointer-events: none; }
+.depthChartMarker { position: absolute; transform: translate(-50%, -50%); min-width: 34px; padding: 4px 6px; border-radius: 8px; border: 2px solid #fff; background: rgba(17,17,17,.75); color: #fff; font-size: 9.5px; font-weight: 800; text-align: center; cursor: pointer; line-height: 1.1; }
+.depthChartMarker.selected { background: var(--bengal-orange); border-color: #fff; box-shadow: 0 0 0 3px rgba(255,106,19,.35); }
+/* Compact +/- style arrow cluster for nudging the SELECTED marker's spot on
+   the diagram above -- lives in the detail card below, not on the tiny
+   marker itself, since there's no room to tap precisely on something that
+   small. */
+.depthChartNudge { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.depthChartNudgeLabel { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.depthChartNudgeBtns { display: flex; gap: 4px; }
 .attemptBox.tackleBox.assist { background: linear-gradient(225deg, var(--bengal-black) 50%, #fff 50%); }
 .attemptRowTotal { font-size: 11px; font-weight: 800; color: var(--bengal-orange-dark); white-space: nowrap; margin-left: auto; }
 .attemptAddWrap { display: flex; align-items: center; gap: 3px; margin-left: 4px; }
