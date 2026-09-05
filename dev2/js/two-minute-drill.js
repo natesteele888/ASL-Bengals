@@ -2554,6 +2554,14 @@
   }
 
   function startGame() {
+    // Nathan: "how many of those [2-Minute Drills] have been started."
+    // Same analytics/{kind} shape and logQuizStart() helper study-quiz.js
+    // already logs Standard/Timed Quiz starts with -- this file doesn't
+    // define its own copy, it's relying on that one already being on
+    // window since study-quiz.js loads as a plain (non-module) script on
+    // every page this drill runs on. Logged on every fresh attempt,
+    // including Play Again, same as a quiz retake counts as its own start.
+    if (typeof window.logQuizStart === 'function') window.logQuizStart('twoMinDrillStarts');
     Object.assign(state, {
       clockMs: CLOCK_START_MS, running: true, fieldPos: START_FIELD_POS,
       score: 0, streak: 0, bestStreak: 0, correctCount: 0, wrongCount: 0, delayOfGameCount: 0, totalYards: 0,

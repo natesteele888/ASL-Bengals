@@ -87,7 +87,7 @@
     const buildEl = document.getElementById('coachDashBuildVersion');
     if (buildEl && window.BUILD_V) buildEl.textContent = window.BUILD_V;
 
-    const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts, quizLbEntries] = await Promise.all([
+    const [timedStarts, standardStarts, standardResults, timedResults, signalAttempts, timedLbEntries, sessions, pcqResults, pcqRoundAttempts, quizLbEntries, twoMinDrillStarts] = await Promise.all([
       cloudFetch('analytics/timedStarts'),
       cloudFetch('analytics/standardStarts'),
       cloudFetch('analytics/standardResults'),
@@ -98,7 +98,29 @@
       cloudFetch('analytics/pcqResults'),
       cloudFetch('analytics/pcqRoundAttempts'),
       cloudFetch('leaderboard'),
+      // Nathan: "how many times are kids using features -- the new 2
+      // minute drill, how many of those have been started." Same
+      // analytics/{kind} shape as Standard/Timed Quiz starts, now that
+      // two-minute-drill.js's startGame() logs one too.
+      cloudFetch('analytics/twoMinDrillStarts'),
     ]);
+    // Nathan: "any metrics you can add would be helpful." Runs Completed
+    // comes from the drill's own raw history (already recorded for the
+    // leaderboard/ticker's "Best 2-Minute Drill Today" -- see
+    // js/two-minute-drill.js's fetchTwoMinDrillRawHistory) rather than a
+    // second analytics event, since a completed run is already logged
+    // there in full; Film Views totals the same filmViews data Coach
+    // Tools > Stats' own Film Views sub-tab reads, just rolled up into
+    // one number instead of a per-game breakdown.
+    let twoMinDrillCompletions = null, filmViewsTotal = null;
+    try {
+      const raw = (typeof window.fetchTwoMinDrillRawHistory === 'function') ? await window.fetchTwoMinDrillRawHistory() : [];
+      twoMinDrillCompletions = Array.isArray(raw) ? raw.filter(e => e && !e.isCoach).length : null;
+    } catch(e) { /* nice-to-have -- the rest of the dashboard still loads fine without it */ }
+    try {
+      const views = (typeof window.fetchFilmViews === 'function') ? await window.fetchFilmViews() : {};
+      filmViewsTotal = Object.values(views || {}).reduce((sum, list) => sum + (list || []).filter(v => v && !v.isCoach).length, 0);
+    } catch(e) { /* same -- cosmetic count, never worth blocking the dashboard over */ }
     const players = window.PlayerIdentity ? await window.PlayerIdentity.fetchAllPlayers() : {};
     const roster = (window.isTeamRosterLoaded && window.isTeamRosterLoaded())
       ? window.getTeamRosterCached()
@@ -498,6 +520,10 @@
         <div class="adminStatGrid">
           ${statCard(timedStarts.length, 'Timed Quiz Starts')}
           ${statCard(standardStarts.length, 'Standard Quiz Starts')}
+          ${statCard(twoMinDrillStarts ? twoMinDrillStarts.length : 0, '2-Min Drill Starts')}
+          ${twoMinDrillCompletions != null ? statCard(twoMinDrillCompletions, '2-Min Drill Completions') : ''}
+          ${signalAttempts ? statCard(signalAttempts.length, 'Signal Attempts') : ''}
+          ${filmViewsTotal != null ? statCard(filmViewsTotal, 'Film Views') : ''}
         </div>
         <div class="adminDashGrid">
           <button class="adminDashBtn" data-panel="activity">📈 Player Activity &amp; Highlights</button>
