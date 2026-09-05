@@ -220,19 +220,12 @@
     selectedGame = liveGamesCache.find(function(g){ return g.id === gameId; }) || null;
     if (!selectedGame){ loadStatus.textContent = 'Could not find this game.'; return; }
     loadStatus.textContent = 'Checking for an existing log…';
+    let existingGameState = null;
     try {
       const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + gameId + '.json');
       const res = await fetch(url);
-      const existing = res.ok ? await res.json() : null;
-      if (existing && Array.isArray(existing.plays) && existing.plays.length){
-        loadStatus.textContent = 'This game already has ' + existing.plays.length + ' play(s) logged.';
-        if (!confirm('"' + (selectedGame.opponent||'This game') + '" already has a play log started. Run through setup again anyway? (Nothing gets deleted -- the opening kickoff will just be ADDED as one more play; use Stat Keeper directly if you just want to keep logging.)')){
-          wizardWrap.style.display = 'none'; emptyWrap.style.display = '';
-          gameSelect.value = '';
-          return;
-        }
-      }
-    } catch(e){ /* fine to proceed without knowing -- worst case the coach sees a duplicate kickoff and can delete it in Stat Keeper */ }
+      existingGameState = res.ok ? await res.json() : null;
+    } catch(e){ /* fine to proceed without knowing -- worst case this just looks like a fresh game */ }
     loadStatus.textContent = 'Loading roster & depth chart…';
     try {
       const rosterUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
@@ -247,7 +240,19 @@
     loadStatus.textContent = '';
     wizardWrap.style.display = ''; emptyWrap.style.display = 'none';
     wiz.state = { starters: {}, tossWinner: null, tossChoice: null, receivingTeam: null, endNote: null };
-    wiz.step = 0;
+    // Nathan: "If I use the wizard, will that redo the entire game over
+    // again? What is the best approach to amend the first game." Used to
+    // just ask "run through setup again?" and, either way, still made you
+    // walk Starters -> Coin Toss -> Kickoff before you could log a single
+    // play -- there was never an actual way to just pick up where an
+    // existing log left off. Now: any game with plays already on it stops
+    // at a resume screen instead of forcing the full setup again.
+    if (existingGameState && Array.isArray(existingGameState.plays) && existingGameState.plays.length){
+      wiz.resumeGameState = existingGameState;
+      wiz.step = 'resume';
+    } else {
+      wiz.step = 0;
+    }
     renderWizard();
   }
 
@@ -255,6 +260,7 @@
   const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Playing'];
   const wiz = { step: 0, state: {} };
   function renderDots(){
+    if (wiz.step === 'resume'){ document.getElementById('stepDots').innerHTML = ''; return; }
     document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
       const cls = i === wiz.step ? 'active' : (i < wiz.step ? 'done' : '');
       return '<div class="stepDot ' + cls + '"></div>';
@@ -264,10 +270,76 @@
     renderDots();
     const area = document.getElementById('stepArea');
     area.innerHTML = '';
-    if (wiz.step === 0) renderStartersStep(area);
+    if (wiz.step === 'resume') renderResumeStep(area);
+    else if (wiz.step === 0) renderStartersStep(area);
     else if (wiz.step === 1) renderCoinTossStep(area);
     else if (wiz.step === 2) renderKickoffStep(area);
     else renderPlayLoopStep(area);
+  }
+
+  // Nathan: "the coach on the sideline doing the play calls won't be
+  // visible" when logging from film after the fact -- best-effort guess at
+  // who currently has the ball from the most recent real play, using the
+  // same `side`/team fields every play already carries (a run/pass/kneel's
+  // own `side`, or the actual team that just kicked/punted/turned it over
+  // for a possession-change play). Shown to the coach to confirm/flip
+  // rather than trusted blindly, same "always correctable" rule as
+  // everything else spot-related in this app -- inferring this wrong and
+  // never asking would quietly corrupt every down/distance call after it.
+  function inferPossession(plays){
+    const last = (plays || []).find(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; });
+    if (!last) return 'Us';
+    if (last.type === 'kick') return last.kickTeam === 'Opponent' ? 'Us' : 'Opponent'; // receiving team, not kicking team, has it now
+    if (last.type === 'punt') return last.puntTeam === 'Opponent' ? 'Us' : 'Opponent';
+    if (last.type === 'turnover') return last.side === 'offense' ? 'Opponent' : 'Us';
+    if (last.type === 'defextra') return 'Us'; // this app's defextra (INT/PBU/Sack) always credits one of our own players
+    return last.side === 'offense' ? 'Us' : 'Opponent';
+  }
+  function renderResumeStep(area){
+    const gs = wiz.resumeGameState;
+    const card = document.createElement('div'); card.className = 'card';
+    if (wiz.resumePossessionOverride == null) wiz.resumePossessionOverride = inferPossession(gs.plays);
+    card.innerHTML = '<h2>▶️ Continue This Game</h2><div class="sub">' + gs.plays.length + ' play(s) already logged. Pick up right where it left off, no need to redo Starters/Coin Toss/Kickoff.</div>' +
+      '<div class="summaryLine">📍 <b>' + spotLabelAbs(typeof gs.spot === 'number' ? gs.spot : 50) + '</b> · ' + ['1st','2nd','3rd','4th'][(gs.down||1)-1] + ' &amp; ' + (gs.distance||10) + ' · ' + quarterLbl(gs.quarter||1) + '</div>';
+    chipGroupFieldFake(card, 'Who has the ball right now?', ['Us','Opponent'], wiz.resumePossessionOverride, function(v){ wiz.resumePossessionOverride = v; renderWizard(); });
+    const cont = document.createElement('button'); cont.className = 'primaryBtn'; cont.textContent = '▶️ Continue Logging Plays';
+    cont.addEventListener('click', function(){
+      wiz.game = {
+        spot: typeof gs.spot === 'number' ? gs.spot : 50,
+        down: gs.down || 1, distance: gs.distance || 10, quarter: gs.quarter || 1,
+        scoreUs: Number(gs.finalUs) || 0, scoreOpp: Number(gs.finalOpp) || 0,
+        possession: wiz.resumePossessionOverride,
+        defendingEnd: 'Left',
+      };
+      wiz.play = { phase: wiz.game.possession === 'Us' ? 'callCheck' : 'playType' };
+      wiz.step = 3;
+      renderWizard();
+    });
+    card.appendChild(cont);
+    const startOver = document.createElement('button'); startOver.className = 'ghostBtn'; startOver.textContent = '🔄 Start Over From Kickoff Instead';
+    startOver.addEventListener('click', function(){ wiz.step = 0; renderWizard(); });
+    card.appendChild(startOver);
+    const differentGame = document.createElement('button'); differentGame.className = 'ghostBtn'; differentGame.textContent = 'Pick a Different Game';
+    differentGame.addEventListener('click', function(){ gameSelect.value = ''; wizardWrap.style.display = 'none'; emptyWrap.style.display = ''; });
+    card.appendChild(differentGame);
+    area.appendChild(card);
+  }
+  // Tiny one-off chip row for the resume screen, before PLAYBOOK/chipGroupField
+  // (defined further down, in the play-loop section) exist yet in source
+  // order -- functionally identical, just named separately to avoid relying
+  // on wiz.play (which doesn't exist yet at this point in the flow).
+  function chipGroupFieldFake(container, label, options, current, onSelect){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + '</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    options.forEach(function(v){
+      const c = document.createElement('div'); c.className = 'optChip' + (current === v ? ' active' : '');
+      c.textContent = v;
+      c.addEventListener('click', function(){ onSelect(v); });
+      row.appendChild(c);
+    });
+    wrap.appendChild(row);
+    container.appendChild(wrap);
   }
 
   // ---- Step 1: Confirm Starters ----
@@ -724,18 +796,103 @@
   }
   function sideYardFromAbs(abs){ const y = Math.round(abs <= 50 ? abs : (100 - abs)); return { side: abs <= 50 ? 'OWN' : 'OPP', yard: y }; }
 
+  // Nathan: "I want to use the wizard to watch the game back... with the
+  // game film in the top of the screen and the wizard at the bottom." Uses
+  // whatever's already linked under this game's own Game Footage (same
+  // clips schedule.js's game detail page shows) -- YouTube and Google
+  // Drive links get embedded directly since both support that; anything
+  // else (Hudl, etc.) just gets a button, since most video hosts block
+  // being embedded in someone else's page and there's no reliable way
+  // around that. On a tablet, opening that link and using the OS's own
+  // split-view alongside this page is the practical fallback there.
+  function embeddableFilmSrc(url){
+    if (!url) return null;
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (m) return 'https://www.youtube.com/embed/' + m[1];
+    m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+    return null;
+  }
+  let filmPanelCollapsed = false;
+  let filmClipIndex = 0;
+  function renderFilmPanel(container){
+    const clips = (selectedGame && Array.isArray(selectedGame.gameFootage)) ? selectedGame.gameFootage.filter(function(c){ return c && c.url; }) : [];
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
+    const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎥 Game Film';
+    const toggleLbl = document.createElement('span'); toggleLbl.style.cssText = 'font-size:12px;color:var(--dim);cursor:pointer;';
+    toggleLbl.textContent = filmPanelCollapsed ? 'Show ▾' : 'Hide ▴';
+    toggleLbl.addEventListener('click', function(){ filmPanelCollapsed = !filmPanelCollapsed; renderWizard(); });
+    headRow.appendChild(title); headRow.appendChild(toggleLbl);
+    wrap.appendChild(headRow);
+    if (!filmPanelCollapsed){
+      if (!clips.length){
+        const empty = document.createElement('div'); empty.className = 'sub'; empty.style.margin = '8px 0 0';
+        empty.textContent = 'No film linked to this game yet -- add a link under Game Footage on this game in Schedule.';
+        wrap.appendChild(empty);
+      } else {
+        if (clips.length > 1){
+          const pickRow = document.createElement('div'); pickRow.className = 'chipRow'; pickRow.style.marginTop = '8px';
+          clips.forEach(function(c, i){
+            const chip = document.createElement('div'); chip.className = 'optChip' + (filmClipIndex === i ? ' active' : '');
+            chip.style.cssText = 'padding:6px 10px;font-size:11px;flex:0 0 auto;min-width:auto;';
+            chip.textContent = c.title || ('Clip ' + (i+1));
+            chip.addEventListener('click', function(){ filmClipIndex = i; renderWizard(); });
+            pickRow.appendChild(chip);
+          });
+          wrap.appendChild(pickRow);
+        }
+        const clip = clips[filmClipIndex] || clips[0];
+        const embed = embeddableFilmSrc(clip.url);
+        if (embed){
+          const iframe = document.createElement('iframe');
+          iframe.src = embed; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+          iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+          wrap.appendChild(iframe);
+        } else {
+          const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
+          openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';
+          openLink.textContent = '▶️ Open ' + (clip.title || 'Film') + ' in a New Tab';
+          wrap.appendChild(openLink);
+          const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+          hint.textContent = "This host doesn't allow embedding -- on a tablet, use your OS's split-view/split-screen to keep this open next to the Wizard.";
+          wrap.appendChild(hint);
+        }
+      }
+    }
+    container.appendChild(wrap);
+  }
+
+  // Nathan: "I am only worried about what we ran as going forward, the
+  // coach on the sideline doing the play calls won't be visible." Reusing
+  // Stat Keeper's log while watching film back means there's no sideline
+  // signal to compare against -- this skips straight to "what actually
+  // happened" every time instead of asking once per play.
+  let filmReviewMode = false;
+
   function renderPlayLoopStep(area){
+    renderFilmPanel(area);
+
     const header = document.createElement('div');
     header.innerHTML = renderGameHeaderHtml();
     area.appendChild(header);
 
-    const utilRow = document.createElement('div'); utilRow.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;';
+    const utilRow = document.createElement('div'); utilRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
     const toBtn = document.createElement('button'); toBtn.className = 'ghostBtn'; toBtn.style.margin = '0'; toBtn.textContent = '⏱ Timeout';
     toBtn.addEventListener('click', function(){ logEvent('timeout'); });
     const eqBtn = document.createElement('button'); eqBtn.className = 'ghostBtn'; eqBtn.style.margin = '0'; eqBtn.textContent = '🏁 End Quarter';
     eqBtn.addEventListener('click', function(){ logEvent('quarterEnd'); });
     utilRow.appendChild(toBtn); utilRow.appendChild(eqBtn);
     area.appendChild(utilRow);
+
+    const reviewToggle = document.createElement('div');
+    reviewToggle.className = 'optChip' + (filmReviewMode ? ' active' : '');
+    reviewToggle.style.cssText = 'display:inline-block;padding:6px 12px;font-size:11.5px;margin-bottom:14px;';
+    reviewToggle.textContent = '🎬 Reviewing Film (skip play-call check)';
+    reviewToggle.addEventListener('click', function(){ filmReviewMode = !filmReviewMode; renderWizard(); });
+    area.appendChild(reviewToggle);
+
+    if (wiz.game.possession === 'Us' && wiz.play.phase === 'callCheck' && filmReviewMode) wiz.play.phase = 'playType';
 
     const card = document.createElement('div'); card.className = 'card';
     const phase = wiz.play.phase;
@@ -1007,7 +1164,7 @@
   }
 
   function startNextPlay(){
-    wiz.play = { phase: wiz.game.possession === 'Us' ? 'callCheck' : 'playType' };
+    wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
     renderWizard();
   }
 
