@@ -74,7 +74,7 @@
      transform, the same way the reference image's numbers actually shrink
      toward the far edge. No white anywhere -- the scene sits directly on
      the app's own dark background, only the turf itself has color. */
-  .fieldOuter{padding:34px 0 10px;margin-bottom:12px;perspective:640px}
+  .fieldOuter{position:relative;padding:34px 0 10px;margin-bottom:12px;perspective:640px}
   .fieldScene{position:relative;height:118px;margin:0 auto;max-width:94%;transform:rotateX(48deg);transform-style:preserve-3d}
   .fieldTurf{position:relative;width:100%;height:100%;border-radius:4px;overflow:hidden;
     box-shadow:0 0 0 3px #e8e4d8, 0 0 0 5px #1a1a1a;
@@ -92,9 +92,8 @@
   .yardNumRow{position:absolute;left:9.09%;right:9.09%;display:flex;justify-content:space-between;font-size:9px;font-weight:800;color:rgba(255,255,255,.7);padding:0 4px;pointer-events:none;z-index:2}
   .yardNumRow.top{top:6px;transform:rotate(180deg)}
   .yardNumRow.bottom{bottom:6px}
-  .goalPost{position:absolute;top:-30px;width:2px;height:32px;background:#e8e4d8;z-index:4;transform-style:preserve-3d}
-  .goalPost::before{content:'';position:absolute;top:-14px;left:-13px;width:28px;height:15px;border:3px solid #e8e4d8;border-bottom:none;border-radius:8px 8px 0 0}
-  .goalPost.left{left:2%} .goalPost.right{right:2%}
+  .goalPostIcon{position:absolute;top:0;width:26px;height:34px;z-index:4;pointer-events:none}
+  .goalPostIcon.left{left:6%} .goalPostIcon.right{right:6%}
   .ballMarker{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;transition:left .5s ease;font-size:16px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));z-index:3}
   .firstDownLine{position:absolute;top:0;bottom:0;width:2px;background:#ffe14d;opacity:.85;transition:left .5s ease;z-index:2}
   /* Nathan: "Lines on the field should show the original line of
@@ -175,15 +174,28 @@
   <div class="tdBanner" id="tdBanner">🏆 TOUCHDOWN!</div>
 
   <div class="fieldOuter">
+    <!-- Nathan (follow-up): "Goal posts are awful, need to be fixed." They
+         were CSS shapes living inside .fieldScene, so the same rotateX
+         tilting the field also warped them into a flat, melted-looking
+         smear -- a real goal post needs to read as standing upright
+         against the tilted field, not lying flat within its plane. Drawn
+         as plain SVG lines instead (crisper than border/box-shadow
+         tricks) and moved outside .fieldScene entirely so they render
+         flat and undistorted, the same way the reference photo's posts
+         stay clean verticals against the angled turf. -->
+    <svg class="goalPostIcon left" viewBox="0 0 26 34"><g fill="none" stroke="#e8e4d8" stroke-width="2.5" stroke-linecap="round">
+      <line x1="13" y1="34" x2="13" y2="14"/><line x1="3" y1="14" x2="23" y2="14"/><line x1="3" y1="14" x2="3" y2="2"/><line x1="23" y1="14" x2="23" y2="2"/>
+    </g></svg>
+    <svg class="goalPostIcon right" viewBox="0 0 26 34"><g fill="none" stroke="#e8e4d8" stroke-width="2.5" stroke-linecap="round">
+      <line x1="13" y1="34" x2="13" y2="14"/><line x1="3" y1="14" x2="23" y2="14"/><line x1="3" y1="14" x2="3" y2="2"/><line x1="23" y1="14" x2="23" y2="2"/>
+    </g></svg>
     <div class="fieldScene" id="fieldScene">
       <div class="fieldTurf">
-        <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BEN</span><span class="endzoneLabel">BEN</span></div>
-        <div class="endzoneOpp" id="endzoneOpp"><span class="endzoneGhost" id="endzoneOppGhost">OPP</span><span class="endzoneLabel">OPP</span></div>
+        <div class="endzoneOwn" id="endzoneOwn"><span class="endzoneGhost" id="endzoneOwnGhost">BENGALS</span><span class="endzoneLabel" id="endzoneOwnLabel">BENGALS</span></div>
+        <div class="endzoneOpp" id="endzoneOpp"><span class="endzoneGhost" id="endzoneOppGhost">OPP</span><span class="endzoneLabel" id="endzoneOppLabel">OPP</span></div>
         <div class="yardNumRow top"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
         <div class="yardNumRow bottom"><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span></div>
       </div>
-      <div class="goalPost left"></div>
-      <div class="goalPost right"></div>
       <svg class="moveSvg" id="moveSvg" viewBox="0 0 100 74" preserveAspectRatio="none"></svg>
       <div class="losLine" id="losLine" style="display:none;"></div>
       <div class="currentLine" id="currentLine" style="display:none;"></div>
@@ -360,16 +372,27 @@
   // deterministic hashColor the rest of the app already falls back to) to
   // both the score bug and the end zone -- called once per game load,
   // not per play, since none of this changes during a single game.
+  let currentOppAbbrev = 'OPP'; // used by the box score column header -- kept separate from the endzone's own (now full-name) text so reading it back doesn't concatenate the ghost + label spans together
   function applyOpponentIdentity(game){
     const name = (game && game.opponent) || 'Opponent';
     const abbrev = opponentAbbrev(name);
+    currentOppAbbrev = abbrev;
     const color = hashColor(name);
-    // Nathan: "I want the endzones to be more dynamic." Text now lives in
-    // two child spans (a small vertical label, plus a big ghosted
-    // watermark letter) instead of being the end zone div's own
-    // textContent directly -- setting both here so neither gets wiped out.
-    document.getElementById('endzoneOppGhost').textContent = abbrev;
-    document.querySelector('#endzoneOpp .endzoneLabel').textContent = abbrev;
+    // Nathan (follow-up): "use the town name in the endzone - for ours use
+    // BENGALS." The end zone now shows the actual opponent name (not the
+    // 3-letter abbreviation -- that's still used elsewhere, like the box
+    // score column header, where space is tighter) to match how a real
+    // end zone reads the town/school name, same as BENGALS is now spelled
+    // out on our own end rather than "BEN" (see the static HTML). Font
+    // size steps down for a longer name so it doesn't run off the end
+    // zone's narrow width.
+    const townName = name.replace(/\(.*?\)/g, '').trim().toUpperCase() || 'OPPONENT';
+    const fitSize = townName.length > 10 ? '7px' : townName.length > 7 ? '8px' : '9px';
+    const ghostSize = townName.length > 10 ? '18px' : townName.length > 7 ? '24px' : '30px';
+    const oppGhost = document.getElementById('endzoneOppGhost');
+    const oppLabel = document.getElementById('endzoneOppLabel');
+    oppGhost.textContent = townName; oppGhost.style.fontSize = ghostSize;
+    oppLabel.textContent = townName; oppLabel.style.fontSize = fitSize;
     document.getElementById('endzoneOpp').style.background = color;
     document.getElementById('endzoneOwn').style.background = 'linear-gradient(180deg, var(--bengal-orange, #ff6a13), #7a3d0f)';
     const oppLogoEl = document.getElementById('oppLogo');
@@ -801,7 +824,7 @@
       cells += '<td class="totalCell">'+total+'</td>';
       return '<tr>'+cells+'</tr>';
     }
-    const oppAbbrev = document.getElementById('endzoneOpp').textContent || 'Opp';
+    const oppAbbrev = currentOppAbbrev;
     table.innerHTML = '<thead>'+head+'</thead><tbody>'+row('Bengals','us')+row(oppAbbrev,'opp')+'</tbody>';
   }
 
