@@ -167,6 +167,26 @@ window.isApprovedCoachProfile = function(){
   return window.COACH_PROFILE_NAMES.indexOf(name) !== -1;
 };
 
+// Nathan: "Need a way on Coach Nate account to see the kids account view.
+// See how it looks to them. Maybe a press and hold on the logo." Reloads
+// the page with a sessionStorage flag set, which the boot-time role
+// restoration above reads and substitutes 'player' for the real stored
+// 'coach' role -- a real fresh player-view render (every one of the
+// roughly dozen files that check isCoachSession/isApprovedCoachProfile
+// picks it up correctly this way), not a partial hide-some-buttons patch
+// that would miss anything not specifically taught about preview mode.
+// The real role is never overwritten in localStorage, so exiting preview
+// is just clearing the flag and reloading back to the actual session.
+window.enterPlayerPreview = function(){
+  if (!window.isApprovedCoachProfile || !window.isApprovedCoachProfile()) return;
+  try { sessionStorage.setItem(PREVIEW_KEY, '1'); } catch(e) {}
+  location.reload();
+};
+window.exitPlayerPreview = function(){
+  try { sessionStorage.removeItem(PREVIEW_KEY); } catch(e) {}
+  location.reload();
+};
+
 (function(){
   var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
   // Nathan: "For Coach profile, you will need to put in 'FrontSeat' as the
@@ -192,6 +212,7 @@ window.isApprovedCoachProfile = function(){
   window.userRole = null;
   var STORAGE_KEY = 'bengalsPlaybookAuthed';
   var ROLE_KEY = 'bengalsUserRole';
+  var PREVIEW_KEY = 'bengalsPreviewAsPlayer';
   var LOCKOUT_KEY = 'bengalsPlaybookLockout';
   var MAX_ATTEMPTS = 5;
   var LOCKOUT_MS = 30000;
@@ -260,7 +281,32 @@ window.isApprovedCoachProfile = function(){
         // new devices going forward always pick a role explicitly below.
         storedRole = localStorage.getItem('bengalsCoachSession') === '1' ? 'coach' : 'player';
       }
-      applyRole(storedRole);
+      // Nathan: "Need a way on Coach Nate account to see the kids account
+      // view. See how it looks to them." sessionStorage (not localStorage)
+      // on purpose -- scoped to just this one tab/session, so previewing
+      // can never accidentally "stick" permanently on a device the way a
+      // localStorage flag could if someone forgot to exit it. Only ever
+      // takes effect for a real coach session; a player/parent device
+      // reading a leftover preview flag (shouldn't happen, but just in
+      // case) is ignored rather than trusted.
+      var previewOn = false;
+      try { previewOn = sessionStorage.getItem(PREVIEW_KEY) === '1' && storedRole === 'coach'; } catch(e) {}
+      if (previewOn){
+        window.__previewRealRole = storedRole;
+        applyRole('player');
+        // Nathan: "Need a way on Coach Nate account to see the kids
+        // account view." Same DOM-is-already-parsed assumption the
+        // screenEl/contentEl lookups above already rely on (this script
+        // runs after the page's own markup exists), so appending here
+        // directly is safe without waiting for another load event.
+        var bar = document.createElement('div');
+        bar.textContent = '👁️ Previewing as a Player — tap to exit back to Coach';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff6a13;color:#111;font-weight:800;font-size:13px;text-align:center;padding:9px 12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);';
+        bar.addEventListener('click', function(){ window.exitPlayerPreview(); });
+        document.body.appendChild(bar);
+      } else {
+        applyRole(storedRole);
+      }
       if(window.__resolveBengalsAuth) window.__resolveBengalsAuth();
       proceedPastRoleChoice();
     }

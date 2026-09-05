@@ -517,6 +517,37 @@ function logQuizStart(kind){
    index.html's #modeTabs), the secret back door has no job left to do.
    ============================================================ */
 
+/* ============================================================
+   PLAYER-VIEW PREVIEW -- Nathan (follow-up): "Need a way on Coach Nate
+   account to see the kids account view. See how it looks to them. Maybe
+   a press and hold on the logo." The logo's gesture slot was sitting
+   empty after the 2-Minute-Drill shortcut above was retired, so it's
+   reused here rather than adding a new secret spot -- though per that
+   same history (three different things have lived on this one gesture
+   and then gotten removed once they had a proper home), this is
+   genuinely likely to want a real, discoverable settings toggle
+   eventually instead of staying a secret gesture forever.
+   Only does anything for an approved coach profile (enterPlayerPreview
+   itself no-ops for anyone else); a long-press from a player or parent
+   session is just... nothing, no visible reaction either way, so there's
+   no reason to hide or restrict the listener itself.
+   ============================================================ */
+(function wireLogoPreviewHold(){
+  const logo = document.getElementById('headerLogo');
+  if (!logo) return;
+  const HOLD_MS = 1400;
+  let holdTimer = null;
+  function start(){ holdTimer = setTimeout(function(){ if (window.enterPlayerPreview) window.enterPlayerPreview(); }, HOLD_MS); }
+  function cancel(){ if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; } }
+  logo.addEventListener('touchstart', start, { passive: true });
+  logo.addEventListener('touchend', cancel);
+  logo.addEventListener('touchcancel', cancel);
+  logo.addEventListener('touchmove', cancel);
+  logo.addEventListener('mousedown', start);
+  logo.addEventListener('mouseup', cancel);
+  logo.addEventListener('mouseleave', cancel);
+})();
+
 function getLeaderboard(){
   try { const raw = localStorage.getItem(LEADERBOARD_KEY); return raw ? JSON.parse(raw) : []; } catch(e) { return []; }
 }
