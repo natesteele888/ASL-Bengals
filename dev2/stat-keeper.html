@@ -637,10 +637,14 @@
 
   // Ranks players by tackle involvement so far this game (solo=1, assist=0.5) — used to
   // surface the 3 "hot" quick-pick tacklers instead of scrolling the full roster every time.
+  // Nathan: "when we are set to defense, I can say who ran the ball, but it
+  // doesn't allow me to say we made the tackle" -- Run/Pass now carry their
+  // own tackler/assist when the opponent has the ball, same as Tackle/Punt
+  // already did, so this list counts those too.
   function topTacklers(n){
     const counts = {};
     plays.forEach(function(p){
-      if (p.type !== 'tackle' && p.type !== 'punt') return;
+      if (p.type !== 'tackle' && p.type !== 'punt' && p.type !== 'run' && p.type !== 'pass') return;
       if (p.tackler) counts[p.tackler] = (counts[p.tackler]||0) + 1;
       asList(p.assist).forEach(function(name){ counts[name] = (counts[name]||0) + 0.5; });
     });
@@ -1202,9 +1206,29 @@
       snapSpotFields(isUsRun).forEach(function(row){ fieldsArea.appendChild(row); });
       fieldsArea.appendChild(downDistanceField());
       fieldsArea.appendChild(fieldBlock('Direction', optChips('dir', ['Left','Middle','Right'])));
+      if (!isUsRun){
+        // Nathan: "when we are set to defense, I can say who ran the ball,
+        // but it doesn't allow me to say we made the tackle." Previously
+        // the only way to credit a tackle on an opponent run was a second,
+        // separate Tackle entry -- same tackler/assist fields the
+        // standalone Tackle type already has, just living directly on
+        // this Run entry instead, so one entry captures the whole play.
+        // compileStatSheet/translatePlaysForLive/topTacklers all already
+        // credit a tackler off Run the same way they already did for
+        // Tackle/Punt.
+        fieldsArea.appendChild(fieldBlock('Tackler (solo, optional)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
+        fieldsArea.appendChild(fieldBlock('Assist (optional, select all who assisted)', playerPicker('assist', {multi:true, hotFn: function(){ return topTacklers(3); }})));
+      }
       const toggles = document.createElement('div'); toggles.className='toggleRow';
       toggles.appendChild(chipToggle('firstDown', isUsRun ? '1st Down' : 'Opponent 1st Down'));
       toggles.appendChild(chipToggle('td','🏆 Touchdown'));
+      // Nathan (follow-up): "it also doesn't show me how he was brought
+      // down: tackle or out of bounds." Tackler/assist above already say
+      // WHO stopped him; this says HOW -- independent toggle rather than
+      // replacing the tackler fields, since "ran out of bounds, no clean
+      // tackle to credit" is a real, common case those fields alone don't
+      // capture.
+      toggles.appendChild(chipToggle('oob', 'Out of Bounds'));
       // Nathan: "rushing attempts where there is a fumble on the exchange
       // isn't a rushing attempt" -- a botched snap/handoff before the
       // ball's really been handed off isn't a designed run, so it
@@ -1242,7 +1266,15 @@
         const toggles = document.createElement('div'); toggles.className='toggleRow';
         toggles.appendChild(chipToggle('firstDown', isUsPass ? '1st Down' : 'Opponent 1st Down'));
         toggles.appendChild(chipToggle('td','🏆 Touchdown'));
+        toggles.appendChild(chipToggle('oob', 'Out of Bounds'));
         fieldsArea.appendChild(fieldBlock('', toggles));
+        if (!isUsPass){
+          // Nathan: "when we are set to defense, I can say who ran the
+          // ball, but it doesn't allow me to say we made the tackle" --
+          // same gap existed for a completed opponent pass, same fix.
+          fieldsArea.appendChild(fieldBlock('Tackler (solo, optional)', playerPicker('tackler', {hotFn: function(){ return topTacklers(3); }})));
+          fieldsArea.appendChild(fieldBlock('Assist (optional, select all who assisted)', playerPicker('assist', {multi:true, hotFn: function(){ return topTacklers(3); }})));
+        }
       } else if (draft.result === 'Incomplete'){
         fieldsArea.appendChild(fieldBlock('Reason (optional)', optChips('incReason', ['Dropped','Overthrown','Underthrown','Broken Up','Threw It Away','Other'])));
         if (draft.incReason === 'Broken Up'){
@@ -1439,6 +1471,16 @@
     return ' [Called: ' + name + (p.coachCallDir ? ' ' + p.coachCallDir : '') + ']';
   }
   function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation + (p.coachFormationDir ? ' '+p.coachFormationDir : '') +']' : ''; }
+  // Nathan: "it doesn't allow me to say we made the tackle" -- Run/Pass can
+  // now carry their own tackler/assist (see renderFields), same fields the
+  // standalone Tackle type already used; this shares one bit of text
+  // between both describePlay branches below instead of duplicating it.
+  function tackleTxt(p){
+    if (!p.tackler && !asList(p.assist).length) return '';
+    const assists = asList(p.assist);
+    if (!p.tackler) return ' · tackled by ' + assists.join(' + ') + ' (assist)';
+    return ' · tackled by ' + p.tackler + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : '');
+  }
 
   // Nathan: "I am also still missing the visual of what the yard spot of
   // the play is. It can be added to the play bar." The plain-English spot
@@ -1471,8 +1513,8 @@
       const prefix = isUsRun ? '' : '🛡️ ';
       const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
       return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
-        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
-        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') +
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
@@ -1484,7 +1526,7 @@
         return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
     if (p.type==='kick'){
       const isUsKick = p.kickTeam !== 'Opponent';
@@ -2136,7 +2178,7 @@
           if (startAbs != null && catchAbs != null){ pt.grossYds += (catchAbs - startAbs); pt.grossCount++; }
         }
       }
-      if ((p.type==='tackle' || p.type==='punt') && p.tackler){
+      if ((p.type==='tackle' || p.type==='punt' || p.type==='run' || p.type==='pass') && p.tackler){
         const t = tackles[p.tackler] || (tackles[p.tackler] = {name:p.tackler, solo:0, ast:0});
         t.solo++; // primary tackler always credited solo, regardless of whether there's an assist
         asList(p.assist).forEach(function(name){
@@ -2785,7 +2827,7 @@
           asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });
         }
       }
-      if (p.type === 'tackle' && p.tackler){
+      if ((p.type === 'tackle' || p.type === 'run' || p.type === 'pass') && p.tackler){
         const tNum = numFor(p.tackler);
         if (tNum != null) ensureTackleRow(tNum).marks.push('solo');
         asList(p.assist).forEach(name => { const aNum = numFor(name); if (aNum != null) ensureTackleRow(aNum).marks.push('assist'); });

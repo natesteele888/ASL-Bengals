@@ -389,6 +389,17 @@
     return ' [Called: ' + name + (p.coachCallDir ? ' ' + p.coachCallDir : '') + ']';
   }
   function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation + (p.coachFormationDir ? ' '+p.coachFormationDir : '') +']' : ''; }
+  // Nathan: "when we are set to defense, I can say who ran the ball, but
+  // it doesn't allow me to say we made the tackle" -- fixed in
+  // stat-keeper.html by letting Run/Pass carry their own tackler/assist;
+  // mirrored here so a replay shows the same tackle credit stat-keeper
+  // itself now does.
+  function tackleTxt(p){
+    if (!p.tackler && !asList(p.assist).length) return '';
+    const assists = asList(p.assist);
+    if (!p.tackler) return ' · tackled by ' + assists.join(' + ') + ' (assist)';
+    return ' · tackled by ' + p.tackler + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : '');
+  }
 
   function spotBadgeText(p){
     if (p.startSide != null && p.endSide != null){
@@ -412,8 +423,8 @@
       const prefix = isUsRun ? '' : '🛡️ ';
       const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
       return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
-        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') +
-        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') +
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
     if (p.type==='pass'){
       const isUsPass = p.passTeam !== 'Opponent';
@@ -425,7 +436,7 @@
         return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
-        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
     if (p.type==='kick'){
       const isUsKick = p.kickTeam !== 'Opponent';
