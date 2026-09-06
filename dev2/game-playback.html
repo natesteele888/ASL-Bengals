@@ -377,34 +377,28 @@
     });
     return ytApiLoadPromise;
   }
-  // Nathan: "Please confirm these videos aren't available on YouTube."
-  // telestrator.html's own banner confirms this footage is real Google
-  // Drive video files -- the /preview iframe here couldn't be driven by
-  // seekTo at all (cross-origin, same restriction YouTube has without its
-  // API), so auto-seek would have silently done nothing for Drive-hosted
-  // film. Now a real <video> element, same direct-file-URL technique
-  // telestrator.html already uses, giving native seekTo-equivalent
-  // control (just setting .currentTime) with no API needed.
-  function driveDirectVideoUrl(shareUrl){
-    const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (!m) return null;
-    return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t';
-  }
+  // Nathan: "this whole feature isn't working well" -- the direct-video-
+  // file technique (converting a Drive share link to a streamable file URL
+  // for a native <video>) failed with a real "source not supported/
+  // blocked" error, most likely Google Drive's own virus-scan/large-file
+  // interstitial page coming back instead of actual video bytes when hit
+  // this way. Back to the plain /preview embed Google's own viewer uses --
+  // reliable, but no programmatic control, so auto-seek can't work for
+  // Drive-hosted footage (still works for YouTube).
   function embeddableFilmSrc(url){
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
     if (m) return { kind:'youtube', videoId: m[1] };
-    const driveUrl = /drive\.google\.com/.test(url) ? driveDirectVideoUrl(url) : null;
-    if (driveUrl) return { kind:'drive', url: driveUrl };
+    m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind:'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
     return null;
   }
   let ytPlayer = null;
-  let driveVideoEl = null;
   let filmKind = null; // 'youtube' | 'drive' | null
   function renderPlaybackFilmPanel(game){
     const host = document.getElementById('filmPanelHost');
     host.innerHTML = '';
-    ytPlayer = null; driveVideoEl = null; filmKind = null;
+    ytPlayer = null; filmKind = null;
     const clips = (game && Array.isArray(game.gameFootage)) ? game.gameFootage.filter(function(c){ return c && c.url; }) : [];
     if (!clips.length) return; // nothing linked -- just no panel at all, rather than an empty placeholder taking up space every game
     const clip = clips[0]; // the main game film -- markers were captured against whichever clip was loaded in the Wizard at commit time, which is always the first one
@@ -423,26 +417,13 @@
         ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
       });
     } else if (embed.kind === 'drive'){
-      const video = document.createElement('video');
-      video.id = 'filmVideo'; video.controls = true; video.playsInline = true; video.preload = 'metadata';
-      video.src = embed.url;
-      video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;background:#000;display:block;';
-      wrap.appendChild(video);
-      driveVideoEl = video;
-      // Nathan: "play button is not working." Same diagnostic as
-      // game-wizard.html -- surface whatever actually fails instead of a
-      // silently unresponsive video.
-      const videoStatus = document.createElement('div'); videoStatus.className = 'sub'; videoStatus.style.margin = '6px 0 0'; videoStatus.style.color = '#e0402a';
-      video.addEventListener('error', function(){
-        const codes = { 1:'load aborted', 2:'network error', 3:'could not decode this video', 4:'source not supported/blocked' };
-        const code = video.error ? video.error.code : null;
-        videoStatus.textContent = '⚠️ Video failed to load' + (code ? ' (' + (codes[code] || 'error ' + code) + ')' : '') + ' -- use the link below instead.';
-      });
-      wrap.appendChild(videoStatus);
-      const fallbackLink = document.createElement('a'); fallbackLink.href = clip.url; fallbackLink.target = '_blank'; fallbackLink.rel = 'noopener';
-      fallbackLink.className = 'ghostBtn'; fallbackLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:6px;';
-      fallbackLink.textContent = '↗️ Open This Film in a New Tab Instead';
-      wrap.appendChild(fallbackLink);
+      const iframe = document.createElement('iframe');
+      iframe.src = embed.previewUrl; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
+      wrap.appendChild(iframe);
+      const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+      hint.textContent = "Auto-seek isn't available for this film -- use the video's own controls above to find each play.";
+      wrap.appendChild(hint);
     }
     host.appendChild(wrap);
   }
@@ -696,7 +677,12 @@
     if (p.type === 'score'){
       const forUs = p.scoreTeam !== 'Opponent';
       let pts = 0;
-      if (p.scoreKind === 'PAT Good') pts = 1; else if (p.scoreKind === '2PT Good') pts = 2; else if (p.scoreKind === 'Safety') pts = 2;
+      // Nathan: "at this level - a kick is worth 2 points and a play for
+      // a score is worth 1 point." Matches both the corrected label and
+      // the old one, same backward-compatible approach as stat-keeper.html.
+      if (p.scoreKind === 'Kick (2 pt Good)' || p.scoreKind === '2PT Good') pts = 2;
+      else if (p.scoreKind === 'Run/Pass Play (1 pt Good)' || p.scoreKind === 'PAT Good') pts = 1;
+      else if (p.scoreKind === 'Safety') pts = 2;
       if (forUs) us += pts; else opp += pts;
       return { us, opp };
     }
@@ -884,15 +870,14 @@
     // check matters because scrubbing quickly (or hitting Play) fires
     // renderStep repeatedly, and re-seeking to the same spot on every one
     // of those would visibly stutter the video for no reason.
-    if (p.filmTimestamp != null){
-      if (filmKind === 'youtube' && ytPlayer && typeof ytPlayer.seekTo === 'function'){
-        try {
-          const current = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : null;
-          if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
-        } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
-      } else if (filmKind === 'drive' && driveVideoEl){
-        if (Math.abs(driveVideoEl.currentTime - p.filmTimestamp) > 1.5) driveVideoEl.currentTime = p.filmTimestamp;
-      }
+    // Nathan: "this whole feature isn't working well" -- Drive is back to
+    // a plain /preview embed, which can't be seeked programmatically at
+    // all, so auto-jump only works for YouTube-hosted film right now.
+    if (p.filmTimestamp != null && filmKind === 'youtube' && ytPlayer && typeof ytPlayer.seekTo === 'function'){
+      try {
+        const current = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : null;
+        if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
+      } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
     }
     document.getElementById('scoreUs').textContent = after.us;
     document.getElementById('scoreOpp').textContent = after.opp;
