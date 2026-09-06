@@ -377,20 +377,34 @@
     });
     return ytApiLoadPromise;
   }
+  // Nathan: "Please confirm these videos aren't available on YouTube."
+  // telestrator.html's own banner confirms this footage is real Google
+  // Drive video files -- the /preview iframe here couldn't be driven by
+  // seekTo at all (cross-origin, same restriction YouTube has without its
+  // API), so auto-seek would have silently done nothing for Drive-hosted
+  // film. Now a real <video> element, same direct-file-URL technique
+  // telestrator.html already uses, giving native seekTo-equivalent
+  // control (just setting .currentTime) with no API needed.
+  function driveDirectVideoUrl(shareUrl){
+    const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (!m) return null;
+    return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t';
+  }
   function embeddableFilmSrc(url){
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
-    if (m) return { videoId: m[1], youtube: true };
-    m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (m) return { url: 'https://drive.google.com/file/d/' + m[1] + '/preview', youtube: false };
+    if (m) return { kind:'youtube', videoId: m[1] };
+    const driveUrl = /drive\.google\.com/.test(url) ? driveDirectVideoUrl(url) : null;
+    if (driveUrl) return { kind:'drive', url: driveUrl };
     return null;
   }
   let ytPlayer = null;
-  let filmIsYouTube = false;
+  let driveVideoEl = null;
+  let filmKind = null; // 'youtube' | 'drive' | null
   function renderPlaybackFilmPanel(game){
     const host = document.getElementById('filmPanelHost');
     host.innerHTML = '';
-    ytPlayer = null;
+    ytPlayer = null; driveVideoEl = null; filmKind = null;
     const clips = (game && Array.isArray(game.gameFootage)) ? game.gameFootage.filter(function(c){ return c && c.url; }) : [];
     if (!clips.length) return; // nothing linked -- just no panel at all, rather than an empty placeholder taking up space every game
     const clip = clips[0]; // the main game film -- markers were captured against whichever clip was loaded in the Wizard at commit time, which is always the first one
@@ -398,21 +412,23 @@
     if (!embed) return; // host doesn't support embedding -- nothing to auto-seek, and a bare link here isn't worth cluttering the top of every game with
     const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
     wrap.innerHTML = '<div style="font-weight:800;font-size:13px;margin-bottom:6px;">🎥 ' + escapeHtml(clip.title || 'Game Film') + '</div>';
-    filmIsYouTube = embed.youtube;
-    if (embed.youtube){
+    filmKind = embed.kind;
+    if (embed.kind === 'youtube'){
       const playerHost = document.createElement('div');
-      playerHost.id = 'filmIframe';
+      playerHost.id = 'filmPlayer';
       playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;background:#000;';
       wrap.appendChild(playerHost);
       ensureYouTubeApi().then(function(){
-        if (!document.getElementById('filmIframe')) return; // a different game may have been selected while this was loading
-        ytPlayer = new YT.Player('filmIframe', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
+        if (!document.getElementById('filmPlayer')) return; // a different game may have been selected while this was loading
+        ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
       });
-    } else {
-      const iframe = document.createElement('iframe');
-      iframe.src = embed.url; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
-      wrap.appendChild(iframe);
+    } else if (embed.kind === 'drive'){
+      const video = document.createElement('video');
+      video.id = 'filmVideo'; video.controls = true; video.playsInline = true; video.preload = 'metadata';
+      video.src = embed.url;
+      video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;background:#000;display:block;';
+      wrap.appendChild(video);
+      driveVideoEl = video;
     }
     host.appendChild(wrap);
   }
@@ -854,11 +870,15 @@
     // check matters because scrubbing quickly (or hitting Play) fires
     // renderStep repeatedly, and re-seeking to the same spot on every one
     // of those would visibly stutter the video for no reason.
-    if (filmIsYouTube && ytPlayer && typeof ytPlayer.seekTo === 'function' && p.filmTimestamp != null){
-      try {
-        const current = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : null;
-        if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
-      } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
+    if (p.filmTimestamp != null){
+      if (filmKind === 'youtube' && ytPlayer && typeof ytPlayer.seekTo === 'function'){
+        try {
+          const current = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : null;
+          if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
+        } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
+      } else if (filmKind === 'drive' && driveVideoEl){
+        if (Math.abs(driveVideoEl.currentTime - p.filmTimestamp) > 1.5) driveVideoEl.currentTime = p.filmTimestamp;
+      }
     }
     document.getElementById('scoreUs').textContent = after.us;
     document.getElementById('scoreOpp').textContent = after.opp;

@@ -865,22 +865,33 @@
   // being embedded in someone else's page and there's no reliable way
   // around that. On a tablet, opening that link and using the OS's own
   // split-view alongside this page is the practical fallback there.
+  // Nathan: "Please confirm these videos aren't available on YouTube...
+  // let's revisit the Telestrator option." telestrator.html's own banner
+  // confirms footage is real Google Drive video files, not YouTube --
+  // meaning the /preview iframe embed used here couldn't have its
+  // currentTime read at all (same cross-origin restriction as YouTube
+  // without its API), so filmTimestamp was quietly never getting captured
+  // for Drive-hosted footage. Fixed the same way telestrator.html already
+  // solves it: convert the share link to a direct, streamable file URL and
+  // hand it to a real <video> element instead of an embed -- full native
+  // currentTime/play()/pause() control, no API needed at all for this one.
+  function driveDirectVideoUrl(shareUrl){
+    const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (!m) return null;
+    return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t';
+  }
   function embeddableFilmSrc(url){
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
-    // Nathan: "I need a quick pause and play option on it." enablejsapi=1
-    // lets the custom Play/Pause buttons below talk to the embedded
-    // player over postMessage without pulling in the full YouTube IFrame
-    // API script -- just enough to send play/pause commands.
-    if (m) return { url: 'https://www.youtube.com/embed/' + m[1] + '?enablejsapi=1', youtube: true };
-    m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (m) return { url: 'https://drive.google.com/file/d/' + m[1] + '/preview', youtube: false };
+    if (m) return { kind:'youtube', videoId: m[1] };
+    const driveUrl = /drive\.google\.com/.test(url) ? driveDirectVideoUrl(url) : null;
+    if (driveUrl) return { kind:'drive', url: driveUrl };
     return null;
   }
   let filmPanelCollapsed = false;
   let filmClipIndex = 0;
   let filmPanelBuiltForGameId = null; // which game's film is currently sitting in #filmPanelHost
-  let filmIframeIsYouTube = false;
+  let filmKind = null; // 'youtube' | 'drive' | null -- which control path getCurrentFilmTime/play-pause should use
 
   // Nathan: "Video is always visible in the top and should not start over
   // or reload when a play is saved." Builds the panel (and its <iframe>)
@@ -917,12 +928,27 @@
     return ytApiLoadPromise;
   }
   let ytPlayer = null;
+  let driveVideoEl = null;
+  function appendPlayPauseControls(wrap, onPlay, onPause){
+    // Nathan: "I need a quick pause and play option on it... Needs to be
+    // quick." Big, thumb-reachable buttons under the video -- faster to
+    // hit mid-play-call than the tiny controls inside an embedded player,
+    // especially one-handed. Same two buttons regardless of whether the
+    // video underneath is a YouTube player object or a native <video>.
+    const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    const playBtn = document.createElement('button'); playBtn.className = 'primaryBtn'; playBtn.style.margin = '0'; playBtn.textContent = '▶️ Play';
+    playBtn.addEventListener('click', onPlay);
+    const pauseBtn = document.createElement('button'); pauseBtn.className = 'primaryBtn'; pauseBtn.style.margin = '0'; pauseBtn.style.background = 'linear-gradient(135deg,#6b7480,#454c56)'; pauseBtn.textContent = '⏸ Pause';
+    pauseBtn.addEventListener('click', onPause);
+    controls.appendChild(playBtn); controls.appendChild(pauseBtn);
+    wrap.appendChild(controls);
+  }
 
   function renderFilmPanelContent(){
     const host = document.getElementById('filmPanelHost');
     const clips = (selectedGame && Array.isArray(selectedGame.gameFootage)) ? selectedGame.gameFootage.filter(function(c){ return c && c.url; }) : [];
     host.innerHTML = '';
-    ytPlayer = null; // whatever player existed belonged to the just-cleared iframe
+    ytPlayer = null; driveVideoEl = null; filmKind = null; // whatever player/video existed belonged to the just-cleared content
     const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
     const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
     const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎥 Game Film';
@@ -954,42 +980,33 @@
         }
         const clip = clips[filmClipIndex] || clips[0];
         const embed = embeddableFilmSrc(clip.url);
-        if (embed){
-          filmIframeIsYouTube = embed.youtube;
-          if (embed.youtube){
-            const playerHost = document.createElement('div');
-            playerHost.id = 'filmIframe';
-            playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;margin-top:8px;background:#000;';
-            wrap.appendChild(playerHost);
-            const videoIdMatch = embed.url.match(/embed\/([a-zA-Z0-9_-]+)/);
-            const videoId = videoIdMatch ? videoIdMatch[1] : null;
-            const thisClipIndex = filmClipIndex;
-            ensureYouTubeApi().then(function(){
-              // Bail if the panel's moved on since this resolved (clip
-              // switched, panel rebuilt) -- don't attach a player to a
-              // host that's no longer the one currently on screen.
-              if (filmClipIndex !== thisClipIndex || !document.getElementById('filmIframe')) return;
-              ytPlayer = new YT.Player('filmIframe', { videoId: videoId, playerVars: { playsinline: 1 } });
-            });
-            // Nathan: "I need a quick pause and play option on it... Needs
-            // to be quick." Big, thumb-reachable buttons right under the
-            // video -- faster to hit mid-play-call than the tiny controls
-            // inside the embedded player itself, especially one-handed.
-            // Talk to ytPlayer directly now (a real player object) instead
-            // of guessing at postMessage commands.
-            const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-            const playBtn = document.createElement('button'); playBtn.className = 'primaryBtn'; playBtn.style.margin = '0'; playBtn.textContent = '▶️ Play';
-            playBtn.addEventListener('click', function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); });
-            const pauseBtn = document.createElement('button'); pauseBtn.className = 'primaryBtn'; pauseBtn.style.margin = '0'; pauseBtn.style.background = 'linear-gradient(135deg,#6b7480,#454c56)'; pauseBtn.textContent = '⏸ Pause';
-            pauseBtn.addEventListener('click', function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
-            controls.appendChild(playBtn); controls.appendChild(pauseBtn);
-            wrap.appendChild(controls);
-          } else {
-            const iframe = document.createElement('iframe');
-            iframe.src = embed.url; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-            iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
-            wrap.appendChild(iframe);
-          }
+        filmKind = embed ? embed.kind : null;
+        if (embed && embed.kind === 'youtube'){
+          const playerHost = document.createElement('div');
+          playerHost.id = 'filmPlayer';
+          playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;margin-top:8px;background:#000;';
+          wrap.appendChild(playerHost);
+          const thisClipIndex = filmClipIndex;
+          ensureYouTubeApi().then(function(){
+            // Bail if the panel's moved on since this resolved (clip
+            // switched, panel rebuilt) -- don't attach a player to a
+            // host that's no longer the one currently on screen.
+            if (filmClipIndex !== thisClipIndex || !document.getElementById('filmPlayer')) return;
+            ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
+          });
+          appendPlayPauseControls(wrap, function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }, function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
+        } else if (embed && embed.kind === 'drive'){
+          // Nathan: "let's revisit the Telestrator option" confirmed this
+          // footage is real Drive video files -- a native <video> element
+          // gives full currentTime/play()/pause() control directly, no
+          // API needed at all (unlike YouTube, which requires one).
+          const video = document.createElement('video');
+          video.id = 'filmVideo'; video.controls = true; video.playsInline = true; video.preload = 'metadata';
+          video.src = embed.url;
+          video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;margin-top:8px;background:#000;display:block;';
+          wrap.appendChild(video);
+          driveVideoEl = video;
+          appendPlayPauseControls(wrap, function(){ video.play(); }, function(){ video.pause(); });
         } else {
           const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
           openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';
@@ -1010,11 +1027,14 @@
   // button to remember to press, the natural instant a play gets logged
   // IS the marker.
   function getCurrentFilmTime(){
-    if (!filmIframeIsYouTube || !ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return null;
-    try {
-      const t = ytPlayer.getCurrentTime();
+    if (filmKind === 'youtube' && ytPlayer && typeof ytPlayer.getCurrentTime === 'function'){
+      try { const t = ytPlayer.getCurrentTime(); return (typeof t === 'number' && !isNaN(t)) ? t : null; } catch(e){ return null; }
+    }
+    if (filmKind === 'drive' && driveVideoEl){
+      const t = driveVideoEl.currentTime;
       return (typeof t === 'number' && !isNaN(t)) ? t : null;
-    } catch(e){ return null; }
+    }
+    return null;
   }
 
   // Nathan: "I am only worried about what we ran as going forward, the

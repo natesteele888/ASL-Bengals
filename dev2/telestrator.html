@@ -78,6 +78,22 @@
     <canvas id="drawLayer" class="drawLayer"></canvas>
   </div>
 
+  <!-- Nathan: "it's already play by play within the video, I would like to
+       set it up where it stops automatically at the end of each play. You
+       click next to run the next play... The screen will show the play
+       and then whatever play was identified in the STATKEEPER for the
+       game as the play that was run." Sits right under the video, above
+       the drawing toolbar -- the primary action while running a coaching
+       session, so it's the first thing reachable after the video itself,
+       not buried under the draw controls. -->
+  <div id="filmPlaySection" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div id="filmPlayInfo" style="font-size:13px;font-weight:700;flex:1;">Tap Next Play to start.</div>
+      <button type="button" class="btn primary" id="nextPlayBtn" style="flex:0 0 auto;">Next Play ▶️</button>
+    </div>
+    <div id="filmPlayCounter" style="font-size:10.5px;color:var(--dim);margin-top:4px;"></div>
+  </div>
+
   <div id="controllerToolbar" class="toolbar" style="display:none;">
     <div class="scrubRow">
       <button type="button" class="btn" id="playBtn">▶️</button>
@@ -292,6 +308,95 @@
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage : [];
     clip = clips.find(c => c.id === clipId);
     if (!clip) throw new Error('Footage clip not found on this game.');
+  }
+
+  // Nathan: "it's already play by play within the video, I would like to
+  // set it up where it stops automatically at the end of each play. You
+  // click next to run the next play... The screen will show the play and
+  // then whatever play was identified in the STATKEEPER for the game as
+  // the play that was run." Pulls the same filmTimestamp game-wizard.html
+  // now stamps onto every play at commit time (see its own "setting
+  // markers" work) -- a play with no timestamp (logged before that
+  // existed, or the footage wasn't loaded when it was logged) just can't
+  // be auto-paused on, so those are filtered out rather than guessed at.
+  let filmPlays = [];
+  let filmPlayIndex = 0;
+  async function loadFilmPlays(){
+    try {
+      const url = await firebaseAuthedUrl(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
+      const res = await fetch(url);
+      const gs = res.ok ? await res.json() : null;
+      const plays = (gs && Array.isArray(gs.plays)) ? gs.plays.slice().reverse() : []; // stored newest-first; chronological order for stepping through
+      filmPlays = plays.filter(p => p && p.type !== 'quarterEnd' && p.type !== 'timeout' && typeof p.filmTimestamp === 'number')
+        .sort((a, b) => a.filmTimestamp - b.filmTimestamp);
+    } catch(e){ filmPlays = []; }
+  }
+  // Lightweight description, not the full describePlay from stat-keeper.html/
+  // game-playback.html -- this only needs to say enough for a coach to
+  // recognize the play, not reproduce every stat-sheet detail.
+  function describeFilmPlay(p){
+    if (p.type === 'run'){
+      const isUs = p.runTeam !== 'Opponent';
+      const who = isUs ? (p.carrier || '?') : ('Opponent' + (p.oppCarrier ? ' (' + p.oppCarrier + ')' : ''));
+      const call = isUs && p.playCall ? ' — ' + p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '') : '';
+      return 'Run' + call + ' — ' + who + ', ' + (p.yards != null ? p.yards + ' yds' : '');
+    }
+    if (p.type === 'pass'){
+      const isUs = p.passTeam !== 'Opponent';
+      const who = isUs ? ((p.passer || '?') + ' to ' + (p.target || '?')) : 'Opponent pass';
+      const call = isUs && p.playCall ? ' — ' + p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '') : '';
+      return 'Pass' + call + ' — ' + who + (p.result === 'Incomplete' ? ' (incomplete)' : ', ' + (p.yards != null ? p.yards + ' yds' : ''));
+    }
+    if (p.type === 'punt') return 'Punt' + (p.puntResult ? ' — ' + p.puntResult : '');
+    if (p.type === 'kick') return 'Kickoff';
+    if (p.type === 'penalty') return 'Penalty' + (p.penType ? ' — ' + p.penType : '') + (p.penTeam ? ' on ' + p.penTeam : '');
+    if (p.type === 'turnover') return 'Turnover' + (p.toType ? ' — ' + p.toType : '');
+    if (p.type === 'tackle') return 'Tackle' + (p.tackler ? ' — ' + p.tackler : '');
+    return (p.type || 'Play').toUpperCase();
+  }
+  function updateFilmPlayPanel(){
+    const section = document.getElementById('filmPlaySection');
+    if (!filmPlays.length){ section.style.display = 'none'; return; }
+    section.style.display = '';
+    const infoEl = document.getElementById('filmPlayInfo');
+    const counterEl = document.getElementById('filmPlayCounter');
+    if (filmPlayIndex >= filmPlays.length){
+      infoEl.textContent = "That's every play with a marker on it.";
+      counterEl.textContent = filmPlays.length + ' / ' + filmPlays.length;
+      document.getElementById('nextPlayBtn').textContent = 'Done';
+      return;
+    }
+    infoEl.textContent = describeFilmPlay(filmPlays[filmPlayIndex]);
+    counterEl.textContent = (filmPlayIndex + 1) + ' / ' + filmPlays.length + ' -- from Stat Keeper';
+    document.getElementById('nextPlayBtn').textContent = 'Next Play ▶️';
+  }
+  function wireFilmPlayStepping(){
+    if (!filmPlays.length) return;
+    // Auto-pause: a SEPARATE timeupdate listener from the scrub bar's own
+    // one in wireControllerUI -- both just watch the same event, no
+    // conflict. Checks "have we just reached or passed the CURRENT
+    // target play's marker" rather than an exact match, since timeupdate
+    // fires in small irregular jumps, not on every single frame.
+    vid.addEventListener('timeupdate', () => {
+      if (filmPlayIndex >= filmPlays.length) return;
+      if (vid.paused) return; // don't re-trigger off a pause the coach did themselves
+      if (vid.currentTime >= filmPlays[filmPlayIndex].filmTimestamp){
+        vid.pause();
+        updateFilmPlayPanel(); // show the play that just ended BEFORE advancing the index, so it matches what's on screen
+        filmPlayIndex++;
+      }
+    });
+    document.getElementById('nextPlayBtn').addEventListener('click', () => {
+      if (filmPlayIndex >= filmPlays.length) return;
+      // Nathan: "We need the interface at the bottom... so he can draw on
+      // it." Clears whatever was drawn for the play that just ended and
+      // exits draw mode before the next one starts -- a fresh canvas for
+      // each new play, same as a real telestrator resetting between reps.
+      if (drawMode) document.getElementById('drawToggleBtn').click();
+      strokes = []; redrawStrokes();
+      vid.play();
+    });
+    updateFilmPlayPanel();
   }
 
   // ---- Video + draw canvas ----
@@ -694,6 +799,12 @@
       await startDisplayListening();
     } else {
       wireControllerUI();
+      // Nathan: "set it up where it stops automatically at the end of
+      // each play." Only for the controlling device, not a TV display --
+      // a display mirrors what the controller sends it, it shouldn't
+      // independently decide to pause on its own.
+      await loadFilmPlays();
+      wireFilmPlayStepping();
     }
     renderAnnotations();
   } catch(e){
