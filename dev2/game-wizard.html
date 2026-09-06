@@ -996,17 +996,37 @@
           });
           appendPlayPauseControls(wrap, function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }, function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
         } else if (embed && embed.kind === 'drive'){
-          // Nathan: "let's revisit the Telestrator option" confirmed this
-          // footage is real Drive video files -- a native <video> element
-          // gives full currentTime/play()/pause() control directly, no
-          // API needed at all (unlike YouTube, which requires one).
+          // Nathan: "play button is not working... Play on the video
+          // window or the big CTA." Structurally this matches
+          // telestrator.html's own working version exactly (same
+          // driveDirectVideoUrl, same plain <video src>), so I can't be
+          // certain of the real cause without seeing an actual browser
+          // error -- rather than guess again, this surfaces whatever
+          // actually goes wrong (a failed load, a blocked play() call)
+          // as visible text, and always keeps a working fallback link
+          // right there so film review isn't blocked either way while
+          // we track down the real cause together.
           const video = document.createElement('video');
           video.id = 'filmVideo'; video.controls = true; video.playsInline = true; video.preload = 'metadata';
           video.src = embed.url;
           video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;margin-top:8px;background:#000;display:block;';
           wrap.appendChild(video);
           driveVideoEl = video;
-          appendPlayPauseControls(wrap, function(){ video.play(); }, function(){ video.pause(); });
+          const videoStatus = document.createElement('div'); videoStatus.className = 'sub'; videoStatus.style.margin = '6px 0 0'; videoStatus.style.color = '#e0402a';
+          video.addEventListener('error', function(){
+            const codes = { 1:'load aborted', 2:'network error', 3:'could not decode this video', 4:'source not supported/blocked' };
+            const code = video.error ? video.error.code : null;
+            videoStatus.textContent = '⚠️ Video failed to load' + (code ? ' (' + (codes[code] || 'error ' + code) + ')' : '') + ' -- use the link below instead.';
+          });
+          wrap.appendChild(videoStatus);
+          appendPlayPauseControls(wrap, function(){
+            const p = video.play();
+            if (p && p.catch) p.catch(function(err){ videoStatus.textContent = '⚠️ Play was blocked: ' + (err && err.message ? err.message : err) + ' -- try the native controls on the video itself, or the link below.'; });
+          }, function(){ video.pause(); });
+          const fallbackLink = document.createElement('a'); fallbackLink.href = clip.url; fallbackLink.target = '_blank'; fallbackLink.rel = 'noopener';
+          fallbackLink.className = 'ghostBtn'; fallbackLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:6px;';
+          fallbackLink.textContent = '↗️ Open This Film in a New Tab Instead';
+          wrap.appendChild(fallbackLink);
         } else {
           const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
           openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';

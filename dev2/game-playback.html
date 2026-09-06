@@ -429,6 +429,20 @@
       video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;background:#000;display:block;';
       wrap.appendChild(video);
       driveVideoEl = video;
+      // Nathan: "play button is not working." Same diagnostic as
+      // game-wizard.html -- surface whatever actually fails instead of a
+      // silently unresponsive video.
+      const videoStatus = document.createElement('div'); videoStatus.className = 'sub'; videoStatus.style.margin = '6px 0 0'; videoStatus.style.color = '#e0402a';
+      video.addEventListener('error', function(){
+        const codes = { 1:'load aborted', 2:'network error', 3:'could not decode this video', 4:'source not supported/blocked' };
+        const code = video.error ? video.error.code : null;
+        videoStatus.textContent = '⚠️ Video failed to load' + (code ? ' (' + (codes[code] || 'error ' + code) + ')' : '') + ' -- use the link below instead.';
+      });
+      wrap.appendChild(videoStatus);
+      const fallbackLink = document.createElement('a'); fallbackLink.href = clip.url; fallbackLink.target = '_blank'; fallbackLink.rel = 'noopener';
+      fallbackLink.className = 'ghostBtn'; fallbackLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:6px;';
+      fallbackLink.textContent = '↗️ Open This Film in a New Tab Instead';
+      wrap.appendChild(fallbackLink);
     }
     host.appendChild(wrap);
   }
