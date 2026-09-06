@@ -702,7 +702,19 @@
         // see logEvent('quarterEnd').
         defendingEnd: wiz.state.endNote || 'Left',
       };
-      wiz.play = { phase: 'callCheck' };
+      // Nathan (follow-up): "it wouldn't recognize the first option to
+      // choose the play after kickoff. I had to leave and come back for
+      // it to show up." Real bug, not a rendering hiccup: this was
+      // hardcoded to 'callCheck' regardless of who actually received the
+      // kickoff. The play loop only knows how to show 'callCheck' when
+      // WE have the ball (there's no sideline call to check when the
+      // opponent has it) -- so if the other team received, this landed on
+      // a phase with no matching screen at all: blank, unresponsive,
+      // looked exactly like it "wouldn't recognize" anything. Leaving and
+      // coming back worked around it by accident, because the Resume
+      // screen picks the phase correctly. Same possession + film-review
+      // check startNextPlay() already uses correctly, applied here too.
+      wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
     wiz.step = 3;
@@ -865,27 +877,20 @@
   // being embedded in someone else's page and there's no reliable way
   // around that. On a tablet, opening that link and using the OS's own
   // split-view alongside this page is the practical fallback there.
-  // Nathan: "Please confirm these videos aren't available on YouTube...
-  // let's revisit the Telestrator option." telestrator.html's own banner
-  // confirms footage is real Google Drive video files, not YouTube --
-  // meaning the /preview iframe embed used here couldn't have its
-  // currentTime read at all (same cross-origin restriction as YouTube
-  // without its API), so filmTimestamp was quietly never getting captured
-  // for Drive-hosted footage. Fixed the same way telestrator.html already
-  // solves it: convert the share link to a direct, streamable file URL and
-  // hand it to a real <video> element instead of an embed -- full native
-  // currentTime/play()/pause() control, no API needed at all for this one.
-  function driveDirectVideoUrl(shareUrl){
-    const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (!m) return null;
-    return 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t';
-  }
+  // Nathan: "this whole feature isn't working well" -- the direct-video-
+  // file technique (converting a Drive share link to a streamable file URL
+  // for a native <video>) failed with a real "source not supported/
+  // blocked" error, most likely Google Drive's own virus-scan/large-file
+  // interstitial page coming back instead of actual video bytes when hit
+  // this way. Back to the plain /preview embed Google's own viewer uses --
+  // reliable, but no programmatic control, so filmTimestamp can't be
+  // auto-captured for Drive-hosted footage (still works for YouTube).
   function embeddableFilmSrc(url){
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
     if (m) return { kind:'youtube', videoId: m[1] };
-    const driveUrl = /drive\.google\.com/.test(url) ? driveDirectVideoUrl(url) : null;
-    if (driveUrl) return { kind:'drive', url: driveUrl };
+    m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind:'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
     return null;
   }
   let filmPanelCollapsed = false;
@@ -928,7 +933,6 @@
     return ytApiLoadPromise;
   }
   let ytPlayer = null;
-  let driveVideoEl = null;
   function appendPlayPauseControls(wrap, onPlay, onPause){
     // Nathan: "I need a quick pause and play option on it... Needs to be
     // quick." Big, thumb-reachable buttons under the video -- faster to
@@ -948,7 +952,7 @@
     const host = document.getElementById('filmPanelHost');
     const clips = (selectedGame && Array.isArray(selectedGame.gameFootage)) ? selectedGame.gameFootage.filter(function(c){ return c && c.url; }) : [];
     host.innerHTML = '';
-    ytPlayer = null; driveVideoEl = null; filmKind = null; // whatever player/video existed belonged to the just-cleared content
+    ytPlayer = null; filmKind = null; // whatever player/embed existed belonged to the just-cleared content
     const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
     const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
     const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎥 Game Film';
@@ -996,37 +1000,24 @@
           });
           appendPlayPauseControls(wrap, function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }, function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
         } else if (embed && embed.kind === 'drive'){
-          // Nathan: "play button is not working... Play on the video
-          // window or the big CTA." Structurally this matches
-          // telestrator.html's own working version exactly (same
-          // driveDirectVideoUrl, same plain <video src>), so I can't be
-          // certain of the real cause without seeing an actual browser
-          // error -- rather than guess again, this surfaces whatever
-          // actually goes wrong (a failed load, a blocked play() call)
-          // as visible text, and always keeps a working fallback link
-          // right there so film review isn't blocked either way while
-          // we track down the real cause together.
-          const video = document.createElement('video');
-          video.id = 'filmVideo'; video.controls = true; video.playsInline = true; video.preload = 'metadata';
-          video.src = embed.url;
-          video.style.cssText = 'width:100%;max-height:38vh;border-radius:10px;margin-top:8px;background:#000;display:block;';
-          wrap.appendChild(video);
-          driveVideoEl = video;
-          const videoStatus = document.createElement('div'); videoStatus.className = 'sub'; videoStatus.style.margin = '6px 0 0'; videoStatus.style.color = '#e0402a';
-          video.addEventListener('error', function(){
-            const codes = { 1:'load aborted', 2:'network error', 3:'could not decode this video', 4:'source not supported/blocked' };
-            const code = video.error ? video.error.code : null;
-            videoStatus.textContent = '⚠️ Video failed to load' + (code ? ' (' + (codes[code] || 'error ' + code) + ')' : '') + ' -- use the link below instead.';
-          });
-          wrap.appendChild(videoStatus);
-          appendPlayPauseControls(wrap, function(){
-            const p = video.play();
-            if (p && p.catch) p.catch(function(err){ videoStatus.textContent = '⚠️ Play was blocked: ' + (err && err.message ? err.message : err) + ' -- try the native controls on the video itself, or the link below.'; });
-          }, function(){ video.pause(); });
-          const fallbackLink = document.createElement('a'); fallbackLink.href = clip.url; fallbackLink.target = '_blank'; fallbackLink.rel = 'noopener';
-          fallbackLink.className = 'ghostBtn'; fallbackLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:6px;';
-          fallbackLink.textContent = '↗️ Open This Film in a New Tab Instead';
-          wrap.appendChild(fallbackLink);
+          // Nathan: "this whole feature isn't working well." The direct-
+          // video-file technique (driveDirectVideoUrl -> native <video>)
+          // just failed with a real, specific error -- "source not
+          // supported/blocked" -- most likely Google Drive's own virus-
+          // scan/large-file interstitial page coming back instead of
+          // actual video bytes when hit this way. Reverting to the plain
+          // /preview embed Google's own viewer uses, which reliably
+          // displays the video -- the tradeoff is losing programmatic
+          // control (no auto-capturing a timestamp, no auto-seek in
+          // Playback for Drive-hosted film specifically), but a working,
+          // simple video beats a broken, fancier one.
+          const iframe = document.createElement('iframe');
+          iframe.src = embed.previewUrl; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+          iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+          wrap.appendChild(iframe);
+          const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+          hint.textContent = 'Use the play/pause controls built into the video above -- this embed can\'t be driven by a separate button, so timestamps can\'t be auto-captured for this film.';
+          wrap.appendChild(hint);
         } else {
           const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
           openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';
@@ -1046,13 +1037,13 @@
   // commitCurrentPlay's use of this) -- no separate "mark this moment"
   // button to remember to press, the natural instant a play gets logged
   // IS the marker.
+  // Nathan: "this whole feature isn't working well" -- Drive is back to a
+  // plain /preview embed (see embeddableFilmSrc), which can't be read
+  // programmatically at all, so only YouTube can actually have a
+  // timestamp captured right now.
   function getCurrentFilmTime(){
     if (filmKind === 'youtube' && ytPlayer && typeof ytPlayer.getCurrentTime === 'function'){
       try { const t = ytPlayer.getCurrentTime(); return (typeof t === 'number' && !isNaN(t)) ? t : null; } catch(e){ return null; }
-    }
-    if (filmKind === 'drive' && driveVideoEl){
-      const t = driveVideoEl.currentTime;
-      return (typeof t === 'number' && !isNaN(t)) ? t : null;
     }
     return null;
   }
@@ -1212,7 +1203,15 @@
       renderPlayerChooser(card, 'Ball Carrier', wiz.play, 'carrier');
       chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
     } else {
+      // Nathan (follow-up): "When I chose run, it no longer gave me the
+      // option of right middle or left like it should." Direction is
+      // which way the run actually went -- a fact about the play, not a
+      // "call" the way formation/playCall are, so unlike those it belongs
+      // on defense too. It lived only in the onOffense branch above;
+      // added here as well rather than moved, since offense still needs
+      // its own copy alongside the ball carrier field there.
       renderPlayerChooser(card, 'Opponent Ball Carrier', wiz.play, 'oppCarrier', {optional:true});
+      chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
     }
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
     next.addEventListener('click', function(){ wiz.play.phase = 'resultSpot'; renderWizard(); });
