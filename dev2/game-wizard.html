@@ -1257,6 +1257,8 @@
     else if (phase === 'puntDetail') renderPhasePuntDetail(card);
     else if (phase === 'resultSpot') renderPhaseResultSpot(card);
     else if (phase === 'tackler') renderPhaseTackler(card);
+    else if (phase === 'extraPoint') renderPhaseExtraPoint(card);
+    else if (phase === 'postScoreKickoff') renderPhasePostScoreKickoff(card);
     else if (phase === 'touchdown') renderPhaseTouchdown(card);
     area.appendChild(card);
 
@@ -1568,13 +1570,117 @@
     card.appendChild(next);
   }
 
-  function renderPhaseTouchdown(card){
-    card.innerHTML = '<div class="handoffIcon">🏆</div><h2 style="text-align:center;">Touchdown!</h2>' +
-      '<div class="sub" style="text-align:center;">Log the PAT/2-point attempt and the ensuing kickoff in Stat Keeper for now -- that combo isn\'t built into the Wizard flow yet. Everything up to the score is already saved.</div>';
-    const cta = document.createElement('a'); cta.className = 'primaryBtn'; cta.style.cssText = 'display:block;text-align:center;text-decoration:none;';
-    cta.textContent = '📋 Finish the Score in Stat Keeper →';
-    cta.href = 'stat-keeper.html?game=' + encodeURIComponent(selectedGame.id);
-    card.appendChild(cta);
+  // Nathan: "at this level - a kick is worth 2 points and a play for a
+  // score is worth 1 point." The reverse of standard football (kick=1,
+  // run/pass conversion=2) -- naming these "Kick"/"Play" instead of the
+  // usual "PAT"/"2PT" on purpose, since those labels carry the standard
+  // assumption and would be actively misleading for this league's actual
+  // rule. Point values are hardcoded to this level's rule, not the chip
+  // labels doing double duty as the number.
+  function renderPhaseExtraPoint(card){
+    const g = wiz.game;
+    const scoringTeam = wiz.play.side === 'offense' ? 'Us' : 'Opponent'; // whoever just scored the TD attempts this, not necessarily still "on offense" by the time this renders
+    card.innerHTML = '<div class="handoffIcon">🏆</div><h2 style="text-align:center;">Touchdown, ' + scoringTeam + '!</h2>' +
+      '<div class="sub" style="text-align:center;">Extra point attempt -- at this level, a kick is worth 2, a run/pass play is worth 1.</div>';
+    chipGroupField(card, 'Attempt', wiz.play, 'xpType', [['kick','🦵 Kick (2 pts)'],['play','🏃 Run/Pass Play (1 pt)']]);
+    if (wiz.play.xpType) chipGroupField(card, 'Result', wiz.play, 'xpResult', ['Good','No Good']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log It & Continue';
+    next.addEventListener('click', function(){
+      if (!wiz.play.xpType || !wiz.play.xpResult){ alert('Pick the attempt type and the result.'); return; }
+      commitExtraPoint(scoringTeam);
+    });
+    card.appendChild(next);
+  }
+  async function commitExtraPoint(scoringTeam){
+    const g = wiz.game;
+    const points = wiz.play.xpType === 'kick' ? 2 : 1;
+    const good = wiz.play.xpResult === 'Good';
+    if (good){ if (scoringTeam === 'Us') g.scoreUs += points; else g.scoreOpp += points; }
+    const entry = {
+      id: genId(), type:'score', side: wiz.play.side, quarter: g.quarter,
+      scoreKind: (wiz.play.xpType === 'kick' ? 'Kick' : 'Run/Pass Play') + ' (' + (good ? points + ' pt Good' : 'No Good') + ')',
+      scoreTeam: scoringTeam,
+    };
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    // Nathan: a touchdown+extra point is always followed by a real
+    // kickoff -- reuses the same idea as the opening kickoff (a real
+    // 'kick' play, possession flips, down/distance resets to 1st & 10)
+    // rather than handing off to Stat Keeper for it, same as the extra
+    // point itself no longer does.
+    wiz.play = { phase: 'postScoreKickoff', kickingTeam: scoringTeam };
+    renderWizard();
+  }
+
+  function renderPhasePostScoreKickoff(card){
+    const g = wiz.game;
+    const isUsKick = wiz.play.kickingTeam === 'Us';
+    card.innerHTML = '<h2>🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off</h2><div class="sub">Same as the opening kickoff -- where it was caught, and where the return ended.</div>';
+    chipGroupField(card, 'Onside Attempt?', wiz.play, 'onside', [[true,'Yes'],[false,'No']]);
+    if (wiz.play.onside){
+      chipGroupField(card, 'Recovered By', wiz.play, 'recoveredByTeam', ['Us','Opponent']);
+    } else {
+      if (isUsKick) renderPlayerChooser(card, 'Returner (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      else renderPlayerChooser(card, 'Returner', wiz.play, 'returner');
+      wiz.play.catchSide = wiz.play.catchSide != null ? wiz.play.catchSide : (isUsKick ? 'OPP' : 'OWN');
+      wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : 15;
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Caught At'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+      wiz.play.endSide = wiz.play.endSide != null ? wiz.play.endSide : wiz.play.catchSide;
+      wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : wiz.play.catchYard;
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Brought Ball To'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    }
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Kickoff & Continue';
+    next.addEventListener('click', function(){ commitPostScoreKickoff(); });
+    card.appendChild(next);
+  }
+  async function commitPostScoreKickoff(){
+    const g = wiz.game;
+    const isUsKick = wiz.play.kickingTeam === 'Us';
+    const entry = { id: genId(), type:'kick', side: isUsKick ? 'offense' : 'defense', quarter: g.quarter,
+      kickTeam: wiz.play.kickingTeam, onside: !!wiz.play.onside };
+    let newSpot = 50, newPossession = isUsKick ? 'Opponent' : 'Us';
+    if (wiz.play.onside){
+      entry.recoveredByTeam = wiz.play.recoveredByTeam;
+      newPossession = wiz.play.recoveredByTeam;
+      newSpot = g.spot; // onside kicks don't carry their own spot math -- same simplification stat-keeper.html already makes
+    } else {
+      entry.startSide = isUsKick ? 'OWN' : 'OPP'; entry.startYard = 40;
+      entry.catchSide = wiz.play.catchSide; entry.catchYard = wiz.play.catchYard;
+      entry.endSide = wiz.play.endSide; entry.endYard = wiz.play.endYard;
+      entry.returner = wiz.play.returner; entry.oppReturner = wiz.play.oppReturner;
+      const endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+      if (endAbs != null) newSpot = clampSpot(endAbs);
+    }
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      g.spot = newSpot; g.down = 1; g.distance = 10; g.possession = newPossession;
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    startNextPlay();
   }
 
   function startNextPlay(){
@@ -1795,14 +1901,31 @@
       }
 
       const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
-        finalUs: (existing && existing.finalUs) || '', finalOpp: (existing && existing.finalOpp) || '', updatedAt: new Date().toISOString() };
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
       const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
       const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
 
-    if (entries.some(function(e){ return e.td; })){ wiz.play.phase = 'touchdown'; renderWizard(); return; }
+    // Nathan: "when a run is called and its a touchdown - I need to be
+    // able to set if the PAT is good." The score bug never actually
+    // tracked points at all before this -- scoreUs/scoreOpp sat wherever
+    // they were initialized and finalUs/finalOpp only ever got set by
+    // hand elsewhere (Stat Keeper's own Final Score Check). A touchdown
+    // is worth 6 regardless of who scored it (offense, or a defensive/
+    // special-teams TD), credited to whichever team just had the ball.
+    if (entries.some(function(e){ return e.td; })){
+      if (onOffense) g.scoreUs += 6; else g.scoreOpp += 6;
+      // wiz.play still holds the just-committed run/pass's fields (formation,
+      // carrier, etc.) -- side was never one of them (it lives on the entry's
+      // `base` object, not the draft), so it's set explicitly here for
+      // renderPhaseExtraPoint to read who actually scored.
+      wiz.play.side = onOffense ? 'offense' : 'defense';
+      wiz.play.phase = 'extraPoint';
+      renderWizard();
+      return;
+    }
     if (converted){ wiz.play.phase = 'firstDownToast'; renderWizard(); return; }
     startNextPlay();
   }
@@ -1903,7 +2026,7 @@
       {key:'td', label:'Touchdown', kind:'toggle'},
     ],
     score: [
-      {key:'scoreKind', label:'Kind', kind:'chip', options:['PAT Good','PAT No Good','2PT Good','2PT No Good','Safety']},
+      {key:'scoreKind', label:'Kind', kind:'chip', options:['Kick (2 pt Good)','Kick (No Good)','Run/Pass Play (1 pt Good)','Run/Pass Play (No Good)','Safety']},
       {key:'scoreTeam', label:'Team', kind:'chip', options:['Us','Opponent']},
       {key:'scorePlayer', label:'Player', kind:'player', optional:true},
       {key:'spotSingle', label:'Spot', kind:'spotSingle'},
