@@ -979,7 +979,14 @@
   // Stat Keeper's log while watching film back means there's no sideline
   // signal to compare against -- this skips straight to "what actually
   // happened" every time instead of asking once per play.
-  let filmReviewMode = false;
+  // Nathan (follow-up): "we instructed the camera man to not show the play
+  // calls on the sideline so we won't ever know what play was called."
+  // Confirms this isn't a one-off for a single review session -- it's how
+  // every game from here on will be filmed. Defaulting from localStorage
+  // (and saving whenever it's toggled) means it's just already on the next
+  // time the Wizard opens, instead of a switch to remember to flip every
+  // single game.
+  let filmReviewMode = (function(){ try { return localStorage.getItem('bengalsWizardFilmReview') === '1'; } catch(e){ return false; } })();
 
   function renderPlayLoopStep(area){
     ensureFilmPanelBuilt();
@@ -1010,7 +1017,11 @@
     reviewToggle.className = 'optChip' + (filmReviewMode ? ' active' : '');
     reviewToggle.style.cssText = 'display:inline-block;padding:6px 12px;font-size:11.5px;margin-bottom:14px;';
     reviewToggle.textContent = '🎬 Reviewing Film (skip play-call check)';
-    reviewToggle.addEventListener('click', function(){ filmReviewMode = !filmReviewMode; renderWizard(); });
+    reviewToggle.addEventListener('click', function(){
+      filmReviewMode = !filmReviewMode;
+      try { localStorage.setItem('bengalsWizardFilmReview', filmReviewMode ? '1' : '0'); } catch(e){}
+      renderWizard();
+    });
     area.appendChild(reviewToggle);
 
     if (wiz.game.possession === 'Us' && wiz.play.phase === 'callCheck' && filmReviewMode) wiz.play.phase = 'playType';
