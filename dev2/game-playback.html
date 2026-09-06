@@ -407,6 +407,11 @@
       if (!a || !b) return '';
       return a === b ? a : (a + ' → ' + b);
     }
+    if (p.catchSide != null && p.endSide != null){
+      const a = spotLabel(p.catchSide, p.catchYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
     if (p.spotSide != null) return spotLabel(p.spotSide, p.spotYard);
     if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot);
     return '';
@@ -545,8 +550,16 @@
       const base = baseAbs != null ? baseAbs : currentSpot;
       const yds = Number(entry.penYards || 0);
       currentSpot = clampSpot(base + (entry.penTeam === 'Us' ? -yds : yds));
-    } else if (entry.type === 'defextra' || entry.type === 'turnover'){
+    } else if (entry.type === 'defextra'){
       const spotAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      if (spotAbs != null) currentSpot = clampSpot(spotAbs);
+    } else if (entry.type === 'turnover'){
+      // Nathan: same catchSide/endSide fix as stat-keeper.html and
+      // game-wizard.html -- the replay simulation needs to advance the
+      // ball to where the return ENDED, not just where it was caught.
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      const legacyAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      const spotAbs = endAbs != null ? endAbs : legacyAbs;
       if (spotAbs != null) currentSpot = clampSpot(spotAbs);
     }
     state.spot = currentSpot;

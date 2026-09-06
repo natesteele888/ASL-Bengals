@@ -1422,7 +1422,12 @@
       fieldsArea.appendChild(fieldBlock('Type', optChips('toType', ['Fumble','Interception'])));
       fieldsArea.appendChild(fieldBlock('Lost By (offense)', playerPicker('lostBy')));
       fieldsArea.appendChild(fieldBlock('Recovered By (defense, optional)', playerPicker('recoveredBy')));
-      fieldsArea.appendChild(singleSpotField('Spot (where recovered)'));
+      // Nathan: "Marked an interception but it didn't say where he caught
+      // it and where he was tackled." One spot field couldn't capture an
+      // actual return -- same catchSide/endSide pattern Punt already uses
+      // just above for exactly this "caught here, ran it to here" shape.
+      fieldsArea.appendChild(fieldBlock('Intercepted / Recovered At', spotPicker('catchSide', 'catchYard', 40)));
+      fieldsArea.appendChild(fieldBlock('Final Spot (after any return)', spotPicker('endSide', 'endYard', 40)));
       fieldsArea.appendChild(fieldBlock('', chipToggle('td','🏆 Touchdown (return)')));
       const note = document.createElement('textarea'); note.className='noteInput';
       note.placeholder = 'Quick note (optional) — e.g. "strip sack, 2nd quarter"';
@@ -1494,6 +1499,16 @@
   function spotBadgeText(p){
     if (p.startSide != null && p.endSide != null){
       const a = spotLabel(p.startSide, p.startYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    // Nathan: "Marked an interception but it didn't say where he caught it
+    // and where he was tackled." Turnover has no separate "start" spot of
+    // its own (the catch/recovery point itself is the first of the two),
+    // so it needs its own check here rather than falling through to the
+    // single-spot legacy check below.
+    if (p.catchSide != null && p.endSide != null){
+      const a = spotLabel(p.catchSide, p.catchYard), b = spotLabel(p.endSide, p.endYard);
       if (!a || !b) return '';
       return a === b ? a : (a + ' → ' + b);
     }
@@ -1701,15 +1716,31 @@
       const base = baseAbs != null ? baseAbs : currentSpot;
       const yds = Number(entry.penYards || 0);
       currentSpot = clampSpot(base + (entry.penTeam === 'Us' ? -yds : yds));
-    } else if (entry.type === 'defextra' || entry.type === 'turnover'){
+    } else if (entry.type === 'defextra'){
       // Nathan (follow-up): "show the ball spot in yellow for every line."
-      // An interception, sack, or fumble recovery hands the ball over (or
-      // moves it) right at wherever it happened -- now that these have
-      // their own explicit spot (singleSpotField), sync currentSpot
-      // straight to it, same as every other type that carries real
-      // position data forward. Legacy entries with no spotSide yet just
-      // leave currentSpot untouched, as before.
+      // A sack hands the ball over (or moves it) right at wherever it
+      // happened -- now that this has its own explicit spot
+      // (singleSpotField), sync currentSpot straight to it, same as every
+      // other type that carries real position data forward. Legacy
+      // entries with no spotSide yet just leave currentSpot untouched.
       const spotAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      if (spotAbs != null) currentSpot = clampSpot(spotAbs);
+    } else if (entry.type === 'turnover'){
+      // Nathan (follow-up): "Marked an interception but it didn't say
+      // where he caught it and where he was tackled. I put it at the 16
+      // but it showed us with 1st and 10 at the 27 which was the previous
+      // spot." A turnover used to share the same single spotSide/spotYard
+      // field as defextra above -- fine for a sack (no real return), wrong
+      // for an interception/fumble that gets run back. Now syncs from
+      // endSide/endYard (the FINAL spot after any return), same as kick/
+      // punt/tackle just above; catchSide/catchYard (where it was actually
+      // picked off) is still saved on the entry for the record, it just
+      // isn't what the next play starts from. Old entries logged before
+      // this fix only have spotSide/spotYard -- still honored as a
+      // fallback so nothing already-logged silently loses its spot.
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      const legacyAbs = absoluteSpot(entry.spotSide, entry.spotYard);
+      const spotAbs = endAbs != null ? endAbs : legacyAbs;
       if (spotAbs != null) currentSpot = clampSpot(spotAbs);
     }
   }

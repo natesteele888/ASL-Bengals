@@ -269,7 +269,7 @@
   const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Playing'];
   const wiz = { step: 0, state: {} };
   function renderDots(){
-    if (wiz.step === 'resume' || wiz.step === 'audit'){ document.getElementById('stepDots').innerHTML = ''; return; }
+    if (wiz.step === 'resume' || wiz.step === 'audit' || wiz.step === 'quickEdit'){ document.getElementById('stepDots').innerHTML = ''; return; }
     document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
       const cls = i === wiz.step ? 'active' : (i < wiz.step ? 'done' : '');
       return '<div class="stepDot ' + cls + '"></div>';
@@ -286,11 +286,12 @@
     // yet. Showing/hiding never touches the iframe itself (see
     // ensureFilmPanelBuilt above), so it's never mid-play when this runs.
     const filmHost = document.getElementById('filmPanelHost');
-    const wantsFilm = (wiz.step === 'audit' || (typeof wiz.step === 'number' && wiz.step === 3));
+    const wantsFilm = (wiz.step === 'audit' || wiz.step === 'quickEdit' || (typeof wiz.step === 'number' && wiz.step === 3));
     if (wantsFilm && selectedGame) ensureFilmPanelBuilt();
     filmHost.style.display = wantsFilm ? '' : 'none';
     if (wiz.step === 'resume') renderResumeStep(area);
     else if (wiz.step === 'audit') renderAuditStep(area);
+    else if (wiz.step === 'quickEdit') renderQuickEditStep(area);
     else if (wiz.step === 0) renderStartersStep(area);
     else if (wiz.step === 1) renderCoinTossStep(area);
     else if (wiz.step === 2) renderKickoffStep(area);
@@ -986,6 +987,7 @@
     const header = document.createElement('div');
     header.innerHTML = renderGameHeaderHtml();
     area.appendChild(header);
+    renderRecentPlaysPanel(area);
 
     const utilRow = document.createElement('div'); utilRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;';
     const toBtn = document.createElement('button'); toBtn.className = 'ghostBtn'; toBtn.style.margin = '0'; toBtn.textContent = '⏱ Timeout';
@@ -1230,9 +1232,24 @@
     chipGroupField(card, 'Type', wiz.play, 'toType', ['Fumble','Interception']);
     renderPlayerChooser(card, 'Lost By (offense)', wiz.play, 'lostBy', {optional:true});
     renderPlayerChooser(card, 'Recovered By (defense)', wiz.play, 'recoveredBy', {optional: true});
-    wiz.play.spotSide = wiz.play.spotSide || sideYardFromAbs(wiz.game.spot).side;
-    wiz.play.spotYard = wiz.play.spotYard != null ? wiz.play.spotYard : sideYardFromAbs(wiz.game.spot).yard;
-    card.appendChild(spotPicker(wiz.play, 'spotSide', 'spotYard', wiz.play.spotYard, renderWizard));
+    // Nathan: "Marked an interception but it didn't say where he caught it
+    // and where he was tackled. I put it at the 16 but it showed us with
+    // 1st and 10 at the 27 which was the previous spot." Two real, related
+    // bugs here: there was only ONE spot field for a turnover at all (an
+    // interception return covers two different spots -- where it was
+    // caught, and where the return ended, same as a punt already models
+    // with catchSide/endSide), AND that one field was saved as
+    // spotSide/spotYard while the spot-advance logic below reads
+    // endSide/endYard -- a name mismatch, so whatever was actually entered
+    // was saved onto the play but silently never used to move the ball.
+    wiz.play.catchSide = wiz.play.catchSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Intercepted / Recovered At'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+    wiz.play.endSide = wiz.play.endSide != null ? wiz.play.endSide : wiz.play.catchSide;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : wiz.play.catchYard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot (after any return -- same as above if no return)'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Turnover & Continue';
     next.addEventListener('click', function(){ if (!wiz.play.toType){ alert('Pick Fumble or Interception.'); return; } commitCurrentPlay(); });
     card.appendChild(next);
@@ -1466,7 +1483,7 @@
       converted = !!wiz.play.firstDown;
     } else if (type === 'Turnover'){
       entries.push(Object.assign({}, base, { type:'turnover', toType: wiz.play.toType, lostBy: wiz.play.lostBy, recoveredBy: wiz.play.recoveredBy,
-        spotSide: wiz.play.spotSide, spotYard: wiz.play.spotYard }));
+        catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard, endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
       possessionFlips = true;
     } else if (type === 'Punt'){
       const sy = sideYardFromAbs(g.spot);
@@ -1628,7 +1645,7 @@
       {key:'toType', label:'Type', kind:'chip', options:['Fumble','Interception']},
       {key:'lostBy', label:'Lost By', kind:'player', optional:true},
       {key:'recoveredBy', label:'Recovered By', kind:'player', optional:true},
-      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+      {key:'spot', label:'Recovered At / Final Spot', kind:'catchEndPair'},
     ],
     kneel: [
       {key:'kneelType', label:'Type', kind:'chip', options:['Kneel','Spike']},
@@ -1666,6 +1683,10 @@
   function auditFieldValueText(play, f){
     if (f.kind === 'spotPair'){
       const a = spotLabel(play.startSide, play.startYard), b = spotLabel(play.endSide, play.endYard);
+      return (a && b) ? (a + ' → ' + b) : '— none —';
+    }
+    if (f.kind === 'catchEndPair'){
+      const a = spotLabel(play.catchSide, play.catchYard), b = spotLabel(play.endSide, play.endYard);
       return (a && b) ? (a + ' → ' + b) : '— none —';
     }
     if (f.kind === 'spotSingle'){
@@ -1710,6 +1731,18 @@
       const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Start Spot';
       wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'startSide', 'startYard', auditDraft.startYard, renderWizard));
       const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'End Spot';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'catchEndPair'){
+      // Nathan: "it didn't say where he caught it and where he was
+      // tackled." Same shape as spotPair above, but catchSide/catchYard +
+      // endSide/endYard -- the actual fields a Turnover entry carries
+      // (there's no separate "start spot" stored on it; the interception/
+      // recovery spot itself is the first of the two).
+      if (auditDraft.catchSide == null){ const sy = sideYardFromAbs(50); auditDraft.catchSide = sy.side; auditDraft.catchYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Intercepted / Recovered At';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'catchSide', 'catchYard', auditDraft.catchYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'Final Spot (after any return)';
       wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
     } else if (f.kind === 'spotSingle'){
       if (auditDraft.spotSide == null){ const sy = sideYardFromAbs(50); auditDraft.spotSide = sy.side; auditDraft.spotYard = sy.yard; }
@@ -1831,10 +1864,88 @@
       const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
       const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
-      auditPlays[auditIndex] = auditDraft; // keep the in-memory copy in sync so Previous shows the saved version
+      // Quick-edit (from the live loop) never populated auditPlays/auditIndex
+      // for a real review sequence -- writing into them here would silently
+      // clobber an unrelated slot if a full Audit Mode session happened
+      // earlier in the tab. Skip that bookkeeping outright when not really
+      // auditing; goToNextAuditPlay (below) is the only thing that ever
+      // reads it back, and quick-edit never calls that.
+      if (!quickEditMode) auditPlays[auditIndex] = auditDraft;
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
     if (advance) goToNextAuditPlay();
+  }
+
+  // Nathan: "I can't see the play log in the entry screen so I don't know
+  // what was added is accurate" + "It's still way too clunky" for fixing a
+  // mistake without leaving the live flow. Reuses the exact same
+  // AUDIT_FIELDS/renderAuditFieldEditor/saveAuditDraft machinery Audit
+  // Mode already has -- a "review one play" screen, not a second, parallel
+  // editor to keep in sync with the real one.
+  let quickEditMode = false;
+  function openQuickEdit(play){
+    auditDraft = Object.assign({}, play);
+    quickEditMode = true;
+    wiz.step = 'quickEdit';
+    renderWizard();
+  }
+  function renderQuickEditStep(area){
+    const fields = AUDIT_FIELDS[auditDraft.type] || [];
+    const card = document.createElement('div'); card.className = 'card';
+    const sideTag = auditDraft.side ? (auditDraft.side === 'offense' ? 'OFF' : 'DEF') : '';
+    card.innerHTML = '<h2>✏️ Fix This Play</h2><div class="sub">' + (sideTag ? sideTag + ' · ' : '') + (auditDraft.type||'').toUpperCase() + '</div>';
+    fields.forEach(function(f){ renderAuditFieldEditor(card, f); });
+    const saveBtn = document.createElement('button'); saveBtn.className = 'primaryBtn'; saveBtn.textContent = '💾 Save & Back to Live Plays';
+    saveBtn.addEventListener('click', async function(){ await saveAuditDraft(false); quickEditMode = false; resumeLivePlayLoop(); });
+    card.appendChild(saveBtn);
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghostBtn'; cancelBtn.textContent = 'Cancel (Discard Changes)';
+    cancelBtn.addEventListener('click', function(){ quickEditMode = false; resumeLivePlayLoop(); });
+    card.appendChild(cancelBtn);
+    area.appendChild(card);
+  }
+  // Nathan: "I can't see the play log in the entry screen." A live,
+  // recent-plays list right in the play loop -- no need to leave the flow
+  // (or guess) to confirm what actually got saved. Re-fetches fresh every
+  // time it's opened, so an edit made through this same panel or through
+  // Stat Keeper directly always shows up correctly.
+  let recentPlaysOpen = false;
+  let recentPlaysCache = [];
+  async function toggleRecentPlays(){
+    recentPlaysOpen = !recentPlaysOpen;
+    if (recentPlaysOpen){
+      try {
+        const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+        const res = await fetch(url);
+        const gs = res.ok ? await res.json() : null;
+        recentPlaysCache = (gs && Array.isArray(gs.plays)) ? gs.plays.filter(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; }).slice(0, 6) : [];
+      } catch(e){ recentPlaysCache = []; }
+    }
+    renderWizard();
+  }
+  function renderRecentPlaysPanel(container){
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px'; wrap.style.marginBottom = '14px';
+    const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;cursor:pointer;';
+    headRow.innerHTML = '<span style="font-weight:800;font-size:13px;">📋 Recent Plays</span><span style="font-size:12px;color:var(--dim);">' + (recentPlaysOpen ? 'Hide ▴' : 'Show ▾') + '</span>';
+    headRow.addEventListener('click', toggleRecentPlays);
+    wrap.appendChild(headRow);
+    if (recentPlaysOpen){
+      if (!recentPlaysCache.length){
+        const empty = document.createElement('div'); empty.className = 'sub'; empty.style.margin = '8px 0 0'; empty.textContent = 'No plays logged yet.';
+        wrap.appendChild(empty);
+      }
+      recentPlaysCache.forEach(function(p){
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line-bright);';
+        const sideTag = p.side === 'offense' ? 'OFF' : p.side === 'defense' ? 'DEF' : '';
+        const summary = document.createElement('div'); summary.style.cssText = 'font-size:12px;color:var(--dim);flex:1;';
+        summary.textContent = (sideTag ? sideTag + ' · ' : '') + (p.type||'?').toUpperCase() + (p.yards != null ? ' · ' + p.yards + ' yds' : '');
+        const editBtn = document.createElement('button'); editBtn.className = 'ghostBtn'; editBtn.style.cssText = 'margin:0;padding:5px 10px;font-size:11px;flex:0 0 auto;'; editBtn.textContent = '✏️ Edit';
+        editBtn.addEventListener('click', function(){ openQuickEdit(p); });
+        row.appendChild(summary); row.appendChild(editBtn);
+        wrap.appendChild(row);
+      });
+    }
+    container.appendChild(wrap);
   }
 
   async function boot(){
