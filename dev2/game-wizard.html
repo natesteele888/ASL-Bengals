@@ -191,6 +191,150 @@
     return (spot <= 50 ? 'OWN ' : 'OPP ') + y;
   }
   function clampSpot(v){ return Math.max(0, Math.min(100, v)); }
+  function spotLabel(side, yard){ if (!side || yard === '' || yard == null) return ''; return side + ' ' + yard; }
+  function asList(v){ if (Array.isArray(v)) return v.filter(Boolean); return v ? [v] : []; }
+  // Nathan (follow-up): "recent play history doesn't show anything -
+  // should show the same way it does in the Stat Keeper." Ported directly
+  // from stat-keeper.html/game-playback.html (both already had this)
+  // rather than the much thinner one-line summary the Recent Plays panel
+  // was using -- same descriptions, same spot/down-distance badges,
+  // everywhere a play gets shown in this file now.
+  function playRunTxt(p){
+    if (!p.playCall) return '';
+    const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
+    return ' [Ran: ' + name + (p.playCallDir ? ' ' + p.playCallDir : '') + ']';
+  }
+  function formationTxt(p){ return p.formation ? ' ['+p.formation + (p.formationDir ? ' '+p.formationDir : '') +']' : ''; }
+  function coachCallTxt(p){
+    if (!p.coachCall) return '';
+    const name = p.coachCall === 'Other / Not Sure' ? (p.coachCallOther || 'unknown call') : p.coachCall;
+    return ' [Called: ' + name + (p.coachCallDir ? ' ' + p.coachCallDir : '') + ']';
+  }
+  function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation + (p.coachFormationDir ? ' '+p.coachFormationDir : '') +']' : ''; }
+  function tackleTxt(p){
+    if (!p.tackler && !asList(p.assist).length) return '';
+    const assists = asList(p.assist);
+    if (!p.tackler) return ' · tackled by ' + assists.join(' + ') + ' (assist)';
+    return ' · tackled by ' + p.tackler + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : '');
+  }
+  function spotBadgeText(p){
+    if (p.startSide != null && p.endSide != null){
+      const a = spotLabel(p.startSide, p.startYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    if (p.catchSide != null && p.endSide != null){
+      const a = spotLabel(p.catchSide, p.catchYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    if (p.spotSide != null) return spotLabel(p.spotSide, p.spotYard);
+    if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot);
+    return '';
+  }
+  function downDistBadgeText(p){
+    if (p.down == null || p.distance == null) return '';
+    return ['1st','2nd','3rd','4th'][p.down-1] + ' & ' + p.distance;
+  }
+  function describePlay(p){
+    if (p.type==='run'){
+      const isUsRun = p.runTeam !== 'Opponent';
+      const carrierTxt = isUsRun ? (p.carrier||'?') : ('Opponent' + (p.oppCarrier ? ' ('+p.oppCarrier+')' : ''));
+      const prefix = isUsRun ? '' : '🛡️ ';
+      const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
+      return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
+        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') +
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
+    }
+    if (p.type==='pass'){
+      const isUsPass = p.passTeam !== 'Opponent';
+      const passerTxt = isUsPass ? (p.passer||'?') : ('Opponent' + (p.oppPasser ? ' ('+p.oppPasser+')' : ''));
+      const targetTxt = isUsPass ? (p.target||'?') : (p.oppTarget || 'opponent');
+      const prefix = isUsPass ? '' : '🛡️ ';
+      if (p.result==='Incomplete'){
+        let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+      }
+      return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
+    }
+    if (p.type==='kick'){
+      const isUsKick = p.kickTeam !== 'Opponent';
+      if (p.onside){
+        let base = (isUsKick ? '' : '🛡️ ') + '⚡ Onside Kick (' + (isUsKick?'Us':'Opponent') + ') — recovered by ' + (p.recoveredByTeam||'?') + (p.recoverPlayer ? ' ('+p.recoverPlayer+')' : '');
+        if (p.recoveredByTeam==='Us' && p.returner) base += ', ' + p.returner + ' brought it ' + (p.yards||0) + ' yds';
+        return base;
+      }
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const returnerTxt = isUsKick ? ('Opponent' + (p.oppReturner ? ' ('+p.oppReturner+')' : '')) : (p.returner||'?');
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      const kickDist = (startAbs != null && catchAbs != null) ? (isUsKick ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUsKick ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      let base = (isUsKick ? '' : '🛡️ ') + 'Kickoff (' + (isUsKick?'Us':'Opponent') + ')' + ', returned by ' + returnerTxt;
+      if (catchTxt) base += ', caught at '+catchTxt;
+      if (p.td) base += ' · 🏆 TD';
+      if (kickDist != null) base += ' · '+kickDist+' yd kick';
+      if (retYds != null) base += ' · '+retYds+' return yds';
+      return base;
+    }
+    if (p.type==='punt'){
+      const isUs = p.puntTeam !== 'Opponent';
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      const net = (startAbs != null && endAbs != null) ? (isUs ? (endAbs - startAbs) : (startAbs - endAbs)) : null;
+      const puntDist = (startAbs != null && catchAbs != null) ? (isUs ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
+      let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss;
+      if (p.puntResult === 'Returned'){
+        if (isUs){
+          const puntAssists = asList(p.assist);
+          const tackleT = p.tackler ? ' · tackled by '+p.tackler+(puntAssists.length?' + '+puntAssists.join(' + ')+' (assist)':'') : '';
+          base += ', returned by ' + (p.oppReturner || 'opponent');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += tackleT;
+        } else {
+          base += ', returned by ' + (p.returner||'?');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += (p.oppTackler ? ' · tackled by '+p.oppTackler : '');
+        }
+        if (p.td) base += ' · 🏆 TD';
+        if (puntDist != null) base += ' · '+puntDist+' yd punt';
+        if (retYds != null) base += ' · '+retYds+' return yds';
+      } else { base += ' (' + (p.puntResult||'?') + ')'; }
+      if (net != null) base += ' · net ' + net + ' yds';
+      return base;
+    }
+    if (p.type==='kneel'){
+      const isUsKneel = p.kneelTeam !== 'Opponent';
+      const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
+      const lossTxt = (p.kneelType !== 'Spike' && p.kneelYards) ? ', -' + p.kneelYards + ' yds' : '';
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt;
+    }
+    if (p.type==='tackle'){
+      const assists = asList(p.assist);
+      const base = (!p.tackler && assists.length)
+        ? 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ')
+        : 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
+      if (p.startSide != null && p.endSide != null){
+        const startAbs = absoluteSpot(p.startSide, p.startYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, false);
+        return base + ', ' + yards + ' yds' + (p.firstDown ? ' · Opponent 1st down' : '');
+      }
+      return base;
+    }
+    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
+    if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
+      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '');
+    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '');
+    if (p.type==='penalty'){
+      const penName = (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty');
+      const ydsTxt = p.declined ? 'declined' : (p.penYards||0)+' yds';
+      return '🚩 ' + penName + ' on ' + (p.penTeam||'?') + (p.penPlayer ? ' ('+p.penPlayer+')' : '') +
+        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '');
+    }
+    return 'Play';
+  }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
   function genId(){ return 'play_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
@@ -1908,7 +2052,7 @@
     const card = document.createElement('div'); card.className = 'card';
     const sideTag = play.side ? (play.side === 'offense' ? 'OFF' : 'DEF') : '';
     card.innerHTML = '<h2>' + (sideTag ? sideTag + ' · ' : '') + play.type.toUpperCase() + '</h2>' +
-      '<div class="sub">Quarter ' + (play.quarter || '?') + '</div>';
+      '<div class="sub">Quarter ' + (play.quarter || '?') + ' -- ' + escapeHtml(describePlay(play)) + '</div>';
 
     const summary = document.createElement('div'); summary.style.cssText = 'margin:10px 0;padding:10px;background:#12161c;border-radius:8px;';
     fields.forEach(function(f){
@@ -2033,15 +2177,40 @@
         const empty = document.createElement('div'); empty.className = 'sub'; empty.style.margin = '8px 0 0'; empty.textContent = 'No plays logged yet.';
         wrap.appendChild(empty);
       }
+      // Nathan (follow-up): "recent play history doesn't show anything -
+      // should show the same way it does in the Stat Keeper." Two real
+      // bugs fixed together here: (1) this row was a flex row with an
+      // Edit button using .ghostBtn, which sets width:100% -- inside a
+      // flex row with flex:0 0 auto and no explicit width override, that
+      // 100% became the button's flex-basis, so it tried to claim the
+      // WHOLE row and squeezed the text down to nothing, wrapping it into
+      // a single narrow column exactly like the screenshot. Explicit
+      // width:auto below fixes that outright. (2) the summary text itself
+      // was a bare "TYPE · N yds" -- now it's the same describePlay/
+      // spotBadgeText/downDistBadgeText Stat Keeper's own play log uses,
+      // stacked the same way (tags on top, full description below).
       recentPlaysCache.forEach(function(p){
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line-bright);';
+        row.style.cssText = 'padding:8px 0;border-top:1px solid var(--line-bright);';
         const sideTag = p.side === 'offense' ? 'OFF' : p.side === 'defense' ? 'DEF' : '';
-        const summary = document.createElement('div'); summary.style.cssText = 'font-size:12px;color:var(--dim);flex:1;';
-        summary.textContent = (sideTag ? sideTag + ' · ' : '') + (p.type||'?').toUpperCase() + (p.yards != null ? ' · ' + p.yards + ' yds' : '');
-        const editBtn = document.createElement('button'); editBtn.className = 'ghostBtn'; editBtn.style.cssText = 'margin:0;padding:5px 10px;font-size:11px;flex:0 0 auto;'; editBtn.textContent = '✏️ Edit';
+        const spotTxt = spotBadgeText(p), ddTxt = downDistBadgeText(p);
+        const tagsRow = document.createElement('div');
+        tagsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;font-weight:800;margin-bottom:4px;';
+        tagsRow.innerHTML =
+          (sideTag ? '<span style="color:' + (sideTag==='OFF'?'var(--cyan)':'var(--orange)') + ';">' + sideTag + '</span>' : '') +
+          '<span style="color:var(--dim);">' + (p.type||'?').toUpperCase() + '</span>' +
+          (ddTxt ? '<span style="color:var(--dim2);">' + escapeHtml(ddTxt) + '</span>' : '') +
+          (spotTxt ? '<span style="color:#ffe14d;">📍 ' + escapeHtml(spotTxt) + '</span>' : '');
+        row.appendChild(tagsRow);
+        const bottomRow = document.createElement('div'); bottomRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;';
+        const summary = document.createElement('div'); summary.style.cssText = 'font-size:13px;color:#fff;flex:1;min-width:0;';
+        summary.textContent = describePlay(p);
+        const editBtn = document.createElement('button'); editBtn.className = 'ghostBtn';
+        editBtn.style.cssText = 'width:auto;margin:0;padding:5px 10px;font-size:11px;flex:0 0 auto;white-space:nowrap;';
+        editBtn.textContent = '✏️ Edit';
         editBtn.addEventListener('click', function(){ openQuickEdit(p); });
-        row.appendChild(summary); row.appendChild(editBtn);
+        bottomRow.appendChild(summary); bottomRow.appendChild(editBtn);
+        row.appendChild(bottomRow);
         wrap.appendChild(row);
       });
     }
