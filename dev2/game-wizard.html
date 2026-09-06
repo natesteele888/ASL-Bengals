@@ -895,10 +895,34 @@
     filmClipIndex = 0;
     renderFilmPanelContent();
   }
+  // Nathan: "Give me the options of setting markers at the end of each
+  // play so there is a link between the plays and the clip." Picked
+  // option B (auto-capture) + C (auto-jump in Playback) -- this needs the
+  // real YouTube IFrame API (not just fire-and-forget postMessage
+  // commands like before), since reading the CURRENT time back out of the
+  // player requires an actual player object, not just sending it
+  // one-way instructions. Loaded once, reused by both the Wizard's own
+  // capture and (mirrored) Playback's auto-seek.
+  let ytApiLoadPromise = null;
+  function ensureYouTubeApi(){
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    if (ytApiLoadPromise) return ytApiLoadPromise;
+    ytApiLoadPromise = new Promise(function(resolve){
+      const prevCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function(){ if (prevCallback) prevCallback(); resolve(); };
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    });
+    return ytApiLoadPromise;
+  }
+  let ytPlayer = null;
+
   function renderFilmPanelContent(){
     const host = document.getElementById('filmPanelHost');
     const clips = (selectedGame && Array.isArray(selectedGame.gameFootage)) ? selectedGame.gameFootage.filter(function(c){ return c && c.url; }) : [];
     host.innerHTML = '';
+    ytPlayer = null; // whatever player existed belonged to the just-cleared iframe
     const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
     const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
     const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎥 Game Film';
@@ -932,23 +956,39 @@
         const embed = embeddableFilmSrc(clip.url);
         if (embed){
           filmIframeIsYouTube = embed.youtube;
-          const iframe = document.createElement('iframe');
-          iframe.id = 'filmIframe';
-          iframe.src = embed.url; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-          iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
-          wrap.appendChild(iframe);
           if (embed.youtube){
+            const playerHost = document.createElement('div');
+            playerHost.id = 'filmIframe';
+            playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;margin-top:8px;background:#000;';
+            wrap.appendChild(playerHost);
+            const videoIdMatch = embed.url.match(/embed\/([a-zA-Z0-9_-]+)/);
+            const videoId = videoIdMatch ? videoIdMatch[1] : null;
+            const thisClipIndex = filmClipIndex;
+            ensureYouTubeApi().then(function(){
+              // Bail if the panel's moved on since this resolved (clip
+              // switched, panel rebuilt) -- don't attach a player to a
+              // host that's no longer the one currently on screen.
+              if (filmClipIndex !== thisClipIndex || !document.getElementById('filmIframe')) return;
+              ytPlayer = new YT.Player('filmIframe', { videoId: videoId, playerVars: { playsinline: 1 } });
+            });
             // Nathan: "I need a quick pause and play option on it... Needs
             // to be quick." Big, thumb-reachable buttons right under the
             // video -- faster to hit mid-play-call than the tiny controls
             // inside the embedded player itself, especially one-handed.
+            // Talk to ytPlayer directly now (a real player object) instead
+            // of guessing at postMessage commands.
             const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
             const playBtn = document.createElement('button'); playBtn.className = 'primaryBtn'; playBtn.style.margin = '0'; playBtn.textContent = '▶️ Play';
-            playBtn.addEventListener('click', function(){ postFilmCommand('playVideo'); });
+            playBtn.addEventListener('click', function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); });
             const pauseBtn = document.createElement('button'); pauseBtn.className = 'primaryBtn'; pauseBtn.style.margin = '0'; pauseBtn.style.background = 'linear-gradient(135deg,#6b7480,#454c56)'; pauseBtn.textContent = '⏸ Pause';
-            pauseBtn.addEventListener('click', function(){ postFilmCommand('pauseVideo'); });
+            pauseBtn.addEventListener('click', function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
             controls.appendChild(playBtn); controls.appendChild(pauseBtn);
             wrap.appendChild(controls);
+          } else {
+            const iframe = document.createElement('iframe');
+            iframe.src = embed.url; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+            iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+            wrap.appendChild(iframe);
           }
         } else {
           const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
@@ -963,15 +1003,18 @@
     }
     host.appendChild(wrap);
   }
-  // Sends a play/pause command to the embedded YouTube player over
-  // postMessage -- requires enablejsapi=1 on the embed src (see
-  // embeddableFilmSrc above), but doesn't need the full YouTube IFrame API
-  // script loaded just for two commands.
-  function postFilmCommand(func){
-    if (!filmIframeIsYouTube) return;
-    const iframe = document.getElementById('filmIframe');
-    if (!iframe || !iframe.contentWindow) return;
-    iframe.contentWindow.postMessage(JSON.stringify({ event:'command', func: func, args:[] }), '*');
+  // Nathan: "setting markers at the end of each play so there is a link
+  // between the plays and the clip." Reads the video's real current
+  // timestamp at the moment a play is actually committed (see
+  // commitCurrentPlay's use of this) -- no separate "mark this moment"
+  // button to remember to press, the natural instant a play gets logged
+  // IS the marker.
+  function getCurrentFilmTime(){
+    if (!filmIframeIsYouTube || !ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return null;
+    try {
+      const t = ytPlayer.getCurrentTime();
+      return (typeof t === 'number' && !isNaN(t)) ? t : null;
+    } catch(e){ return null; }
   }
 
   // Nathan: "I am only worried about what we ran as going forward, the
@@ -1430,7 +1473,14 @@
     const wasFourthDown = g.down === 4;
     const entries = [];
     let type = wiz.play.type;
-    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter };
+    // Nathan: "Give me the options of setting markers at the end of each
+    // play so there is a link between the plays and the clip." Captured
+    // right here, at the exact moment a play is committed -- no separate
+    // button to remember, and it's on `base` so every entry type below
+    // (Run, Pass, Penalty, Turnover, Punt) gets it the same way. null on
+    // anything that isn't a YouTube video (Drive/Hudl links, or no film at
+    // all) rather than a fake/misleading number.
+    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter, filmTimestamp: getCurrentFilmTime() };
     let startAbs = g.spot, endAbs = g.spot;
     let converted = false;
     let possessionFlips = false;

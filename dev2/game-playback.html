@@ -145,6 +145,13 @@
 </div>
 
 <div class="wrap" id="viewerWrap" style="display:none;">
+  <!-- Nathan: "Give me the options of setting markers at the end of each
+       play so there is a link between the plays and the clip so we could
+       show the clip along with the field graphic in playback mode." Sits
+       above the field, same "video always on top" layout as the Wizard --
+       stepping through plays auto-seeks this to whatever moment that play
+       was logged at (see renderStep's use of ytPlayer.seekTo). -->
+  <div id="filmPanelHost"></div>
   <div class="scoreBug">
     <div class="teamSide us">
       <img class="teamLogo" id="usLogo" src="assets/images/header-logo.png" alt="ASL Bengals">
@@ -351,6 +358,65 @@
   // both the score bug and the end zone -- called once per game load,
   // not per play, since none of this changes during a single game.
   let currentOppAbbrev = 'OPP'; // used by the box score column header -- kept separate from the endzone's own (now full-name) text so reading it back doesn't concatenate the ghost + label spans together
+  // Nathan: "Give me the options of setting markers at the end of each
+  // play so there is a link between the plays and the clip." Same real
+  // YouTube IFrame API approach as game-wizard.html (needed so renderStep
+  // below can call ytPlayer.seekTo -- a plain iframe can't be driven like
+  // that), ported rather than shared since these are separate standalone
+  // pages with no shared module system between them.
+  let ytApiLoadPromise = null;
+  function ensureYouTubeApi(){
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    if (ytApiLoadPromise) return ytApiLoadPromise;
+    ytApiLoadPromise = new Promise(function(resolve){
+      const prevCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function(){ if (prevCallback) prevCallback(); resolve(); };
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    });
+    return ytApiLoadPromise;
+  }
+  function embeddableFilmSrc(url){
+    if (!url) return null;
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (m) return { videoId: m[1], youtube: true };
+    m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return { url: 'https://drive.google.com/file/d/' + m[1] + '/preview', youtube: false };
+    return null;
+  }
+  let ytPlayer = null;
+  let filmIsYouTube = false;
+  function renderPlaybackFilmPanel(game){
+    const host = document.getElementById('filmPanelHost');
+    host.innerHTML = '';
+    ytPlayer = null;
+    const clips = (game && Array.isArray(game.gameFootage)) ? game.gameFootage.filter(function(c){ return c && c.url; }) : [];
+    if (!clips.length) return; // nothing linked -- just no panel at all, rather than an empty placeholder taking up space every game
+    const clip = clips[0]; // the main game film -- markers were captured against whichever clip was loaded in the Wizard at commit time, which is always the first one
+    const embed = embeddableFilmSrc(clip.url);
+    if (!embed) return; // host doesn't support embedding -- nothing to auto-seek, and a bare link here isn't worth cluttering the top of every game with
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
+    wrap.innerHTML = '<div style="font-weight:800;font-size:13px;margin-bottom:6px;">🎥 ' + escapeHtml(clip.title || 'Game Film') + '</div>';
+    filmIsYouTube = embed.youtube;
+    if (embed.youtube){
+      const playerHost = document.createElement('div');
+      playerHost.id = 'filmIframe';
+      playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;background:#000;';
+      wrap.appendChild(playerHost);
+      ensureYouTubeApi().then(function(){
+        if (!document.getElementById('filmIframe')) return; // a different game may have been selected while this was loading
+        ytPlayer = new YT.Player('filmIframe', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
+      });
+    } else {
+      const iframe = document.createElement('iframe');
+      iframe.src = embed.url; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
+      wrap.appendChild(iframe);
+    }
+    host.appendChild(wrap);
+  }
+
   function applyOpponentIdentity(game){
     const name = (game && game.opponent) || 'Opponent';
     const abbrev = opponentAbbrev(name);
@@ -673,6 +739,7 @@
     if (!gameId){ viewerWrap.style.display='none'; emptyWrap.style.display=''; return; }
     const game = liveGamesCache.find(function(g){ return g.id === gameId; });
     applyOpponentIdentity(game);
+    renderPlaybackFilmPanel(game);
     loadStatus.textContent = 'Loading this game\'s log…';
     let gs = null;
     try {
@@ -781,6 +848,18 @@
     const p = step.play;
     const after = step.after;
     const before = step.before;
+    // Nathan: "show the clip along with the field graphic in playback
+    // mode." Auto-seeks whenever this step has a marker AND actually
+    // differs from wherever the player currently sits -- the equality
+    // check matters because scrubbing quickly (or hitting Play) fires
+    // renderStep repeatedly, and re-seeking to the same spot on every one
+    // of those would visibly stutter the video for no reason.
+    if (filmIsYouTube && ytPlayer && typeof ytPlayer.seekTo === 'function' && p.filmTimestamp != null){
+      try {
+        const current = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : null;
+        if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
+      } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
+    }
     document.getElementById('scoreUs').textContent = after.us;
     document.getElementById('scoreOpp').textContent = after.opp;
     document.getElementById('quarterLabel').textContent = quarterLabel(after.quarter);
