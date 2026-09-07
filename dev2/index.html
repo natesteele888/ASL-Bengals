@@ -118,13 +118,20 @@
   finished, so there's no gap where an unfinished shell is visible either
   behind the login screen or after it hides.
 -->
-<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
-  <img src="assets/images/header-logo.png" alt="" style="width:64px;height:64px;border-radius:50%;opacity:.9;">
-  <div style="width:120px;height:4px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;">
+<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13 url('assets/images/loading-desktop.jpg') center center / cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+  <!-- Nathan: "use the attached image as the desktop loading screen... reformat it like the vertical one for mobile." Both images already have
+       "LOADING..." baked into the artwork itself, including a static decorative bar under it -- the old circular-logo-plus-bar approach is
+       replaced entirely by this full-bleed background, with only the real, script-driven progress bar overlaid roughly where the art's own
+       static one sits, so it reads as that bar actually filling in rather than two separate loading indicators stacked on the page. -->
+  <div style="width:17%;max-width:180px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:9%;">
     <div id="appLoadingBar" style="width:0%;height:100%;background:#ff6a13;transition:width .2s ease;"></div>
   </div>
-  <div style="font-size:12px;color:#9aa4ae;font-weight:600;">Loading…</div>
 </div>
+<style>
+  @media (max-width: 640px) {
+    #appLoadingOverlay { background-image: url('assets/images/loading-mobile.jpg'); }
+  }
+</style>
 
 <!-- Nathan: "toolbar is not staying with the toolbar, and stays over
      everything, I don't want that" -- #topToolbar moved from here (a

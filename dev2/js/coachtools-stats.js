@@ -262,7 +262,16 @@
         const isUsPassAtt = p.type === 'pass' && p.passTeam !== 'Opponent';
         if (!isUsRun && !isUsPassAtt) return;
         const yds = Number(p.yards) || 0;
-        const callKey = p.playCall ? (p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '')) : null;
+        // Nathan (follow-up): "do these account for variations? I know we
+        // ran several Sweep Right Counters that broke for big runs, want
+        // to make sure those show as their own." Confirmed gap -- this
+        // only ever grouped by playCall+direction, so a plain "Sweep
+        // Right" and a "Sweep Right" run with the Counter tag on it were
+        // being silently lumped into the same row, hiding exactly the
+        // distinction being asked about here. Tags are now part of the
+        // grouping key, so each combination gets counted separately.
+        const tagSuffix = (Array.isArray(p.tags) && p.tags.length) ? ' [' + p.tags.join(', ') + ']' : '';
+        const callKey = p.playCall ? (p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '') + tagSuffix) : null;
         if (isUsRun) {
           runAtt++; runYds += yds;
           if (p.carrier) {
@@ -478,27 +487,29 @@
     });
     wrap.appendChild(dirBox);
 
+    // Nathan (follow-up): "I don't like how this chart looks, it's hard
+    // to understand what it means." The stacked color bar needed a
+    // color→direction legend held in your head (red=Left, blue=Right,
+    // gray=Middle) plus a separate text label to actually get the
+    // numbers -- replaced with a plain table, same shape as the Play Call
+    // Report above it, so the numbers are just... there to read.
     wrap.appendChild(sectionHeading('🏃 Who Runs Where'));
     const players = Object.values(byPlayer).filter(p => p.totalAtt > 0).sort((a, b) => b.totalAtt - a.totalAtt).slice(0, 8);
-    if (!players.length) {
-      wrap.appendChild(document.createTextNode(''));
+    if (players.length) {
+      const whoTable = document.createElement('div');
+      whoTable.style.cssText = 'margin-bottom:18px;';
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;padding:0 0 4px;border-bottom:2px solid #eee;';
+      header.innerHTML = `<span style="flex:1;">Player</span><span style="width:50px;text-align:right;">Left</span><span style="width:50px;text-align:right;">Mid</span><span style="width:50px;text-align:right;">Right</span><span style="width:55px;text-align:right;">Total</span>`;
+      whoTable.appendChild(header);
+      players.forEach(p => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;font-size:12.5px;padding:5px 0;border-bottom:1px solid #f5f5f5;align-items:center;';
+        row.innerHTML = `<span style="flex:1;font-weight:700;">${escapeHtml(playerLabel(p))}</span><span style="width:50px;text-align:right;">${p.Left.att}</span><span style="width:50px;text-align:right;">${p.Middle.att}</span><span style="width:50px;text-align:right;">${p.Right.att}</span><span style="width:55px;text-align:right;font-weight:800;">${p.totalAtt}</span>`;
+        whoTable.appendChild(row);
+      });
+      wrap.appendChild(whoTable);
     }
-    const whoBox = document.createElement('div');
-    whoBox.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
-    players.forEach(p => {
-      const row = document.createElement('div');
-      row.style.cssText = 'font-size:12px;';
-      const segs = DIRS.map(d => {
-        const { att } = p[d];
-        const pct = p.totalAtt ? (att / p.totalAtt * 100) : 0;
-        const color = d === 'Left' ? '#c0342a' : d === 'Right' ? '#1c6fc0' : '#888';
-        return att ? `<span title="${d}: ${att} att" style="display:inline-block;height:100%;width:${pct.toFixed(0)}%;background:${color};"></span>` : '';
-      }).join('');
-      row.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:2px;"><b>${playerLabel(p)}</b><span style="color:#666;">${p.totalAtt} att — L ${p.Left.att} · M ${p.Middle.att} · R ${p.Right.att}</span></div>
-        <div style="background:#f0f0f0;border-radius:4px;overflow:hidden;height:10px;display:flex;">${segs}</div>`;
-      whoBox.appendChild(row);
-    });
-    wrap.appendChild(whoBox);
   }
 
   // ---- Sub-nav ----
