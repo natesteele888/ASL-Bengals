@@ -613,7 +613,13 @@
        at stats section where you can add stats to a game on the schedule."
        Four CTAs at the top switch between panels below; each panel's JS
        lazy-inits the first time it's shown (js/coachtools.js). -->
-  <div class="gameplanPickerGrid" id="coachToolsSubNav" style="margin-bottom:18px;"></div>
+  <!-- Nathan (follow-up): "need this fixed - just looks awful." This div still had class="gameplanPickerGrid" (display:flex, a horizontal
+       row) left over from before the category-bar/sub-panel redesign. coachtools-nav.js now builds its own full block-level structure inside
+       here (the dark category bar stacked above the sub-panel), which that leftover flex-row class was fighting the whole time -- forcing the
+       category bar and the "IN [category]:" panel to sit side by side instead of stacked, and squeezing the category bar itself down to
+       whatever width a flex item happened to get rather than the full row, which is why the active button looked oversized next to squashed,
+       unstyled-looking text for the rest. This container doesn't need any layout class of its own anymore -- coachtools-nav.js owns it. -->
+  <div id="coachToolsSubNav" style="margin-bottom:18px;"></div>
 
   <!-- ---- Resources: print everything ---- -->
   <div id="coachResourcesPanel" class="coachToolsPanel">
@@ -655,7 +661,10 @@
   <div id="coachStatsPanel" class="coachToolsPanel" style="display:none;">
     <div class="lbSectionHeader" style="text-align:center;">📊 Stats</div>
     <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Add stats to a game on the Schedule -- they automatically roll up into the team leaderboard below.</div>
-    <div class="gameplanPickerGrid" id="coachStatsSubNav" style="margin-bottom:14px;"></div>
+    <!-- coachtools-stats.js's renderSubNav() sets its own className ('coachToolsModuleTabs') at runtime, overwriting whatever's here --
+         removing the leftover gameplanPickerGrid class for clarity, same reasoning as the #coachToolsSubNav fix above, even though this one
+         was already harmless since JS replaces it before anyone sees it. -->
+    <div id="coachStatsSubNav" style="margin-bottom:14px;"></div>
     <div id="coachStatsBody" style="max-width:700px;margin:0 auto;"></div>
   </div>
 
