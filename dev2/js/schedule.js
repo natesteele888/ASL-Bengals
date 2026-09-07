@@ -472,6 +472,40 @@
   // preview, this feeds the coach-editable Game Write-Up field via a "Fill
   // from Stats" button rather than auto-displaying, since a recap is
   // something a coach will want to personalize afterward.
+  // Nathan (follow-up): "You have an entire log of the whole game, seems
+  // like it should be straightforward to recreate the flow and speak to
+  // it with key plays." The old recap (buildGameHighlightsText below) was
+  // a stat-leaders blurb -- final score plus who led in each category,
+  // with no sense of HOW the game actually unfolded. computeScoringPlays
+  // (built for the Scoring Plays timeline) already has exactly what's
+  // needed for that: every score, in order, with a description and a
+  // drive summary. This turns that same data into prose instead of a
+  // second use of it. Extra Point events aren't narrated as their own
+  // sentence -- they get folded into the preceding touchdown's score, so
+  // "touchdown, then the PAT" reads as the one score it actually is.
+  function buildNarrativeRecap(events, game) {
+    if (!events || !events.length) return '';
+    const oppName = game.opponent || 'the opponent';
+    const sentences = [];
+    let lastScoringTeam = null;
+    events.forEach((e, i) => {
+      if (e.kind !== 'Touchdown' && e.kind !== 'Safety') return;
+      let finalUs = e.scoreUs, finalOpp = e.scoreOpp;
+      const next = events[i + 1];
+      if (e.kind === 'Touchdown' && next && next.kind === 'Extra Point' && next.team === e.team) {
+        finalUs = next.scoreUs; finalOpp = next.scoreOpp;
+      }
+      const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
+      const verb = sentences.length === 0 ? 'opened the scoring'
+        : (e.team === lastScoringTeam ? 'extended the lead' : 'answered back');
+      const driveTxt = e.plays != null ? ` (${e.plays} play${e.plays === 1 ? '' : 's'}, ${e.yards} yard${e.yards === 1 ? '' : 's'})` : '';
+      const desc = e.kind === 'Safety' ? 'a safety' : e.desc.charAt(0).toLowerCase() + e.desc.slice(1);
+      sentences.push(`${teamLabel} ${verb} with ${desc}${driveTxt}, making it ${finalUs}-${finalOpp}.`);
+      lastScoringTeam = e.team;
+    });
+    return sentences.join(' ');
+  }
+
   function buildGameHighlightsText(game) {
     if (!game || !window.computeGamePlayerStats || !window.normalizeGameStatSheet || !window.gameStatSheetHasAnything) return '';
     const norm = window.normalizeGameStatSheet(game.statSheet);
@@ -821,7 +855,21 @@
       tackles: { us: topIn(us, 'tackles'), opp: null },
     };
   }
-  function renderGameLeaders(container, leaders) {
+  // Nathan (follow-up): "use the circle photos of the players in the Game
+  // Leaders Section." Real player photos only exist for OUR OWN roster
+  // (matched by name against the roster, same lookup leaderCardHtml
+  // already does by number) -- opponent players never have a photo on
+  // file, so they always get the colored-initials fallback, same as
+  // opponentBadgeHtml does elsewhere on this page.
+  function leaderPhotoHtml(name, roster) {
+    if (!name) return `<span class="leaderPhoto small placeholder">?</span>`;
+    const rosterEntry = (roster || []).find(r => r.name === name);
+    const photo = rosterEntry ? (playerProfiles[rosterEntry.id] || {}).photo : null;
+    return photo
+      ? `<span class="leaderPhoto small"><img src="${photo}" alt="${escapeHtml(name)}"></span>`
+      : `<span class="leaderPhoto small" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
+  }
+  function renderGameLeaders(container, leaders, roster) {
     const rows = [
       ['🎯 Passing Yards', leaders.passing, 'yds'],
       ['🏃 Rushing Yards', leaders.rushing, 'yds'],
@@ -834,11 +882,19 @@
     let html = `<div class="lbSectionHeader" style="margin-top:14px;">🏆 Game Leaders</div>`;
     rows.forEach(([label, r, unit]) => {
       if (!r.us && !r.opp) return;
-      const usTxt = r.us ? `<b>${escapeHtml(r.us.name)}</b> — ${r.us.val}${unit}` : '—';
-      const oppTxt = r.opp ? `<b>${escapeHtml(r.opp.name)}</b> — ${r.opp.val}${unit}` : (r.opp === null && (label.indexOf('Sack') !== -1 || label.indexOf('Tackle') !== -1) ? '<span style="color:#999;">Not tracked</span>' : '—');
+      const usSide = r.us
+        ? `${leaderPhotoHtml(r.us.name, roster)}<span class="leaderRow2ColName">${escapeHtml(r.us.name)} — ${r.us.val}${unit}</span>`
+        : '<span style="color:#999;">—</span>';
+      const oppNotTracked = r.opp === null && (label.indexOf('Sack') !== -1 || label.indexOf('Tackle') !== -1);
+      const oppSide = r.opp
+        ? `<span class="leaderRow2ColName">${escapeHtml(r.opp.name)} — ${r.opp.val}${unit}</span>${leaderPhotoHtml(r.opp.name, [])}`
+        : (oppNotTracked ? '<span style="color:#999;">Not tracked</span>' : '<span style="color:#999;">—</span>');
       html += `<div style="padding:9px 0;border-bottom:1px solid #f0f0f0;">
-          <div style="font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;text-align:center;margin-bottom:4px;">${label}</div>
-          <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${usTxt}</span><span style="text-align:right;">${oppTxt}</span></div>
+          <div style="font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;text-align:center;margin-bottom:6px;">${label}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span style="display:flex;align-items:center;gap:6px;min-width:0;">${usSide}</span>
+            <span style="display:flex;align-items:center;gap:6px;min-width:0;flex-direction:row-reverse;text-align:right;">${oppSide}</span>
+          </div>
         </div>`;
     });
     container.innerHTML = html;
@@ -1003,26 +1059,34 @@
     { key: 'sacks', label: 'Sacks' },
     { key: 'tackles', label: 'Tackles' },
   ];
+  // Nathan (follow-up): "reformat the Season Leaders section to be the
+  // same 2 column style with name and circle player photo." Was a grid of
+  // standalone cards (each with its own big photo/name/stat stacked
+  // vertically) -- now a list of rows, category label + small photo +
+  // name on the left, the stat value on the right, matching the row
+  // shape Game Leaders now uses.
   function leaderCardHtml(cat, rec, roster) {
     if (!rec) {
       return `
-        <div class="leaderCard">
-          <div class="leaderCat">${escapeHtml(cat.label)}</div>
-          <span class="leaderPhoto placeholder">?</span>
-          <div class="leaderName lbEmpty" style="padding:0;">No stats yet</div>
+        <div class="leaderRow2Col">
+          <div class="leaderRow2ColLeft">
+            <span class="leaderPhoto small placeholder">?</span>
+            <div><div class="leaderRow2ColCat">${escapeHtml(cat.label)}</div><div class="leaderRow2ColName lbEmpty" style="padding:0;">No stats yet</div></div>
+          </div>
         </div>`;
     }
     const rosterEntry = roster.find(r => String(r.num) === String(rec.num));
     const photo = rosterEntry ? (playerProfiles[rosterEntry.id] || {}).photo : null;
     const photoHtml = photo
-      ? `<span class="leaderPhoto"><img src="${photo}" alt="${escapeHtml(rec.name || '')}"></span>`
-      : `<span class="leaderPhoto" style="background:${hashColor(rec.name || String(rec.num))};">${escapeHtml(initials(rec.name || String(rec.num)))}</span>`;
+      ? `<span class="leaderPhoto small"><img src="${photo}" alt="${escapeHtml(rec.name || '')}"></span>`
+      : `<span class="leaderPhoto small" style="background:${hashColor(rec.name || String(rec.num))};">${escapeHtml(initials(rec.name || String(rec.num)))}</span>`;
     return `
-      <div class="leaderCard">
-        <div class="leaderCat">${escapeHtml(cat.label)}</div>
-        ${photoHtml}
-        <div class="leaderName">#${escapeHtml(String(rec.num))} ${escapeHtml(rec.name || '')}</div>
-        <div class="leaderStat">${formatNum(rec[cat.key])}</div>
+      <div class="leaderRow2Col">
+        <div class="leaderRow2ColLeft">
+          ${photoHtml}
+          <div><div class="leaderRow2ColCat">${escapeHtml(cat.label)}</div><div class="leaderRow2ColName">#${escapeHtml(String(rec.num))} ${escapeHtml(rec.name || '')}</div></div>
+        </div>
+        <div class="leaderRow2ColStat">${formatNum(rec[cat.key])}</div>
       </div>`;
   }
   function renderSeasonLeaders() {
@@ -1032,11 +1096,11 @@
     const players = Object.values(byNum);
     loadPlayerProfilesLocal().then(() => {
       const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
-      const cards = LEADER_CATS.map(cat => {
+      const rows = LEADER_CATS.map(cat => {
         const top = players.filter(p => p[cat.key] > 0).sort((a, b) => b[cat.key] - a[cat.key])[0];
         return leaderCardHtml(cat, top || null, roster);
       }).join('');
-      wrap.innerHTML = `<div class="lbSectionHeader">🏆 Season Leaders</div><div class="leaderGrid">${cards}</div>`;
+      wrap.innerHTML = `<div class="lbSectionHeader">🏆 Season Leaders</div><div class="leaderList">${rows}</div>`;
     });
   }
 
@@ -1103,6 +1167,18 @@
     wrap.style.display = text ? '' : 'none';
     if (titleEl) titleEl.textContent = isFinal ? '📰 Game Recap' : '📰 Game Preview';
     textEl.textContent = text;
+    // Nathan (follow-up): "You have an entire log of the whole game...
+    // recreate the flow and speak to it with key plays." Same pattern as
+    // Head-to-Head/Scoring Plays/Game Leaders -- shows the fast, already-
+    // working stat-leaders recap immediately, then replaces it with the
+    // narrative version once the play-by-play loads, rather than leaving
+    // the box blank while it fetches.
+    if (isFinal && current.id) {
+      computeScoringPlays(current.id).then(events => {
+        const narrative = buildNarrativeRecap(events, current);
+        if (narrative) textEl.textContent = narrative;
+      }).catch(err => console.error('[narrativeRecap] failed for', current.id, err));
+    }
   }
 
   function renderWeather() {
@@ -1731,7 +1807,7 @@
         : hasEventPassed(current.date, current.gameTime || current.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
-      const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${preGameTimesLine ? ' • ' + preGameTimesLine : ''}`;
+      const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${(preGameTimesLine && !gameIsFinal) ? ' • ' + preGameTimesLine : ''}`;
       const gameTypeTag = current.gameType && current.gameType !== 'Regular Season' ? `<div style="text-align:center;margin-bottom:8px;"><span class="scheduleGameTypeTag">${escapeHtml(current.gameType)}</span></div>` : '';
       const heroRecordStr = bengalsRecord(games);
       const heroRecordHtml = heroRecordStr ? `<span class="scheduleTeamRecord">${escapeHtml(heroRecordStr)}</span>` : '';
@@ -1745,7 +1821,10 @@
               <span class="scheduleRowCenterDate">${fmtDate(current.date)}</span>
               <!-- Nathan: "If a game is complete with a score - it doesn't need to display the time anymore." -->
               ${(current.gameTime && !resultFor(current)) ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
-              ${badgeHtml}
+              <!-- Nathan (follow-up): "once final, let's add space between the DATE and RESULT." Removing the kickoff time above (for a
+                   final game) also removed the only thing sitting between the date and this badge, so they were left touching -- this margin
+                   only applies once the game's actually final, since the time element still does that spacing job for an upcoming game. -->
+              <div style="${resultFor(current) ? 'margin-top:6px;' : ''}">${badgeHtml}</div>
             </span>
             <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
           </div>
@@ -1824,10 +1903,19 @@
         const spWrap = document.getElementById('schedScoringPlaysWrap');
         if (spWrap) renderScoringPlaysTimeline(spWrap, events);
       }).catch(err => console.error('[scoringPlays] failed for', current.id, err));
-      // Nathan: "Add the Game Leaders to the game."
+      // Nathan: "Add the Game Leaders to the game." Photos need the
+      // roster and playerProfiles loaded first, same as renderSeasonLeaders
+      // already does -- Promise.all so both fetches run in parallel
+      // rather than waiting on one another.
       computeGameLeaders(current.id).then(leaders => {
-        const glWrap = document.getElementById('schedGameLeadersWrap');
-        if (glWrap) renderGameLeaders(glWrap, leaders);
+        Promise.all([
+          loadPlayerProfilesLocal(),
+          window.loadTeamRoster && !window.isTeamRosterLoaded() ? window.loadTeamRoster() : Promise.resolve(),
+        ]).then(() => {
+          const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+          const glWrap = document.getElementById('schedGameLeadersWrap');
+          if (glWrap) renderGameLeaders(glWrap, leaders, roster);
+        });
       }).catch(err => console.error('[gameLeaders] failed for', current.id, err));
       renderGameBoxScore();
       renderMomentumChart();
