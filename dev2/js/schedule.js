@@ -592,55 +592,75 @@
     const usLabel = 'The Bengals';
     const sentences = [];
 
-    // Opening line: the shape of the whole game, not the first play in it.
+    // Nathan (follow-up): "don't use my words exact, needs to be something
+    // similar though, just showing you the way." His example was a style
+    // reference, not text to reproduce -- same structure (summary first,
+    // field position on the opening score, cause-and-effect on turnovers)
+    // but reworded throughout, and picked from a small bank per sentence
+    // type so two different games' recaps don't read like the same
+    // template with the numbers swapped either.
     const usTds = scores.filter(s => s.team === 'Us').length;
     const oppTds = scores.filter(s => s.team === 'Opponent').length;
-    const parts = [`It finished ${scoreUs}-${scoreOpp}`];
-    if (oppTds && usTds) parts.push(`with ${oppName} finding the end zone ${oppTds} time${oppTds === 1 ? '' : 's'} and the Bengals ${usTds}`);
-    else if (oppTds) parts.push(`with ${oppName} finding the end zone ${oppTds} time${oppTds === 1 ? '' : 's'}`);
-    else if (usTds) parts.push(`with the Bengals finding the end zone ${usTds} time${usTds === 1 ? '' : 's'}`);
-    if (xpAttempted) parts.push(`converting ${xpMade} of ${xpAttempted} extra point attempt${xpAttempted === 1 ? '' : 's'}`);
-    sentences.push(parts.join(', ') + '.');
+    let openingLine = `Final score: ${scoreUs}-${scoreOpp}`;
+    if (oppTds && usTds) openingLine += ` -- ${oppName} reached the end zone ${oppTds} time${oppTds === 1 ? '' : 's'} to the Bengals' ${usTds}`;
+    else if (oppTds) openingLine += ` -- ${oppName} found the end zone ${oppTds} time${oppTds === 1 ? '' : 's'}`;
+    else if (usTds) openingLine += ` -- the Bengals found the end zone ${usTds} time${usTds === 1 ? '' : 's'}`;
+    if (xpAttempted) openingLine += `, going ${xpMade}-for-${xpAttempted} on extra points`;
+    sentences.push(openingLine + '.');
 
     // Opening score: leads with field position drama when the drive
-    // actually started somewhere notable, same as "Close to pinning them
-    // deep in their own area, Nipmuc broke a 74 yard run..."
+    // actually started somewhere notable.
     if (scores.length) {
       const first = scores[0];
       const teamLabel = first.team === 'Us' ? usLabel : oppName;
       const posTxt = deepFieldPosTxt(first.startAbs, first.team);
       const driveTxt = first.plays != null ? ` (${first.plays} play${first.plays === 1 ? '' : 's'}, ${first.yards} yard${first.yards === 1 ? '' : 's'})` : '';
       sentences.push(posTxt
-        ? `Starting ${posTxt}, ${teamLabel} broke free for the opening score: ${first.desc}${driveTxt}.`
-        : `${teamLabel} opened the scoring with ${first.desc}${driveTxt}.`);
+        ? `Pinned ${posTxt}, ${teamLabel} still found a way to strike first: ${first.desc}${driveTxt}.`
+        : `${teamLabel} got on the board first with ${first.desc}${driveTxt}.`);
     }
 
     // Interceptions: framed around whether the team that picked it off
-    // actually turned it into points, same as "Despite the early
-    // interception, Bengals couldn't convert it into points."
+    // actually turned it into points.
+    const NO_CONVERT_PHRASES = [
+      (n, who) => `${who} picked ${n === 1 ? 'one' : n + ' of them'} off but came away with nothing to show for it.`,
+      (n, who) => `${n === 1 ? 'An interception' : n + ' interceptions'} gave ${who} a shot, but the drive${n === 1 ? '' : 's'} that followed stalled.`,
+      (n, who) => `${who} forced ${n === 1 ? 'an interception' : n + ' interceptions'} without turning it into points.`,
+    ];
+    const CONVERT_PHRASES = [
+      (n, who) => `${who} cashed in on ${n === 1 ? 'an interception' : n + ' interceptions'}.`,
+      (n, who) => `${who} made ${n === 1 ? 'that pick' : 'those picks'} count on the scoreboard.`,
+    ];
     const intByLoser = {};
     turnovers.filter(t => t.toType === 'Interception').forEach(t => {
       const g = intByLoser[t.team] || (intByLoser[t.team] = { count: 0, scored: 0 });
       g.count++; if (t.ledToScore) g.scored++;
     });
+    let intPhraseIdx = 0;
     Object.keys(intByLoser).forEach(losingTeam => {
       const g = intByLoser[losingTeam];
       const recoveringLabel = losingTeam === 'Us' ? oppName : usLabel;
-      const n = g.count;
-      if (g.scored === 0) sentences.push(`Despite ${n === 1 ? 'an interception' : n + ' interceptions'}, ${recoveringLabel} couldn't convert ${n === 1 ? 'it' : 'them'} into points.`);
-      else sentences.push(`${recoveringLabel} turned ${n === 1 ? 'an interception' : n + ' interceptions'} into points.`);
+      const bank = g.scored === 0 ? NO_CONVERT_PHRASES : CONVERT_PHRASES;
+      sentences.push(bank[intPhraseIdx % bank.length](g.count, recoveringLabel));
+      intPhraseIdx++;
     });
 
-    // Fumbles: framed around drives ended, same as "2 fumbles lost by
-    // bengals killed two drives" -- a fumble always ends the possession
-    // that lost it, whether or not the other team capitalized, so this
+    // Fumbles: framed around drives ended -- always true by definition,
+    // regardless of whether the recovering team capitalized, so this
     // doesn't need the same "did it convert" framing interceptions get.
+    const FUMBLE_PHRASES = [
+      (n, who) => `${who} put the ball on the ground ${n === 1 ? 'once' : n + ' times'}, ending ${n === 1 ? 'that drive' : 'those drives'} on the spot.`,
+      (n, who) => `${n} lost fumble${n === 1 ? '' : 's'} by ${who} cut short ${n === 1 ? 'a possession' : 'that many possessions'}.`,
+      (n, who) => `${who}'s ${n === 1 ? 'fumble' : n + ' fumbles'} handed the ball right back, ${n === 1 ? 'ending a drive' : 'ending drives'} that otherwise had life.`,
+    ];
     const fumByLoser = {};
     turnovers.filter(t => t.toType === 'Fumble').forEach(t => { fumByLoser[t.team] = (fumByLoser[t.team] || 0) + 1; });
+    let fumPhraseIdx = 0;
     Object.keys(fumByLoser).forEach(losingTeam => {
       const n = fumByLoser[losingTeam];
       const losingLabel = losingTeam === 'Us' ? usLabel : oppName;
-      sentences.push(`${n} fumble${n === 1 ? '' : 's'} lost by ${losingLabel} killed ${n === 1 ? 'a drive' : n + ' drives'}.`);
+      sentences.push(FUMBLE_PHRASES[fumPhraseIdx % FUMBLE_PHRASES.length](n, losingLabel));
+      fumPhraseIdx++;
     });
 
     return sentences.join(' ');
