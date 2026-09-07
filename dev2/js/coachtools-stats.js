@@ -266,6 +266,14 @@
     const byFormation = {}; // "Wing"/"Split" -> {att, yds, byCall:{...}}
     const byDirection = {}; // "Left"/"Middle"/"Right" -> {att, yds} (run only)
     const byPlayer = {}; // name -> {att, yds, td, fd, byCall:{...}}
+    // Nathan (follow-up, picked from the metrics list): down & distance
+    // tendencies, 3rd down conversion, targets vs receptions, run/pass by
+    // quarter -- each is just a different grouping of the same run/pass
+    // plays already being walked below, not a new data source.
+    const byDown = { 1: { run: 0, pass: 0 }, 2: { run: 0, pass: 0 }, 3: { run: 0, pass: 0 }, 4: { run: 0, pass: 0 } };
+    const thirdDown = { runAtt: 0, runConv: 0, passAtt: 0, passConv: 0 };
+    const byQuarter = { 1: { run: 0, pass: 0 }, 2: { run: 0, pass: 0 }, 3: { run: 0, pass: 0 }, 4: { run: 0, pass: 0 } };
+    const targets = {}; // receiver name -> {targets, receptions}
     let runAtt = 0, runYds = 0, passAtt = 0, passComp = 0, passYds = 0, totalCalledPlays = 0;
     function ensurePlayer(name) {
       return byPlayer[name] || (byPlayer[name] = { name, att: 0, yds: 0, td: 0, fd: 0, byCall: {} });
@@ -277,6 +285,16 @@
         const isUsPassAtt = p.type === 'pass' && p.passTeam !== 'Opponent';
         if (!isUsRun && !isUsPassAtt) return;
         const yds = Number(p.yards) || 0;
+        // Down & distance tendencies, run/pass by quarter, and 3rd down
+        // conversion -- all just different groupings of this same
+        // isUsRun/isUsPassAtt split, so they're tracked here once
+        // regardless of which specific play type this turns out to be.
+        if (p.down && byDown[p.down]) { if (isUsRun) byDown[p.down].run++; else byDown[p.down].pass++; }
+        if (p.quarter && byQuarter[p.quarter]) { if (isUsRun) byQuarter[p.quarter].run++; else byQuarter[p.quarter].pass++; }
+        if (p.down === 3) {
+          if (isUsRun) { thirdDown.runAtt++; if (p.firstDown) thirdDown.runConv++; }
+          else { thirdDown.passAtt++; if (p.firstDown) thirdDown.passConv++; }
+        }
         // Nathan (follow-up): "do these account for variations? I know we
         // ran several Sweep Right Counters that broke for big runs, want
         // to make sure those show as their own." Confirmed gap -- this
@@ -299,6 +317,16 @@
           }
         } else {
           passAtt++;
+          // Nathan (follow-up): "targets vs. receptions (catch rate)."
+          // Counted here, before the Complete check below, since a target
+          // is who the ball was thrown TO regardless of whether it was
+          // caught -- an incomplete pass still has a real p.target, it's
+          // just never been counted anywhere before this.
+          if (p.target) {
+            const t = targets[p.target] || (targets[p.target] = { name: p.target, targets: 0, receptions: 0 });
+            t.targets++;
+            if (p.result === 'Complete') t.receptions++;
+          }
           if (p.result === 'Complete') {
             passComp++; passYds += yds;
             if (p.target) {
@@ -347,7 +375,7 @@
         }
       });
     });
-    return { byCall, byTag, byFormation, byDirection, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
+    return { byCall, byTag, byFormation, byDirection, byPlayer, byDown, byQuarter, thirdDown, targets, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
   }
 
   // Nathan (follow-up): "an offensive coach summary... quick comparison
@@ -406,6 +434,63 @@
       mRow.style.cssText = 'font-size:12.5px;padding:8px 10px;background:#f7f7f7;border-radius:8px;margin-bottom:18px;';
       mRow.innerHTML = `🌀 <b>Motion called:</b> ${motionCount} time${motionCount === 1 ? '' : 's'} out of ${totalSnaps} offensive snap${totalSnaps === 1 ? '' : 's'} (${Math.round(motionCount / totalSnaps * 100)}%)`;
       wrap.appendChild(mRow);
+    }
+
+    // Down & distance tendencies -- one head-to-head bar per down, same
+    // shape as Run vs Pass above, just filtered to that down specifically.
+    const { byDown, byQuarter, thirdDown, targets } = report;
+    const downsWithData = [1, 2, 3, 4].filter(d => byDown[d].run + byDown[d].pass > 0);
+    if (downsWithData.length) {
+      wrap.appendChild(sectionHeading('🔢 Run vs Pass by Down'));
+      const dnBox = document.createElement('div'); dnBox.style.cssText = 'margin-bottom:18px;';
+      downsWithData.forEach(d => { dnBox.innerHTML += hhBarHtml(`${['1st', '2nd', '3rd', '4th'][d - 1]} Down`, byDown[d].run, byDown[d].pass, 'Run', 'Pass'); });
+      wrap.appendChild(dnBox);
+    }
+
+    // 3rd down conversion -- overall rate first, then split by whether the
+    // call itself was a run or a pass, since "how we convert" usually
+    // matters more to a coach than the raw attempt count on its own.
+    const thirdAtt = thirdDown.runAtt + thirdDown.passAtt;
+    if (thirdAtt > 0) {
+      const thirdConv = thirdDown.runConv + thirdDown.passConv;
+      wrap.appendChild(sectionHeading('🎯 3rd Down Conversion'));
+      const tdBox = document.createElement('div'); tdBox.style.cssText = 'margin-bottom:18px;font-size:12.5px;';
+      tdBox.innerHTML = `<div style="margin-bottom:6px;"><b>Overall:</b> ${thirdConv}/${thirdAtt} (${Math.round(thirdConv / thirdAtt * 100)}%)</div>`;
+      if (thirdDown.runAtt) tdBox.innerHTML += `<div>Run calls: ${thirdDown.runConv}/${thirdDown.runAtt} (${Math.round(thirdDown.runConv / thirdDown.runAtt * 100)}%)</div>`;
+      if (thirdDown.passAtt) tdBox.innerHTML += `<div>Pass calls: ${thirdDown.passConv}/${thirdDown.passAtt} (${Math.round(thirdDown.passConv / thirdDown.passAtt * 100)}%)</div>`;
+      wrap.appendChild(tdBox);
+    }
+
+    // Run/pass tendency by quarter -- same head-to-head shape as by-down
+    // above, just grouped by quarter instead.
+    const quartersWithData = [1, 2, 3, 4].filter(q => byQuarter[q].run + byQuarter[q].pass > 0);
+    if (quartersWithData.length > 1) { // only worth showing if there's more than one quarter's worth of data to actually compare
+      wrap.appendChild(sectionHeading('🕐 Run vs Pass by Quarter'));
+      const qBox = document.createElement('div'); qBox.style.cssText = 'margin-bottom:18px;';
+      quartersWithData.forEach(q => { qBox.innerHTML += hhBarHtml(`Q${q}`, byQuarter[q].run, byQuarter[q].pass, 'Run', 'Pass'); });
+      wrap.appendChild(qBox);
+    }
+
+    // Targets vs receptions -- catch rate, not just yards on completions.
+    // A player targeted 8 times but caught 3 reads very differently than
+    // one targeted 3 times and caught all 3, which yards-on-completions
+    // alone can't tell apart.
+    const targetRows = Object.values(targets).sort((a, b) => b.targets - a.targets);
+    if (targetRows.length) {
+      wrap.appendChild(sectionHeading('🎯 Targets vs. Receptions'));
+      const trBox = document.createElement('div'); trBox.style.cssText = 'margin-bottom:8px;';
+      const header = document.createElement('div');
+      header.style.cssText = 'display:flex;font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;padding:0 0 4px;border-bottom:2px solid #eee;';
+      header.innerHTML = `<span style="flex:1;">Player</span><span style="width:60px;text-align:right;">Targets</span><span style="width:70px;text-align:right;">Catches</span><span style="width:60px;text-align:right;">Rate</span>`;
+      trBox.appendChild(header);
+      targetRows.forEach(t => {
+        const rate = t.targets ? Math.round(t.receptions / t.targets * 100) : 0;
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;font-size:12.5px;padding:5px 0;border-bottom:1px solid #f5f5f5;';
+        row.innerHTML = `<span style="flex:1;font-weight:700;">${escapeHtml(t.name)}</span><span style="width:60px;text-align:right;">${t.targets}</span><span style="width:70px;text-align:right;">${t.receptions}</span><span style="width:60px;text-align:right;font-weight:800;">${rate}%</span>`;
+        trBox.appendChild(row);
+      });
+      wrap.appendChild(trBox);
     }
   }
 
