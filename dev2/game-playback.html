@@ -704,15 +704,17 @@
   // play only ever recorded ITS OWN moment, never the full runing state
   // in between.
   function buildTimeline(plays){
-    // Nathan (follow-up): "the plays are running in reverse order from the
-    // last to the first, I need those to flip around to start at the
-    // beginning." Stat Keeper stores newest-logged-first (insertPlay's
-    // default is plays.unshift(entry), so the most recent entry reads at
-    // the top of its own list without needing to scroll) -- correct for
-    // that live-entry UI, but backwards for a chronological replay, which
-    // needs oldest-first. Reversed once here rather than changing how Stat
-    // Keeper stores things at all.
-    const ordered = (plays || []).slice().reverse();
+    // Nathan (follow-up): "play 57/57 is the first play of the game
+    // appearing at the end of the timeline." Confirmed by direct testing
+    // that plays are now genuinely stored chronologically (oldest first)
+    // -- insertPlay's default was fixed to plays.push (append) rather
+    // than plays.unshift (prepend) specifically because that's what
+    // renderLog() already assumed and what the Wizard's own commit
+    // functions already do. This reversal was correct back when Stat
+    // Keeper's OWN entry form defaulted to prepending new plays -- once
+    // that changed, reversing already-chronological data just flips the
+    // whole game backwards, which is exactly what this screenshot shows.
+    const ordered = (plays || []).slice();
     const state = { spot: 50, down: 1, distance: 10, us: 0, opp: 0, quarter: 1 };
     const steps = [];
     ordered.forEach(function(p){
