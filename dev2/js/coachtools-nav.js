@@ -151,23 +151,17 @@
       return;
     }
 
-    // ---- Normal mode: category pills, then that category's own tabs. ----
-    // Nathan: "it's confusing with the second set of pill buttons before
-    // the top 5 options, need a better way of visually breaking those up."
-    // Both rows used the exact same .gameplanChip pill before -- same
-    // size, same border, same active color -- so there was nothing telling
-    // you which row was "the 5 sections" and which was "the tools inside
-    // whichever one's selected." The category row keeps the normal
-    // full-size chip; the tools underneath now sit inside a labeled,
-    // shaded panel with smaller/more muted chips, so it visibly reads as
-    // "contents of the tab above" rather than a second, equal-weight row.
+    // ---- Normal mode: category BAR (level 1, visually distinct dark
+    // bar), then that category's own tabs (level 2, existing muted
+    // sub-panel). See the styles.css comment on .coachToolsCategoryBar
+    // for why these two tiers now look deliberately different instead of
+    // both being plain pills. ----
     const catRow = document.createElement('div');
-    catRow.className = 'gameplanPickerGrid';
-    catRow.style.marginBottom = '10px';
+    catRow.className = 'coachToolsCategoryBar';
     CATEGORIES.forEach(c => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'gameplanChip' + (activeCategory === c.key ? ' active' : '');
+      btn.className = 'coachToolsCategoryBtn' + (activeCategory === c.key ? ' active' : '');
       btn.textContent = c.label;
       // Nathan: "The Resources CTAs still show on every tab." Real bug --
       // this only ever changed activeCategory and re-rendered the NAV

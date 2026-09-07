@@ -438,10 +438,23 @@
   let tendenciesGameFilter = null; // null = whole season
   async function renderTendencies(wrap) {
     wrap.innerHTML = '<div class="lbSub" style="text-align:center;">Loading…</div>';
-    const report = await computePlayCallReport(tendenciesGameFilter);
+    // Nathan (follow-up): "still nothing showing here." Couldn't reproduce
+    // via static review -- every file involved is confirmed byte-for-byte
+    // identical to what's live, so this wraps the actual computation in a
+    // try/catch that puts the real error message directly on the page
+    // instead of only the console, since that's the fastest way to find
+    // out what's actually failing without needing dev tools open.
+    let report;
+    try {
+      report = await computePlayCallReport(tendenciesGameFilter);
+    } catch (err) {
+      wrap.innerHTML = `<div class="lbEmpty" style="color:#c0342a;">⚠️ Tendencies failed to load: ${escapeHtml(String(err && err.message ? err.message : err))}</div>`;
+      console.error('[renderTendencies] failed:', err);
+      return;
+    }
     wrap.innerHTML = '';
-
-    const selRow = document.createElement('div');
+    try {
+      const selRow = document.createElement('div');
     selRow.style.cssText = 'margin-bottom:14px;';
     const sel = document.createElement('select');
     sel.style.cssText = 'width:100%;padding:9px;border:2px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;background:#fff;';
@@ -510,17 +523,30 @@
       });
       wrap.appendChild(whoTable);
     }
+    } catch (err) {
+      wrap.innerHTML += `<div class="lbEmpty" style="color:#c0342a;">⚠️ Tendencies partially failed: ${escapeHtml(String(err && err.message ? err.message : err))}</div>`;
+      console.error('[renderTendencies] failed mid-render:', err);
+    }
   }
 
   // ---- Sub-nav ----
+  // Nathan (follow-up): "Rethink this with a high level bar and sub menus
+  // because this is painful to navigate and look at." This is the third
+  // navigation tier on this page (Category -> its tabs -> this module's
+  // own internal views) -- it used to be the exact same .gameplanChip
+  // pill as the top-level category bar, which is a big part of why the
+  // whole thing read as an undifferentiated stack of button rows.
+  // Underlined tabs instead, matching the visual language of "you're
+  // inside a module now, this is choosing a view within it."
   function renderSubNav() {
     const nav = document.getElementById('coachStatsSubNav');
     if (!nav) return;
     nav.innerHTML = '';
+    nav.className = 'coachToolsModuleTabs';
     [['enter', '✏️ Enter Stats'], ['leaderboard', '🏆 Leaderboard'], ['tendencies', '🧭 Tendencies'], ['filmviews', '🎥 Film Views']].forEach(([key, label]) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'gameplanChip' + (subTab === key ? ' active' : '');
+      btn.className = 'coachToolsModuleTab' + (subTab === key ? ' active' : '');
       btn.textContent = label;
       btn.addEventListener('click', () => { subTab = key; renderAll(); });
       nav.appendChild(btn);
