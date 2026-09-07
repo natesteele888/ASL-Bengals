@@ -169,7 +169,16 @@
       btn.type = 'button';
       btn.className = 'gameplanChip' + (activeCategory === c.key ? ' active' : '');
       btn.textContent = c.label;
-      btn.addEventListener('click', () => { activeCategory = c.key; renderNav(); });
+      // Nathan: "The Resources CTAs still show on every tab." Real bug --
+      // this only ever changed activeCategory and re-rendered the NAV
+      // (which tab buttons are listed), it never actually switched the
+      // active PANEL. So whatever was last open (Resources, by default,
+      // since that's this whole app's starting tab) just kept showing
+      // underneath the newly-selected category's own buttons, mixed
+      // together -- which is exactly the "jumbled, weird hierarchy" this
+      // produces regardless of which category gets clicked. Jumping to
+      // that category's first real tab actually swaps the visible panel.
+      btn.addEventListener('click', () => { setActiveTab(tabsForCategory(c.key)[0].key); });
       catRow.appendChild(btn);
     });
     nav.appendChild(catRow);
