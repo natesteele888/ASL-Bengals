@@ -585,7 +585,17 @@
         return;
       }
     }
-    plays.unshift(entry);
+    // Nathan (follow-up): "when you manually add a play, it adds to the
+    // top instead of the bottom so you have to push it down 1 step at a
+    // time... Big pain with 60 something plays." renderLog() displays
+    // `plays` directly with no reversal, and game-wizard.html's own
+    // commitCurrentPlay/pushPlayEntry always append (plays.push) -- this
+    // function was the one piece still prepending (plays.unshift) by
+    // default, which is exactly backwards from both of those: a plain
+    // "just log the next play" (no insertAfterId picked) needs to land at
+    // the END, not the front, to match everywhere else that touches this
+    // same array.
+    plays.push(entry);
   }
   // A dropdown rather than a single auto-advancing button — lets you jump
   // straight to "End of Q4" even if you forgot to tap "End of Q3" earlier,

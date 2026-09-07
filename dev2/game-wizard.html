@@ -1627,7 +1627,16 @@
   function renderPhasePostScoreKickoff(card){
     const g = wiz.game;
     const isUsKick = wiz.play.kickingTeam === 'Us';
-    card.innerHTML = '<h2>🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off</h2><div class="sub">Same as the opening kickoff -- where it was caught, and where the return ended.</div>';
+    const heading = wiz.play.isHalftime ? '🏈 Halftime — ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off to Start the 2nd Half' : '🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off';
+    card.innerHTML = '<h2>' + heading + '</h2><div class="sub">Same as the opening kickoff -- where it was caught, and where the return ended.</div>';
+    if (wiz.play.isHalftime){
+      // Nathan: "confirming the side we were defending." Pre-picked from
+      // the automatic flip in logEvent (teams do switch ends every
+      // quarter), but halftime specifically gets an actual confirm step
+      // rather than just trusting the silent flip -- easy to get turned
+      // around on which end is which after a break between halves.
+      chipGroupField(card, 'Which end do we defend for the 2nd half?', g, 'defendingEnd', ['Left','Right']);
+    }
     chipGroupField(card, 'Onside Attempt?', wiz.play, 'onside', [[true,'Yes'],[false,'No']]);
     if (wiz.play.onside){
       chipGroupField(card, 'Recovered By', wiz.play, 'recoveredByTeam', ['Us','Opponent']);
@@ -1715,9 +1724,21 @@
       const team = confirm('Timeout by US? (Cancel = Opponent)') ? 'Us' : 'Opponent';
       await pushPlayEntry({ type:'timeout', id: genId(), side: team === 'Us' ? 'offense' : 'defense', quarter: wiz.game.quarter, team: team });
     } else {
-      const nextQ = wiz.game.quarter + 1;
-      await pushPlayEntry({ type:'quarterEnd', id: genId(), quarter: wiz.game.quarter });
-      wiz.game.quarter = nextQ;
+      // Nathan (follow-up): "When I ended the 2nd quarter... it still says
+      // it's Q2." Real bug: pushPlayEntry (below) saves wiz.game.quarter
+      // into the overall game record, but it used to be called BEFORE
+      // wiz.game.quarter was incremented -- so the record that actually
+      // got persisted still had the OLD quarter number on it. The in-
+      // memory value looked right for the rest of that same session (it
+      // WAS incremented, just after the save already happened), which is
+      // exactly why it only showed up as wrong after leaving and coming
+      // back -- a fresh load reads back the stale number that was
+      // actually saved. Incrementing first, and saving the marker itself
+      // with the quarter that just ended (not the new one), fixes both.
+      const endingQuarter = wiz.game.quarter;
+      const wasHalftime = endingQuarter === 2;
+      wiz.game.quarter = endingQuarter + 1;
+      await pushPlayEntry({ type:'quarterEnd', id: genId(), quarter: endingQuarter });
       // Nathan: "end of 2nd and 3rd quarters? It will automatically flip
       // the field and retain down, distance and possession." Teams switch
       // ends every quarter in real football, not just at halftime -- so
@@ -1727,6 +1748,20 @@
       // nothing to reset because a quarter change was never wired to
       // reset it in the first place.
       wiz.game.defendingEnd = wiz.game.defendingEnd === 'Left' ? 'Right' : 'Left';
+      // Nathan (follow-up): "instead of going to halftime, and starting
+      // the 2nd half with a kickoff and confirming the side we were
+      // defending, it still says it's Q2." Halftime is genuinely
+      // different from the Q1->Q2/Q3->Q4 flips above -- real football
+      // restarts with an actual kickoff, not a continuation of whatever
+      // drive was happening. Reuses the exact same post-score kickoff
+      // screen already built for "team just scored, now they kick off" --
+      // same shape of event, different trigger. The team that received
+      // the OPENING kickoff now kicks (receiving doesn't carry over
+      // between halves, by rule), and the end each team defends gets a
+      // real confirm step here instead of just being silently flipped.
+      if (wasHalftime && wiz.state.receivingTeam){
+        wiz.play = { phase: 'postScoreKickoff', kickingTeam: wiz.state.receivingTeam, isHalftime: true };
+      }
     }
     renderWizard();
   }
