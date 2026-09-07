@@ -493,14 +493,26 @@
     const gs = wiz.resumeGameState;
     const card = document.createElement('div'); card.className = 'card';
     if (wiz.resumePossessionOverride == null) wiz.resumePossessionOverride = inferPossession(gs.plays);
+    // Nathan (follow-up): "I went back in to keep logging plays and it
+    // still shows Q2." Expected -- the quarter-ordering fix only corrects
+    // FUTURE "End Quarter" presses; it can't retroactively fix a number
+    // that was already saved wrong by the old buggy code before the fix
+    // existed. Pressing End Quarter again isn't a good workaround either
+    // -- it'd log a second "END OF Q2" marker that shows up chronologically
+    // AFTER whatever's already been logged since the real halftime,
+    // which is confusing to read back later. This corrects the resume
+    // value directly instead, with no marker and no play-log side effects
+    // at all -- it only affects what this session starts counting from.
+    if (wiz.resumeQuarterOverride == null) wiz.resumeQuarterOverride = gs.quarter || 1;
     card.innerHTML = '<h2>▶️ Continue This Game</h2><div class="sub">' + gs.plays.length + ' play(s) already logged. Pick up right where it left off, no need to redo Starters/Coin Toss/Kickoff.</div>' +
       '<div class="summaryLine">📍 <b>' + spotLabelAbs(typeof gs.spot === 'number' ? gs.spot : 50) + '</b> · ' + ['1st','2nd','3rd','4th'][(gs.down||1)-1] + ' &amp; ' + (gs.distance||10) + ' · ' + quarterLbl(gs.quarter||1) + '</div>';
     chipGroupFieldFake(card, 'Who has the ball right now?', ['Us','Opponent'], wiz.resumePossessionOverride, function(v){ wiz.resumePossessionOverride = v; renderWizard(); });
+    chipGroupFieldFake(card, 'Actually still ' + quarterLbl(gs.quarter||1) + '? Fix it if not:', [[1,'Q1'],[2,'Q2'],[3,'Q3'],[4,'Q4']], wiz.resumeQuarterOverride, function(v){ wiz.resumeQuarterOverride = v; renderWizard(); });
     const cont = document.createElement('button'); cont.className = 'primaryBtn'; cont.textContent = '▶️ Continue Logging Plays';
     cont.addEventListener('click', function(){
       wiz.game = {
         spot: typeof gs.spot === 'number' ? gs.spot : 50,
-        down: gs.down || 1, distance: gs.distance || 10, quarter: gs.quarter || 1,
+        down: gs.down || 1, distance: gs.distance || 10, quarter: wiz.resumeQuarterOverride,
         scoreUs: Number(gs.finalUs) || 0, scoreOpp: Number(gs.finalOpp) || 0,
         possession: wiz.resumePossessionOverride,
         defendingEnd: 'Left',
@@ -536,10 +548,12 @@
     const wrap = document.createElement('div');
     wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + '</div>';
     const row = document.createElement('div'); row.className = 'chipRow';
-    options.forEach(function(v){
-      const c = document.createElement('div'); c.className = 'optChip' + (current === v ? ' active' : '');
-      c.textContent = v;
-      c.addEventListener('click', function(){ onSelect(v); });
+    options.forEach(function(opt){
+      const val = Array.isArray(opt) ? opt[0] : opt;
+      const lbl = Array.isArray(opt) ? opt[1] : opt;
+      const c = document.createElement('div'); c.className = 'optChip' + (current === val ? ' active' : '');
+      c.textContent = lbl;
+      c.addEventListener('click', function(){ onSelect(val); });
       row.appendChild(c);
     });
     wrap.appendChild(row);
