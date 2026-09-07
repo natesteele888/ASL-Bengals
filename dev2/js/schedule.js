@@ -683,6 +683,7 @@
   function quarterLbl(q) {
     return ['1st Quarter','2nd Quarter','3rd Quarter','4th Quarter'][Math.max(0, Math.min(3, (q||1)-1))];
   }
+  function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : []); }
   function scoringPlayDesc(p, scoringTeam) {
     if (p.type === 'score') {
       const kind = (p.scoreKind || '').startsWith('Kick') ? 'Kick' : (p.scoreKind || '').startsWith('Run/Pass') ? 'Run/Pass Play' : (p.scoreKind || 'Extra Point');
@@ -760,6 +761,84 @@
             ${driveTxt}
           </div>
           <div style="flex:0 0 auto;text-align:right;font-weight:800;font-size:13px;">${e.scoreUs} - ${e.scoreOpp}</div>
+        </div>`;
+    });
+    container.innerHTML = html;
+  }
+
+  // ---- Game Leaders -- Nathan: "Add the Game Leaders to the game" (the
+  // ESPN reference: top performer per stat, side by side for both teams,
+  // for THIS one game -- different from the season-wide Leaders panel
+  // that already exists). Built from the same statKeeperLogs data as
+  // Scoring Plays and the opponent totals. One honest gap: sacks and
+  // tackles are only ever tracked for OUR OWN players (there's no field
+  // anywhere that records which opponent player made a tackle or sack
+  // against us) -- the opponent side just says "Not tracked" for those
+  // two rather than showing a misleading blank or zero.
+  async function computeGameLeaders(gameId) {
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
+    const res = await fetch(url);
+    const gs = res.ok ? await res.json() : null;
+    const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+    const us = {}, opp = {};
+    function bump(bucket, name, key, val) {
+      if (!name) return;
+      const p = bucket[name] || (bucket[name] = { name, rushYds: 0, passYds: 0, recYds: 0, tackles: 0, sacks: 0 });
+      p[key] += val;
+    }
+    plays.forEach(p => {
+      if (p.type === 'run') {
+        const yds = Number(p.yards) || 0;
+        if (p.runTeam !== 'Opponent') bump(us, p.carrier, 'rushYds', yds);
+        else bump(opp, p.oppCarrier, 'rushYds', yds);
+        if (p.tackler) bump(us, p.tackler, 'tackles', 1);
+        asList(p.assist).forEach(a => bump(us, a, 'tackles', 0.5));
+      } else if (p.type === 'pass') {
+        const yds = Number(p.yards) || 0;
+        const isUs = p.passTeam !== 'Opponent';
+        if (p.result === 'Complete') {
+          if (isUs) { bump(us, p.passer, 'passYds', yds); bump(us, p.target, 'recYds', yds); }
+          else { bump(opp, p.oppPasser, 'passYds', yds); bump(opp, p.oppTarget, 'recYds', yds); }
+        }
+        if (p.tackler) bump(us, p.tackler, 'tackles', 1);
+        asList(p.assist).forEach(a => bump(us, a, 'tackles', 0.5));
+      } else if (p.type === 'tackle') {
+        if (p.tackler) bump(us, p.tackler, 'tackles', 1);
+        asList(p.assist).forEach(a => bump(us, a, 'tackles', 0.5));
+      } else if (p.type === 'defextra' && p.extraType === 'Sack' && p.player) {
+        bump(us, p.player, 'sacks', 1);
+      }
+    });
+    function topIn(bucket, key) {
+      const rows = Object.values(bucket).filter(p => p[key] > 0).sort((a, b) => b[key] - a[key]);
+      return rows.length ? { name: rows[0].name, val: rows[0][key] } : null;
+    }
+    return {
+      passing: { us: topIn(us, 'passYds'), opp: topIn(opp, 'passYds') },
+      rushing: { us: topIn(us, 'rushYds'), opp: topIn(opp, 'rushYds') },
+      receiving: { us: topIn(us, 'recYds'), opp: topIn(opp, 'recYds') },
+      sacks: { us: topIn(us, 'sacks'), opp: null },
+      tackles: { us: topIn(us, 'tackles'), opp: null },
+    };
+  }
+  function renderGameLeaders(container, leaders) {
+    const rows = [
+      ['🎯 Passing Yards', leaders.passing, 'yds'],
+      ['🏃 Rushing Yards', leaders.rushing, 'yds'],
+      ['🙌 Receiving Yards', leaders.receiving, 'yds'],
+      ['💥 Sacks', leaders.sacks, ''],
+      ['🛡️ Tackles', leaders.tackles, ''],
+    ];
+    const anyData = rows.some(([, r]) => r.us || r.opp);
+    if (!anyData) { container.innerHTML = ''; return; }
+    let html = `<div class="lbSectionHeader" style="margin-top:14px;">🏆 Game Leaders</div>`;
+    rows.forEach(([label, r, unit]) => {
+      if (!r.us && !r.opp) return;
+      const usTxt = r.us ? `<b>${escapeHtml(r.us.name)}</b> — ${r.us.val}${unit}` : '—';
+      const oppTxt = r.opp ? `<b>${escapeHtml(r.opp.name)}</b> — ${r.opp.val}${unit}` : (r.opp === null && (label.indexOf('Sack') !== -1 || label.indexOf('Tackle') !== -1) ? '<span style="color:#999;">Not tracked</span>' : '—');
+      html += `<div style="padding:9px 0;border-bottom:1px solid #f0f0f0;">
+          <div style="font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;text-align:center;margin-bottom:4px;">${label}</div>
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span>${usTxt}</span><span style="text-align:right;">${oppTxt}</span></div>
         </div>`;
     });
     container.innerHTML = html;
@@ -1664,7 +1743,8 @@
             <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${heroRecordHtml}${usScore}</span>
             <span class="scheduleRowCenter">
               <span class="scheduleRowCenterDate">${fmtDate(current.date)}</span>
-              ${current.gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
+              <!-- Nathan: "If a game is complete with a score - it doesn't need to display the time anymore." -->
+              ${(current.gameTime && !resultFor(current)) ? `<span class="scheduleRowCenterTime">${escapeHtml(to12h(current.gameTime))}</span>` : ''}
               ${badgeHtml}
             </span>
             <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
@@ -1688,6 +1768,7 @@
         ${gameFootageTopCtaHtml(current)}
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedGameLeadersWrap" style="margin-top:16px;"></div>
         <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
         <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
         <div id="schedMomentumWrap" style="display:none;"></div>
@@ -1743,6 +1824,11 @@
         const spWrap = document.getElementById('schedScoringPlaysWrap');
         if (spWrap) renderScoringPlaysTimeline(spWrap, events);
       }).catch(err => console.error('[scoringPlays] failed for', current.id, err));
+      // Nathan: "Add the Game Leaders to the game."
+      computeGameLeaders(current.id).then(leaders => {
+        const glWrap = document.getElementById('schedGameLeadersWrap');
+        if (glWrap) renderGameLeaders(glWrap, leaders);
+      }).catch(err => console.error('[gameLeaders] failed for', current.id, err));
       renderGameBoxScore();
       renderMomentumChart();
       renderSeasonLeaders();
