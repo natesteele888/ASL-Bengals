@@ -146,7 +146,7 @@
     background-position: center; background-repeat: no-repeat;
   }
   #appLoadingBg {
-    background-size: contain;
+    background-size: cover; /* Nathan (follow-up): "I made the new desktop loading image big enough that it should be set to fill so you don't see any bars on the top or bottom." Desktop's sharp layer switches from contain to cover now that the new image is sized to actually fill the screen without cropping anything important. */
     animation: appLoadingBreathe 6s ease-in-out infinite;
   }
   #appLoadingBgBlur {
@@ -156,6 +156,11 @@
   }
   @media (max-width: 640px) {
     #appLoadingBg, #appLoadingBgBlur { background-image: url('assets/images/loading-mobile.jpg'); }
+    /* The mobile image wasn't resized the same way -- keeping this on
+       contain here (letterboxed, filled by the blur layer showing through)
+       so switching desktop to cover doesn't reintroduce the mobile
+       cropping bug from a few rounds back ("can't see all of it"). */
+    #appLoadingBg { background-size: contain; }
   }
   @keyframes appLoadingBreathe {
     0%, 100% { transform: scale(1); }
