@@ -3039,7 +3039,17 @@
         // Nathan: "add fumbles recovered along with yards per carry" --
         // same "name a player, credit them" pattern already used for
         // pbuBy on a broken-up pass.
-        if (p.toType === 'Fumble' && p.recoveredBy){
+        // Nathan (follow-up): "it said it couldn't find player #11 and
+        // they wouldn't be included in the stats. they were on the other
+        // team." Real bug: recoveredBy was always run through numFor
+        // (which only ever matches against OUR OWN roster) regardless of
+        // which team actually recovered it. When WE fumble (p.side ===
+        // 'offense'), the recoverer is the OPPONENT -- there's no reason
+        // to expect their number to match our roster at all, and no
+        // fumble-recovery credit belongs on our own stat sheet for a play
+        // one of their players made. Only look this up (and only warn if
+        // it doesn't match) when THEY fumbled and WE recovered it.
+        if (p.toType === 'Fumble' && p.recoveredBy && p.side === 'defense'){
           const num = numFor(p.recoveredBy);
           if (num != null){
             const row = ensureDefExtraRow(num);
