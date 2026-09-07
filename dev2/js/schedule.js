@@ -1508,7 +1508,7 @@
     // already done on it isn't lost if it gets revisited later.
     return `<div style="display:flex;flex-direction:column;gap:6px;">${clips.map(c => `
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="lbLinkBtn" style="justify-content:flex-start;flex:1;">🎥 ${escapeHtml(c.title || 'Game Footage')}</a>
+        ${filmButtonHtml(c.url, `🎥 ${escapeHtml(c.title || 'Game Footage')}`, { btnClass: 'lbLinkBtn', btnStyle: 'justify-content:flex-start;flex:1;display:flex;text-decoration:none;' })}
       </div>`).join('')}</div>`;
   }
   // Nathan: "the little game footage text links at the bottom of the Game
@@ -1534,8 +1534,14 @@
   function gameFootageTopCtaHtml(game) {
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
     if (!clips.length) return '';
-    const buttons = clips.map(c => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" title="${escapeHtml(c.title || 'Game Footage')}" style="display:block;text-align:center;box-sizing:border-box;padding:9px 6px;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🎥 ${escapeHtml(footageClipLabel(c.title))}</a>`).join('');
-    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px;margin-bottom:12px;">${buttons}</div>`;
+    const slotId = 'footageGridEmbed_' + escapeHtml(game.id || 'x');
+    const buttons = clips.map(c => filmButtonHtml(c.url, `🎥 ${escapeHtml(footageClipLabel(c.title))}`, {
+      sharedSlotId: slotId,
+      title: c.title || 'Game Footage',
+      btnClass: 'navBtn',
+      btnStyle: 'display:block;text-align:center;box-sizing:border-box;padding:9px 6px;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+    })).join('');
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px;margin-bottom:6px;">${buttons}</div><div id="${slotId}" style="display:none;margin-bottom:12px;"></div>`;
   }
 
   // Coach edit list -- mutates current.gameFootage in place and re-renders
@@ -1634,6 +1640,70 @@
     wrap.appendChild(addBtn);
   }
 
+  // Nathan (follow-up): "I still hate that the google videos open in
+  // another screen - walk it to open in a local player." Same embed
+  // detection (YouTube -> real iframe embed, Google Drive -> the plain
+  // /preview embed) already proven reliable in game-wizard.html/
+  // game-playback.html -- ported here since this is a separate file with
+  // no shared code (same lesson as the resultFor bug earlier). Drive's
+  // /preview embed doesn't support a timestamp URL parameter the way
+  // YouTube does, so a "jump to timestamp" link on Drive-hosted film
+  // still can't auto-seek -- same honest limitation as everywhere else
+  // this embed technique is already used in this app.
+  function embeddableFilmSrc(url) {
+    if (!url) return null;
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (m) return { kind: 'youtube', videoId: m[1] };
+    m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind: 'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
+    return null;
+  }
+  let inlineFilmPlayerSeq = 0;
+  // Renders a button that expands an inline embedded player instead of an
+  // <a> tag that navigates to a new tab. opts.sharedSlotId points multiple
+  // buttons at the SAME embed area (for a grid of quarter buttons, where
+  // each button getting its own adjacent slot would break the grid layout)
+  // -- omit it for a single button to get its own dedicated slot right
+  // below it. Falls back to a real link only for a URL this can't embed
+  // (not a recognized YouTube/Drive link), so there's always some way to
+  // open it even when inline playback isn't possible for that link.
+  function filmButtonHtml(url, label, opts) {
+    opts = opts || {};
+    const embed = embeddableFilmSrc(url);
+    if (!embed) {
+      return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="${opts.btnClass || 'navBtn'}" style="${opts.btnStyle || 'display:block;text-align:center;text-decoration:none;'}">${label}</a>`;
+    }
+    const slotId = opts.sharedSlotId || ('inlineFilm' + (++inlineFilmPlayerSeq));
+    const dataAttrs = opts.filmGameId ? ` data-film-game-id="${escapeHtml(opts.filmGameId)}"` : '';
+    const startAttr = (opts.startSeconds != null) ? ` data-embed-start="${Math.floor(opts.startSeconds)}"` : '';
+    let html = `<button type="button" class="${opts.btnClass || 'navBtn'}" style="${opts.btnStyle || 'display:block;width:100%;text-align:center;'}" data-film-url="${escapeHtml(url)}" data-embed-target="${slotId}"${startAttr}${dataAttrs}${opts.title ? ` title="${escapeHtml(opts.title)}"` : ''}>${label}</button>`;
+    if (!opts.sharedSlotId) html += `<div id="${slotId}" style="display:none;margin-top:8px;"></div>`;
+    return html;
+  }
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-embed-target]');
+    if (!btn) return;
+    const slot = document.getElementById(btn.getAttribute('data-embed-target'));
+    if (!slot) return;
+    const embed = embeddableFilmSrc(btn.getAttribute('data-film-url'));
+    if (!embed) return;
+    const start = btn.getAttribute('data-embed-start');
+    // Clicking a DIFFERENT button pointed at the same shared slot (the
+    // quarter grid) should switch what's playing, not just toggle closed
+    // -- only collapse when re-clicking the SAME button that's already open.
+    if (slot.style.display !== 'none' && slot.getAttribute('data-showing-url') === btn.getAttribute('data-film-url')) {
+      slot.style.display = 'none'; slot.innerHTML = ''; slot.removeAttribute('data-showing-url');
+      return;
+    }
+    // Nathan: Drive's /preview embed has no timestamp URL parameter the
+    // way YouTube does -- start only ever applies to the YouTube branch.
+    slot.innerHTML = embed.kind === 'youtube'
+      ? `<iframe src="https://www.youtube.com/embed/${embed.videoId}?autoplay=1${start ? '&start=' + start : ''}" style="width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`
+      : `<iframe src="${embed.previewUrl}" style="width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+    slot.setAttribute('data-showing-url', btn.getAttribute('data-film-url'));
+    slot.style.display = '';
+  });
+
   function fmtDate(dateStr) {
     if (!dateStr) return 'Date TBD';
     // date input value is 'YYYY-MM-DD' -- parse as local, not UTC, so the
@@ -1654,18 +1724,11 @@
   // available. Would be great to clip a few plays... This is also partly
   // the telestrator piece that died." Real video trimming isn't something
   // this app can do client-side, but jumping an existing film link
-  // straight to a specific moment is -- YouTube supports a timestamp URL
-  // param directly, so "clip" becomes "this game film, starting at
-  // 1:42" instead of an actual cut-and-re-hosted video. Only YouTube
-  // reliably supports this; anything else (Drive, Hudl) just links to the
-  // film as a whole, same as it already did.
-  function filmTimestampUrl(url, seconds) {
-    if (!url || !seconds) return url;
-    const isYouTube = /youtube\.com|youtu\.be/.test(url);
-    if (!isYouTube) return url;
-    const sep = url.indexOf('?') === -1 ? '?' : '&';
-    return `${url}${sep}t=${Math.max(0, Math.round(seconds))}s`;
-  }
+  // straight to a specific moment is. This function's own job (building a
+  // YouTube ?t= URL) is now handled inside filmButtonHtml's startSeconds
+  // option instead, which plays the video inline rather than linking out
+  // to it -- see "I still hate that the google videos open in another
+  // screen" below.
   function mmssToSeconds(mmss) {
     const parts = String(mmss || '').trim().split(':');
     if (parts.length === 1) return Math.max(0, parseInt(parts[0], 10) || 0);
@@ -1691,7 +1754,7 @@
         <div class="thisweekKeysBox" style="margin-bottom:8px;">
           ${n.label ? `<div class="thisweekKeysTitle">${escapeHtml(n.label)}</div>` : ''}
           ${n.note ? `<div style="font-size:14px;font-weight:600;line-height:1.45;margin:${n.label?'4px':'0'} 0 ${game.opponentFilmUrl && n.timestamp ? '8px':'0'};">${escapeHtml(n.note)}</div>` : ''}
-          ${game.opponentFilmUrl && n.timestamp ? `<a href="${escapeHtml(filmTimestampUrl(game.opponentFilmUrl, n.timestamp))}" target="_blank" rel="noopener" class="lbLinkBtn">▶ Jump to ${secondsToMmss(n.timestamp)} in the film</a>` : ''}
+          ${game.opponentFilmUrl && n.timestamp ? filmButtonHtml(game.opponentFilmUrl, `▶ Jump to ${secondsToMmss(n.timestamp)} in the film`, { startSeconds: n.timestamp, btnClass: 'lbLinkBtn', btnStyle: 'display:flex;text-decoration:none;' }) : ''}
         </div>`).join('')}`;
   }
 
@@ -2072,7 +2135,7 @@
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
-        ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(current.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch Game Film of our Upcoming Opponent</a>` : ''}
+        ${current.opponentFilmUrl ? filmButtonHtml(current.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', { filmGameId: current.id, btnClass: 'navBtn', btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}` }) : ''}
         ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
         ${scoutingNotesReadOnlyHtml(current)}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">

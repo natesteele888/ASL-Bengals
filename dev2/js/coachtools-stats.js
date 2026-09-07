@@ -263,7 +263,8 @@
     }));
     const byCall = {}; // "Play Name [Dir]" -> {att, yds, td, fd}
     const byTag = { Motion: 0, Counter: 0, 'Boot/Naked': 0, 'Play-Action': 0, 'Pass Option': 0 };
-    const byFormation = {}; // "Wing"/"Split" -> {att, yds}
+    const byFormation = {}; // "Wing"/"Split" -> {att, yds, byCall:{...}}
+    const byDirection = {}; // "Left"/"Middle"/"Right" -> {att, yds} (run only)
     const byPlayer = {}; // name -> {att, yds, td, fd, byCall:{...}}
     let runAtt = 0, runYds = 0, passAtt = 0, passComp = 0, passYds = 0, totalCalledPlays = 0;
     function ensurePlayer(name) {
@@ -307,8 +308,24 @@
           }
         }
         if (p.formation) {
-          const f = byFormation[p.formation] || (byFormation[p.formation] = { att: 0, yds: 0 });
+          const f = byFormation[p.formation] || (byFormation[p.formation] = { att: 0, yds: 0, byCall: {} });
           f.att++; f.yds += yds;
+          // Nathan (follow-up): "have a further breakdown that shows, play
+          // with the addons that we ran out of each formation." Same
+          // callKey (already includes tags) as the team-wide byCall above,
+          // just nested under whichever formation it was run from.
+          if (callKey) {
+            const fc = f.byCall[callKey] || (f.byCall[callKey] = { name: callKey, att: 0, yds: 0 });
+            fc.att++; fc.yds += yds;
+          }
+        }
+        // Nathan (follow-up): "yards per direction for pass and rush."
+        // Direction (dir) only exists on run plays in this data model --
+        // passes don't have a direction field the way runs do (no
+        // "Left/Middle/Right" concept for a thrown ball the same way).
+        if (isUsRun && p.dir) {
+          const d = byDirection[p.dir] || (byDirection[p.dir] = { att: 0, yds: 0 });
+          d.att++; d.yds += yds;
         }
         (Array.isArray(p.tags) ? p.tags : []).forEach(t => { if (byTag[t] != null) byTag[t]++; });
         // "What plays are we calling" -- only counts plays with an actual
@@ -330,11 +347,70 @@
         }
       });
     });
-    return { byCall, byTag, byFormation, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
+    return { byCall, byTag, byFormation, byDirection, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
+  }
+
+  // Nathan (follow-up): "an offensive coach summary... quick comparison
+  // charts... I prefer the head to head style graphics showing direct
+  // comparison visually." Same visual language as schedule.js's own
+  // Head-to-Head section (value, bar growing from center, value) --
+  // rebuilt locally here since these are separate files with no shared
+  // code between them (same lesson as the resultFor bug from earlier).
+  function hhBarHtml(label, leftVal, rightVal, leftLabel, rightLabel) {
+    const total = leftVal + rightVal;
+    const leftPct = total ? (leftVal / total * 100) : 50;
+    return `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;margin-bottom:3px;"><span>${escapeHtml(leftLabel)}</span><span>${escapeHtml(label)}</span><span>${escapeHtml(rightLabel)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;margin-bottom:3px;"><span>${leftVal}</span><span>${rightVal}</span></div>
+        <div style="display:flex;height:10px;border-radius:4px;overflow:hidden;background:#f0f0f0;">
+          <span style="width:${leftPct}%;background:var(--bengal-orange,#e0201a);"></span><span style="width:${100-leftPct}%;background:#2a6fb0;"></span>
+        </div>
+      </div>`;
+  }
+  function renderOffensiveCoachSummary(wrap, report) {
+    const { runAtt, runYds, passAtt, passComp, passYds, byFormation, byDirection, byTag } = report;
+    if (!runAtt && !passAtt) return;
+    wrap.appendChild(sectionHeading('📊 Offensive Coach Summary'));
+    const box = document.createElement('div'); box.style.cssText = 'margin-bottom:18px;';
+    box.innerHTML += hhBarHtml('Run vs Pass (att)', runAtt, passAtt, 'Run', 'Pass');
+    const wing = (byFormation['Wing'] && byFormation['Wing'].att) || 0;
+    const split = (byFormation['Split'] && byFormation['Split'].att) || 0;
+    if (wing || split) box.innerHTML += hhBarHtml('Wing vs Split (att)', wing, split, 'Wing', 'Split');
+    wrap.appendChild(box);
+
+    // Direction is 3-way (Left/Middle/Right), not 2-way, so it doesn't fit
+    // the head-to-head shape above -- simple side-by-side bars instead,
+    // each scaled against whichever direction has the most yards.
+    const dirs = ['Left', 'Middle', 'Right'].map(d => Object.assign({ name: d }, byDirection[d] || { att: 0, yds: 0 }));
+    if (dirs.some(d => d.att > 0)) {
+      wrap.appendChild(sectionHeading('↔️ Yards by Direction (run only)'));
+      const dBox = document.createElement('div'); dBox.style.cssText = 'margin-bottom:18px;';
+      const maxYds = Math.max(1, ...dirs.map(d => Math.abs(d.yds)));
+      dirs.forEach(d => {
+        const pct = Math.max(4, Math.abs(d.yds) / maxYds * 100);
+        const row = document.createElement('div'); row.style.cssText = 'margin-bottom:8px;';
+        row.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;"><b>${d.name}</b><span>${d.att} att · ${d.yds} yds</span></div>
+          <div style="background:#f0f0f0;border-radius:4px;height:9px;overflow:hidden;"><span style="display:block;width:${pct}%;height:100%;background:var(--bengal-orange,#e0201a);"></span></div>`;
+        dBox.appendChild(row);
+      });
+      wrap.appendChild(dBox);
+    }
+
+    // Motion isn't a two-sided comparison the way run/pass or formation
+    // are -- a plain callout reads more honestly than forcing it into a
+    // bar shape that implies a comparison against something.
+    const motionCount = byTag['Motion'] || 0;
+    const totalSnaps = runAtt + passAtt;
+    if (totalSnaps > 0) {
+      const mRow = document.createElement('div');
+      mRow.style.cssText = 'font-size:12.5px;padding:8px 10px;background:#f7f7f7;border-radius:8px;margin-bottom:18px;';
+      mRow.innerHTML = `🌀 <b>Motion called:</b> ${motionCount} time${motionCount === 1 ? '' : 's'} out of ${totalSnaps} offensive snap${totalSnaps === 1 ? '' : 's'} (${Math.round(motionCount / totalSnaps * 100)}%)`;
+      wrap.appendChild(mRow);
+    }
   }
 
   function renderPlayCallReport(wrap, report) {
-    const { byCall, byTag, byFormation, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays } = report;
+    const { byCall, byTag, byFormation, byDirection, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays } = report;
     wrap.appendChild(sectionHeading('📋 Play Call Report'));
     if (!totalCalledPlays) {
       const empty = document.createElement('div'); empty.className = 'lbEmpty';
@@ -405,14 +481,29 @@
     wrap.appendChild(tagBox);
 
     // Formation usage, same shape as the play-call table above.
+    // Nathan (follow-up): "have a further breakdown that shows, play with
+    // the addons that we ran out of each formation." Each formation now
+    // expands to show exactly which calls (tags included, so a Counter
+    // run shows as its own line here too) were actually run out of it,
+    // not just the formation's own aggregate attempts/average.
     const formRows = Object.entries(byFormation).sort((a, b) => b[1].att - a[1].att);
     if (formRows.length) {
       wrap.appendChild(sectionHeading('📐 Formation Usage'));
       const fBox = document.createElement('div'); fBox.style.cssText = 'margin-bottom:18px;';
       formRows.forEach(([name, f]) => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;';
-        row.innerHTML = `<b>${escapeHtml(name)}</b><span>${f.att} att · ${f.att?(f.yds/f.att).toFixed(1):'0.0'} avg</span>`;
+        row.style.cssText = 'padding:6px 0;border-bottom:1px solid #f0f0f0;';
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;';
+        header.innerHTML = `<span>${escapeHtml(name)}</span><span>${f.att} att · ${f.att?(f.yds/f.att).toFixed(1):'0.0'} avg</span>`;
+        row.appendChild(header);
+        const calls = Object.values(f.byCall || {}).sort((a, b) => b.att - a.att);
+        calls.forEach(c => {
+          const sub = document.createElement('div');
+          sub.style.cssText = 'display:flex;justify-content:space-between;font-size:11.5px;color:#666;padding:2px 0 2px 12px;';
+          sub.innerHTML = `<span>${escapeHtml(c.name)}</span><span>${c.att} att · ${c.att?(c.yds/c.att).toFixed(1):'0.0'} ypc</span>`;
+          row.appendChild(sub);
+        });
         fBox.appendChild(row);
       });
       wrap.appendChild(fBox);
@@ -559,6 +650,7 @@
     selRow.appendChild(sel);
     wrap.appendChild(selRow);
 
+    renderOffensiveCoachSummary(wrap, report);
     renderPlayCallReport(wrap, report);
 
     const { byDir, byPlayer } = runTendencies();
