@@ -1242,7 +1242,7 @@
         // for our own offense.
         const tagsWrap = document.createElement('div'); tagsWrap.innerHTML = '<div class="fieldLabel">Add-ons (optional)</div>';
         const tagsRow = document.createElement('div'); tagsRow.className = 'chipRow';
-        ['Motion','Counter','Boot/Naked','Play-Action'].forEach(function(t){
+        ['Motion','Counter','Boot/Naked','Play-Action','Pass Option'].forEach(function(t){
           const chip = document.createElement('div');
           const on = (draft.tags || []).indexOf(t) !== -1;
           chip.className = 'toggleChip' + (on ? ' on' : '');
@@ -1316,7 +1316,7 @@
         fieldsArea.appendChild(fieldBlock('Opponent Passer (optional)', textInput('oppPasser', "Opponent's QB, if known")));
         fieldsArea.appendChild(fieldBlock('Opponent Target (optional)', textInput('oppTarget', "Opponent's receiver, if known")));
       }
-      fieldsArea.appendChild(fieldBlock('Result', optChips('result', ['Complete','Incomplete'])));
+      fieldsArea.appendChild(fieldBlock('Result', optChips('result', ['Complete','Incomplete','Sacked'])));
       if (draft.result === 'Complete'){
         snapSpotFields(isUsPass).forEach(function(row){ fieldsArea.appendChild(row); });
         fieldsArea.appendChild(downDistanceField());
@@ -1342,6 +1342,16 @@
         // snap), so it only needs the one spot, not a start+end pair like
         // a completion gets from snapSpotFields.
         fieldsArea.appendChild(singleSpotField('Line of Scrimmage (spot)'));
+        fieldsArea.appendChild(downDistanceField());
+      } else if (draft.result === 'Sacked'){
+        // Nathan (follow-up): "There are also instances when players get
+        // sacked instead of a rush for a loss. I don't want it to look
+        // like it was a designed run." Stays a 'pass' type entry with
+        // real start/end spots (a sack does move the ball, backward) --
+        // it just never had anywhere to live before Complete/Incomplete,
+        // which is exactly what was pushing coaches to log it as a Run
+        // for negative yards instead.
+        snapSpotFields(isUsPass).forEach(function(row){ fieldsArea.appendChild(row); });
         fieldsArea.appendChild(downDistanceField());
       }
     }
@@ -1602,6 +1612,16 @@
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
         return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
+      // Nathan: "There are also instances when players get sacked instead
+      // of a rush for a loss. I don't want it to look like it was a
+      // designed run." Its own line, not folded into the Complete branch
+      // below (which would otherwise read as a completed pass FOR
+      // negative yards, i.e. "to ?" with no receiver, which is its own
+      // kind of confusing) and not a Run at all -- still whatever play was
+      // actually called, it just broke down into a sack.
+      if (p.result==='Sacked'){
+        return prefix + 'Pass — ' + passerTxt + ' sacked for ' + p.yards + ' yds' + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+      }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
         (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
@@ -1719,7 +1739,7 @@
   function advanceSpotForPlay(entry){
     if (entry.type === 'run'){
       currentSpot = clampSpot(currentSpot + (entry.runTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
-    } else if (entry.type === 'pass' && entry.result === 'Complete'){
+    } else if (entry.type === 'pass' && (entry.result === 'Complete' || entry.result === 'Sacked')){
       currentSpot = clampSpot(currentSpot + (entry.passTeam !== 'Opponent' ? Number(entry.yards||0) : -Number(entry.yards||0)));
     } else if (entry.type === 'kick'){
       if (entry.onside){
@@ -1833,7 +1853,7 @@
   function advanceDownDistanceForPlay(entry){
     function yardsAndDirFor(e){
       if (e.type === 'run') return { yards: Number(e.yards||0), forward100: e.runTeam !== 'Opponent' };
-      if (e.type === 'pass' && e.result === 'Complete') return { yards: Number(e.yards||0), forward100: e.passTeam !== 'Opponent' };
+      if (e.type === 'pass' && (e.result === 'Complete' || e.result === 'Sacked')) return { yards: Number(e.yards||0), forward100: e.passTeam !== 'Opponent' };
       if (e.type === 'tackle'){
         const startAbs = absoluteSpot(e.startSide, e.startYard), endAbs = absoluteSpot(e.endSide, e.endYard);
         return { yards: signedYardsFromSpots(startAbs, endAbs, false), forward100: false }; // opponent always has the ball on a tackle
@@ -2367,9 +2387,18 @@
           (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td ? ' · TD return' : '') +
           (p.note ? ' ('+p.note+')' : ''));
         // Nathan: "add fumbles recovered along with yards per carry."
-        if (p.toType === 'Fumble' && p.recoveredBy){
+        // Nathan (follow-up): "it said it couldn't find player #11...
+        // they were on the other team" + "Jacob W doesn't have his 1st
+        // quarter interception showing up." Same two fixes as
+        // translatePlaysForLive's copy of this: (1) only credit a
+        // recovery to OUR defExtra table when WE actually recovered it
+        // (p.side==='defense' -- THEY had the ball, WE took it away),
+        // never when the opponent recovered our own fumble, and (2) an
+        // Interception needs the exact same crediting Fumble already got,
+        // which it was simply missing entirely.
+        if (p.recoveredBy && p.side === 'defense' && (p.toType === 'Fumble' || p.toType === 'Interception')){
           const d = defExtra[p.recoveredBy] || (defExtra[p.recoveredBy] = {name:p.recoveredBy, int:0, pbu:0, sack:0, fum:0, td:0});
-          d.fum++;
+          if (p.toType === 'Fumble') d.fum++; else d.int++;
         }
       }
       if (p.type==='score'){
@@ -3054,6 +3083,20 @@
           if (num != null){
             const row = ensureDefExtraRow(num);
             row.fum += 1;
+            if (p.td) row.td = true;
+          }
+        }
+        // Nathan (follow-up): "Jacob W doesn't have his 1st quarter
+        // interception showing up." A logged Interception never had a
+        // matching credit branch at all here -- only Fumble did. Same
+        // team-check as the fumble fix just above (an interception only
+        // makes sense as THEIR offense throwing it and OUR defense
+        // catching it, i.e. p.side === 'defense').
+        if (p.toType === 'Interception' && p.recoveredBy && p.side === 'defense'){
+          const num = numFor(p.recoveredBy);
+          if (num != null){
+            const row = ensureDefExtraRow(num);
+            row.int += 1;
             if (p.td) row.td = true;
           }
         }

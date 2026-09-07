@@ -255,6 +255,9 @@
         let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
         return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
       }
+      if (p.result==='Sacked'){
+        return prefix + 'Pass — ' + passerTxt + ' sacked for ' + p.yards + ' yds' + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+      }
       return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
         (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
     }
@@ -890,7 +893,7 @@
   // than inventing a second version of any of it.
   const PLAYBOOK = ['Inside Zone','Outside Zone','Option','Blast','Double Blast','Option Pass','Sweep','Shuffle Pass'];
   const FORMATIONS = ['Wing','Split'];
-  const PLAY_TAGS = ['Motion','Counter','Boot/Naked','Play-Action'];
+  const PLAY_TAGS = ['Motion','Counter','Boot/Naked','Play-Action','Pass Option'];
 
   function getQuickPickPlayers(){
     const nums = {};
@@ -1270,6 +1273,7 @@
     else if (phase === 'turnoverDetail') renderPhaseTurnoverDetail(card);
     else if (phase === 'puntDetail') renderPhasePuntDetail(card);
     else if (phase === 'resultSpot') renderPhaseResultSpot(card);
+    else if (phase === 'sackSpot') renderPhaseSackSpot(card);
     else if (phase === 'tackler') renderPhaseTackler(card);
     else if (phase === 'extraPoint') renderPhaseExtraPoint(card);
     else if (phase === 'postScoreKickoff') renderPhasePostScoreKickoff(card);
@@ -1393,16 +1397,37 @@
       renderPlayerChooser(card, 'Opponent Passer', wiz.play, 'oppPasser', {optional:true});
       wiz.play.oppTarget = wiz.play.oppTarget || '';
     }
-    chipGroupField(card, 'Result', wiz.play, 'result', ['Complete','Incomplete']);
+    chipGroupField(card, 'Result', wiz.play, 'result', ['Complete','Incomplete','Sacked']);
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
     next.addEventListener('click', function(){
-      if (!wiz.play.result){ alert('Pick Complete or Incomplete first.'); return; }
+      if (!wiz.play.result){ alert('Pick Complete, Incomplete, or Sacked first.'); return; }
       if (wiz.play.result === 'Incomplete'){ commitCurrentPlay(); return; } // Nathan: "if incomplete, ball stays in the same spot as previous play" -- nothing left to ask
-      wiz.play.phase = 'resultSpot';
+      // Nathan (follow-up): "There are also instances when players get
+      // sacked instead of a rush for a loss. I don't want it to look like
+      // it was a designed run." A sack used to have no home on a Pass
+      // play at all -- Complete/Incomplete were the only options, so a
+      // sack could only get logged as a Run for negative yards, which
+      // then shows up in the Play Call Report as a called RUSHING play
+      // that lost yardage instead of a broken-down passing play. This
+      // stays a 'pass' type entry either way, just with its own simple
+      // spot phase (no "how did it end" chip -- a sack isn't a touchdown
+      // or out of bounds the way a completed pass can be).
+      wiz.play.phase = wiz.play.result === 'Sacked' ? 'sackSpot' : 'resultSpot';
       renderWizard();
     });
     card.appendChild(next);
     backBtn(card, 'playType');
+  }
+
+  function renderPhaseSackSpot(card){
+    card.innerHTML = '<h2>💥 Sacked</h2><div class="sub">Where the QB went down -- this stays logged as a passing play, not a run.</div>';
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Sack & Continue';
+    next.addEventListener('click', function(){ commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'passDetail');
   }
 
   // Nathan: "It needs to understand basic football knowledge... if a
@@ -1859,6 +1884,26 @@
           coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
           down: g.down, distance: g.distance,
         }));
+      } else if (wiz.play.result === 'Sacked'){
+        // Nathan: "There are also instances when players get sacked
+        // instead of a rush for a loss. I don't want it to look like it
+        // was a designed run." Still a 'pass' type entry, still keeps
+        // whatever playCall was actually called (the play WAS a called
+        // pass -- it just broke down into a sack instead of a
+        // completion), so the Play Call Report correctly counts this
+        // against passing, not as a designed rushing play that happened
+        // to lose yards.
+        const sy = sideYardFromAbs(g.spot);
+        startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Sacked',
+          passer: wiz.play.passer, oppPasser: wiz.play.oppPasser,
+          startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, yards: yards,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          down: g.down, distance: g.distance,
+        }));
       } else {
         const sy = sideYardFromAbs(g.spot);
         startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
@@ -1903,7 +1948,7 @@
       entries.forEach(function(e){ plays.push(e); });
 
       // ---- advance spot ----
-      if (type === 'Run' || (type === 'Pass' && wiz.play.result === 'Complete')){
+      if (type === 'Run' || (type === 'Pass' && (wiz.play.result === 'Complete' || wiz.play.result === 'Sacked'))){
         g.spot = clampSpot(endAbs);
       } else if (type === 'Punt' || type === 'Turnover'){
         const endA = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
@@ -1914,7 +1959,12 @@
       }
 
       // ---- advance down/distance ----
-      if (type === 'Run' || (type === 'Pass' && wiz.play.result === 'Complete')){
+      // Sacked shares this branch with Run/Complete on purpose -- converted
+      // is always false for a sack (never set in that branch above), so it
+      // correctly falls to "down+1, distance grows by however many yards
+      // were lost" the same way a stuffed run does, without needing its
+      // own separate case.
+      if (type === 'Run' || (type === 'Pass' && (wiz.play.result === 'Complete' || wiz.play.result === 'Sacked'))){
         if (converted){ g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot)); }
         else { g.down = g.down + 1; g.distance = Math.max(1, g.distance - signedYardsFromSpots(startAbs, endAbs, onOffense)); }
       } else if (type === 'Pass' && wiz.play.result === 'Incomplete'){
@@ -2015,7 +2065,7 @@
       {key:'td', label:'Touchdown', kind:'toggle'},
     ],
     pass: [
-      {key:'result', label:'Complete / Incomplete', kind:'chip', options:['Complete','Incomplete']},
+      {key:'result', label:'Complete / Incomplete / Sacked', kind:'chip', options:['Complete','Incomplete','Sacked']},
       {key:'formation', label:'Formation', kind:'chip', options:FORMATIONS},
       {key:'formationDir', label:'Formation Direction', kind:'chip', options:['Left','Right']},
       {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
@@ -2133,7 +2183,7 @@
       const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
       wrap.appendChild(l);
       const row = document.createElement('div'); row.className = 'chipRow';
-      ['Motion','Counter','Boot/Naked','Play-Action'].forEach(function(t){
+      ['Motion','Counter','Boot/Naked','Play-Action','Pass Option'].forEach(function(t){
         const on = (auditDraft[f.key] || []).indexOf(t) !== -1;
         const c = document.createElement('div'); c.className = 'optChip' + (on ? ' active' : '');
         c.textContent = t;

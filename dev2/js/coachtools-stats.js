@@ -194,7 +194,7 @@
   function runTendencies() {
     const byDir = {}; DIRS.forEach(d => { byDir[d] = { att: 0, yds: 0 }; });
     const byPlayer = {};
-    games.forEach(g => {
+    games.filter(g => !tendenciesGameFilter || g.id === tendenciesGameFilter).forEach(g => {
       if (!g.statSheet) return;
       const ss = window.normalizeGameStatSheet(g.statSheet);
       (ss.rushing || []).forEach(row => {
@@ -224,30 +224,64 @@
   // playCall, direction, and motion/counter/boot/play-action tags only
   // exist on the RAW play-by-play (statKeeperLogs/{gameId}.json), which
   // this fetches directly, one request per game, in parallel.
-  async function computePlayCallReport() {
+  //
+  // Nathan (follow-up): "I should have visibility to plays we called for
+  // each game logged as well as numbers over the season." All games are
+  // still fetched every time (the season is small enough that re-fetching
+  // per game-selector change isn't worth the extra complexity of caching)
+  // -- gameId just controls which of the already-fetched logs get counted.
+  //
+  // Nathan (follow-up): "Metrics on players and what they have had the
+  // most success with. Usage numbers and tendencies." byPlayer below is
+  // keyed by carrier/passer/target name, same idea as byCall but per
+  // person instead of per play -- each one also tracks ITS OWN byCall
+  // breakdown, so "what has Will J had the most success with" is answered
+  // directly instead of only being visible team-wide.
+  async function computePlayCallReport(gameId) {
     const list = sortedGames();
     const logs = await Promise.all(list.map(async g => {
       try {
         const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${g.id}.json`);
         const res = await fetch(url);
         const gs = res.ok ? await res.json() : null;
-        return (gs && Array.isArray(gs.plays)) ? gs.plays : [];
-      } catch (e) { return []; }
+        return { gameId: g.id, plays: (gs && Array.isArray(gs.plays)) ? gs.plays : [] };
+      } catch (e) { return { gameId: g.id, plays: [] }; }
     }));
     const byCall = {}; // "Play Name [Dir]" -> {att, yds, td, fd}
-    const byTag = { Motion: 0, Counter: 0, 'Boot/Naked': 0, 'Play-Action': 0 };
+    const byTag = { Motion: 0, Counter: 0, 'Boot/Naked': 0, 'Play-Action': 0, 'Pass Option': 0 };
     const byFormation = {}; // "Wing"/"Split" -> {att, yds}
+    const byPlayer = {}; // name -> {att, yds, td, fd, byCall:{...}}
     let runAtt = 0, runYds = 0, passAtt = 0, passComp = 0, passYds = 0, totalCalledPlays = 0;
-    logs.forEach(plays => {
+    function ensurePlayer(name) {
+      return byPlayer[name] || (byPlayer[name] = { name, att: 0, yds: 0, td: 0, fd: 0, byCall: {} });
+    }
+    logs.forEach(({ gameId: gid, plays }) => {
+      if (gameId && gid !== gameId) return;
       plays.forEach(p => {
         const isUsRun = p.type === 'run' && p.runTeam !== 'Opponent' && !p.fumbledExchange;
         const isUsPassAtt = p.type === 'pass' && p.passTeam !== 'Opponent';
         if (!isUsRun && !isUsPassAtt) return;
         const yds = Number(p.yards) || 0;
-        if (isUsRun) { runAtt++; runYds += yds; }
-        else {
+        const callKey = p.playCall ? (p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '')) : null;
+        if (isUsRun) {
+          runAtt++; runYds += yds;
+          if (p.carrier) {
+            const pl = ensurePlayer(p.carrier);
+            pl.att++; pl.yds += yds; if (p.td) pl.td++; if (p.firstDown) pl.fd++;
+            if (callKey) {
+              const pc = pl.byCall[callKey] || (pl.byCall[callKey] = { name: callKey, att: 0, yds: 0 });
+              pc.att++; pc.yds += yds;
+            }
+          }
+        } else {
           passAtt++;
-          if (p.result === 'Complete') { passComp++; passYds += yds; }
+          if (p.result === 'Complete') {
+            passComp++; passYds += yds;
+            if (p.target) {
+              const pl = ensurePlayer(p.target + ' (rec)');
+              pl.att++; pl.yds += yds; if (p.td) pl.td++; if (p.firstDown) pl.fd++;
+            }
+          }
         }
         if (p.formation) {
           const f = byFormation[p.formation] || (byFormation[p.formation] = { att: 0, yds: 0 });
@@ -257,20 +291,27 @@
         // "What plays are we calling" -- only counts plays with an actual
         // named call (playCall from run/pass), not every single snap
         // (kneels/penalties/etc. don't have one).
-        if (p.playCall && (isUsRun || (isUsPassAtt && p.result))) {
+        if (callKey && (isUsRun || (isUsPassAtt && p.result))) {
           totalCalledPlays++;
-          const key = p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '');
-          const c = byCall[key] || (byCall[key] = { name: key, att: 0, yds: 0, td: 0, fd: 0 });
+          const c = byCall[callKey] || (byCall[callKey] = { name: callKey, att: 0, yds: 0, td: 0, fd: 0 });
           c.att++;
-          if (isUsRun || p.result === 'Complete') { c.yds += yds; if (p.td) c.td++; if (p.firstDown) c.fd++; }
+          // Nathan (follow-up): "players get sacked instead of a rush for
+          // a loss. I don't want it to look like it was a designed run."
+          // Sacked already stays a 'pass' type (fixed at the source in
+          // game-wizard.html/stat-keeper.html) -- but the yardage lost on
+          // that sack needs to actually count against the play call it
+          // broke down from, or the report would show that call as an
+          // "attempt" with a suspiciously good average because its worst
+          // outcomes were silently excluded.
+          if (isUsRun || p.result === 'Complete' || p.result === 'Sacked') { c.yds += yds; if (p.td) c.td++; if (p.firstDown) c.fd++; }
         }
       });
     });
-    return { byCall, byTag, byFormation, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
+    return { byCall, byTag, byFormation, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
   }
 
   function renderPlayCallReport(wrap, report) {
-    const { byCall, byTag, byFormation, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays } = report;
+    const { byCall, byTag, byFormation, byPlayer, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays } = report;
     wrap.appendChild(sectionHeading('📋 Play Call Report'));
     if (!totalCalledPlays) {
       const empty = document.createElement('div'); empty.className = 'lbEmpty';
@@ -353,12 +394,61 @@
       });
       wrap.appendChild(fBox);
     }
+
+    // Nathan (follow-up): "Metrics on players and what they have had the
+    // most success with. Usage numbers and tendencies." Sorted by usage
+    // (touches) first, same as "Who Runs Where" below it -- the coach's
+    // own framing was "usage numbers AND tendencies", in that order, and
+    // each player's own best-and-worst call answers "what have THEY had
+    // success with" directly instead of only showing the team-wide split.
+    const playerRows = Object.values(byPlayer).filter(p => p.att > 0).sort((a, b) => b.att - a.att);
+    if (playerRows.length) {
+      wrap.appendChild(sectionHeading('👤 Player Usage & Success'));
+      const pBox = document.createElement('div'); pBox.style.cssText = 'margin-bottom:18px;';
+      playerRows.forEach(p => {
+        const ypc = p.att ? (p.yds / p.att).toFixed(1) : '0.0';
+        const calls = Object.values(p.byCall).sort((a, b) => b.att - a.att);
+        const topCall = calls[0];
+        const card = document.createElement('div');
+        card.style.cssText = 'padding:8px 0;border-bottom:1px solid #f0f0f0;';
+        card.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:12.5px;">
+            <b>${escapeHtml(p.name)}</b>
+            <span>${p.att} touches · ${p.yds} yds · <span style="font-weight:800;color:${Number(ypc)>=5?'#1a7a3a':Number(ypc)<2?'#c0342a':'#333'};">${ypc} avg</span>${p.td?` · ${p.td} TD`:''}</span>
+          </div>
+          ${topCall ? `<div style="font-size:11.5px;color:#888;margin-top:2px;">Most used: ${escapeHtml(topCall.name)} (${topCall.att} att, ${topCall.att?(topCall.yds/topCall.att).toFixed(1):'0.0'} ypc)</div>` : ''}`;
+        pBox.appendChild(card);
+      });
+      wrap.appendChild(pBox);
+    }
   }
 
+  // Nathan (follow-up): "I should have visibility to plays we called for
+  // each game logged as well as numbers over the season." Persisted at
+  // module scope (not local to renderTendencies) so picking a game sticks
+  // if the coach flips to another sub-tab and back.
+  let tendenciesGameFilter = null; // null = whole season
   async function renderTendencies(wrap) {
     wrap.innerHTML = '<div class="lbSub" style="text-align:center;">Loading…</div>';
-    const report = await computePlayCallReport();
+    const report = await computePlayCallReport(tendenciesGameFilter);
     wrap.innerHTML = '';
+
+    const selRow = document.createElement('div');
+    selRow.style.cssText = 'margin-bottom:14px;';
+    const sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;padding:9px;border:2px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;background:#fff;';
+    const seasonOpt = document.createElement('option'); seasonOpt.value = ''; seasonOpt.textContent = '📅 Whole Season';
+    sel.appendChild(seasonOpt);
+    sortedGames().filter(g => resultFor(g)).forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.date ? ' — ' + g.date : ''}`;
+      if (g.id === tendenciesGameFilter) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => { tendenciesGameFilter = sel.value || null; renderTendencies(wrap); });
+    selRow.appendChild(sel);
+    wrap.appendChild(selRow);
+
     renderPlayCallReport(wrap, report);
 
     const { byDir, byPlayer } = runTendencies();
