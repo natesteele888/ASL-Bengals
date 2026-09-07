@@ -123,20 +123,38 @@
        "LOADING..." baked into the artwork itself, including a static decorative bar under it -- the old circular-logo-plus-bar approach is
        replaced entirely by this full-bleed background, with only the real, script-driven progress bar overlaid roughly where the art's own
        static one sits, so it reads as that bar actually filling in rather than two separate loading indicators stacked on the page.
-       Nathan (follow-up): "on mobile, the loading screen isn't showing correctly, can't see all of it." background-size:cover was the bug --
-       it scales to FILL the screen, and a phone's aspect ratio is much taller/narrower than this artwork, so it was scaling up and cropping
-       both the top and bottom off-screen. #appLoadingBg is now a separate layer sized with `contain` (shows the whole image, letterboxed with
-       the dark background color rather than cropped) and also carries the "GIF movement... loading bar moving too" animation -- a slow,
-       subtle breathing zoom, since there's no actual GIF file to restore (the source Nathan provided was a static image), respecting
-       prefers-reduced-motion for anyone with that OS setting on. -->
-  <div id="appLoadingBg" style="position:absolute;inset:0;background:url('assets/images/loading-desktop.jpg') center center / contain no-repeat;animation:appLoadingBreathe 6s ease-in-out infinite;"></div>
+       Nathan (follow-up): "desktop image is showing on mobile - that doesn't work." Real bug in the previous version: the image URL was set as
+       an INLINE style attribute on this element, and inline styles always beat rules in a <style> block -- media query or not -- so the mobile
+       override below could never actually win no matter how it was written. Both background layers below get their image from the stylesheet
+       now instead, which is the only way the media query swap can work at all.
+       Nathan (follow-up): "add a secondary blurred version under the clean version to help fill the areas... accommodate the screen ratio."
+       #appLoadingBgBlur sits behind the sharp, fully-visible #appLoadingBg layer -- same image, scaled up and blurred so its cropped, softened
+       edges fill the letterboxed space `contain` leaves empty, rather than that space just being flat background color. Common "blurred
+       backdrop" technique (Spotify's now-playing screen, Apple Photos, etc.) -- I don't have an image-generation tool available to actually
+       paint in new background content the way "generate more background" would need, so this is the CSS-only version of that idea. -->
+  <div id="appLoadingBgBlur"></div>
+  <div id="appLoadingBg"></div>
   <div style="position:relative;width:17%;max-width:180px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:9%;">
     <div id="appLoadingBar" style="width:0%;height:100%;background:#ff6a13;transition:width .2s ease;"></div>
   </div>
 </div>
 <style>
+  #appLoadingBg, #appLoadingBgBlur {
+    position: absolute; inset: 0;
+    background-image: url('assets/images/loading-desktop.jpg');
+    background-position: center; background-repeat: no-repeat;
+  }
+  #appLoadingBg {
+    background-size: contain;
+    animation: appLoadingBreathe 6s ease-in-out infinite;
+  }
+  #appLoadingBgBlur {
+    background-size: cover;
+    filter: blur(28px) brightness(.5);
+    transform: scale(1.15); /* avoids the blur's soft edge showing a hard, un-blurred border */
+  }
   @media (max-width: 640px) {
-    #appLoadingBg { background-image: url('assets/images/loading-mobile.jpg'); }
+    #appLoadingBg, #appLoadingBgBlur { background-image: url('assets/images/loading-mobile.jpg'); }
   }
   @keyframes appLoadingBreathe {
     0%, 100% { transform: scale(1); }
