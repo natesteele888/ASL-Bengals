@@ -2187,6 +2187,20 @@ if (window.ResizeObserver) {
   const loginScreenEl = document.getElementById('loginScreen');
   const stillNeedsLogin = loginScreenEl && !loginScreenEl.classList.contains('hide');
   if (stillNeedsLogin && appLoadingOverlay) appLoadingOverlay.style.display = 'none';
+  // Nathan (follow-up): "I am now stuck on the loading screen forever."
+  // Independent second safety net alongside the try/catch added around
+  // the script-loading loop below -- if ANYTHING else in boot() throws or
+  // hangs for a reason this file's own error handling doesn't anticipate,
+  // this fires regardless and gets the person into the app rather than
+  // leaving them stranded behind the overlay with no way in at all. 20s
+  // is generous enough to never fire on a normal load, even a slow one.
+  const forceHideOverlayTimer = setTimeout(() => {
+    if (appLoadingOverlay && appLoadingOverlay.style.display !== 'none') {
+      console.error('[boot] loading overlay force-hidden after 20s timeout -- something in boot() did not complete normally.');
+      appLoadingOverlay.style.opacity = '0';
+      setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
+    }
+  }, 20000);
 
   // One-time leaderboard cleanup + Houston route What's New note (see
   // cloud-auth.js) -- fire-and-forget so neither ever delays boot; both
@@ -2206,8 +2220,23 @@ if (window.ResizeObserver) {
 
   const appLoadingBar = document.getElementById('appLoadingBar');
   let loadedCount = 0;
+  // Nathan (follow-up): "I am now stuck on the loading screen forever."
+  // Root cause: this loop had no error handling at all -- if even ONE of
+  // the ~39 scripts fails to load (a dropped request, a momentary CDN
+  // issue, anything), loadScript's promise rejects, and since nothing
+  // here catches it, the whole async boot() function throws right there
+  // and never reaches the code that hides the overlay, below. One bad
+  // network request for one script permanently strands the entire page
+  // behind the loading screen. Logging the failure and continuing means a
+  // single script failing degrades that one feature instead of the whole
+  // app; the hard timeout a few lines down is the second, independent
+  // safety net in case something else entirely goes wrong.
   for (const src of scripts) {
-    await loadScript(withV(src));
+    try {
+      await loadScript(withV(src));
+    } catch (err) {
+      console.error('[boot] failed to load script (continuing anyway):', src, err);
+    }
     loadedCount++;
     if (appLoadingBar) appLoadingBar.style.width = Math.round((loadedCount / scripts.length) * 100) + '%';
   }
@@ -2231,6 +2260,7 @@ if (window.ResizeObserver) {
   // then display:none once the fade's finished so it's not sitting there
   // invisible-but-still-in-the-way.
   if (appLoadingOverlay) {
+    clearTimeout(forceHideOverlayTimer); // boot() completed normally -- the 20s safety net isn't needed
     const minDisplayMs = 1400;
     const elapsed = Date.now() - bootStartTime;
     if (elapsed < minDisplayMs) await new Promise(r => setTimeout(r, minDisplayMs - elapsed));
