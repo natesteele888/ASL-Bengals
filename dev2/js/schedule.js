@@ -483,25 +483,50 @@
   // second use of it. Extra Point events aren't narrated as their own
   // sentence -- they get folded into the preceding touchdown's score, so
   // "touchdown, then the PAT" reads as the one score it actually is.
+  // Nathan (follow-up): "engaging descriptive recap... Key plays such as
+  // interceptions and fumbles, scoring plays and big gains and the
+  // context of down and distance." Now narrates Turnover and Big Gain
+  // events alongside Touchdown/Safety, in the same chronological order
+  // they happened. Also fixes a real bug from the first version: it used
+  // to lowercase the first letter of e.desc to make "with {desc}" read
+  // naturally for generic descriptions -- but e.desc usually starts with
+  // a player's actual name ("Jahbari Kuykendall 90 Yd..."), so that was
+  // quietly lowercasing real names. Colon-based sentence templates below
+  // avoid needing to touch the description's capitalization at all.
   function buildNarrativeRecap(events, game) {
     if (!events || !events.length) return '';
     const oppName = game.opponent || 'the opponent';
     const sentences = [];
     let lastScoringTeam = null;
+    let scoringSentenceCount = 0;
     events.forEach((e, i) => {
-      if (e.kind !== 'Touchdown' && e.kind !== 'Safety') return;
-      let finalUs = e.scoreUs, finalOpp = e.scoreOpp;
-      const next = events[i + 1];
-      if (e.kind === 'Touchdown' && next && next.kind === 'Extra Point' && next.team === e.team) {
-        finalUs = next.scoreUs; finalOpp = next.scoreOpp;
+      if (e.kind === 'Extra Point') return; // folded into the preceding touchdown's sentence, never its own
+      if (e.kind === 'Touchdown' || e.kind === 'Safety') {
+        let finalUs = e.scoreUs, finalOpp = e.scoreOpp;
+        const next = events[i + 1];
+        if (e.kind === 'Touchdown' && next && next.kind === 'Extra Point' && next.team === e.team) {
+          finalUs = next.scoreUs; finalOpp = next.scoreOpp;
+        }
+        const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
+        const verb = scoringSentenceCount === 0 ? 'opened the scoring'
+          : (e.team === lastScoringTeam ? 'extended the lead' : 'answered back');
+        const driveTxt = e.plays != null ? ` (${e.plays} play${e.plays === 1 ? '' : 's'}, ${e.yards} yard${e.yards === 1 ? '' : 's'})` : '';
+        const desc = e.kind === 'Safety' ? 'a safety' : e.desc;
+        sentences.push(`${teamLabel} ${verb} with ${desc}${driveTxt}, making it ${finalUs}-${finalOpp}.`);
+        lastScoringTeam = e.team;
+        scoringSentenceCount++;
+        return;
       }
-      const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
-      const verb = sentences.length === 0 ? 'opened the scoring'
-        : (e.team === lastScoringTeam ? 'extended the lead' : 'answered back');
-      const driveTxt = e.plays != null ? ` (${e.plays} play${e.plays === 1 ? '' : 's'}, ${e.yards} yard${e.yards === 1 ? '' : 's'})` : '';
-      const desc = e.kind === 'Safety' ? 'a safety' : e.desc.charAt(0).toLowerCase() + e.desc.slice(1);
-      sentences.push(`${teamLabel} ${verb} with ${desc}${driveTxt}, making it ${finalUs}-${finalOpp}.`);
-      lastScoringTeam = e.team;
+      if (e.kind === 'Turnover') {
+        const teamLabel = e.team === 'Us' ? 'The Bengals defense' : `${oppName}'s defense`;
+        sentences.push(`${teamLabel} forced a turnover: ${e.desc}.`);
+        return;
+      }
+      if (e.kind === 'Big Gain') {
+        const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
+        sentences.push(`${teamLabel} broke off a big play: ${e.desc}.`);
+        return;
+      }
     });
     return sentences.join(' ');
   }
@@ -731,7 +756,21 @@
     if (p.type === 'pass') return `${p.target || 'Opponent'} ${Number(p.yards)||0} Yd Pass from ${p.passer || (scoringTeam === 'Us' ? 'Opponent' : 'Us')}`;
     return 'Score';
   }
-  async function computeScoringPlays(gameId) {
+  // Nathan (follow-up): "Key plays such as interceptions and fumbles,
+  // scoring plays and big gains and the context of down and distance
+  // should allow for a more compelling approach." opts.includeKeyPlays
+  // adds Turnover and Big Gain events to the SAME walk this function
+  // already does for scores -- defaults to false so the existing Scoring
+  // Plays timeline (which calls this with no options) keeps showing only
+  // actual scores, unaffected. The recap builder below calls this WITH
+  // the option on.
+  async function computeScoringPlays(gameId, opts) {
+    const includeKeyPlays = !!(opts && opts.includeKeyPlays);
+    const BIG_GAIN_YARDS = 15;
+    function downDistTxt(p) {
+      if (p.down == null || p.distance == null) return '';
+      return ` on ${['1st','2nd','3rd','4th'][Math.max(0, Math.min(3, p.down - 1))]} & ${p.distance}`;
+    }
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
     const res = await fetch(url);
     const gs = res.ok ? await res.json() : null;
@@ -748,6 +787,8 @@
           if (scoringSide === 'Us') scoreUs += 6; else scoreOpp += 6;
           events.push({ quarter, team: scoringSide, kind: 'Touchdown', desc: scoringPlayDesc(p, scoringSide), scoreUs, scoreOpp, plays: drivePlays, yards: driveYards });
           driveTeam = null; drivePlays = 0; driveYards = 0; // waiting for the next kickoff to start a fresh drive
+        } else if (includeKeyPlays && p.type === 'turnover') {
+          events.push({ quarter, team: scoringSide, kind: 'Turnover', desc: `${p.toType || 'Turnover'} — lost by ${p.lostBy || '?'}, recovered by ${p.recoveredBy || 'the defense'}${downDistTxt(p)}`, scoreUs, scoreOpp, plays: null, yards: null });
         }
         return;
       }
@@ -755,10 +796,13 @@
         const team = p.runTeam || p.passTeam || p.kneelTeam || (p.side === 'offense' ? 'Us' : 'Opponent');
         if (team !== driveTeam) { driveTeam = team; drivePlays = 0; driveYards = 0; } // possession changed without an explicit turnover/punt logged -- treat as a fresh drive rather than mixing team's yards together
         drivePlays++; driveYards += Number(p.yards) || 0;
+        const yds = Number(p.yards) || 0;
         if (p.td) {
           if (team === 'Us') scoreUs += 6; else scoreOpp += 6;
           events.push({ quarter, team, kind: 'Touchdown', desc: scoringPlayDesc(p, team), scoreUs, scoreOpp, plays: drivePlays, yards: driveYards });
           driveTeam = null; drivePlays = 0; driveYards = 0;
+        } else if (includeKeyPlays && (p.type === 'run' || p.type === 'pass') && p.result !== 'Sacked' && yds >= BIG_GAIN_YARDS) {
+          events.push({ quarter, team, kind: 'Big Gain', desc: `${scoringPlayDesc(p, team)}${downDistTxt(p)}`, scoreUs, scoreOpp, plays: null, yards: null });
         }
         return;
       }
@@ -1174,7 +1218,7 @@
     // narrative version once the play-by-play loads, rather than leaving
     // the box blank while it fetches.
     if (isFinal && current.id) {
-      computeScoringPlays(current.id).then(events => {
+      computeScoringPlays(current.id, { includeKeyPlays: true }).then(events => {
         const narrative = buildNarrativeRecap(events, current);
         if (narrative) textEl.textContent = narrative;
       }).catch(err => console.error('[narrativeRecap] failed for', current.id, err));
@@ -1297,10 +1341,21 @@
   // moved to sit right under the auto-generated Game Recap/Preview box,
   // where a coach or player actually looks first. One button per clip,
   // since (unlike opponentFilmUrl) a game can have several.
+  // Nathan (follow-up): "shrink the CTAs on the Game Film section so it's
+  // two rows of two buttons... if you can do 4 across with Q1/Q2/Q3/Q4, I
+  // will take it." Quarter-named clips get abbreviated ("1st Quarter" ->
+  // "Q1") to fit; anything else keeps its real title. auto-fit with a
+  // 70px minimum naturally lands on 4-across when there's room and wraps
+  // to 2x2 on a narrower screen, without needing a separate mobile rule.
+  function footageClipLabel(title) {
+    const m = String(title || '').match(/^(1st|2nd|3rd|4th)\s+Quarter$/i);
+    return m ? 'Q' + { '1st': '1', '2nd': '2', '3rd': '3', '4th': '4' }[m[1].toLowerCase()] : (title || 'Footage');
+  }
   function gameFootageTopCtaHtml(game) {
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
     if (!clips.length) return '';
-    return clips.map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;${i < clips.length - 1 ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch ${escapeHtml(c.title || 'Game Footage')}</a>`).join('');
+    const buttons = clips.map(c => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" title="${escapeHtml(c.title || 'Game Footage')}" style="display:block;text-align:center;box-sizing:border-box;padding:9px 6px;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🎥 ${escapeHtml(footageClipLabel(c.title))}</a>`).join('');
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px;margin-bottom:12px;">${buttons}</div>`;
   }
 
   // Coach edit list -- mutates current.gameFootage in place and re-renders

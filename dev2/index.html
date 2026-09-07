@@ -139,6 +139,7 @@
   </div>
 </div>
 <style>
+  #appLoadingOverlay { transition: opacity .4s ease; }
   #appLoadingBg, #appLoadingBgBlur {
     position: absolute; inset: 0;
     background-image: url('assets/images/loading-desktop.jpg');
@@ -2091,6 +2092,11 @@ if (window.ResizeObserver) {
 // to already be populated by the time it runs, exactly like the old
 // inline JSON blobs.
 (async function boot(){
+  // Nathan (follow-up): "have it show for a second or two before fading
+  // into the dashboard." Tracked from the very start of boot() so the
+  // minimum-display check below accounts for the whole load time, not
+  // just the script-loading loop specifically.
+  const bootStartTime = Date.now();
   // Cache-busting query string: without this, browsers (and mobile Safari
   // especially) can keep serving an old cached copy of a script/data file
   // after a new one has been pushed, even though the freshly-served
@@ -2213,7 +2219,24 @@ if (window.ResizeObserver) {
   // and the app is actually ready to be touched, instead of the raw shell
   // being visible and clickable for however long that loop used to take
   // in the background.
-  if (appLoadingOverlay) appLoadingOverlay.style.display = 'none';
+  // Nathan (follow-up): "loading screen looks sick, have it show for a
+  // second or two before fading into the dashboard." On a fast connection
+  // the whole loop above can finish in well under a second, which made the
+  // new artwork flash by almost instantly -- this waits out whatever's
+  // left of a 1.4s minimum before starting the fade, so it's never up
+  // LONGER than necessary on a slow connection (loading already took
+  // however long it took), just never SHORTER than enough to actually see
+  // it on a fast one. Fades via opacity (see the #appLoadingOverlay
+  // transition in the <style> block above) instead of an instant cut,
+  // then display:none once the fade's finished so it's not sitting there
+  // invisible-but-still-in-the-way.
+  if (appLoadingOverlay) {
+    const minDisplayMs = 1400;
+    const elapsed = Date.now() - bootStartTime;
+    if (elapsed < minDisplayMs) await new Promise(r => setTimeout(r, minDisplayMs - elapsed));
+    appLoadingOverlay.style.opacity = '0';
+    setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
+  }
 })();
 </script>
 
