@@ -118,18 +118,32 @@
   finished, so there's no gap where an unfinished shell is visible either
   behind the login screen or after it hides.
 -->
-<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13 url('assets/images/loading-desktop.jpg') center center / cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;overflow:hidden;">
   <!-- Nathan: "use the attached image as the desktop loading screen... reformat it like the vertical one for mobile." Both images already have
        "LOADING..." baked into the artwork itself, including a static decorative bar under it -- the old circular-logo-plus-bar approach is
        replaced entirely by this full-bleed background, with only the real, script-driven progress bar overlaid roughly where the art's own
-       static one sits, so it reads as that bar actually filling in rather than two separate loading indicators stacked on the page. -->
-  <div style="width:17%;max-width:180px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:9%;">
+       static one sits, so it reads as that bar actually filling in rather than two separate loading indicators stacked on the page.
+       Nathan (follow-up): "on mobile, the loading screen isn't showing correctly, can't see all of it." background-size:cover was the bug --
+       it scales to FILL the screen, and a phone's aspect ratio is much taller/narrower than this artwork, so it was scaling up and cropping
+       both the top and bottom off-screen. #appLoadingBg is now a separate layer sized with `contain` (shows the whole image, letterboxed with
+       the dark background color rather than cropped) and also carries the "GIF movement... loading bar moving too" animation -- a slow,
+       subtle breathing zoom, since there's no actual GIF file to restore (the source Nathan provided was a static image), respecting
+       prefers-reduced-motion for anyone with that OS setting on. -->
+  <div id="appLoadingBg" style="position:absolute;inset:0;background:url('assets/images/loading-desktop.jpg') center center / contain no-repeat;animation:appLoadingBreathe 6s ease-in-out infinite;"></div>
+  <div style="position:relative;width:17%;max-width:180px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:9%;">
     <div id="appLoadingBar" style="width:0%;height:100%;background:#ff6a13;transition:width .2s ease;"></div>
   </div>
 </div>
 <style>
   @media (max-width: 640px) {
-    #appLoadingOverlay { background-image: url('assets/images/loading-mobile.jpg'); }
+    #appLoadingBg { background-image: url('assets/images/loading-mobile.jpg'); }
+  }
+  @keyframes appLoadingBreathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #appLoadingBg { animation: none; }
   }
 </style>
 
