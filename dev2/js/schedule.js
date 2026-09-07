@@ -493,12 +493,24 @@
   // a player's actual name ("Jahbari Kuykendall 90 Yd..."), so that was
   // quietly lowercasing real names. Colon-based sentence templates below
   // avoid needing to touch the description's capitalization at all.
+  // Nathan (follow-up): "This reads very poorly." Beyond the scoringPlayDesc
+  // bug above, the sentence templates themselves were also part of the
+  // problem -- every turnover used the exact phrase "forced a turnover,"
+  // every big gain used "broke off a big play," with no variation even
+  // back to back. Small phrase banks per repeatable sentence type, cycled
+  // through so the same kind of event happening twice in a row doesn't
+  // read identically both times.
   function buildNarrativeRecap(events, game) {
     if (!events || !events.length) return '';
     const oppName = game.opponent || 'the opponent';
+    const usLabel = 'The Bengals';
     const sentences = [];
     let lastScoringTeam = null;
-    let scoringSentenceCount = 0;
+    let scoringSentenceCount = 0, turnoverCount = 0, bigGainCount = 0;
+    const SAME_TEAM_VERBS = ['extended the lead', 'struck again', 'added another score', 'padded the lead further'];
+    const OTHER_TEAM_VERBS = ['answered back', 'responded right away', 'cut into the lead', 'fired right back'];
+    const TURNOVER_OPENERS = ['forced a turnover', 'came up with a takeaway', 'flipped the field with a turnover'];
+    const BIGGAIN_OPENERS = ['broke off a big play', 'popped a chunk gain', 'made it look easy for a big gain'];
     events.forEach((e, i) => {
       if (e.kind === 'Extra Point') return; // folded into the preceding touchdown's sentence, never its own
       if (e.kind === 'Touchdown' || e.kind === 'Safety') {
@@ -507,9 +519,11 @@
         if (e.kind === 'Touchdown' && next && next.kind === 'Extra Point' && next.team === e.team) {
           finalUs = next.scoreUs; finalOpp = next.scoreOpp;
         }
-        const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
-        const verb = scoringSentenceCount === 0 ? 'opened the scoring'
-          : (e.team === lastScoringTeam ? 'extended the lead' : 'answered back');
+        const teamLabel = e.team === 'Us' ? usLabel : oppName;
+        let verb;
+        if (scoringSentenceCount === 0) verb = 'opened the scoring';
+        else if (e.team === lastScoringTeam) verb = SAME_TEAM_VERBS[scoringSentenceCount % SAME_TEAM_VERBS.length];
+        else verb = OTHER_TEAM_VERBS[scoringSentenceCount % OTHER_TEAM_VERBS.length];
         const driveTxt = e.plays != null ? ` (${e.plays} play${e.plays === 1 ? '' : 's'}, ${e.yards} yard${e.yards === 1 ? '' : 's'})` : '';
         const desc = e.kind === 'Safety' ? 'a safety' : e.desc;
         sentences.push(`${teamLabel} ${verb} with ${desc}${driveTxt}, making it ${finalUs}-${finalOpp}.`);
@@ -518,13 +532,17 @@
         return;
       }
       if (e.kind === 'Turnover') {
-        const teamLabel = e.team === 'Us' ? 'The Bengals defense' : `${oppName}'s defense`;
-        sentences.push(`${teamLabel} forced a turnover: ${e.desc}.`);
+        const teamLabel = e.team === 'Us' ? "The Bengals' defense" : `${oppName}'s defense`;
+        const opener = TURNOVER_OPENERS[turnoverCount % TURNOVER_OPENERS.length];
+        sentences.push(`${teamLabel} ${opener}: ${e.desc}.`);
+        turnoverCount++;
         return;
       }
       if (e.kind === 'Big Gain') {
-        const teamLabel = e.team === 'Us' ? 'The Bengals' : oppName;
-        sentences.push(`${teamLabel} broke off a big play: ${e.desc}.`);
+        const teamLabel = e.team === 'Us' ? usLabel : oppName;
+        const opener = BIGGAIN_OPENERS[bigGainCount % BIGGAIN_OPENERS.length];
+        sentences.push(`${teamLabel} ${opener}: ${e.desc}.`);
+        bigGainCount++;
         return;
       }
     });
@@ -743,17 +761,25 @@
     return ['1st Quarter','2nd Quarter','3rd Quarter','4th Quarter'][Math.max(0, Math.min(3, (q||1)-1))];
   }
   function asList(v) { return Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : []); }
+  // Nathan (follow-up): "'Nipmuc opened the scoring with Us 74 Yd Run' -
+  // This reads very poorly." Real bug, not just awkward phrasing: none of
+  // these ever checked the opp* fields (oppCarrier/oppReturner/oppPasser/
+  // oppTarget) at all -- only the "our team" field. For an OPPONENT play,
+  // that field is always empty (their carrier lives in oppCarrier, not
+  // carrier), so it fell through to a generic Us/Opponent fallback that
+  // reads backwards from what's intended. Now checks both fields, whichever
+  // one is actually populated for that play.
   function scoringPlayDesc(p, scoringTeam) {
     if (p.type === 'score') {
       const kind = (p.scoreKind || '').startsWith('Kick') ? 'Kick' : (p.scoreKind || '').startsWith('Run/Pass') ? 'Run/Pass Play' : (p.scoreKind || 'Extra Point');
       const good = /Good/.test(p.scoreKind || '');
       return `Extra Point (${kind})` + (good ? ' — good' : ' — no good');
     }
-    if (p.type === 'kick') return `${p.returner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Kickoff Return`;
-    if (p.type === 'punt') return `${p.returner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Punt Return`;
+    if (p.type === 'kick') return `${p.returner || p.oppReturner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Kickoff Return`;
+    if (p.type === 'punt') return `${p.returner || p.oppReturner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Punt Return`;
     if (p.type === 'turnover') return `${p.recoveredBy || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${p.toType || 'Turnover'} Return`;
-    if (p.type === 'run') return `${p.carrier || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Run`;
-    if (p.type === 'pass') return `${p.target || 'Opponent'} ${Number(p.yards)||0} Yd Pass from ${p.passer || (scoringTeam === 'Us' ? 'Opponent' : 'Us')}`;
+    if (p.type === 'run') return `${p.carrier || p.oppCarrier || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Run`;
+    if (p.type === 'pass') return `${p.target || p.oppTarget || 'Opponent'} ${Number(p.yards)||0} Yd Pass from ${p.passer || p.oppPasser || (scoringTeam === 'Us' ? 'Opponent' : 'Us')}`;
     return 'Score';
   }
   // Nathan (follow-up): "Key plays such as interceptions and fumbles,
