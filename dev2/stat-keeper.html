@@ -2136,6 +2136,15 @@
   // live app's current statSheet fields — flagged in the exported JSON, not hidden.)
   function compileStatSheet(){
     const rushing = {}, passing = {}, receiving = {}, kickoffs = {}, tackles = {}, defExtra = {}, penalties = {}, punting = {}, puntReturns = {};
+    // Nathan: "it has the # for the carrier or passer on the other team,
+    // so make sure we have those totals to see for them at the end of the
+    // game." p.oppCarrier/oppPasser/oppTarget were always saved on each
+    // play, but only ever rolled into the team-wide oppRushing/oppPassing
+    // totals below -- the specific number was captured and then thrown
+    // away. Same per-name tally shape as rushing/passing/receiving above,
+    // just keyed by jersey number text instead of a roster name (there's
+    // no opponent roster to look names up against).
+    const oppRushingByNum = {}, oppPassingByNum = {}, oppReceivingByNum = {};
     const turnoverNotes = [];
     const scoring = { touchdowns:0, patGood:0, patNoGood:0, twoPtGood:0, twoPtNoGood:0, safety:0 };
     let offSnaps = 0, defSnaps = 0;
@@ -2194,6 +2203,10 @@
           } else if (!isUsRun){
             oppRushAtt++; oppRushYds += Number(p.yards||0);
             if (p.td) oppRushTd++;
+            if (p.oppCarrier){
+              const or = oppRushingByNum[p.oppCarrier] || (oppRushingByNum[p.oppCarrier] = {name:p.oppCarrier, att:0, yds:0, td:0});
+              or.att++; or.yds += Number(p.yards||0); if (p.td) or.td++;
+            }
           }
         }
         if (p.td) scoring.touchdowns++;
@@ -2213,7 +2226,21 @@
           }
         } else if (!isUsPass){
           oppPassAtt++;
-          if (p.result==='Complete'){ oppPassComp++; oppPassYds += Number(p.yards||0); }
+          if (p.oppPasser){
+            const op = oppPassingByNum[p.oppPasser] || (oppPassingByNum[p.oppPasser] = {name:p.oppPasser, att:0, comp:0, yds:0, td:0});
+            op.att++;
+          }
+          if (p.result==='Complete'){
+            oppPassComp++; oppPassYds += Number(p.yards||0);
+            if (p.oppPasser){
+              const op = oppPassingByNum[p.oppPasser] || (oppPassingByNum[p.oppPasser] = {name:p.oppPasser, att:0, comp:0, yds:0, td:0});
+              op.comp++; op.yds += Number(p.yards||0); if (p.td) op.td++;
+            }
+            if (p.oppTarget){
+              const orc = oppReceivingByNum[p.oppTarget] || (oppReceivingByNum[p.oppTarget] = {name:p.oppTarget, rec:0, yds:0, td:0});
+              orc.rec++; orc.yds += Number(p.yards||0); if (p.td) orc.td++;
+            }
+          }
         }
         // Fix alongside the run change above: an opponent completion's TD
         // flag used to never reach scoring.touchdowns at all (only our own
@@ -2369,6 +2396,14 @@
       forcedPunts: forcedPunts,
       oppPassing: { att: oppPassAtt, comp: oppPassComp, yds: oppPassYds },
       oppRushing: { att: oppRushAtt, yds: oppRushYds, td: oppRushTd },
+      // Nathan: "make sure we have those totals to see for them at the
+      // end of the game." Per-jersey-number breakdown, same ypc treatment
+      // as our own rushing above.
+      oppRushingByNum: Object.values(oppRushingByNum).map(function(r){
+        return Object.assign({}, r, { ypc: r.att ? Math.round(r.yds / r.att * 10) / 10 : null });
+      }),
+      oppPassingByNum: Object.values(oppPassingByNum),
+      oppReceivingByNum: Object.values(oppReceivingByNum),
     };
   }
 
@@ -2460,6 +2495,13 @@
     html += statTable('Rushing', s.rushing, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'},{key:'fd',label:'1st'}]);
     html += statTable('Passing', s.passing, [{key:'comp',label:'Comp'},{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Receiving', s.receiving, [{key:'rec',label:'Rec'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    // Nathan: "it has the # for the carrier or passer on the other team,
+    // so make sure we have those totals to see for them at the end of the
+    // game." Same tables as ours, just keyed by jersey number since
+    // there's no opponent roster to pull a name from.
+    html += statTable('Opponent Rushing (by #)', s.oppRushingByNum, [{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'ypc',label:'YPC'},{key:'td',label:'TD'}]);
+    html += statTable('Opponent Passing (by #)', s.oppPassingByNum, [{key:'comp',label:'Comp'},{key:'att',label:'Att'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
+    html += statTable('Opponent Receiving (by #)', s.oppReceivingByNum, [{key:'rec',label:'Rec'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Kickoff Returns', s.kickoffs, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
     html += statTable('Punting', s.punting, [{key:'punts',label:'Punts'},{key:'avgGross',label:'Avg Gross'},{key:'avgNet',label:'Avg Net'},{key:'touchback',label:'TB'},{key:'fairCatch',label:'FC'},{key:'downed',label:'Dwn'},{key:'returned',label:'Ret Agnst'},{key:'muffed',label:'Muff'}]);
     html += statTable('Punt Returns', s.puntReturns, [{key:'ret',label:'Ret'},{key:'yds',label:'Yds'},{key:'td',label:'TD'}]);
@@ -2509,6 +2551,9 @@
     section('Rushing', s.rushing, r=>r.name+': '+r.att+' att, '+r.yds+' yds ('+(r.ypc==null?'—':r.ypc)+' ypc), '+r.td+' TD');
     section('Passing', s.passing, r=>r.name+': '+r.comp+'/'+r.att+', '+r.yds+' yds, '+r.td+' TD');
     section('Receiving', s.receiving, r=>r.name+': '+r.rec+' rec, '+r.yds+' yds, '+r.td+' TD');
+    section('Opponent Rushing (by #)', s.oppRushingByNum, r=>r.name+': '+r.att+' att, '+r.yds+' yds ('+(r.ypc==null?'—':r.ypc)+' ypc), '+r.td+' TD');
+    section('Opponent Passing (by #)', s.oppPassingByNum, r=>r.name+': '+r.comp+'/'+r.att+', '+r.yds+' yds, '+r.td+' TD');
+    section('Opponent Receiving (by #)', s.oppReceivingByNum, r=>r.name+': '+r.rec+' rec, '+r.yds+' yds, '+r.td+' TD');
     section('Kickoff Returns', s.kickoffs, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds');
     section('Punting', s.punting, r=>r.name+': '+r.punts+' punts, '+(r.avgGross!=null?r.avgGross:'-')+' avg gross, '+(r.avgNet!=null?r.avgNet:'-')+' avg net (TB '+r.touchback+', FC '+r.fairCatch+', downed '+r.downed+', returned against '+r.returned+', muffed '+r.muffed+')');
     section('Punt Returns', s.puntReturns, r=>r.name+': '+r.ret+' ret, '+r.yds+' yds, '+r.td+' TD');
