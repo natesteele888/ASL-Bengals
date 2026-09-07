@@ -998,6 +998,36 @@
       wrap.innerHTML = '<div class="lbEmpty">No games have opponent film linked yet -- add a film link under a game in Schedule to start tracking who watches it.</div>';
       return;
     }
+    // Nathan (follow-up): "should show who has watched what film and how
+    // many times - not just a single piece of film and when they did it. I
+    // want to see who is accessing film and how often, how many times."
+    // js/film-views.js now tracks a real count per person per game instead
+    // of overwriting one timestamp -- this leads with the aggregated,
+    // across-every-game view (the actual "how often" answer) before the
+    // existing per-game cards below it, rather than replacing them, since
+    // "what film" per person is still useful to keep.
+    const byPlayer = {};
+    Object.keys(viewsByGame).forEach(gameId => {
+      (viewsByGame[gameId] || []).forEach(v => {
+        const p = byPlayer[v.name] || (byPlayer[v.name] = { name: v.name, isCoach: v.isCoach, totalViews: 0, games: 0 });
+        p.totalViews += Number(v.count) || 1;
+        p.games += 1;
+      });
+    });
+    const playerRows = Object.values(byPlayer).sort((a, b) => b.totalViews - a.totalViews);
+    if (playerRows.length) {
+      wrap.appendChild(sectionHeading('👤 Who\'s Watching Film'));
+      const pBox = document.createElement('div');
+      pBox.style.cssText = 'margin-bottom:18px;';
+      playerRows.forEach(p => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #f0f0f0;';
+        row.innerHTML = `<span>${p.isCoach ? '🧑‍🏫 ' : ''}${escapeHtml(p.name)}</span><span><b>${p.totalViews}</b> view${p.totalViews===1?'':'s'} <span style="color:#999;">· ${p.games} game${p.games===1?'':'s'}</span></span>`;
+        pBox.appendChild(row);
+      });
+      wrap.appendChild(pBox);
+      wrap.appendChild(sectionHeading('🎬 By Game'));
+    }
     filmGames.slice().reverse().forEach(g => {
       const viewers = viewsByGame[g.id] || [];
       const card = document.createElement('div');
@@ -1006,7 +1036,7 @@
       const rows = viewers.length
         ? viewers.map(v => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">
              <span>${v.isCoach ? '🧑‍🏫 ' : ''}${escapeHtml(v.name)}</span>
-             <span style="color:#888;font-size:12px;">${timeAgoStr(v.ts)}</span>
+             <span style="color:#888;font-size:12px;"><b>${v.count || 1}x</b> · last ${timeAgoStr(v.lastTs || v.ts)}</span>
            </div>`).join('')
         : '<div class="lbSub" style="padding:4px 0;">No one has watched yet</div>';
       card.innerHTML = `<div style="font-weight:800;font-size:13px;margin-bottom:6px;">${label}</div>
