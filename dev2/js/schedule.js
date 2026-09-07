@@ -500,6 +500,152 @@
   // back to back. Small phrase banks per repeatable sentence type, cycled
   // through so the same kind of event happening twice in a row doesn't
   // read identically both times.
+  // Nathan (follow-up): "still just mentioning plays instead of the context
+  // of the game... more like that style" -- his example: "it was 20-0 with
+  // nipmuc scoring 3 times and converting an extra point kick. Despite the
+  // early interception, Bengals couldn't convert it into points. Close to
+  // pinning them deep in their own area, Nipmuc broke a 74 yard run for the
+  // opening score. 2 fumbles lost by bengals killed two drives." That's a
+  // genuinely different kind of writing than narrating each event as it
+  // happens -- it opens with the shape of the whole game, then connects
+  // cause and effect (did a turnover actually cost/gain points, not just
+  // that one happened), and adds field-position drama (how deep a scoring
+  // drive started). This walks the play log ONE time and builds a summary
+  // structure first, instead of trying to narrate straight from the event
+  // list the way the previous version did.
+  function absoluteSpotOf(side, yard) {
+    if (!side || yard === '' || yard == null) return null;
+    const y = Number(yard);
+    if (isNaN(y)) return null;
+    return side === 'OWN' ? y : (100 - y);
+  }
+  // How deep INTO forTeam's own territory absSpot sits, described from
+  // forTeam's perspective -- only returns text when it's actually notable
+  // (inside their own 25); most drives don't start anywhere worth
+  // mentioning, and forcing a field-position line into every sentence
+  // would just be new noise instead of the drama it's meant to add.
+  function deepFieldPosTxt(absSpot, forTeam) {
+    if (absSpot == null) return null;
+    const distFromOwnGoal = forTeam === 'Us' ? absSpot : (100 - absSpot);
+    if (distFromOwnGoal <= 10) return 'deep in their own territory';
+    if (distFromOwnGoal <= 25) return 'backed up near their own goal line';
+    return null;
+  }
+  async function computeGameNarrativeSummary(gameId) {
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
+    const res = await fetch(url);
+    const gs = res.ok ? await res.json() : null;
+    const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+    let scoreUs = 0, scoreOpp = 0;
+    let driveTeam = null, drivePlays = 0, driveYards = 0, driveStartAbs = null;
+    const scores = []; // {team, desc, plays, yards, startAbs}
+    const turnovers = []; // {team (who LOST it), toType, ledToScore (did the RECOVERING team score before losing it again)}
+    let xpAttempted = 0, xpMade = 0;
+    let pendingTurnover = null;
+    plays.forEach(p => {
+      if (p.type === 'quarterEnd') return;
+      if (p.type === 'kick' || p.type === 'punt' || p.type === 'turnover') {
+        const recoveringSide = p.type === 'turnover' ? (p.side === 'defense' ? 'Us' : 'Opponent') : (p.kickTeam === 'Us' || p.puntTeam === 'Us' ? 'Opponent' : 'Us');
+        driveTeam = recoveringSide; drivePlays = 1; driveYards = Number(p.yards) || 0;
+        driveStartAbs = absoluteSpotOf(p.endSide, p.endYard);
+        if (p.type === 'turnover') {
+          pendingTurnover = { team: recoveringSide === 'Us' ? 'Opponent' : 'Us', toType: p.toType, ledToScore: false };
+          turnovers.push(pendingTurnover);
+        } else {
+          pendingTurnover = null; // a kickoff/punt is a clean break -- only an actual turnover's "did it cost points" gets tracked
+        }
+        if (p.td) {
+          if (recoveringSide === 'Us') scoreUs += 6; else scoreOpp += 6;
+          scores.push({ team: recoveringSide, desc: scoringPlayDesc(p, recoveringSide), plays: drivePlays, yards: driveYards, startAbs: driveStartAbs });
+          if (pendingTurnover && pendingTurnover.team !== recoveringSide) pendingTurnover.ledToScore = true;
+          driveTeam = null; drivePlays = 0; driveYards = 0; driveStartAbs = null;
+        }
+        return;
+      }
+      if (p.type === 'run' || p.type === 'pass' || p.type === 'kneel') {
+        const team = p.runTeam || p.passTeam || p.kneelTeam || (p.side === 'offense' ? 'Us' : 'Opponent');
+        if (team !== driveTeam) { driveTeam = team; drivePlays = 0; driveYards = 0; driveStartAbs = absoluteSpotOf(p.startSide, p.startYard); }
+        if (driveStartAbs == null) driveStartAbs = absoluteSpotOf(p.startSide, p.startYard);
+        drivePlays++; driveYards += Number(p.yards) || 0;
+        if (p.td) {
+          if (team === 'Us') scoreUs += 6; else scoreOpp += 6;
+          scores.push({ team, desc: scoringPlayDesc(p, team), plays: drivePlays, yards: driveYards, startAbs: driveStartAbs });
+          if (pendingTurnover && pendingTurnover.team !== team) pendingTurnover.ledToScore = true;
+          driveTeam = null; drivePlays = 0; driveYards = 0; driveStartAbs = null;
+        }
+        return;
+      }
+      if (p.type === 'score') {
+        const team = p.scoreTeam || 'Us';
+        let pts = 0;
+        if (p.scoreKind === 'Kick (2 pt Good)') pts = 2; else if (p.scoreKind === 'Run/Pass Play (1 pt Good)') pts = 1; else if (p.scoreKind === 'Safety') pts = 2;
+        if (pts) { if (team === 'Us') scoreUs += pts; else scoreOpp += pts; }
+        if (p.scoreKind !== 'Safety') { xpAttempted++; if (!/No Good/.test(p.scoreKind || '')) xpMade++; }
+      }
+    });
+    return { scoreUs, scoreOpp, scores, turnovers, xpAttempted, xpMade };
+  }
+  function buildGameContextRecap(summary, game) {
+    const { scoreUs, scoreOpp, scores, turnovers, xpAttempted, xpMade } = summary;
+    if (!scores.length && !turnovers.length) return '';
+    const oppName = game.opponent || 'the opponent';
+    const usLabel = 'The Bengals';
+    const sentences = [];
+
+    // Opening line: the shape of the whole game, not the first play in it.
+    const usTds = scores.filter(s => s.team === 'Us').length;
+    const oppTds = scores.filter(s => s.team === 'Opponent').length;
+    const parts = [`It finished ${scoreUs}-${scoreOpp}`];
+    if (oppTds && usTds) parts.push(`with ${oppName} finding the end zone ${oppTds} time${oppTds === 1 ? '' : 's'} and the Bengals ${usTds}`);
+    else if (oppTds) parts.push(`with ${oppName} finding the end zone ${oppTds} time${oppTds === 1 ? '' : 's'}`);
+    else if (usTds) parts.push(`with the Bengals finding the end zone ${usTds} time${usTds === 1 ? '' : 's'}`);
+    if (xpAttempted) parts.push(`converting ${xpMade} of ${xpAttempted} extra point attempt${xpAttempted === 1 ? '' : 's'}`);
+    sentences.push(parts.join(', ') + '.');
+
+    // Opening score: leads with field position drama when the drive
+    // actually started somewhere notable, same as "Close to pinning them
+    // deep in their own area, Nipmuc broke a 74 yard run..."
+    if (scores.length) {
+      const first = scores[0];
+      const teamLabel = first.team === 'Us' ? usLabel : oppName;
+      const posTxt = deepFieldPosTxt(first.startAbs, first.team);
+      const driveTxt = first.plays != null ? ` (${first.plays} play${first.plays === 1 ? '' : 's'}, ${first.yards} yard${first.yards === 1 ? '' : 's'})` : '';
+      sentences.push(posTxt
+        ? `Starting ${posTxt}, ${teamLabel} broke free for the opening score: ${first.desc}${driveTxt}.`
+        : `${teamLabel} opened the scoring with ${first.desc}${driveTxt}.`);
+    }
+
+    // Interceptions: framed around whether the team that picked it off
+    // actually turned it into points, same as "Despite the early
+    // interception, Bengals couldn't convert it into points."
+    const intByLoser = {};
+    turnovers.filter(t => t.toType === 'Interception').forEach(t => {
+      const g = intByLoser[t.team] || (intByLoser[t.team] = { count: 0, scored: 0 });
+      g.count++; if (t.ledToScore) g.scored++;
+    });
+    Object.keys(intByLoser).forEach(losingTeam => {
+      const g = intByLoser[losingTeam];
+      const recoveringLabel = losingTeam === 'Us' ? oppName : usLabel;
+      const n = g.count;
+      if (g.scored === 0) sentences.push(`Despite ${n === 1 ? 'an interception' : n + ' interceptions'}, ${recoveringLabel} couldn't convert ${n === 1 ? 'it' : 'them'} into points.`);
+      else sentences.push(`${recoveringLabel} turned ${n === 1 ? 'an interception' : n + ' interceptions'} into points.`);
+    });
+
+    // Fumbles: framed around drives ended, same as "2 fumbles lost by
+    // bengals killed two drives" -- a fumble always ends the possession
+    // that lost it, whether or not the other team capitalized, so this
+    // doesn't need the same "did it convert" framing interceptions get.
+    const fumByLoser = {};
+    turnovers.filter(t => t.toType === 'Fumble').forEach(t => { fumByLoser[t.team] = (fumByLoser[t.team] || 0) + 1; });
+    Object.keys(fumByLoser).forEach(losingTeam => {
+      const n = fumByLoser[losingTeam];
+      const losingLabel = losingTeam === 'Us' ? usLabel : oppName;
+      sentences.push(`${n} fumble${n === 1 ? '' : 's'} lost by ${losingLabel} killed ${n === 1 ? 'a drive' : n + ' drives'}.`);
+    });
+
+    return sentences.join(' ');
+  }
+
   function buildNarrativeRecap(events, game) {
     if (!events || !events.length) return '';
     const oppName = game.opponent || 'the opponent';
@@ -1243,9 +1389,17 @@
     // working stat-leaders recap immediately, then replaces it with the
     // narrative version once the play-by-play loads, rather than leaving
     // the box blank while it fetches.
+    // Nathan (follow-up): "still just mentioning plays instead of the
+    // context of the game... more like that style." Switched from the
+    // event-by-event narration (computeScoringPlays/buildNarrativeRecap)
+    // to the summary-first approach (computeGameNarrativeSummary/
+    // buildGameContextRecap) right above this function -- see those for
+    // the actual reasoning. computeScoringPlays/buildNarrativeRecap are
+    // left in place since the Scoring Plays timeline still uses the
+    // former, but nothing calls the latter anymore.
     if (isFinal && current.id) {
-      computeScoringPlays(current.id, { includeKeyPlays: true }).then(events => {
-        const narrative = buildNarrativeRecap(events, current);
+      computeGameNarrativeSummary(current.id).then(summary => {
+        const narrative = buildGameContextRecap(summary, current);
         if (narrative) textEl.textContent = narrative;
       }).catch(err => console.error('[narrativeRecap] failed for', current.id, err));
     }
