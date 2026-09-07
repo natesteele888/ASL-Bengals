@@ -92,6 +92,20 @@
       });
   }
 
+  // Nathan (follow-up): "⚠️ Tendencies partially failed: resultFor is not
+  // defined." Exactly the bug the error-handling from last round was
+  // built to surface -- this got copied over from a pattern used in
+  // schedule.js without noticing that file's resultFor() never actually
+  // exists in THIS file's scope; they're separate modules with no shared
+  // state. Same logic as schedule.js's own version, defined locally here.
+  function resultFor(g) {
+    if (g.ourScore === null || g.ourScore === undefined || g.oppScore === null || g.oppScore === undefined || g.ourScore === '' || g.oppScore === '') return null;
+    const us = Number(g.ourScore), them = Number(g.oppScore);
+    if (isNaN(us) || isNaN(them)) return null;
+    if (us > them) return 'W';
+    if (us < them) return 'L';
+    return 'T';
+  }
   function sortedGames() {
     return games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
   }
@@ -429,6 +443,80 @@
       });
       wrap.appendChild(pBox);
     }
+
+    // Nathan (follow-up): "some writeups about some things it noticed -
+    // look at the play calls and see if you notice tendencies or
+    // improvements we can make." Generated directly from the same
+    // computed report above -- each observation only fires past a
+    // minimum sample size (3+ calls for a specific play, 10+ total snaps
+    // for the run/pass and motion checks) so this isn't drawing strong
+    // conclusions from one or two plays. Genuinely just pattern-matching
+    // on the numbers, not real football judgment -- worded as "worth a
+    // look" rather than a confident recommendation for exactly that
+    // reason.
+    const insights = generatePlayCallInsights(report);
+    if (insights.length) {
+      wrap.appendChild(sectionHeading('🔍 What We\'re Noticing'));
+      const iBox = document.createElement('div'); iBox.style.cssText = 'margin-bottom:8px;';
+      insights.forEach(txt => {
+        const row = document.createElement('div');
+        row.style.cssText = 'font-size:12.5px;color:#333;line-height:1.5;padding:6px 0 6px 18px;position:relative;';
+        row.innerHTML = `<span style="position:absolute;left:0;">💡</span>${txt}`;
+        iBox.appendChild(row);
+      });
+      wrap.appendChild(iBox);
+    }
+  }
+
+  function generatePlayCallInsights(report) {
+    const { byCall, byTag, runAtt, runYds, passAtt, passComp, passYds } = report;
+    const insights = [];
+    const calls = Object.values(byCall);
+    const calledOften = calls.filter(c => c.att >= 3).map(c => Object.assign({}, c, { ypc: c.yds / c.att }));
+
+    // Most efficient play, called often enough to trust the number, that
+    // isn't ALSO the single most-called play (that'd just repeat the
+    // "most success" callout already shown above).
+    const mostCalled = calledOften.slice().sort((a, b) => b.att - a.att)[0];
+    const efficient = calledOften.filter(c => c.ypc >= 6 && (!mostCalled || c.name !== mostCalled.name)).sort((a, b) => b.ypc - a.ypc)[0];
+    if (efficient) {
+      insights.push(`${escapeHtml(efficient.name)} is averaging ${efficient.ypc.toFixed(1)} yards on ${efficient.att} calls -- one of the most efficient plays here, and not the one being called most often. Worth working in more.`);
+    }
+
+    // A play getting real volume (5+) but well below the team's own
+    // overall run average -- called often despite not producing much.
+    const teamRunYpc = runAtt ? runYds / runAtt : 0;
+    const struggling = calledOften.filter(c => c.att >= 5 && c.ypc < Math.min(2, teamRunYpc - 2)).sort((a, b) => a.ypc - b.ypc)[0];
+    if (struggling) {
+      insights.push(`${escapeHtml(struggling.name)} has been called ${struggling.att} times but is only averaging ${struggling.ypc.toFixed(1)} yards -- worth a look at whether it's being defended well or just isn't working right now.`);
+    }
+
+    // Run/pass balance, only worth mentioning with enough plays to mean something.
+    const totalSnaps = runAtt + passAtt;
+    if (totalSnaps >= 10) {
+      const runPct = Math.round(runAtt / totalSnaps * 100);
+      if (runPct >= 88) {
+        insights.push(`This has been almost entirely a running attack -- ${passAtt} pass attempt${passAtt === 1 ? '' : 's'} out of ${totalSnaps} total plays (${100 - runPct}%). Even a handful more pass attempts could open things up if defenses keep loading the box.`);
+      } else if (runPct <= 30) {
+        insights.push(`This has leaned heavily on the pass -- only ${runAtt} rushing attempt${runAtt === 1 ? '' : 's'} out of ${totalSnaps} total plays (${runPct}%).`);
+      }
+    }
+
+    // Motion never used, only worth flagging with enough offensive snaps
+    // logged that "zero" actually means something rather than a small sample.
+    if (totalSnaps >= 10 && byTag['Motion'] === 0) {
+      insights.push(`Motion hasn't shown up at all across ${totalSnaps} offensive plays -- could be worth mixing in to see if it creates any advantages pre-snap.`);
+    }
+
+    // Pass completion rate, only with enough attempts to be meaningful.
+    if (passAtt >= 5) {
+      const compPct = Math.round(passComp / passAtt * 100);
+      if (compPct < 40) {
+        insights.push(`Completion rate is ${passComp}/${passAtt} (${compPct}%) -- worth checking whether that's more about protection, route timing, or the reads being asked for.`);
+      }
+    }
+
+    return insights;
   }
 
   // Nathan (follow-up): "I should have visibility to plays we called for
