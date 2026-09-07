@@ -328,6 +328,20 @@
   // "Clinton (Scrimmage)" count as the same team).
   function buildGamePreviewText(game, allGames) {
     if (!game || !game.opponent) return '';
+    // Nathan (follow-up): "it has preview text that it is a team called
+    // Bye. Have it understand it means we have a week off from a game."
+    // gameType==='Bye' games always store 'Bye' as the opponent name (see
+    // the game-editor code that falls back to it) so there's a slot to
+    // fill in the schedule -- but nothing here ever checked for that
+    // before treating it as a real opponent, generating text like "The
+    // Bengals host Bye on Saturday" instead of recognizing that a bye
+    // means there's no actual game.
+    if (game.gameType === 'Bye') {
+      const record = bengalsRecord(allGames);
+      const recordPart = record ? ` (${record})` : '';
+      const dateStr = game.date ? fmtDate(game.date) : 'this week';
+      return `🛌 The Bengals${recordPart} have a bye ${dateStr} -- no game this week.`;
+    }
     const record = bengalsRecord(allGames);
     const recordPart = record ? ` (${record})` : '';
     const verb = game.homeAway === 'Away' ? 'travel to face' : 'host';
@@ -529,6 +543,25 @@
     const perPlayer = window.computeGamePlayerStats(game.statSheet);
     return Object.values(perPlayer).reduce((s, r) => s + (r.rushYds || 0) + (r.passYds || 0), 0);
   }
+  // Nathan: "BIGGEST PROBLEM RIGHT NOW!!! head-to-head stats are not
+  // there when clicking into the game but I can see them when I am in
+  // statkeeper page." translatePlaysForLive (stat-keeper.html) already
+  // correctly computes oppRushing/oppPassing and pushes them into
+  // game.statSheet -- the exact same object ourTotalYardsFor just above
+  // reads from successfully (proven working: "111" already displays
+  // correctly with zero fetch involved). Reading yards from here first is
+  // more reliable than a separate live fetch that has its own failure
+  // modes (network, auth, an id mismatch) -- the live fetch in
+  // fetchOppTotalsFromStatKeeper stays as a fallback for first downs
+  // specifically, since oppRushing/oppPassing don't track that.
+  function oppTotalYardsFor(game) {
+    if (!game || !game.statSheet) return null;
+    const r = game.statSheet.oppRushing, p = game.statSheet.oppPassing;
+    if (!r && !p) return null;
+    const total = (r ? Number(r.yds)||0 : 0) + (p ? Number(p.yds)||0 : 0);
+    const hadAnyPlays = (r && Number(r.att)) || (p && Number(p.att));
+    return hadAnyPlays ? total : null; // distinguishes "genuinely 0 yards on real attempts" from "Push to Live Stats was never run, so there's nothing here at all"
+  }
   // Nathan: "Show stats like first downs." Same derived-from-statSheet
   // pattern as Total Yards above -- the fd toggle per rushing/passing/
   // receiving attempt (game-stats-editor.js) already existed, it just
@@ -577,6 +610,52 @@
       oppYds: (pt && pt.opponent && pt.opponent.yds) || 0,
     };
   }
+  // Nathan (follow-up): "it didn't pull any of the other team's stats into
+  // the comparison." Confirmed the actual gap: Total Yards/First Downs for
+  // the opponent were ALWAYS a plain manual number (schedOppYards/
+  // schedOppFirstDowns) -- there was never a path pulling them from
+  // anywhere, unlike our own side (ourTotalYardsFor above), which already
+  // auto-computes from game.statSheet. That was a reasonable call when
+  // this was built ("a live in-game version isn't possible without someone
+  // entering it play by play, which Nathan ruled out" -- see the comment
+  // above), but Stat Keeper's play-by-play now genuinely exists and
+  // already tracks exactly this (runTeam/passTeam !== 'Us', yards,
+  // firstDown, on every real play) -- so it's worth actually pulling from
+  // now rather than needing a second, manually-retyped number. Manual
+  // fields stay as the fallback for any older game with no Stat Keeper
+  // data at all, so nothing that already relied on them breaks.
+  async function fetchOppTotalsFromStatKeeper(gameId){
+    // Nathan: "BIGGEST PROBLEM RIGHT NOW!!! head-to-head stats are not
+    // there when clicking into the game but I can see them when I am in
+    // statkeeper page." Stat Keeper's own compileStatSheet() correctly
+    // found 203 opponent rushing yards for this exact game using the
+    // identical runTeam==='Opponent' matching this function already had --
+    // so the filtering logic itself was never the problem. This returns a
+    // real reason on failure now instead of a bare null, and the caller
+    // shows it directly on the page, so whatever's actually happening
+    // (a failed fetch, a cached old copy of this file, or something else)
+    // is visible without needing to open the browser console.
+    try {
+      const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
+      const res = await fetch(url);
+      if (!res.ok) return { ok:false, reason: `Stat Keeper log request failed (HTTP ${res.status})` };
+      const gs = await res.json();
+      const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+      if (!plays.length) return { ok:false, reason: 'No Stat Keeper plays found under this game\'s ID' };
+      let yards = 0, firstDowns = 0, sawAny = false;
+      plays.forEach(p => {
+        const isOppRun = p.type === 'run' && p.runTeam === 'Opponent';
+        const isOppPass = p.type === 'pass' && p.passTeam === 'Opponent' && p.result === 'Complete';
+        if (isOppRun || isOppPass){
+          sawAny = true;
+          yards += Number(p.yards) || 0;
+          if (p.firstDown) firstDowns++;
+        }
+      });
+      if (!sawAny) return { ok:false, reason: `Loaded ${plays.length} plays but none had runTeam/passTeam set to "Opponent"` };
+      return { ok:true, yards, firstDowns };
+    } catch(e){ return { ok:false, reason: 'Fetch error: ' + (e && e.message ? e.message : e) }; }
+  }
   function h2hBarHtml(label, us, them, oppName) {
     const total = us + them;
     const usPct = total > 0 ? Math.round((us / total) * 100) : 50;
@@ -594,14 +673,107 @@
         </div>
       </div>`;
   }
-  function renderHeadToHead() {
+  // ---- Scoring Plays Timeline -- Nathan: "this is what I am really after
+  // for the gamecast" (ESPN's scoring-plays list, grouped by quarter, each
+  // with a drive summary like "7 plays, 75 yards"). Built from the same
+  // statKeeperLogs data as everything else on this page. One real gap
+  // versus ESPN's version: there's no game-clock data anywhere in this
+  // app (only quarter number), so drive TIME can't be shown -- plays and
+  // yards can.
+  function quarterLbl(q) {
+    return ['1st Quarter','2nd Quarter','3rd Quarter','4th Quarter'][Math.max(0, Math.min(3, (q||1)-1))];
+  }
+  function scoringPlayDesc(p, scoringTeam) {
+    if (p.type === 'score') {
+      const kind = (p.scoreKind || '').startsWith('Kick') ? 'Kick' : (p.scoreKind || '').startsWith('Run/Pass') ? 'Run/Pass Play' : (p.scoreKind || 'Extra Point');
+      const good = /Good/.test(p.scoreKind || '');
+      return `Extra Point (${kind})` + (good ? ' — good' : ' — no good');
+    }
+    if (p.type === 'kick') return `${p.returner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Kickoff Return`;
+    if (p.type === 'punt') return `${p.returner || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Punt Return`;
+    if (p.type === 'turnover') return `${p.recoveredBy || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${p.toType || 'Turnover'} Return`;
+    if (p.type === 'run') return `${p.carrier || (scoringTeam === 'Us' ? 'Opponent' : 'Us')} ${Number(p.yards)||0} Yd Run`;
+    if (p.type === 'pass') return `${p.target || 'Opponent'} ${Number(p.yards)||0} Yd Pass from ${p.passer || (scoringTeam === 'Us' ? 'Opponent' : 'Us')}`;
+    return 'Score';
+  }
+  async function computeScoringPlays(gameId) {
+    const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
+    const res = await fetch(url);
+    const gs = res.ok ? await res.json() : null;
+    const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+    let quarter = 1, scoreUs = 0, scoreOpp = 0;
+    let driveTeam = null, drivePlays = 0, driveYards = 0;
+    const events = [];
+    plays.forEach(p => {
+      if (p.type === 'quarterEnd') { quarter = (p.quarter || quarter) + 1; return; }
+      if (p.type === 'kick' || p.type === 'punt' || p.type === 'turnover') {
+        const scoringSide = p.type === 'turnover' ? (p.side === 'defense' ? 'Us' : 'Opponent') : (p.kickTeam === 'Us' || p.puntTeam === 'Us' ? 'Opponent' : 'Us');
+        driveTeam = scoringSide; drivePlays = 1; driveYards = Number(p.yards) || 0;
+        if (p.td) {
+          if (scoringSide === 'Us') scoreUs += 6; else scoreOpp += 6;
+          events.push({ quarter, team: scoringSide, kind: 'Touchdown', desc: scoringPlayDesc(p, scoringSide), scoreUs, scoreOpp, plays: drivePlays, yards: driveYards });
+          driveTeam = null; drivePlays = 0; driveYards = 0; // waiting for the next kickoff to start a fresh drive
+        }
+        return;
+      }
+      if (p.type === 'run' || p.type === 'pass' || p.type === 'kneel') {
+        const team = p.runTeam || p.passTeam || p.kneelTeam || (p.side === 'offense' ? 'Us' : 'Opponent');
+        if (team !== driveTeam) { driveTeam = team; drivePlays = 0; driveYards = 0; } // possession changed without an explicit turnover/punt logged -- treat as a fresh drive rather than mixing team's yards together
+        drivePlays++; driveYards += Number(p.yards) || 0;
+        if (p.td) {
+          if (team === 'Us') scoreUs += 6; else scoreOpp += 6;
+          events.push({ quarter, team, kind: 'Touchdown', desc: scoringPlayDesc(p, team), scoreUs, scoreOpp, plays: drivePlays, yards: driveYards });
+          driveTeam = null; drivePlays = 0; driveYards = 0;
+        }
+        return;
+      }
+      if (p.type === 'score') {
+        const team = p.scoreTeam || 'Us';
+        let pts = 0;
+        if (p.scoreKind === 'Kick (2 pt Good)') pts = 2; else if (p.scoreKind === 'Run/Pass Play (1 pt Good)') pts = 1; else if (p.scoreKind === 'Safety') pts = 2;
+        if (pts) { if (team === 'Us') scoreUs += pts; else scoreOpp += pts; }
+        if (p.scoreKind !== 'Safety' && !/No Good/.test(p.scoreKind || '')) {
+          events.push({ quarter, team, kind: 'Extra Point', desc: scoringPlayDesc(p, team), scoreUs, scoreOpp, plays: null, yards: null });
+        } else if (p.scoreKind === 'Safety') {
+          events.push({ quarter, team, kind: 'Safety', desc: 'Safety', scoreUs, scoreOpp, plays: null, yards: null });
+        }
+      }
+    });
+    return events;
+  }
+  function renderScoringPlaysTimeline(container, events) {
+    if (!events.length) return;
+    let html = `<div class="lbSectionHeader" style="margin-top:14px;">🏈 Scoring Plays</div>`;
+    let lastQ = null;
+    events.forEach(e => {
+      if (e.quarter !== lastQ) {
+        html += `<div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;margin:14px 0 6px;">${quarterLbl(e.quarter)}</div>`;
+        lastQ = e.quarter;
+      }
+      const badge = e.team === 'Us' ? bengalsBadgeHtml() : opponentBadgeHtml(current.opponent || 'Opponent');
+      const driveTxt = (e.plays != null) ? `<div style="font-size:11px;color:#999;margin-top:2px;">${e.plays} play${e.plays===1?'':'s'}, ${e.yards} yard${e.yards===1?'':'s'}</div>` : '';
+      html += `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f0f0f0;">
+          <div style="flex:0 0 auto;">${badge}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:800;font-size:13px;">${escapeHtml(e.kind)}</div>
+            <div style="font-size:12.5px;color:#333;">${escapeHtml(e.desc)}</div>
+            ${driveTxt}
+          </div>
+          <div style="flex:0 0 auto;text-align:right;font-weight:800;font-size:13px;">${e.scoreUs} - ${e.scoreOpp}</div>
+        </div>`;
+    });
+    container.innerHTML = html;
+  }
+
+  function renderHeadToHead(oppOverride) {
     const wrap = document.getElementById('schedH2HWrap');
     if (!wrap || !current) return;
     if (!resultFor(current)) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     const ourYards = ourTotalYardsFor(current);
-    const oppYards = Number(current.oppYards) || 0;
+    const pushedOppYards = oppTotalYardsFor(current);
+    const oppYards = pushedOppYards != null ? pushedOppYards : ((oppOverride && oppOverride.ok) ? oppOverride.yards : (Number(current.oppYards) || 0));
     const ourFD = ourFirstDownsFor(current);
-    const oppFD = Number(current.oppFirstDowns) || 0;
+    const oppFD = (oppOverride && oppOverride.ok) ? oppOverride.firstDowns : (Number(current.oppFirstDowns) || 0);
     const ourTOs = current.ourTurnovers === '' || current.ourTurnovers == null ? null : Number(current.ourTurnovers);
     const oppTOs = current.oppTurnovers === '' || current.oppTurnovers == null ? null : Number(current.oppTurnovers);
     const pen = penaltyTotalsFor(current);
@@ -613,7 +785,18 @@
     if (pen.usYds || pen.oppYds) bars.push(splitBarHtml('Penalty Yards', pen.usYds, pen.oppYds, current.opponent));
     if (!bars.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
     wrap.style.display = '';
-    wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>`;
+    // Nathan: "BIGGEST PROBLEM RIGHT NOW!!! head-to-head stats are not
+    // there when clicking into the game but I can see them when I am in
+    // statkeeper page." This note only shows up when yards AND first
+    // downs both still fall back to the manually-typed numbers -- if
+    // pushedOppYards found real data, yards are already reliable and
+    // there's nothing to warn about even if the separate live fetch
+    // (used only for first downs now) had an issue.
+    const yardsAreFallback = pushedOppYards == null && !(oppOverride && oppOverride.ok);
+    const diag = (yardsAreFallback && oppOverride && !oppOverride.ok)
+      ? `<div style="font-size:11px;color:#c0601a;margin-top:6px;">⚠️ Opponent Total Yards above is the manually-entered number, not pulled from Stat Keeper: ${escapeHtml(oppOverride.reason)}. Try "Push to Live Stats" from Stat Keeper for this game, or check the browser console for more detail.</div>`
+      : '';
+    wrap.innerHTML = `<div class="lbSectionHeader">🥊 Head-to-Head</div><div class="h2hBox">${bars.join('')}</div>${diag}`;
   }
 
   // Nathan: "all the stats should show in the game info - just like an NFL
@@ -1004,6 +1187,63 @@
     wrap.appendChild(addBtn);
   }
 
+  // Nathan: "Would be great to clip a few plays or save screenshots from
+  // the video to call out coverages or what they are doing. Coach could
+  // type in notes... It's going to be on the coaches to create the clips
+  // but the kids need to be able to see them." Same mutate-in-place/
+  // re-render pattern as renderGameFootageEditor just above. Timestamp is
+  // stored in seconds (what filmTimestampUrl/the YouTube URL param
+  // actually need) but edited as MM:SS since that's what a coach is
+  // actually looking at on the scrubber -- mmssToSeconds/secondsToMmss
+  // convert both ways.
+  function renderScoutingNotesEditor() {
+    const wrap = document.getElementById('schedScoutingNotesWrap');
+    if (!wrap || !current) return;
+    const notes = current.scoutingNotes;
+    wrap.innerHTML = '';
+    if (!current.opponentFilmUrl) {
+      const hint = document.createElement('div');
+      hint.className = 'lbSub';
+      hint.textContent = 'Add the opponent film link above first -- these notes link straight into a moment in that film.';
+      wrap.appendChild(hint);
+    }
+    if (!notes.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = 'No scouting notes yet.';
+      wrap.appendChild(empty);
+    }
+    notes.forEach((note, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:flex-start;';
+      const tsInput = document.createElement('input');
+      tsInput.type = 'text'; tsInput.placeholder = 'M:SS'; tsInput.value = note.timestamp ? secondsToMmss(note.timestamp) : '';
+      tsInput.style.cssText = 'flex:0 0 64px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;';
+      tsInput.addEventListener('input', () => { note.timestamp = mmssToSeconds(tsInput.value); });
+      row.appendChild(tsInput);
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text'; labelInput.placeholder = 'Label (e.g. "Base Coverage")'; labelInput.value = note.label || '';
+      labelInput.style.cssText = 'flex:1 1 120px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;';
+      labelInput.addEventListener('input', () => { note.label = labelInput.value; });
+      row.appendChild(labelInput);
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'statsRmBtnSmall'; rm.textContent = '✕';
+      rm.addEventListener('click', () => { notes.splice(i, 1); renderScoutingNotesEditor(); });
+      row.appendChild(rm);
+      const noteInput = document.createElement('textarea');
+      noteInput.placeholder = 'What should the kids notice here?'; noteInput.value = note.note || '';
+      noteInput.style.cssText = 'width:100%;min-height:44px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;margin-top:4px;';
+      noteInput.addEventListener('input', () => { note.note = noteInput.value; });
+      row.appendChild(noteInput);
+      wrap.appendChild(row);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'lbLinkBtn'; addBtn.style.marginTop = '4px';
+    addBtn.textContent = '+ Add Scouting Note';
+    addBtn.addEventListener('click', () => { notes.push({ id: genId(), timestamp: 0, label: '', note: '' }); renderScoutingNotesEditor(); });
+    wrap.appendChild(addBtn);
+  }
+
   function fmtDate(dateStr) {
     if (!dateStr) return 'Date TBD';
     // date input value is 'YYYY-MM-DD' -- parse as local, not UTC, so the
@@ -1018,6 +1258,51 @@
     const d = document.createElement('div');
     d.textContent = s || '';
     return d.innerHTML;
+  }
+
+  // Nathan: "A big thing will be having the footage of the other teams
+  // available. Would be great to clip a few plays... This is also partly
+  // the telestrator piece that died." Real video trimming isn't something
+  // this app can do client-side, but jumping an existing film link
+  // straight to a specific moment is -- YouTube supports a timestamp URL
+  // param directly, so "clip" becomes "this game film, starting at
+  // 1:42" instead of an actual cut-and-re-hosted video. Only YouTube
+  // reliably supports this; anything else (Drive, Hudl) just links to the
+  // film as a whole, same as it already did.
+  function filmTimestampUrl(url, seconds) {
+    if (!url || !seconds) return url;
+    const isYouTube = /youtube\.com|youtu\.be/.test(url);
+    if (!isYouTube) return url;
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    return `${url}${sep}t=${Math.max(0, Math.round(seconds))}s`;
+  }
+  function mmssToSeconds(mmss) {
+    const parts = String(mmss || '').trim().split(':');
+    if (parts.length === 1) return Math.max(0, parseInt(parts[0], 10) || 0);
+    const m = parseInt(parts[0], 10) || 0, s = parseInt(parts[1], 10) || 0;
+    return Math.max(0, m * 60 + s);
+  }
+  function secondsToMmss(total) {
+    total = Math.max(0, Math.round(Number(total) || 0));
+    const m = Math.floor(total / 60), s = total % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+  // Nathan: "It's going to be on the coaches to create the clips but the
+  // kids need to be able to see them." Shown in the SAME read-only game
+  // detail view players already see (right under the film link/note,
+  // above), not tucked behind coach-only editing -- these are for the
+  // kids, that's the whole point.
+  function scoutingNotesReadOnlyHtml(game) {
+    const notes = Array.isArray(game.scoutingNotes) ? game.scoutingNotes : [];
+    if (!notes.length) return '';
+    return `
+      <div class="lbSectionHeader" style="margin-top:16px;">🔍 Scouting Notes</div>
+      ${notes.map(n => `
+        <div class="thisweekKeysBox" style="margin-bottom:8px;">
+          ${n.label ? `<div class="thisweekKeysTitle">${escapeHtml(n.label)}</div>` : ''}
+          ${n.note ? `<div style="font-size:14px;font-weight:600;line-height:1.45;margin:${n.label?'4px':'0'} 0 ${game.opponentFilmUrl && n.timestamp ? '8px':'0'};">${escapeHtml(n.note)}</div>` : ''}
+          ${game.opponentFilmUrl && n.timestamp ? `<a href="${escapeHtml(filmTimestampUrl(game.opponentFilmUrl, n.timestamp))}" target="_blank" rel="noopener" class="lbLinkBtn">▶ Jump to ${secondsToMmss(n.timestamp)} in the film</a>` : ''}
+        </div>`).join('')}`;
   }
 
   // Nathan: "saving the schedule on my phone worked but it assigned all
@@ -1233,7 +1518,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '' };
+      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '', scoutingNotes: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -1293,6 +1578,15 @@
     // Footage button, same linking (saved.gameId -> upcomingGames) as the
     // URL itself.
     current.opponentFilmNote = current.opponentFilmNote || '';
+    // Nathan: "Would be great to clip a few plays or save screenshots from
+    // the video to call out coverages... coach could type in notes." Lives
+    // on the game record like everything else in this block; unlike
+    // telestrator.html's gameFootageAnnotations (which capture an actual
+    // drawn-on video frame, but only works with a directly-playable video
+    // file, not a YouTube/Hudl embed), this is deliberately just a
+    // timestamp + text note -- lighter weight, and it works with
+    // whatever's already linked as opponentFilmUrl regardless of host.
+    current.scoutingNotes = Array.isArray(current.scoutingNotes) ? current.scoutingNotes : [];
     pendingFieldPhoto = current.fieldPhoto; // fresh edit session starts from whatever's already saved
     // Brand-new, never-saved games have nothing to preview yet -- open
     // those straight into the edit form; anything already on the
@@ -1386,6 +1680,7 @@
         ${heroHtml}
         ${current.opponentFilmUrl ? `<a href="${escapeHtml(current.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(current.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}">🎥 Watch Game Film of our Upcoming Opponent</a>` : ''}
         ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
+        ${scoutingNotesReadOnlyHtml(current)}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
@@ -1393,6 +1688,7 @@
         ${gameFootageTopCtaHtml(current)}
         <div id="schedWeatherWrap" style="display:none;"></div>
         <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
         <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
         <div id="schedMomentumWrap" style="display:none;"></div>
         <div id="schedLeadersWrap" style="margin-top:16px;"></div>
@@ -1432,6 +1728,21 @@
       renderGamePreview();
       renderWeather();
       renderHeadToHead();
+      // Nathan: "it didn't pull any of the other team's stats into the
+      // comparison." Renders once immediately with whatever manual number
+      // exists (fast, no flash of a blank section), then re-renders with
+      // the real total the moment Stat Keeper data comes back, if there
+      // is any -- most games will have this land within a second or two
+      // of the page opening.
+      fetchOppTotalsFromStatKeeper(current.id).then(oppOverride => {
+        renderHeadToHead(oppOverride);
+      });
+      // Nathan: "this is what I am really after for the gamecast" (the
+      // scoring plays timeline, grouped by quarter with drive summaries).
+      computeScoringPlays(current.id).then(events => {
+        const spWrap = document.getElementById('schedScoringPlaysWrap');
+        if (spWrap) renderScoringPlaysTimeline(spWrap, events);
+      }).catch(err => console.error('[scoringPlays] failed for', current.id, err));
       renderGameBoxScore();
       renderMomentumChart();
       renderSeasonLeaders();
@@ -1523,6 +1834,9 @@
       <input type="text" id="schedOpponentFilmUrl" placeholder="https://…" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
       <input type="text" id="schedOpponentFilmNote" placeholder="e.g. &quot;Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6&quot;" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:4px;">
       <div class="lbSub" style="margin:2px 0 8px;">Optional note shown right under the film button -- jersey colors, final score, anything worth flagging before they hit play.</div>
+      <div class="lbSectionHeader" style="margin-top:12px;">🔍 Scouting Notes</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Point kids straight at a moment in the film above -- "1:42, their base coverage," a quick note on what to notice. Visible to the whole team, same as the film link itself.</div>
+      <div id="schedScoutingNotesWrap" style="margin-bottom:8px;"></div>
       <div class="lbSub" style="margin:8px 0;">Stats for this game are entered separately under Coach Tools &gt; Stats, once it's played.</div>
       <div id="gameCancelSection"></div>
       <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
@@ -1550,6 +1864,7 @@
     document.getElementById('schedOppTurnovers').value = current.oppTurnovers === null || current.oppTurnovers === undefined ? '' : current.oppTurnovers;
     renderInjuryEditor();
     renderGameFootageEditor();
+    renderScoutingNotesEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
     document.getElementById('schedOpponentFilmUrl').value = current.opponentFilmUrl || '';
