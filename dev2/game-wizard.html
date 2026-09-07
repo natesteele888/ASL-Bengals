@@ -1841,7 +1841,7 @@
         carrier: wiz.play.carrier, oppCarrier: wiz.play.oppCarrier,
         startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard,
         yards: yards, dir: wiz.play.dir, formation: wiz.play.formation, formationDir: wiz.play.formationDir,
-        playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+        playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir, tags: wiz.play.tags || [],
         coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir,
         coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
         firstDown: converted, td: !!wiz.play.td, oob: wiz.play.resultKind === 'Out of Bounds', down: g.down, distance: g.distance,
@@ -2006,6 +2006,7 @@
       {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
       {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
       {key:'dir', label:'Run Direction', kind:'chip', options:['Left','Middle','Right']},
+      {key:'tags', label:'Motion/Add-Ons', kind:'tagsMulti', optional:true},
       {key:'carrier', label:'Carrier (us)', kind:'player'},
       {key:'oppCarrier', label:'Carrier (opponent)', kind:'player', optional:true},
       {key:'spot', label:'Start / End Spot', kind:'spotPair'},
@@ -2119,6 +2120,7 @@
     }
     if (f.kind === 'toggle') return play[f.key] ? 'Yes' : 'No';
     if (f.kind === 'playerMulti') return (play[f.key] && play[f.key].length) ? play[f.key].join(', ') : '— none —';
+    if (f.kind === 'tagsMulti') return (play[f.key] && play[f.key].length) ? play[f.key].join(', ') : '— none —';
     return play[f.key] || '— none —';
   }
 
@@ -2127,6 +2129,24 @@
     if (f.kind === 'chip') chipGroupField(wrap, f.label, auditDraft, f.key, f.options);
     else if (f.kind === 'player') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {optional: f.optional});
     else if (f.kind === 'playerMulti') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {multi:true, optional:true});
+    else if (f.kind === 'tagsMulti'){
+      const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
+      wrap.appendChild(l);
+      const row = document.createElement('div'); row.className = 'chipRow';
+      ['Motion','Counter','Boot/Naked','Play-Action'].forEach(function(t){
+        const on = (auditDraft[f.key] || []).indexOf(t) !== -1;
+        const c = document.createElement('div'); c.className = 'optChip' + (on ? ' active' : '');
+        c.textContent = t;
+        c.addEventListener('click', function(){
+          const arr = auditDraft[f.key] || (auditDraft[f.key] = []);
+          const i = arr.indexOf(t);
+          if (i === -1) arr.push(t); else arr.splice(i, 1);
+          renderWizard();
+        });
+        row.appendChild(c);
+      });
+      wrap.appendChild(row);
+    }
     else if (f.kind === 'toggle'){
       chipGroupField(wrap, f.label, auditDraft, f.key, [[true,'Yes'],[false,'No']]);
     } else if (f.kind === 'number'){

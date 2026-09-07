@@ -215,7 +215,152 @@
     return { byDir, byPlayer };
   }
 
-  function renderTendencies(wrap) {
+  // ---- Play Call Report -- Nathan: "now that we have a full log of plays
+  // for offense and defense, showing formations and results, I need a
+  // game report... What plays are we calling, how often, with what
+  // results, what are we getting the most success with." Deliberately a
+  // SEPARATE data source from runTendencies() below (which reads
+  // g.statSheet, the older manually-entered stat system) -- formation,
+  // playCall, direction, and motion/counter/boot/play-action tags only
+  // exist on the RAW play-by-play (statKeeperLogs/{gameId}.json), which
+  // this fetches directly, one request per game, in parallel.
+  async function computePlayCallReport() {
+    const list = sortedGames();
+    const logs = await Promise.all(list.map(async g => {
+      try {
+        const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${g.id}.json`);
+        const res = await fetch(url);
+        const gs = res.ok ? await res.json() : null;
+        return (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+      } catch (e) { return []; }
+    }));
+    const byCall = {}; // "Play Name [Dir]" -> {att, yds, td, fd}
+    const byTag = { Motion: 0, Counter: 0, 'Boot/Naked': 0, 'Play-Action': 0 };
+    const byFormation = {}; // "Wing"/"Split" -> {att, yds}
+    let runAtt = 0, runYds = 0, passAtt = 0, passComp = 0, passYds = 0, totalCalledPlays = 0;
+    logs.forEach(plays => {
+      plays.forEach(p => {
+        const isUsRun = p.type === 'run' && p.runTeam !== 'Opponent' && !p.fumbledExchange;
+        const isUsPassAtt = p.type === 'pass' && p.passTeam !== 'Opponent';
+        if (!isUsRun && !isUsPassAtt) return;
+        const yds = Number(p.yards) || 0;
+        if (isUsRun) { runAtt++; runYds += yds; }
+        else {
+          passAtt++;
+          if (p.result === 'Complete') { passComp++; passYds += yds; }
+        }
+        if (p.formation) {
+          const f = byFormation[p.formation] || (byFormation[p.formation] = { att: 0, yds: 0 });
+          f.att++; f.yds += yds;
+        }
+        (Array.isArray(p.tags) ? p.tags : []).forEach(t => { if (byTag[t] != null) byTag[t]++; });
+        // "What plays are we calling" -- only counts plays with an actual
+        // named call (playCall from run/pass), not every single snap
+        // (kneels/penalties/etc. don't have one).
+        if (p.playCall && (isUsRun || (isUsPassAtt && p.result))) {
+          totalCalledPlays++;
+          const key = p.playCall + (p.playCallDir ? ' ' + p.playCallDir : '');
+          const c = byCall[key] || (byCall[key] = { name: key, att: 0, yds: 0, td: 0, fd: 0 });
+          c.att++;
+          if (isUsRun || p.result === 'Complete') { c.yds += yds; if (p.td) c.td++; if (p.firstDown) c.fd++; }
+        }
+      });
+    });
+    return { byCall, byTag, byFormation, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays };
+  }
+
+  function renderPlayCallReport(wrap, report) {
+    const { byCall, byTag, byFormation, runAtt, runYds, passAtt, passComp, passYds, totalCalledPlays } = report;
+    wrap.appendChild(sectionHeading('📋 Play Call Report'));
+    if (!totalCalledPlays) {
+      const empty = document.createElement('div'); empty.className = 'lbEmpty';
+      empty.textContent = 'No named play calls logged yet (Game Wizard/Stat Keeper) -- this fills in as games are logged with formation/play call data.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    // Run vs Pass split -- "very little passing attempts" is either
+    // confirmed or corrected right here as an actual count, not a guess.
+    const snapTotal = runAtt + passAtt;
+    const runPct = snapTotal ? Math.round(runAtt / snapTotal * 100) : 0;
+    const rpBox = document.createElement('div');
+    rpBox.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-bottom:6px;';
+    rpBox.innerHTML = `<span><b>🏃 Run:</b> ${runAtt} att (${runPct}%), ${runAtt ? (runYds/runAtt).toFixed(1) : '0.0'} ypc</span>
+      <span><b>🎯 Pass:</b> ${passAtt} att (${100-runPct}%), ${passComp}/${passAtt} comp, ${passAtt ? (passYds/Math.max(passComp,1)).toFixed(1) : '0.0'} ypa</span>`;
+    wrap.appendChild(rpBox);
+    const rpBar = document.createElement('div');
+    rpBar.style.cssText = 'display:flex;height:16px;border-radius:4px;overflow:hidden;margin-bottom:18px;background:#f0f0f0;';
+    rpBar.innerHTML = `<span style="width:${runPct}%;background:var(--bengal-orange,#e0201a);"></span><span style="width:${100-runPct}%;background:#2a6fb0;"></span>`;
+    wrap.appendChild(rpBar);
+
+    // Play call table, most-called first -- this is the direct "what are
+    // we calling, how often, with what results" answer.
+    const rows = Object.values(byCall).sort((a, b) => b.att - a.att);
+    const table = document.createElement('div');
+    table.style.cssText = 'margin-bottom:18px;';
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;font-size:10.5px;font-weight:800;color:#888;text-transform:uppercase;padding:0 0 4px;border-bottom:2px solid #eee;';
+    header.innerHTML = `<span style="flex:1;">Play</span><span style="width:50px;text-align:right;">Att</span><span style="width:60px;text-align:right;">Yds</span><span style="width:50px;text-align:right;">Avg</span><span style="width:40px;text-align:right;">TD</span>`;
+    table.appendChild(header);
+    rows.forEach(c => {
+      const avg = c.att ? (c.yds / c.att).toFixed(1) : '0.0';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;font-size:12.5px;padding:5px 0;border-bottom:1px solid #f5f5f5;align-items:center;';
+      row.innerHTML = `<span style="flex:1;font-weight:700;">${escapeHtml(c.name)}</span><span style="width:50px;text-align:right;">${c.att}</span><span style="width:60px;text-align:right;">${c.yds}</span><span style="width:50px;text-align:right;font-weight:800;color:${Number(avg)>=5?'#1a7a3a':Number(avg)<2?'#c0342a':'#333'};">${avg}</span><span style="width:40px;text-align:right;">${c.td||0}</span>`;
+      table.appendChild(row);
+    });
+    wrap.appendChild(table);
+
+    // "what are we getting the most success with" -- called out directly
+    // instead of making the coach scan the table for it themselves.
+    const calledOften = rows.filter(c => c.att >= 3);
+    if (calledOften.length) {
+      const best = calledOften.slice().sort((a, b) => (b.yds/b.att) - (a.yds/a.att))[0];
+      const worst = calledOften.slice().sort((a, b) => (a.yds/a.att) - (b.yds/b.att))[0];
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:12.5px;color:#444;margin-bottom:18px;line-height:1.6;';
+      note.innerHTML = `💪 <b>Most success (3+ calls):</b> ${escapeHtml(best.name)} — ${(best.yds/best.att).toFixed(1)} ypc<br>
+        📉 <b>Least success (3+ calls):</b> ${escapeHtml(worst.name)} — ${(worst.yds/worst.att).toFixed(1)} ypc`;
+      wrap.appendChild(note);
+    }
+
+    // Motion/trickery usage -- direct answer to "I realized we never ran
+    // a single motion call all game... but I could be wrong." Shown even
+    // at zero, on purpose -- a real zero IS the answer to that question,
+    // not something to hide because it's an empty stat.
+    wrap.appendChild(sectionHeading('🌀 Motion & Add-Ons Used'));
+    const tagBox = document.createElement('div');
+    tagBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;';
+    Object.keys(byTag).forEach(t => {
+      const chip = document.createElement('div');
+      const n = byTag[t];
+      chip.style.cssText = `padding:6px 12px;border-radius:16px;font-size:12px;font-weight:700;background:${n?'#fff3e8':'#f5f5f5'};color:${n?'#c0601a':'#999'};border:1px solid ${n?'#f0c090':'#e5e5e5'};`;
+      chip.textContent = `${t}: ${n}`;
+      tagBox.appendChild(chip);
+    });
+    wrap.appendChild(tagBox);
+
+    // Formation usage, same shape as the play-call table above.
+    const formRows = Object.entries(byFormation).sort((a, b) => b[1].att - a[1].att);
+    if (formRows.length) {
+      wrap.appendChild(sectionHeading('📐 Formation Usage'));
+      const fBox = document.createElement('div'); fBox.style.cssText = 'margin-bottom:18px;';
+      formRows.forEach(([name, f]) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;';
+        row.innerHTML = `<b>${escapeHtml(name)}</b><span>${f.att} att · ${f.att?(f.yds/f.att).toFixed(1):'0.0'} avg</span>`;
+        fBox.appendChild(row);
+      });
+      wrap.appendChild(fBox);
+    }
+  }
+
+  async function renderTendencies(wrap) {
+    wrap.innerHTML = '<div class="lbSub" style="text-align:center;">Loading…</div>';
+    const report = await computePlayCallReport();
+    wrap.innerHTML = '';
+    renderPlayCallReport(wrap, report);
+
     const { byDir, byPlayer } = runTendencies();
     const totalAtt = DIRS.reduce((s, d) => s + byDir[d].att, 0);
     if (!totalAtt) {
@@ -773,7 +918,7 @@
   function renderAll() {
     renderSubNav();
     if (subTab === 'leaderboard') renderLeaderboard();
-    else if (subTab === 'tendencies') { const wrap = document.getElementById('coachStatsBody'); if (wrap) { wrap.innerHTML = ''; renderTendencies(wrap); } }
+    else if (subTab === 'tendencies') { const wrap = document.getElementById('coachStatsBody'); if (wrap) renderTendencies(wrap); }
     else if (subTab === 'filmviews') renderFilmViews();
     else renderEnterStats();
   }

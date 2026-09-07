@@ -1229,6 +1229,34 @@
         fieldsArea.appendChild(fieldBlock('Play Run (optional)', playCallField()));
         fieldsArea.appendChild(fieldBlock("Coach's Call — Formation (optional, from film)", coachFormationField()));
         fieldsArea.appendChild(fieldBlock("Coach's Call — Play (optional, from film)", coachCallField()));
+        // Nathan (follow-up): "I realized we never ran a single motion
+        // call all game... but I could be wrong." That's exactly the
+        // question this exists to answer -- but only the Wizard had a way
+        // to capture it (and, separately, wasn't actually saving it onto
+        // the play at all -- fixed alongside this). Stat Keeper never had
+        // this field, so a play logged directly here could never record
+        // motion/trickery either. Same PLAY_TAGS list as game-wizard.html,
+        // and same "belongs with the play call" reasoning as formation/
+        // playCall just above -- these are things WE call, not a fact
+        // about the play the way Direction below is, so they only show
+        // for our own offense.
+        const tagsWrap = document.createElement('div'); tagsWrap.innerHTML = '<div class="fieldLabel">Add-ons (optional)</div>';
+        const tagsRow = document.createElement('div'); tagsRow.className = 'chipRow';
+        ['Motion','Counter','Boot/Naked','Play-Action'].forEach(function(t){
+          const chip = document.createElement('div');
+          const on = (draft.tags || []).indexOf(t) !== -1;
+          chip.className = 'toggleChip' + (on ? ' on' : '');
+          chip.textContent = (on ? '✓ ' : '') + t;
+          chip.addEventListener('click', function(){
+            const arr = draft.tags || (draft.tags = []);
+            const i = arr.indexOf(t);
+            if (i === -1) arr.push(t); else arr.splice(i, 1);
+            renderFields();
+          });
+          tagsRow.appendChild(chip);
+        });
+        tagsWrap.appendChild(tagsRow);
+        fieldsArea.appendChild(tagsWrap);
       } else {
         fieldsArea.appendChild(fieldBlock('Opponent Ball Carrier (optional)', textInput('oppCarrier', "Opponent's ball carrier, if known")));
       }
