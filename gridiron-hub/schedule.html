@@ -61,6 +61,7 @@
   .game-week .lbl{font-size:9.5px;color:var(--text-dim);text-transform:uppercase;}
   .game-main .matchup{font-weight:800;font-size:15.5px;}
   .game-main .matchup .oppname{color:var(--orange);}
+  .opp-logo{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px;}
   .game-main .meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
   .ha-pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:3px;background:rgba(128,128,128,.15);color:var(--text-dim);margin-right:6px;}
   .ha-pill.home{background:rgba(244,105,28,.15);color:var(--orange);}
@@ -154,6 +155,22 @@
       return;
     }
     const t = TEAM_DATA[teamKey];
+
+    // Logo lookup by opponent name -- explicit map rather than
+    // auto-deriving a filename from the name string, since "Leicester/
+    // Spencer" and "North Middlesex" don't turn into safe filenames
+    // automatically (slashes, spaces). Anything not in this map just
+    // renders without a logo -- no broken-image icon.
+    const OPP_LOGOS = {
+      'Leicester/Spencer': 'leicester-spencer', 'Tyngsboro': 'tyngsboro',
+      'North Middlesex': 'north-middlesex', 'Leominster': 'leominster',
+      'Northbridge/Uxbridge': 'northbridge-uxbridge', 'Tantasqua': 'tantasqua',
+      'Nipmuc': 'nipmuc',
+    };
+    function oppLogoHtml(opponent) {
+      const slug = OPP_LOGOS[opponent];
+      return slug ? `<img class="opp-logo" src="assets/img/team-logos/${slug}.png" alt="" onerror="this.style.display='none';">` : '';
+    }
     let html = `
       <div class="team-header">
         <div>
@@ -180,7 +197,7 @@
           <div class="game-row">
             <div class="game-week"><div class="num">${r.result}</div><div class="lbl">Final</div></div>
             <div class="game-main">
-              <div class="matchup">ASL vs <span class="oppname">${r.opponent}</span></div>
+              <div class="matchup">${oppLogoHtml(r.opponent)}ASL vs <span class="oppname">${r.opponent}</span></div>
             </div>
             <div class="game-status"><span class="score-pill ${r.result === 'W' ? 'w' : 'l'}">${r.result} ${r.score}</span></div>
           </div>`;
@@ -194,7 +211,7 @@
         <div class="game-row ${g.home ? 'home' : ''}">
           <div class="game-week"><div class="num">${g.week || '—'}</div><div class="lbl">${g.week ? 'Week' : 'TBD'}</div></div>
           <div class="game-main">
-            <div class="matchup"><span class="ha-pill ${g.home ? 'home' : ''}">${g.home === null ? '--' : (g.home ? 'HOME' : 'AWAY')}</span>${g.home ? 'vs' : '@'} <span class="oppname">${g.opponent}</span></div>
+            <div class="matchup">${oppLogoHtml(g.opponent)}<span class="ha-pill ${g.home ? 'home' : ''}">${g.home === null ? '--' : (g.home ? 'HOME' : 'AWAY')}</span>${g.home ? 'vs' : '@'} <span class="oppname">${g.opponent}</span></div>
             <div class="meta">${g.date}${g.time ? ' · ' + g.time : ''} · ${g.venue}</div>
           </div>
           <div class="game-status"><span class="status-pending">${g.oppRecord ? 'Opp ' + g.oppRecord : ''}</span></div>
