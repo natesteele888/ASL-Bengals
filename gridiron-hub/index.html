@@ -31,19 +31,19 @@
   .navdrop-menu{position:absolute;top:100%;left:0;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:190px;display:none;flex-direction:column;gap:2px;}
   .navdrop:hover .navdrop-menu{display:flex;}
   .navdrop-menu a{color:var(--text-dim);font-size:13.5px;font-weight:700;padding:8px 10px;border-radius:4px;}
-  .navdrop-menu a:hover{background:rgba(255,255,255,.06);color:var(--text);}
+  
   .nav-user{display:flex;align-items:center;gap:12px;}
   .nav-user span{font-size:13px;color:var(--text-dim);}
   .nav-user button{background:none;border:1px solid var(--line);color:var(--text-dim);padding:7px 14px;border-radius:5px;font-size:13px;cursor:pointer;}
 
   /* hero */
-  .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;background:radial-gradient(ellipse at 25% 30%, #2a1408 0%, var(--ink) 60%);border-bottom:none;}
+  .hero{position:relative;overflow:hidden;min-height:640px;display:flex;align-items:center;background:radial-gradient(ellipse at 25% 30%, #2a1408 0%, var(--ink) 60%);border-bottom:none;}
+  html[data-theme="light"] .hero{background:var(--ink);}
   /* Photo sits behind everything; gradient overlay is darkest on the left
      (where text lives, matching WAB Knights) fading toward transparent on
-     the right so the photo itself stays visible there. Set background-image
-     on #heroPhoto once the actual file exists -- structure is ready now. */
-  .hero-photo{position:absolute;inset:0;background-size:cover;background-position:center;}
-  .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg, var(--ink) 0%, rgba(14,14,16,.85) 35%, rgba(14,14,16,.35) 65%, rgba(14,14,16,.15) 100%);}
+     the right so the photo itself stays visible there. */
+  .hero-photo{position:absolute;inset:0;background-image:url('assets/img/hero-football.jpg');background-size:cover;background-position:50% 35%;}
+  .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg, var(--hero-ov-1) 0%, var(--hero-ov-2) 38%, var(--hero-ov-3) 68%, var(--hero-ov-4) 100%);}
   #emberCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
   .hero-tiger-watermark{position:absolute;right:-60px;top:50%;transform:translateY(-50%);width:460px;opacity:.10;pointer-events:none;}
   .hero-tiger-watermark img{width:100%;}
@@ -55,11 +55,17 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;
     text-shadow:0 0 60px rgba(244,105,28,.25);
   }
+  html[data-theme="light"] .hero-headline{
+    background:linear-gradient(180deg,#1c1b18 0%,#4a2f1a 55%,var(--orange) 100%);
+    -webkit-background-clip:text;background-clip:text;
+  }
   .hero-inner p{color:var(--text-dim);font-size:15px;margin-top:0;max-width:52ch;}
   .hero-actions{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;}
   .btn-hero-primary,.btn-hero-ghost{display:inline-flex;padding:13px 24px;border-radius:4px;font-weight:800;font-size:14px;}
-  .btn-hero-primary{background:var(--orange);color:var(--ink);}
+  .btn-hero-primary{background:var(--orange);color:#0e0e10;}
   .btn-hero-ghost{border:1.5px solid var(--line);color:var(--text);}
+  .hero-checks{display:flex;gap:20px;flex-wrap:wrap;margin-top:28px;padding-top:22px;border-top:1px solid var(--line);}
+  .hero-checks span{font-size:12.5px;color:var(--text-dim);}
   .hero-fade{position:absolute;left:0;right:0;bottom:0;height:180px;background:linear-gradient(to bottom,transparent,var(--ink));pointer-events:none;z-index:1;}
 
   /* section */
@@ -86,7 +92,7 @@
   .team-card .record{display:inline-block;margin-top:12px;font-weight:800;font-size:12.5px;padding:4px 9px;border-radius:2px;}
   .record.good{background:var(--green-bg);color:var(--green);}
   .record.mid{background:rgba(244,105,28,.12);color:var(--orange);}
-  .record.bye{background:rgba(255,255,255,.06);color:var(--text-dim);}
+  .record.bye{background:rgba(128,128,128,.14);color:var(--text-dim);}
 
   /* results */
   .results{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;overflow:hidden;}
@@ -111,6 +117,7 @@
       <div class="nav-links">
         <a href="schedule.html">Schedule</a>
         <a href="teams.html">Teams</a>
+        <a href="photos.html">Photos</a>
         <div class="navdrop">
           <span>About</span>
           <div class="navdrop-menu">
@@ -155,6 +162,12 @@
       <div class="hero-actions">
         <a href="#" class="btn-hero-primary">This Week's Games</a>
         <a href="#" class="btn-hero-ghost">All Teams</a>
+      </div>
+      <div class="hero-checks">
+        <span>✓ Flex · Tackle · Cheer</span>
+        <span>✓ Ages 6–14</span>
+        <span>✓ 6 teams · 9 game weeks</span>
+        <span>✓ CMYFCC member</span>
       </div>
     </div>
     <div class="hero-fade"></div>

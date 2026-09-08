@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Photos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  .upload-card{background:var(--ink-2);border:2px dashed var(--line);border-radius:8px;padding:32px;text-align:center;margin-bottom:28px;}
+  .upload-card.dragover{border-color:var(--orange);background:rgba(244,105,28,.06);}
+  .upload-card input[type=file]{display:none;}
+  .upload-btn{display:inline-flex;background:var(--orange);color:#fff;font-weight:800;font-size:14px;padding:11px 22px;border-radius:5px;cursor:pointer;margin-top:10px;}
+  .upload-hint{font-size:12.5px;color:var(--text-dim);margin-top:8px;}
+  .upload-status{font-size:13px;margin-top:14px;display:none;}
+  .upload-status.show{display:block;}
+  .signin-notice{font-size:13.5px;color:var(--text-dim);}
+  .signin-notice a{color:var(--orange);font-weight:700;}
+
+  .photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  .photo-tile{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;background:var(--ink-2);border:1px solid var(--line);}
+  .photo-tile img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-tile .who{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);color:#fff;font-size:11px;padding:16px 8px 6px;}
+  .empty-state{color:var(--text-dim);font-size:14px;padding:30px 0;text-align:center;}
+  @media (max-width:860px){ .photo-grid{grid-template-columns:repeat(2,1fr);} }
+</style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap">
+      <div class="nav-brand"><img src="assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="schedule.html">Schedule</a>
+        <a href="teams.html">Teams</a>
+        <a href="photos.html" class="current">Photos</a>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-eyebrow">TEAM PHOTOS</div>
+      <h1>11U Photos</h1>
+      <p>Uploaded by coaches and parents -- tag who's in the photo so families can find their player.</p>
+    </div>
+
+    <div class="section">
+      <div id="signedOutNotice" class="signin-notice" style="display:none;">
+        <a href="login.html">Sign in</a> to upload photos.
+      </div>
+
+      <div id="uploadCard" class="upload-card" style="display:none;">
+        <div>📸 Drag photos here, or</div>
+        <label class="upload-btn" for="fileInput">Choose Photos</label>
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <div class="upload-hint">JPG or PNG, up to 10MB each. You can tag players after upload.</div>
+        <div class="upload-status" id="uploadStatus"></div>
+      </div>
+
+      <div id="photoGrid" class="photo-grid"></div>
+      <div id="emptyState" class="empty-state" style="display:none;">No photos uploaded yet -- be the first.</div>
+    </div>
+  </div>
+
+<script type="module">
+  import { app, auth, db } from './src/firebase-config.js';
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+  import {
+    collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+  import {
+    getStorage, ref, uploadBytes, getDownloadURL
+  } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
+
+  // Storage requires the Blaze plan (see chat) -- this code is real and
+  // will work the moment Storage is enabled on the project; until then,
+  // uploadBytes below will throw, and the status message surfaces that
+  // plainly rather than failing silently.
+  const storage = getStorage(app);
+  const TEAM_ID = '11u'; // hardcoded for now -- becomes dynamic once multi-team pages exist
+
+  const fileInput = document.getElementById('fileInput');
+  const uploadCard = document.getElementById('uploadCard');
+  const signedOutNotice = document.getElementById('signedOutNotice');
+  const statusEl = document.getElementById('uploadStatus');
+  const gridEl = document.getElementById('photoGrid');
+  const emptyEl = document.getElementById('emptyState');
+
+  let currentUser = null;
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    uploadCard.style.display = user ? 'block' : 'none';
+    signedOutNotice.style.display = user ? 'none' : 'block';
+  });
+
+  function showStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.className = 'upload-status show';
+    statusEl.style.color = isError ? '#ff6b5e' : 'var(--text-dim)';
+  }
+
+  async function handleFiles(files) {
+    if (!currentUser) return;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      showStatus(`Uploading ${file.name}…`, false);
+      try {
+        const path = `teams/${TEAM_ID}/photos/${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, path);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        await addDoc(collection(db, 'teams', TEAM_ID, 'photos'), {
+          url,
+          uploadedByUid: currentUser.uid,
+          uploadedByEmail: currentUser.email,
+          playerTags: [], // filled in later via a tagging UI -- not built yet
+          uploadedAt: serverTimestamp()
+        });
+        showStatus(`${file.name} uploaded.`, false);
+      } catch (err) {
+        // Most likely cause right now: Storage isn't enabled on the Blaze plan yet.
+        showStatus(`Couldn't upload ${file.name}: ${err.code || err.message}`, true);
+      }
+    }
+  }
+
+  fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+  uploadCard.addEventListener('dragover', (e) => { e.preventDefault(); uploadCard.classList.add('dragover'); });
+  uploadCard.addEventListener('dragleave', () => uploadCard.classList.remove('dragover'));
+  uploadCard.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadCard.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+
+  // Live gallery -- renders whatever's in Firestore for this team, newest first.
+  const q = query(collection(db, 'teams', TEAM_ID, 'photos'), orderBy('uploadedAt', 'desc'), limit(48));
+  onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      gridEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    gridEl.style.display = 'grid';
+    emptyEl.style.display = 'none';
+    gridEl.innerHTML = '';
+    snap.forEach((doc) => {
+      const p = doc.data();
+      const tile = document.createElement('div');
+      tile.className = 'photo-tile';
+      const tags = (p.playerTags && p.playerTags.length) ? p.playerTags.join(', ') : '';
+      tile.innerHTML = `<img src="${p.url}" alt="" loading="lazy">${tags ? `<div class="who">${tags}</div>` : ''}`;
+      gridEl.appendChild(tile);
+    });
+  }, (err) => {
+    console.error('Photo feed error (likely Storage/Firestore rules not set up yet):', err);
+  });
+</script>
+
+<script src="assets/js/theme.js"></script>
+</body>
+</html>
