@@ -74,6 +74,7 @@
         <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Name</label><input type="text" id="newPlayerName" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:180px;"></div>
         <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">#</label><input type="number" id="newPlayerNumber" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:70px;"></div>
         <button id="addPlayerBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Add Player</button>
+        <button id="importRosterBtn" style="display:none;background:none;color:var(--text-dim);border:1px solid var(--line);padding:9px 16px;border-radius:4px;font-weight:700;font-size:12.5px;cursor:pointer;">Import Full 11U Roster</button>
         <span id="addPlayerStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
       </div>
 
@@ -113,12 +114,23 @@
   document.getElementById('teamName').textContent = display.name;
   document.getElementById('teamSport').textContent = display.sport;
   if (display.record) document.getElementById('teamRecord').textContent = display.record;
-  document.getElementById('rosterLink').href = `schedule.html`; // placeholder until a real roster page exists
 
   const heroPhotoEl = document.getElementById('teamHeroPhoto');
   const editBtn = document.getElementById('editBannerBtn');
   const fileInput = document.getElementById('bannerFileInput');
   const statusEl = document.getElementById('uploadStatus');
+
+  // Static fallback per team, used until a real bannerUrl exists in
+  // Firestore (Storage isn't enabled yet, so the real upload flow below
+  // can't run yet either). Once Storage is on and someone uses "Edit
+  // Banner" for real, that Firestore value takes over automatically --
+  // this fallback only fires when snap.data().bannerUrl is empty.
+  const FALLBACK_BANNERS = {
+    '11u': 'assets/img/bengals-11u-hero.jpg',
+  };
+  if (FALLBACK_BANNERS[teamId]) {
+    heroPhotoEl.style.backgroundImage = `url('${FALLBACK_BANNERS[teamId]}')`;
+  }
 
   async function loadBanner() {
     try {
@@ -141,6 +153,7 @@
     currentUser = user;
     editBtn.style.display = user ? 'block' : 'none';
     document.getElementById('addPlayerForm').style.display = user ? 'flex' : 'none';
+    updateImportBtnVisibility();
   });
 
   editBtn.addEventListener('click', (e) => {
@@ -153,8 +166,15 @@
   // names link to player.html, which is where tagged-photo lookup lives.
   const rosterGrid = document.getElementById('rosterGrid');
   const rosterEmpty = document.getElementById('rosterEmpty');
+  const importBtn = document.getElementById('importRosterBtn');
+  let rosterIsEmpty = null; // unknown until the first snapshot fires
+  function updateImportBtnVisibility() {
+    importBtn.style.display = (teamId === '11u' && rosterIsEmpty === true && currentUser) ? 'inline-block' : 'none';
+  }
   const rosterQuery = query(collection(db, 'teams', teamId, 'roster'), orderBy('number', 'asc'));
   onSnapshot(rosterQuery, (snap) => {
+    rosterIsEmpty = snap.empty;
+    updateImportBtnVisibility();
     if (snap.empty) {
       rosterGrid.style.display = 'none';
       rosterEmpty.style.display = 'block';
@@ -173,6 +193,36 @@
     });
   }, (err) => {
     console.warn('Roster fetch error (likely Firestore rules for teams/{teamId}/roster not set up yet):', err);
+  });
+
+  // One-time bulk import for the real 11U roster Nathan provided --
+  // hardcoded on purpose (this is a single use-once helper, not meant to
+  // be a general import tool), guarded by teamId/currentUser/empty-roster
+  // above so it can't run twice or on the wrong team.
+  const ROSTER_11U = [
+    { number: 5, name: 'Will J' }, { number: 6, name: 'Jacob W' }, { number: 7, name: 'Henry G' },
+    { number: 8, name: 'Connor' }, { number: 9, name: 'Dylan' }, { number: 11, name: 'Dean A' },
+    { number: 27, name: 'Timmy S' }, { number: 33, name: 'Braden' }, { number: 44, name: 'Jaxson P' },
+    { number: 49, name: 'Emmett B' }, { number: 51, name: 'Sonny L' }, { number: 53, name: 'Wyatt M' },
+    { number: 65, name: 'Jaxon R' }, { number: 66, name: 'Jaiden L' }, { number: 76, name: 'Desmond S' },
+    { number: 77, name: 'Jagger L' }, { number: 80, name: 'Wyatt B' }, { number: 86, name: 'Caden' },
+    { number: 87, name: 'James J' }, { number: 92, name: 'Erik M' }, { number: 98, name: 'Bryce P' },
+    { number: 99, name: 'Rocco D' },
+  ];
+  importBtn.addEventListener('click', async () => {
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing…';
+    try {
+      for (const player of ROSTER_11U) {
+        await addDoc(collection(db, 'teams', teamId, 'roster'), {
+          name: player.name, number: player.number, addedByUid: currentUser.uid, createdAt: serverTimestamp()
+        });
+      }
+      importBtn.textContent = 'Imported ✓';
+    } catch (err) {
+      importBtn.disabled = false;
+      importBtn.textContent = `Failed: ${err.code || err.message}`;
+    }
   });
 
   document.getElementById('addPlayerBtn').addEventListener('click', async () => {
