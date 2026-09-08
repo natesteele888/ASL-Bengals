@@ -15,6 +15,17 @@ html[data-theme="light"]{
   --green:#2f7a2a; --green-bg:rgba(47,122,42,.10);
   --shadow: 0 1px 3px rgba(0,0,0,.08);
 }
+/* Hero photo overlay needs its own theme-aware stops -- rgba() can't take
+   a variable for just the color channel with a different alpha per stop,
+   so each stop gets its own pair rather than one shared color mixed in. */
+:root{
+  --hero-ov-1: rgba(14,14,16,1); --hero-ov-2: rgba(14,14,16,.97);
+  --hero-ov-3: rgba(14,14,16,.55); --hero-ov-4: rgba(14,14,16,.05);
+}
+html[data-theme="light"]{
+  --hero-ov-1: rgba(250,249,246,1); --hero-ov-2: rgba(250,249,246,.97);
+  --hero-ov-3: rgba(250,249,246,.60); --hero-ov-4: rgba(250,249,246,.08);
+}
 
 *{box-sizing:border-box;}
 body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s;}
