@@ -6,63 +6,9 @@
 <title>Gridiron Hub — Flex Football</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  :root{
-    --ink:#0e0e10; --ink-2:#18181b; --orange:#f4691c; --orange-deep:#c94f0f;
-    --text:#e8e7e3; --text-dim:#9a988e; --line:rgba(255,255,255,.10);
-    --green:#3fae4a; --green-bg:rgba(63,174,74,.12);
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;}
-  h1,h2,h3{font-family:'Anton',sans-serif;font-weight:400;margin:0;line-height:1;}
-  a{color:inherit;text-decoration:none;}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
-
-  .nav{position:sticky;top:0;z-index:30;background:var(--ink-2);border-bottom:1px solid var(--line);}
-  .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px;}
-  .nav-brand{display:flex;align-items:center;gap:10px;}
-  .nav-brand img{width:34px;height:34px;}
-  .nav-brand span{font-family:'Anton',sans-serif;font-size:18px;}
-  .nav-links{display:flex;gap:22px;align-items:center;}
-  .nav-links>a{color:var(--text-dim);font-weight:700;font-size:14px;padding:8px 0;}
-  .nav-links>a.current{color:var(--orange);}
-  .navdrop{position:relative;}
-  .navdrop>span{color:var(--text-dim);font-weight:700;font-size:14px;cursor:default;padding:8px 0;display:inline-block;}
-  .navdrop:hover>span{color:var(--text);}
-  .navdrop-menu{position:absolute;top:100%;left:0;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:190px;display:none;flex-direction:column;gap:2px;}
-  .navdrop:hover .navdrop-menu{display:flex;}
-  .navdrop-menu a{color:var(--text-dim);font-size:13.5px;font-weight:700;padding:8px 10px;border-radius:4px;}
-  .navdrop-menu a:hover{background:rgba(255,255,255,.06);color:var(--text);}
-  .nav-cta{background:var(--orange);color:var(--ink);font-weight:800;font-size:13px;padding:9px 16px;border-radius:5px;}
-
-  .page-head{padding:40px 0 30px;border-bottom:1px solid var(--line);}
-  .page-eyebrow{color:var(--orange);font-weight:800;font-size:12.5px;margin-bottom:8px;letter-spacing:.03em;}
-  .page-head h1{font-size:34px;}
-  .page-head p{color:var(--text-dim);font-size:14.5px;margin-top:8px;max-width:60ch;}
-
-  .section{padding:40px 0;border-bottom:1px solid var(--line);}
-  .section:last-of-type{border-bottom:none;}
-  .section h2{font-size:22px;margin-bottom:16px;}
-  .section p{color:var(--text-dim);font-size:14.5px;line-height:1.65;max-width:70ch;}
-
-  .card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:20px;}
-  .card h3{font-size:16px;margin-bottom:6px;font-family:'Karla',sans-serif;font-weight:800;}
-  .card p{font-size:13.5px;color:var(--text-dim);margin:0;}
-  .placeholder-tag{display:inline-block;margin-top:10px;font-size:11px;font-weight:800;color:var(--orange);background:rgba(244,105,28,.1);padding:3px 8px;border-radius:3px;}
-
-  .btn{display:inline-flex;padding:12px 22px;border-radius:5px;font-weight:800;font-size:14px;margin-top:8px;}
-  .btn-primary{background:var(--orange);color:var(--ink);}
-  .btn-ghost{border:1.5px solid var(--line);color:var(--text);}
-
-  footer{padding:30px 0;color:var(--text-dim);font-size:13px;border-top:1px solid var(--line);}
-  footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
-
-  @media (max-width:860px){
-    .card-grid{grid-template-columns:repeat(2,1fr);}
-    .nav-links{display:none;}
-  }
-  @media (max-width:560px){ .card-grid{grid-template-columns:1fr;} }
 
 </style>
 </head>
@@ -99,6 +45,7 @@
             <a href="../resources/sponsors.html">Sponsors</a>
           </div>
         </div>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
         <a href="../register.html" class="nav-cta">Register</a>
       </div>
     </div>
@@ -127,5 +74,6 @@
     </div>
   </footer>
 
+<script src="../assets/js/theme.js"></script>
 </body>
 </html>

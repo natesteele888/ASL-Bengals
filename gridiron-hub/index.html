@@ -6,13 +6,10 @@
 <title>Gridiron Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  :root{
-    --ink:#0e0e10; --ink-2:#18181b; --ink-3:#202024;
-    --orange:#f4691c; --orange-deep:#c94f0f;
-    --text:#e8e7e3; --text-dim:#9a988e; --line:rgba(255,255,255,.10);
-    --green:#3fae4a; --green-bg:rgba(63,174,74,.12);
-  }
+  :root{ --ink-3:#202024; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;}
   h1,h2,h3{font-family:'Anton',sans-serif;font-weight:400;margin:0;line-height:1;}
@@ -138,6 +135,7 @@
             <a href="resources/sponsors.html">Sponsors</a>
           </div>
         </div>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
       </div>
       <div class="nav-user">
         <span>you@example.com</span>
@@ -266,5 +264,6 @@
     document.querySelector('.hero-inner').style.transform = `translateY(${y * 0.2}px)`;
   }, { passive: true });
 </script>
+<script src="assets/js/theme.js"></script>
 </body>
 </html>
