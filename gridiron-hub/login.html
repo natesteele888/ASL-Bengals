@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0e0e10; --orange:#f4691c; --orange-deep:#c94f0f;
+    --paper:#f7f5f0; --white:#ffffff; --line:rgba(14,14,16,.14); --err:#c73a3a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ink);font-family:'Karla',sans-serif;color:var(--ink);}
+  h1{font-family:'Anton',sans-serif;font-weight:400;margin:0;}
+  .card{background:var(--paper);border-radius:6px;padding:36px 32px;width:100%;max-width:380px;}
+  .brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
+  .brand img{width:40px;height:40px;}
+  .brand span{font-family:'Anton',sans-serif;font-size:20px;}
+  h1.title{font-size:24px;text-align:center;margin-bottom:4px;}
+  .sub{text-align:center;color:#6a6860;font-size:13.5px;margin-bottom:22px;}
+  label{display:block;font-size:12.5px;font-weight:700;color:#4a483f;margin:14px 0 5px;}
+  input{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:5px;font-size:14.5px;font-family:'Karla',sans-serif;background:var(--white);}
+  input:focus{outline:none;border-color:var(--orange);}
+  .btn{width:100%;padding:11px;border-radius:5px;font-weight:800;font-size:14px;border:none;cursor:pointer;margin-top:16px;}
+  .btn-primary{background:var(--orange);color:var(--white);}
+  .btn-primary:disabled{opacity:.6;cursor:default;}
+  .btn-google{background:var(--white);border:1.5px solid var(--line);color:var(--ink);display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;}
+  .btn-google img{width:16px;height:16px;}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0 0;color:#9a988e;font-size:12px;}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  .toggle-mode{text-align:center;margin-top:18px;font-size:13px;color:#6a6860;}
+  .toggle-mode button{background:none;border:none;color:var(--orange-deep);font-weight:800;cursor:pointer;font-size:13px;padding:0;}
+  .msg{margin-top:14px;font-size:13px;padding:9px 11px;border-radius:5px;display:none;}
+  .msg.error{display:block;background:rgba(199,58,58,.08);color:var(--err);}
+  .msg.info{display:block;background:rgba(14,14,16,.06);color:#4a483f;}
+</style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="brand"><img src="bengals-logo.png" alt=""><span>GRIDIRON HUB</span></div>
+    <h1 class="title" id="formTitle">Sign in</h1>
+    <div class="sub" id="formSub">Coaches and parents, one login.</div>
+
+    <form id="authForm">
+      <label>Email</label>
+      <input type="email" id="email" required autocomplete="email">
+      <label>Password</label>
+      <input type="password" id="password" required autocomplete="current-password" minlength="6">
+      <button type="submit" class="btn btn-primary" id="submitBtn">Sign In</button>
+    </form>
+
+    <div class="divider">or</div>
+    <button class="btn btn-google" id="googleBtn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+      Continue with Google
+    </button>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="toggle-mode">
+      <span id="toggleText">Don't have an account?</span>
+      <button type="button" id="toggleBtn">Sign up</button>
+    </div>
+  </div>
+
+<script type="module">
+  import { auth, db } from './firebase-config.js';
+  import {
+    signInWithEmailAndPassword, createUserWithEmailAndPassword,
+    GoogleAuthProvider, signInWithPopup, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+  import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+  const form = document.getElementById('authForm');
+  const emailEl = document.getElementById('email');
+  const passEl = document.getElementById('password');
+  const submitBtn = document.getElementById('submitBtn');
+  const googleBtn = document.getElementById('googleBtn');
+  const msgEl = document.getElementById('msg');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const toggleText = document.getElementById('toggleText');
+  const formTitle = document.getElementById('formTitle');
+  const formSub = document.getElementById('formSub');
+
+  let mode = 'signin'; // or 'signup'
+
+  toggleBtn.addEventListener('click', () => {
+    mode = (mode === 'signin') ? 'signup' : 'signin';
+    const isSignup = mode === 'signup';
+    formTitle.textContent = isSignup ? 'Create account' : 'Sign in';
+    formSub.textContent = isSignup ? 'One login for coaches and parents.' : 'Coaches and parents, one login.';
+    submitBtn.textContent = isSignup ? 'Create Account' : 'Sign In';
+    toggleText.textContent = isSignup ? 'Already have an account?' : "Don't have an account?";
+    toggleBtn.textContent = isSignup ? 'Sign in' : 'Sign up';
+    hideMsg();
+  });
+
+  function showMsg(text, kind) {
+    msgEl.textContent = text;
+    msgEl.className = 'msg ' + kind;
+  }
+  function hideMsg() { msgEl.className = 'msg'; }
+
+  // First-login-ever bootstrap: a user doc is how every other Gridiron Hub
+  // feature (role, orgId, teamIds) attaches to this person. Created once,
+  // here, at the single choke point both email/password AND Google sign-in
+  // pass through -- rather than duplicating this in two places. merge:true
+  // so a RETURNING user's existing role/orgId (set later by an org admin)
+  // is never stomped back to these placeholder defaults on a normal login.
+  async function ensureUserDoc(user) {
+    const ref = doc(db, 'users', user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        email: user.email,
+        displayName: user.displayName || null,
+        role: null,        // set later once assigned to an org/team
+        orgId: null,
+        teamIds: [],
+        createdAt: serverTimestamp()
+      }, { merge: true });
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideMsg();
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Please wait…';
+    try {
+      const cred = (mode === 'signup')
+        ? await createUserWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value)
+        : await signInWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value);
+      await ensureUserDoc(cred.user);
+      showMsg('Signed in. Redirecting…', 'info');
+    } catch (err) {
+      showMsg(friendlyError(err), 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = (mode === 'signup') ? 'Create Account' : 'Sign In';
+    }
+  });
+
+  googleBtn.addEventListener('click', async () => {
+    hideMsg();
+    try {
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      await ensureUserDoc(cred.user);
+      showMsg('Signed in. Redirecting…', 'info');
+    } catch (err) {
+      showMsg(friendlyError(err), 'error');
+    }
+  });
+
+  function friendlyError(err) {
+    const map = {
+      'auth/email-already-in-use': 'That email already has an account -- try signing in instead.',
+      'auth/invalid-credential': 'Wrong email or password.',
+      'auth/weak-password': 'Password needs to be at least 6 characters.',
+      'auth/invalid-email': 'That email address doesn\'t look right.',
+    };
+    return map[err.code] || ('Something went wrong (' + err.code + ').');
+  }
+
+  // Placeholder redirect target -- swap once a real landing page exists.
+  onAuthStateChanged(auth, (user) => {
+    if (user) console.log('Signed in as', user.uid, '-- next: redirect to dashboard once it exists.');
+  });
+</script>
+
+</body>
+</html>
