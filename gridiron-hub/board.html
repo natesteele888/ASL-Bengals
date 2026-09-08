@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Board of Directors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  .board-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .board-card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:18px 20px;}
+  .board-card .role{font-size:11px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  .board-card .name{font-size:16px;font-weight:800;}
+  .board-card .email{font-size:12px;color:var(--text-dim);margin-top:4px;}
+  .board-card.unfilled{opacity:.55;}
+  @media (max-width:860px){ .board-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .board-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=1;window.NAV_CURRENT='';</script>
+<script src="../assets/js/nav.js"></script>
+
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-eyebrow">ABOUT</div>
+      <h1>2026 Executive Board</h1>
+      <p>The volunteers who run ASL Bengals football and cheer.</p>
+    </div>
+    <div class="section" style="border-bottom:none;">
+      <div class="board-grid">
+        <div class="board-card"><div class="role">President</div><div class="name">Pat Bishop</div><div class="email">aslbengals.president@gmail.com</div></div>
+        <div class="board-card"><div class="role">Vice President</div><div class="name">Bill McTurk</div></div>
+        <div class="board-card"><div class="role">Co-Secretary</div><div class="name">Ali Pitre</div><div class="email">aslbengals.secretary@gmail.com</div></div>
+        <div class="board-card"><div class="role">Co-Secretary</div><div class="name">Jill Bishop</div><div class="email">aslbengals.secretary@gmail.com</div></div>
+        <div class="board-card"><div class="role">Treasurer</div><div class="name">Raj Pancholi</div></div>
+        <div class="board-card"><div class="role">Director of Football</div><div class="name">Thomas Woodward</div></div>
+        <div class="board-card"><div class="role">Director of Cheerleading</div><div class="name">Carrie Millier</div></div>
+        <div class="board-card"><div class="role">Director of Cheerleading</div><div class="name">Angela Smith</div></div>
+        <div class="board-card unfilled"><div class="role">Apparel &amp; Concessions</div><div class="name">Position open</div></div>
+        <div class="board-card"><div class="role">Fundraising &amp; Special Events</div><div class="name">Molly Crawford</div></div>
+        <div class="board-card"><div class="role">Equipment Manager</div><div class="name">Derek Sousa</div></div>
+        <div class="board-card"><div class="role">Flex Football Coordinator</div><div class="name">Rob Rozzi</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
+
+<script src="../assets/js/theme.js"></script>
+</body>
+</html>
