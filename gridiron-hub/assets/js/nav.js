@@ -17,7 +17,7 @@ function cur(key) { return CURRENT === key ? ' class="current"' : ''; }
 
 const navHtml = `
   <div class="wrap">
-    <div class="nav-brand"><img src="${P}assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
+    <a href="${P}index.html" class="nav-brand"><img src="${P}assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></a>
     <button class="nav-hamburger" id="navHamburger" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
