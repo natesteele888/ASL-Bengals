@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  .player-head{display:flex;align-items:center;gap:20px;padding:40px 0 24px;border-bottom:1px solid var(--line);}
+  .player-num{font-family:'Anton',sans-serif;font-size:56px;color:var(--orange);line-height:1;}
+  .player-head h1{font-size:32px;}
+  .player-head .team-link{font-size:13px;color:var(--text-dim);margin-top:4px;}
+  .player-head .team-link a{color:var(--orange);}
+  .photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:24px 0;}
+  .photo-tile{aspect-ratio:1;border-radius:6px;overflow:hidden;background:var(--ink-2);border:1px solid var(--line);}
+  .photo-tile img{width:100%;height:100%;object-fit:cover;}
+  .empty-state{color:var(--text-dim);font-size:14px;padding:40px 0;text-align:center;}
+  @media (max-width:760px){ .photo-grid{grid-template-columns:repeat(2,1fr);} }
+</style>
+</head>
+<body>
+
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='teams';</script>
+<script src="assets/js/nav.js"></script>
+
+  <div class="wrap">
+    <div class="player-head">
+      <div class="player-num" id="playerNum">#--</div>
+      <div>
+        <h1 id="playerName">Loading…</h1>
+        <div class="team-link">Team: <a id="teamLink" href="#">--</a></div>
+      </div>
+    </div>
+
+    <div class="page-eyebrow" style="margin-top:24px;">TAGGED PHOTOS</div>
+    <div id="photoGrid" class="photo-grid"></div>
+    <div id="emptyState" class="empty-state" style="display:none;">No tagged photos yet. Photos get tagged from the upload flow on the team's Photos page.</div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
+
+<script type="module">
+  import { db } from './src/firebase-config.js';
+  import { doc, getDoc, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+  const params = new URLSearchParams(window.location.search);
+  const teamId = params.get('team');
+  const playerId = params.get('id');
+
+  if (!teamId || !playerId) {
+    document.getElementById('playerName').textContent = 'Player not found';
+  } else {
+    document.getElementById('teamLink').href = `team.html?id=${teamId}`;
+    document.getElementById('teamLink').textContent = teamId.toUpperCase();
+
+    // Player doc lookup -- name/number only, matches the roster schema
+    // (no position field, per Nathan).
+    getDoc(doc(db, 'teams', teamId, 'roster', playerId)).then((snap) => {
+      if (snap.exists()) {
+        const p = snap.data();
+        document.getElementById('playerName').textContent = p.name;
+        document.getElementById('playerNum').textContent = `#${p.number}`;
+      } else {
+        document.getElementById('playerName').textContent = 'Player not found';
+      }
+    }).catch((err) => {
+      console.warn('Player lookup error (likely Firestore rules for teams/{teamId}/roster not set up yet):', err);
+      document.getElementById('playerName').textContent = 'Player not found';
+    });
+
+    // Tagged photos -- playerTags stores player doc IDs (not display
+    // names), since IDs are stable even if a player's name is edited
+    // later. Tagging itself happens on photos.html's upload flow.
+    const gridEl = document.getElementById('photoGrid');
+    const emptyEl = document.getElementById('emptyState');
+    const photosQuery = query(collection(db, 'teams', teamId, 'photos'), where('playerTags', 'array-contains', playerId));
+    onSnapshot(photosQuery, (snap) => {
+      if (snap.empty) {
+        gridEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      gridEl.style.display = 'grid';
+      emptyEl.style.display = 'none';
+      gridEl.innerHTML = '';
+      snap.forEach((docSnap) => {
+        const p = docSnap.data();
+        const tile = document.createElement('div');
+        tile.className = 'photo-tile';
+        tile.innerHTML = `<img src="${p.url}" alt="" loading="lazy">`;
+        gridEl.appendChild(tile);
+      });
+    }, (err) => {
+      console.warn('Tagged photo query error:', err);
+    });
+  }
+</script>
+
+<script src="assets/js/theme.js"></script>
+</body>
+</html>

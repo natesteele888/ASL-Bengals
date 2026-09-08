@@ -31,6 +31,12 @@
 
   .upload-status{font-size:12.5px;margin-top:8px;color:var(--text-dim);}
   .upload-status.error{color:#ff6b5e;}
+
+  .roster-card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;align-items:center;gap:12px;}
+  .roster-card:hover{border-color:var(--orange);}
+  .roster-card .num{font-family:'Anton',sans-serif;font-size:22px;color:var(--orange);width:36px;text-align:center;flex:0 0 auto;}
+  .roster-card .pname{font-weight:700;font-size:14px;}
+  @media (max-width:760px){ #rosterGrid{grid-template-columns:repeat(2,1fr)!important;} }
 </style>
 </head>
 <body>
@@ -57,11 +63,22 @@
     <div class="team-quicklinks">
       <a href="schedule.html">📅 Schedule &amp; Results</a>
       <a href="photos.html">📸 Team Photos</a>
-      <a href="#" id="rosterLink">👥 Roster</a>
     </div>
 
     <div class="section" style="border-bottom:none;">
-      <p style="color:var(--text-dim);font-size:14px;">Roster isn't built yet -- this page is the first step toward every team having its own space here, not just an entry on the Teams grid.</p>
+      <div class="section-head">
+        <div><h2>Roster</h2><p>Name and number -- click a player to see their tagged photos.</p></div>
+      </div>
+
+      <div id="addPlayerForm" style="display:none;margin-bottom:20px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Name</label><input type="text" id="newPlayerName" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:180px;"></div>
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">#</label><input type="number" id="newPlayerNumber" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:70px;"></div>
+        <button id="addPlayerBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Add Player</button>
+        <span id="addPlayerStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
+      </div>
+
+      <div id="rosterGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
+      <div id="rosterEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No players added yet.</div>
     </div>
   </div>
 
@@ -75,7 +92,7 @@
 <script type="module">
   import { app, auth, db } from './src/firebase-config.js';
   import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-  import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+  import { doc, getDoc, setDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
   import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
 
   const storage = getStorage(app);
@@ -123,10 +140,58 @@
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     editBtn.style.display = user ? 'block' : 'none';
+    document.getElementById('addPlayerForm').style.display = user ? 'flex' : 'none';
   });
 
   editBtn.addEventListener('click', (e) => {
     if (e.target === editBtn) fileInput.click();
+  });
+
+  // Roster -- teams/{teamId}/roster/{playerId}, just name + number per
+  // Nathan ("no need for position"). Live-updating grid via onSnapshot so
+  // an added player shows up immediately without a page reload. Player
+  // names link to player.html, which is where tagged-photo lookup lives.
+  const rosterGrid = document.getElementById('rosterGrid');
+  const rosterEmpty = document.getElementById('rosterEmpty');
+  const rosterQuery = query(collection(db, 'teams', teamId, 'roster'), orderBy('number', 'asc'));
+  onSnapshot(rosterQuery, (snap) => {
+    if (snap.empty) {
+      rosterGrid.style.display = 'none';
+      rosterEmpty.style.display = 'block';
+      return;
+    }
+    rosterGrid.style.display = 'grid';
+    rosterEmpty.style.display = 'none';
+    rosterGrid.innerHTML = '';
+    snap.forEach((docSnap) => {
+      const p = docSnap.data();
+      const a = document.createElement('a');
+      a.className = 'roster-card';
+      a.href = `player.html?team=${teamId}&id=${docSnap.id}`;
+      a.innerHTML = `<span class="num">#${p.number}</span><span class="pname">${p.name}</span>`;
+      rosterGrid.appendChild(a);
+    });
+  }, (err) => {
+    console.warn('Roster fetch error (likely Firestore rules for teams/{teamId}/roster not set up yet):', err);
+  });
+
+  document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+    const nameEl = document.getElementById('newPlayerName');
+    const numEl = document.getElementById('newPlayerNumber');
+    const statusEl = document.getElementById('addPlayerStatus');
+    const name = nameEl.value.trim();
+    const number = numEl.value.trim();
+    if (!name || !number) { statusEl.textContent = 'Name and number required.'; return; }
+    statusEl.textContent = 'Adding…';
+    try {
+      await addDoc(collection(db, 'teams', teamId, 'roster'), {
+        name, number: Number(number), addedByUid: currentUser.uid, createdAt: serverTimestamp()
+      });
+      nameEl.value = ''; numEl.value = '';
+      statusEl.textContent = 'Added.';
+    } catch (err) {
+      statusEl.textContent = `Couldn't add: ${err.code || err.message}`;
+    }
   });
 
   fileInput.addEventListener('change', async () => {
