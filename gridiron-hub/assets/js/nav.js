@@ -38,6 +38,7 @@ const navHtml = `
       <div class="navdrop">
         <span class="navdrop-label">Football &amp; Cheer</span>
         <div class="navdrop-menu">
+          <a href="${P}programs.html" style="font-weight:800;border-bottom:1px solid var(--line);margin-bottom:4px;padding-bottom:10px;">All Programs</a>
           <a href="${P}programs/flex-football.html">Flex</a>
           <a href="${P}programs/tackle-football.html">Tackle</a>
           <a href="${P}programs/cheer.html">Cheer</a>
