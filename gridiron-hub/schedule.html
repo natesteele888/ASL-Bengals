@@ -9,58 +9,71 @@
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;}
-  h1,h2{font-family:'Anton',sans-serif;font-weight:400;margin:0;line-height:1;}
-  a{color:inherit;text-decoration:none;}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
-
-  .nav{position:sticky;top:0;z-index:20;background:var(--ink-2);border-bottom:1px solid var(--line);}
-  .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px;}
-  .nav-brand{display:flex;align-items:center;gap:10px;}
-  .nav-brand img{width:34px;height:34px;}
-  .nav-brand span{font-family:'Anton',sans-serif;font-size:18px;}
-  .nav-links{display:flex;gap:22px;align-items:center;}
-  .nav-links a{color:var(--text-dim);font-weight:700;font-size:14px;}
-  .nav-links a.current{color:var(--orange);}
-  .navdrop{position:relative;}
-  .navdrop>span{color:var(--text-dim);font-weight:700;font-size:14px;cursor:default;padding:8px 0;display:inline-block;}
-  .navdrop:hover>span{color:var(--text);}
-  .navdrop-menu{position:absolute;top:100%;left:0;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:190px;display:none;flex-direction:column;gap:2px;}
-  .navdrop:hover .navdrop-menu{display:flex;}
-  .navdrop-menu a{color:var(--text-dim);font-size:13.5px;font-weight:700;padding:8px 10px;border-radius:4px;}
-  .navdrop-menu a:hover{background:rgba(255,255,255,.06);color:var(--text);}
-
-  .page-head{padding:36px 0 28px;border-bottom:1px solid var(--line);}
-  .page-head h1{font-size:32px;}
-  .page-head p{color:var(--text-dim);font-size:14px;margin-top:6px;}
+  .page-head{padding:36px 0 22px;border-bottom:1px solid var(--line);}
+  .page-head h1{font-size:34px;}
+  .page-head h1 .amp{color:var(--orange);}
+  .page-head p{color:var(--text-dim);font-size:14.5px;margin-top:8px;max-width:70ch;}
+  .page-head .fine{font-size:13px;color:var(--text-dim);margin-top:6px;}
+  .page-head .fine b{color:var(--text);}
 
   .live-embed-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:6px;overflow:hidden;}
   .live-embed-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-  .filters{display:flex;gap:8px;padding:20px 0;flex-wrap:wrap;}
-  .filter-btn{padding:7px 16px;border-radius:999px;border:1.5px solid var(--line);font-size:13px;font-weight:700;color:var(--text-dim);}
-  .filter-btn.active{background:var(--orange);color:var(--ink);border-color:transparent;}
 
-  .games{display:flex;flex-direction:column;gap:12px;padding-bottom:48px;}
-  .game-row{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:18px 20px;display:grid;grid-template-columns:70px 1fr auto;gap:18px;align-items:center;border-left:3px solid var(--line);}
-  .game-row.played{border-left-color:var(--text-dim);}
-  .game-row.upcoming{border-left-color:var(--orange);}
+  .team-tabs{display:flex;gap:6px;padding:22px 0 14px;flex-wrap:wrap;border-bottom:1px solid var(--line);}
+  .team-tab{padding:8px 16px;border-radius:999px;font-size:13.5px;font-weight:800;color:var(--text-dim);border:1.5px solid transparent;cursor:pointer;}
+  .team-tab.active{background:var(--orange);color:#0e0e10;}
+  .team-tab:not(.active):hover{border-color:var(--line);}
+
+  .legend-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;flex-wrap:wrap;gap:10px;}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-dim);}
+  .legend-dot{width:8px;height:8px;border-radius:2px;}
+  .legend-dot.home{background:var(--orange);}
+  .legend-dot.away{background:var(--text-dim);}
+  .legend-dot.stream{background:#ff4444;border-radius:50%;}
+  .print-btn{border:1px solid var(--line);color:var(--text-dim);background:none;padding:8px 14px;border-radius:5px;font-size:13px;font-weight:700;cursor:pointer;}
+
+  .team-header{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:24px;margin:20px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+  .team-header .eyebrow{color:var(--orange);font-weight:800;font-size:11.5px;letter-spacing:.04em;margin-bottom:6px;}
+  .team-header h2{font-size:26px;}
+  .team-header h2 .age{color:var(--orange);}
+  .team-header .sub{font-size:13px;color:var(--text-dim);margin-top:4px;}
+  .team-header-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .team-header-actions .btn{margin-top:0;padding:9px 16px;font-size:13px;}
+  .record-display{text-align:center;}
+  .record-display .big{font-family:'Anton',sans-serif;font-size:36px;}
+  .record-split{display:flex;gap:16px;margin-top:4px;}
+  .record-split div{text-align:center;}
+  .record-split .w{color:var(--green);font-weight:800;}
+  .record-split .l{color:#ff6b5e;font-weight:800;}
+  .record-split span{display:block;font-size:10px;color:var(--text-dim);}
+
+  .week-group{margin-top:22px;}
+  .week-group-label{font-size:12.5px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;}
+
+  .games{display:flex;flex-direction:column;gap:10px;padding-bottom:20px;}
+  .game-row{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;grid-template-columns:64px 1fr auto;gap:16px;align-items:center;border-left:3px solid var(--line);}
+  .game-row.home{border-left-color:var(--orange);}
+  .game-row.bye{opacity:.6;}
   .game-week{text-align:center;}
-  .game-week .num{font-family:'Anton',sans-serif;font-size:22px;color:var(--orange);}
-  .game-week .lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em;}
-  .game-main .matchup{font-weight:800;font-size:16.5px;}
+  .game-week .num{font-family:'Anton',sans-serif;font-size:20px;}
+  .game-week .lbl{font-size:9.5px;color:var(--text-dim);text-transform:uppercase;}
+  .game-main .matchup{font-weight:800;font-size:15.5px;}
   .game-main .matchup .oppname{color:var(--orange);}
-  .game-main .meta{font-size:12.5px;color:var(--text-dim);margin-top:4px;}
-  .game-main .venue{font-size:12px;color:var(--text-dim);margin-top:2px;}
-  .game-status{text-align:right;}
-  .status-pill{display:inline-block;padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:800;}
-  .status-pill.upcoming{background:rgba(244,105,28,.14);color:var(--orange);}
-  .status-pill.tbd{background:rgba(255,255,255,.06);color:var(--text-dim);}
-  .opp-record{font-size:12px;color:var(--text-dim);margin-top:6px;}
+  .game-main .meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
+  .ha-pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:3px;background:rgba(128,128,128,.15);color:var(--text-dim);margin-right:6px;}
+  .ha-pill.home{background:rgba(244,105,28,.15);color:var(--orange);}
+  .game-status{text-align:right;display:flex;align-items:center;gap:8px;}
+  .score-pill{font-weight:800;font-size:13px;padding:5px 11px;border-radius:5px;}
+  .score-pill.w{background:rgba(63,174,74,.14);color:var(--green);}
+  .score-pill.l{background:rgba(255,107,94,.14);color:#ff6b5e;}
+  .status-pending{font-size:12px;color:var(--text-dim);}
+  .watch-btn{font-size:12px;font-weight:800;color:#ff4444;border:1px solid rgba(255,68,68,.4);padding:6px 12px;border-radius:5px;}
+  .empty-state{color:var(--text-dim);font-size:14px;padding:50px 0;text-align:center;}
 
   @media (max-width:640px){
-    .game-row{grid-template-columns:50px 1fr;}
-    .game-status{grid-column:1/-1;text-align:left;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;}
+    .game-row{grid-template-columns:44px 1fr;}
+    .game-status{grid-column:1/-1;justify-content:flex-start;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;}
     .nav-links{display:none;}
   }
 </style>
@@ -106,18 +119,16 @@
 
   <div class="wrap">
     <div class="page-head">
-      <h1>11U Schedule</h1>
-      <p>Current record 1-1 · CMYFCC 2026 Fall Season</p>
+      <h1>Schedule <span class="amp">&amp;</span> Results</h1>
+      <p>Every game for every ASL Bengals team. Home games are played at <b>Ayer Shirley Regional High School</b>.</p>
+      <div class="fine">Away dates, times, and venues are set by the host association and may change. <b>Team pages and full multi-division schedules are still being built out</b> -- 11U is the only division with real data right now.</div>
     </div>
 
     <!-- Same pattern as WAB Knights: stream to a YouTube channel, embed it
          here. IMPORTANT: this embed needs the CHANNEL ID (a "UC..." string),
          NOT the @handle -- find it at YouTube Studio > Settings > Channel >
-         Advanced Settings. Once set, this code never needs to change week
-         to week: if nothing's live, YouTube shows the channel's latest
-         upload instead, so live/replay is automatic, not something this
-         page has to track. -->
-    <div class="section" style="padding-top:24px;padding-bottom:0;border-bottom:none;">
+         Advanced Settings. -->
+    <div style="padding-top:20px;">
       <div class="live-embed-wrap">
         <iframe
           src="https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID"
@@ -130,97 +141,141 @@
       <p style="font-size:12.5px;color:var(--text-dim);margin-top:8px;">Live during home games, replays afterward -- streamed via YouTube.</p>
     </div>
 
-    <div class="filters">
-      <div class="filter-btn active">All</div>
-      <div class="filter-btn">Home</div>
-      <div class="filter-btn">Away</div>
+    <div class="team-tabs" id="teamTabs">
+      <div class="team-tab" data-team="all">All Teams</div>
+      <div class="team-tab" data-team="8u">8U</div>
+      <div class="team-tab" data-team="9u">9U</div>
+      <div class="team-tab" data-team="10u">10U</div>
+      <div class="team-tab active" data-team="11u">11U</div>
+      <div class="team-tab" data-team="12u">12U</div>
+      <div class="team-tab" data-team="13u">13U</div>
     </div>
 
-    <div class="games">
-
-      <div class="game-row upcoming">
-        <div class="game-week"><div class="num">5</div><div class="lbl">Week</div></div>
-        <div class="game-main">
-          <div class="matchup">vs <span class="oppname">Leicester/Spencer</span></div>
-          <div class="meta">Sun, Sep 20 · 11:30 AM · HOME</div>
-          <div class="venue">Ayer Shirley Regional High School</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill upcoming">Upcoming</span>
-          <div class="opp-record">Opponent 1-1</div>
-        </div>
+    <div class="legend-row">
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot home"></span>Home</div>
+        <div class="legend-item"><span class="legend-dot away"></span>Away</div>
+        <div class="legend-item"><span class="legend-dot stream"></span>Streamed on YouTube</div>
       </div>
-
-      <div class="game-row upcoming">
-        <div class="game-week"><div class="num">6</div><div class="lbl">Week</div></div>
-        <div class="game-main">
-          <div class="matchup">@ <span class="oppname">Tyngsboro</span></div>
-          <div class="meta">Sun, Sep 27 · 1:45 PM · AWAY</div>
-          <div class="venue">North Middlesex Regional High School</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill upcoming">Upcoming</span>
-          <div class="opp-record">Opponent 1-1</div>
-        </div>
-      </div>
-
-      <div class="game-row upcoming">
-        <div class="game-week"><div class="num">7</div><div class="lbl">Week</div></div>
-        <div class="game-main">
-          <div class="matchup">vs <span class="oppname">North Middlesex</span></div>
-          <div class="meta">Sun, Oct 4 · 1:30 PM · HOME</div>
-          <div class="venue">Ayer Shirley Regional High School</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill upcoming">Upcoming</span>
-          <div class="opp-record">Opponent 1-1</div>
-        </div>
-      </div>
-
-      <div class="game-row upcoming">
-        <div class="game-week"><div class="num">9</div><div class="lbl">Week</div></div>
-        <div class="game-main">
-          <div class="matchup">@ <span class="oppname">Leominster</span></div>
-          <div class="meta">Sun, Oct 11 · 12:45 PM · AWAY</div>
-          <div class="venue">McCloskey Field</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill upcoming">Upcoming</span>
-          <div class="opp-record">Opponent 2-0</div>
-        </div>
-      </div>
-
-      <!-- Week 9 (Oct 11) falls before Week 8 (Oct 25) here -- shown in the
-           order Nathan provided rather than re-sorted, since that's likely
-           a real makeup-game/bye situation, not a data error to silently
-           "fix" by guessing. -->
-      <div class="game-row upcoming">
-        <div class="game-week"><div class="num">8</div><div class="lbl">Week</div></div>
-        <div class="game-main">
-          <div class="matchup">@ <span class="oppname">Northbridge/Uxbridge</span></div>
-          <div class="meta">Sun, Oct 25 · 3:00 PM · AWAY</div>
-          <div class="venue">Venue TBD</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill upcoming">Upcoming</span>
-          <div class="opp-record">Opponent 1-0</div>
-        </div>
-      </div>
-
-      <div class="game-row">
-        <div class="game-week"><div class="num">—</div><div class="lbl">TBD</div></div>
-        <div class="game-main">
-          <div class="matchup">vs <span class="oppname">Tantasqua</span></div>
-          <div class="meta">Date TBD</div>
-          <div class="venue">Venue TBD</div>
-        </div>
-        <div class="game-status">
-          <span class="status-pill tbd">Date TBD</span>
-        </div>
-      </div>
-
+      <button class="print-btn" onclick="window.print()">🖨 Print</button>
     </div>
+
+    <div id="scheduleContent"></div>
   </div>
+
+<script>
+  // Real 11U data only -- every other division renders an honest empty
+  // state rather than sample numbers, since this page (unlike the index.html
+  // homepage preview) is meant to be an actual reference people plan around.
+  const TEAM_DATA = {
+    '11u': {
+      label: '11U', sport: 'TACKLE FOOTBALL', name: 'ASL Bengals 11U',
+      record: { w: 1, l: 1 },
+      totalGames: 8,
+      results: [
+        { opponent: 'Charlton/Dudley', result: 'W', score: '6-0' },
+        { opponent: 'Nipmuc', result: 'L', score: '0-20' },
+      ],
+      upcoming: [
+        { week: 5, date: 'Sun, Sep 20', time: '11:30 AM', home: true, opponent: 'Leicester/Spencer', oppRecord: '1-1', venue: 'Ayer Shirley Regional High School' },
+        { week: 6, date: 'Sun, Sep 27', time: '1:45 PM', home: false, opponent: 'Tyngsboro', oppRecord: '1-1', venue: 'North Middlesex Regional High School' },
+        { week: 7, date: 'Sun, Oct 4', time: '1:30 PM', home: true, opponent: 'North Middlesex', oppRecord: '1-1', venue: 'Ayer Shirley Regional High School' },
+        { week: 9, date: 'Sun, Oct 11', time: '12:45 PM', home: false, opponent: 'Leominster', oppRecord: '2-0', venue: 'McCloskey Field' },
+        { week: 8, date: 'Sun, Oct 25', time: '3:00 PM', home: false, opponent: 'Northbridge/Uxbridge', oppRecord: '1-0', venue: 'Venue TBD' },
+        { week: null, date: 'Date TBD', time: '', home: null, opponent: 'Tantasqua', oppRecord: null, venue: 'Venue TBD' },
+      ]
+    }
+  };
+
+  const contentEl = document.getElementById('scheduleContent');
+  const tabsEl = document.getElementById('teamTabs');
+
+  function renderTeam(teamKey) {
+    if (teamKey === 'all' || !TEAM_DATA[teamKey]) {
+      contentEl.innerHTML = `<div class="empty-state">${teamKey === 'all' ? 'Combined multi-team view is coming once every division has real schedule data -- for now, select 11U above.' : 'No schedule data yet for this team.'}</div>`;
+      return;
+    }
+    const t = TEAM_DATA[teamKey];
+    let html = `
+      <div class="team-header">
+        <div>
+          <div class="eyebrow">${t.sport}</div>
+          <h2>${t.name}</h2>
+          <div class="sub">2026 regular season · ${t.totalGames} games</div>
+          <div class="team-header-actions">
+            <a href="#" class="btn btn-ghost" onclick="downloadIcs('${teamKey}');return false;">📅 Add to Calendar</a>
+          </div>
+        </div>
+        <div class="record-display">
+          <div class="big">${t.record.w}-${t.record.l}</div>
+          <div class="record-split">
+            <div><span class="w">${t.record.w}</span><span>W</span></div>
+            <div><span class="l">${t.record.l}</span><span>L</span></div>
+          </div>
+        </div>
+      </div>`;
+
+    if (t.results.length) {
+      html += `<div class="week-group"><div class="week-group-label">Recent Results</div><div class="games">`;
+      t.results.forEach(r => {
+        html += `
+          <div class="game-row">
+            <div class="game-week"><div class="num">${r.result}</div><div class="lbl">Final</div></div>
+            <div class="game-main">
+              <div class="matchup">ASL vs <span class="oppname">${r.opponent}</span></div>
+            </div>
+            <div class="game-status"><span class="score-pill ${r.result === 'W' ? 'w' : 'l'}">${r.result} ${r.score}</span></div>
+          </div>`;
+      });
+      html += `</div></div>`;
+    }
+
+    html += `<div class="week-group"><div class="week-group-label">Upcoming</div><div class="games">`;
+    t.upcoming.forEach(g => {
+      html += `
+        <div class="game-row ${g.home ? 'home' : ''}">
+          <div class="game-week"><div class="num">${g.week || '—'}</div><div class="lbl">${g.week ? 'Week' : 'TBD'}</div></div>
+          <div class="game-main">
+            <div class="matchup"><span class="ha-pill ${g.home ? 'home' : ''}">${g.home === null ? '--' : (g.home ? 'HOME' : 'AWAY')}</span>${g.home ? 'vs' : '@'} <span class="oppname">${g.opponent}</span></div>
+            <div class="meta">${g.date}${g.time ? ' · ' + g.time : ''} · ${g.venue}</div>
+          </div>
+          <div class="game-status"><span class="status-pending">${g.oppRecord ? 'Opp ' + g.oppRecord : ''}</span></div>
+        </div>`;
+    });
+    html += `</div></div>`;
+    contentEl.innerHTML = html;
+  }
+
+  tabsEl.addEventListener('click', (e) => {
+    const tab = e.target.closest('.team-tab');
+    if (!tab) return;
+    tabsEl.querySelectorAll('.team-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    renderTeam(tab.dataset.team);
+  });
+
+  // Real .ics generation from the upcoming-games array -- no external
+  // calendar service needed, works with Google/Apple/Outlook calendar imports.
+  function downloadIcs(teamKey) {
+    const t = TEAM_DATA[teamKey];
+    if (!t) return;
+    let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Gridiron Hub//Schedule//EN\r\n';
+    t.upcoming.forEach(g => {
+      if (!g.week) return; // skip TBD-date games, no valid date to encode
+      const d = new Date(g.date + ' 2026');
+      const dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+      ics += `BEGIN:VEVENT\r\nSUMMARY:${t.name} ${g.home ? 'vs' : '@'} ${g.opponent}\r\nDTSTART;VALUE=DATE:${dateStr}\r\nLOCATION:${g.venue}\r\nEND:VEVENT\r\n`;
+    });
+    ics += 'END:VCALENDAR';
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${t.name.replace(/\s+/g,'-')}-schedule.ics`;
+    a.click();
+  }
+
+  renderTeam('11u');
+</script>
 
 <script src="assets/js/theme.js"></script>
 </body>
