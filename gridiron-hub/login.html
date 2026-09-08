@@ -163,9 +163,11 @@
     return map[err.code] || ('Something went wrong (' + err.code + ').');
   }
 
-  // Real redirect now that dashboard.html exists.
+  // Real redirect -- goes to the actual homepage now that it's built out
+  // and auth-aware via nav.js, rather than the standalone dashboard.html
+  // that was only ever a placeholder before index.html existed.
   onAuthStateChanged(auth, (user) => {
-    if (user) window.location.href = 'dashboard.html';
+    if (user) window.location.href = 'index.html';
   });
 </script>
 

@@ -3,68 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gridiron Hub — Registration</title>
+<title>Gridiron Hub — How to Join</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
+  .status-pill{display:inline-flex;align-items:center;gap:8px;background:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:9px 18px;font-size:13.5px;color:var(--text-dim);margin-top:16px;}
+  .status-pill b{color:var(--text);}
 
+  .steps{position:relative;padding:30px 0;max-width:760px;}
+  .steps::before{content:"";position:absolute;left:19px;top:44px;bottom:44px;width:1px;background:var(--line);}
+  .step{position:relative;padding-left:64px;margin-bottom:34px;}
+  .step:last-child{margin-bottom:0;}
+  .step-num{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:var(--ink-2);display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:15px;color:var(--orange);}
+  .step.done .step-num{background:var(--orange);border-color:var(--orange);color:#0e0e10;}
+  .step h3{font-size:18px;margin-bottom:6px;font-family:'Karla',sans-serif;font-weight:800;}
+  .step p{font-size:14px;color:var(--text-dim);line-height:1.6;max-width:60ch;margin:0;}
+  .step-links{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
+  .step-links a{font-size:12.5px;font-weight:700;color:var(--orange);border:1px solid var(--line);padding:6px 12px;border-radius:5px;}
+
+  .platform-note{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin:24px 0;font-size:13.5px;color:var(--text-dim);}
+  .platform-note b{color:var(--text);}
 </style>
 </head>
 <body>
 
-  <nav class="nav">
-    <div class="wrap">
-      <div class="nav-brand"><img src="assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
-      <div class="nav-links">
-        <a href="index.html" >Home</a>
-        <a href="schedule.html" >Schedule</a>
-        <a href="teams.html" >Teams</a>
-        <div class="navdrop">
-          <span>About</span>
-          <div class="navdrop-menu">
-            <a href="about/about.html">About The Bengals</a>
-            <a href="about/board.html">Board of Directors</a>
-            <a href="about/facilities.html">Our Facilities</a>
-          </div>
-        </div>
-        <div class="navdrop">
-          <span>Football &amp; Cheer</span>
-          <div class="navdrop-menu">
-            <a href="programs/flex-football.html">Flex</a>
-            <a href="programs/tackle-football.html">Tackle</a>
-            <a href="programs/cheer.html">Cheer</a>
-          </div>
-        </div>
-        <div class="navdrop">
-          <span>Resources</span>
-          <div class="navdrop-menu">
-            <a href="resources/for-coaches.html">For Coaches</a>
-            <a href="resources/for-parents.html">For Parents</a>
-            <a href="resources/sponsors.html">Sponsors</a>
-          </div>
-        </div>
-        <button class="theme-toggle" aria-label="Toggle theme"></button>
-        <a href="register.html" class="nav-cta">Register</a>
-      </div>
-    </div>
-  </nav>
-
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='';</script>
+<script src="assets/js/nav.js"></script>
 
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">REGISTER</div>
-      <h1>Fall 2026 Registration</h1>
-      <p>Matching the real site's current status -- shown as closed rather than inventing an open registration flow.</p>
+      <h1>How to Join</h1>
+      <p>Getting your athlete onto the field, from picking a program to your first practice.</p>
+      <div class="status-pill">🔒 <b>2026 registration is closed.</b> Here's how it works once the next window opens.</div>
     </div>
-    <div class="section">
-      <h2 style="color:var(--orange);">2026 Registration Now Closed</h2>
-      <p>Follow the Bengals on Facebook for the next registration window and season updates.</p>
-      <a href="https://www.facebook.com/profile.php?id=61590687036884" class="btn btn-primary">Facebook</a>
+
+    <div class="platform-note">
+      Registration is handled through <b>SportsEngine</b> -- a free account, done once, covers every season going forward.
+    </div>
+
+    <div class="steps">
+
+      <div class="step done">
+        <div class="step-num">1</div>
+        <h3>Choose Your Program</h3>
+        <p>Flex, Tackle, or Cheer -- see <a href="programs/flex-football.html" style="color:var(--orange);">Football &amp; Cheer</a> for age ranges and what each program covers.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Click Register Now</h3>
+        <p>When registration opens, a "Register Now" link here goes straight to the SportsEngine portal.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Create or Log In</h3>
+        <p>A free SportsEngine account keeps every season's registration history in one place -- create one or sign into an existing account.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Complete the Form</h3>
+        <p>Athlete information, emergency contacts, and any relevant medical details -- this is what keeps coaches informed and your athlete safe.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <h3>Submit Payment</h3>
+        <p>Paid securely through SportsEngine. <span style="color:var(--text-dim);">(Sibling discount and financial assistance policy -- confirm current details before publishing.)</span></p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">6</div>
+        <h3>Gather Your Paperwork</h3>
+        <p>Birth certificate, physical, and any required signed forms -- due before the first practice.</p>
+        <div class="step-links">
+          <a href="resources/for-parents.html">For Parents</a>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">✓</div>
+        <h3>You're a Bengal!</h3>
+        <p>Watch for a welcome email with your practice schedule and next steps.</p>
+      </div>
+
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>Questions?</h2>
+      <p>Email <a href="mailto:aslbengals.president@gmail.com" style="color:var(--orange);">aslbengals.president@gmail.com</a>, or follow along on <a href="https://www.facebook.com/profile.php?id=61590687036884" style="color:var(--orange);">Facebook</a> for the next registration window.</p>
     </div>
   </div>
-
 
   <footer>
     <div class="wrap">
