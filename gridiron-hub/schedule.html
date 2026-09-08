@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0e0e10; --ink-2:#18181b; --orange:#f4691c; --orange-deep:#c94f0f;
+    --text:#e8e7e3; --text-dim:#9a988e; --line:rgba(255,255,255,.10);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;}
+  h1,h2{font-family:'Anton',sans-serif;font-weight:400;margin:0;line-height:1;}
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
+
+  .nav{position:sticky;top:0;z-index:20;background:var(--ink-2);border-bottom:1px solid var(--line);}
+  .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px;}
+  .nav-brand{display:flex;align-items:center;gap:10px;}
+  .nav-brand img{width:34px;height:34px;}
+  .nav-brand span{font-family:'Anton',sans-serif;font-size:18px;}
+  .nav-links{display:flex;gap:26px;}
+  .nav-links a{color:var(--text-dim);font-weight:700;font-size:14px;}
+  .nav-links a.current{color:var(--orange);}
+
+  .page-head{padding:36px 0 28px;border-bottom:1px solid var(--line);}
+  .page-head h1{font-size:32px;}
+  .page-head p{color:var(--text-dim);font-size:14px;margin-top:6px;}
+
+  .filters{display:flex;gap:8px;padding:20px 0;flex-wrap:wrap;}
+  .filter-btn{padding:7px 16px;border-radius:999px;border:1.5px solid var(--line);font-size:13px;font-weight:700;color:var(--text-dim);}
+  .filter-btn.active{background:var(--orange);color:var(--ink);border-color:transparent;}
+
+  .games{display:flex;flex-direction:column;gap:12px;padding-bottom:48px;}
+  .game-row{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:18px 20px;display:grid;grid-template-columns:70px 1fr auto;gap:18px;align-items:center;border-left:3px solid var(--line);}
+  .game-row.played{border-left-color:var(--text-dim);}
+  .game-row.upcoming{border-left-color:var(--orange);}
+  .game-week{text-align:center;}
+  .game-week .num{font-family:'Anton',sans-serif;font-size:22px;color:var(--orange);}
+  .game-week .lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em;}
+  .game-main .matchup{font-weight:800;font-size:16.5px;}
+  .game-main .matchup .oppname{color:var(--orange);}
+  .game-main .meta{font-size:12.5px;color:var(--text-dim);margin-top:4px;}
+  .game-main .venue{font-size:12px;color:var(--text-dim);margin-top:2px;}
+  .game-status{text-align:right;}
+  .status-pill{display:inline-block;padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:800;}
+  .status-pill.upcoming{background:rgba(244,105,28,.14);color:var(--orange);}
+  .status-pill.tbd{background:rgba(255,255,255,.06);color:var(--text-dim);}
+  .opp-record{font-size:12px;color:var(--text-dim);margin-top:6px;}
+
+  @media (max-width:640px){
+    .game-row{grid-template-columns:50px 1fr;}
+    .game-status{grid-column:1/-1;text-align:left;padding-top:8px;border-top:1px solid var(--line);margin-top:4px;}
+    .nav-links{display:none;}
+  }
+</style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="wrap">
+      <div class="nav-brand"><img src="tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="schedule.html" class="current">Schedule</a>
+        <a href="#">Teams</a>
+        <a href="#">Messages</a>
+        <a href="#">Photos</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="page-head">
+      <h1>11U Schedule</h1>
+      <p>Current record 1-1 · CMYFCC 2026 Fall Season</p>
+    </div>
+
+    <div class="filters">
+      <div class="filter-btn active">All</div>
+      <div class="filter-btn">Home</div>
+      <div class="filter-btn">Away</div>
+    </div>
+
+    <div class="games">
+
+      <div class="game-row upcoming">
+        <div class="game-week"><div class="num">5</div><div class="lbl">Week</div></div>
+        <div class="game-main">
+          <div class="matchup">vs <span class="oppname">Leicester/Spencer</span></div>
+          <div class="meta">Sun, Sep 20 · 11:30 AM · HOME</div>
+          <div class="venue">Ayer Shirley Regional High School</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill upcoming">Upcoming</span>
+          <div class="opp-record">Opponent 1-1</div>
+        </div>
+      </div>
+
+      <div class="game-row upcoming">
+        <div class="game-week"><div class="num">6</div><div class="lbl">Week</div></div>
+        <div class="game-main">
+          <div class="matchup">@ <span class="oppname">Tyngsboro</span></div>
+          <div class="meta">Sun, Sep 27 · 1:45 PM · AWAY</div>
+          <div class="venue">North Middlesex Regional High School</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill upcoming">Upcoming</span>
+          <div class="opp-record">Opponent 1-1</div>
+        </div>
+      </div>
+
+      <div class="game-row upcoming">
+        <div class="game-week"><div class="num">7</div><div class="lbl">Week</div></div>
+        <div class="game-main">
+          <div class="matchup">vs <span class="oppname">North Middlesex</span></div>
+          <div class="meta">Sun, Oct 4 · 1:30 PM · HOME</div>
+          <div class="venue">Ayer Shirley Regional High School</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill upcoming">Upcoming</span>
+          <div class="opp-record">Opponent 1-1</div>
+        </div>
+      </div>
+
+      <div class="game-row upcoming">
+        <div class="game-week"><div class="num">9</div><div class="lbl">Week</div></div>
+        <div class="game-main">
+          <div class="matchup">@ <span class="oppname">Leominster</span></div>
+          <div class="meta">Sun, Oct 11 · 12:45 PM · AWAY</div>
+          <div class="venue">McCloskey Field</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill upcoming">Upcoming</span>
+          <div class="opp-record">Opponent 2-0</div>
+        </div>
+      </div>
+
+      <!-- Week 9 (Oct 11) falls before Week 8 (Oct 25) here -- shown in the
+           order Nathan provided rather than re-sorted, since that's likely
+           a real makeup-game/bye situation, not a data error to silently
+           "fix" by guessing. -->
+      <div class="game-row upcoming">
+        <div class="game-week"><div class="num">8</div><div class="lbl">Week</div></div>
+        <div class="game-main">
+          <div class="matchup">@ <span class="oppname">Northbridge/Uxbridge</span></div>
+          <div class="meta">Sun, Oct 25 · 3:00 PM · AWAY</div>
+          <div class="venue">Venue TBD</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill upcoming">Upcoming</span>
+          <div class="opp-record">Opponent 1-0</div>
+        </div>
+      </div>
+
+      <div class="game-row">
+        <div class="game-week"><div class="num">—</div><div class="lbl">TBD</div></div>
+        <div class="game-main">
+          <div class="matchup">vs <span class="oppname">Tantasqua</span></div>
+          <div class="meta">Date TBD</div>
+          <div class="venue">Venue TBD</div>
+        </div>
+        <div class="game-status">
+          <span class="status-pill tbd">Date TBD</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

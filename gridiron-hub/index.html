@@ -34,10 +34,16 @@
 
   /* hero */
   .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;background:radial-gradient(ellipse at 25% 30%, #2a1408 0%, var(--ink) 60%);border-bottom:none;}
-  #emberCanvas{position:absolute;inset:0;width:100%;height:100%;}
+  /* Photo sits behind everything; gradient overlay is darkest on the left
+     (where text lives, matching WAB Knights) fading toward transparent on
+     the right so the photo itself stays visible there. Set background-image
+     on #heroPhoto once the actual file exists -- structure is ready now. */
+  .hero-photo{position:absolute;inset:0;background-size:cover;background-position:center;}
+  .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg, var(--ink) 0%, rgba(14,14,16,.85) 35%, rgba(14,14,16,.35) 65%, rgba(14,14,16,.15) 100%);}
+  #emberCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
   .hero-tiger-watermark{position:absolute;right:-60px;top:50%;transform:translateY(-50%);width:460px;opacity:.10;pointer-events:none;}
   .hero-tiger-watermark img{width:100%;}
-  .hero-inner{position:relative;z-index:2;padding:60px 24px;}
+  .hero-inner{position:relative;z-index:2;padding-top:60px;padding-bottom:60px;}
   .hero-eyebrow{color:var(--orange);font-weight:800;font-size:13px;margin-bottom:10px;letter-spacing:.04em;}
   .hero-headline{
     font-size:clamp(38px,6vw,72px);letter-spacing:.01em;margin-bottom:16px;
@@ -99,7 +105,7 @@
     <div class="wrap">
       <div class="nav-brand"><img src="tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
       <div class="nav-links">
-        <a href="#" class="current">Schedule</a>
+        <a href="schedule.html">Schedule</a>
         <a href="#">Teams</a>
         <a href="#">Messages</a>
         <a href="#">Photos</a>
@@ -112,6 +118,7 @@
   </nav>
 
   <header class="hero" id="hero">
+    <div class="hero-photo" id="heroPhoto"></div>
     <canvas id="emberCanvas"></canvas>
     <div class="hero-tiger-watermark"><img src="tiger-logo.png" alt=""></div>
     <div class="wrap hero-inner">
