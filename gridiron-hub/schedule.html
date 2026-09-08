@@ -16,8 +16,9 @@
   .page-head .fine{font-size:13px;color:var(--text-dim);margin-top:6px;}
   .page-head .fine b{color:var(--text);}
 
-  .live-embed-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:6px;overflow:hidden;}
-  .live-embed-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  .watch-live-banner{display:flex;align-items:center;gap:10px;background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.25);border-radius:6px;padding:14px 20px;margin-top:20px;font-weight:800;font-size:14px;color:#ff4444;}
+  .watch-live-banner:hover{background:rgba(255,68,68,.14);}
+  .live-dot-sm{width:8px;height:8px;border-radius:50%;background:#ff4444;flex:0 0 auto;}
 
   .team-tabs{display:flex;gap:6px;padding:22px 0 14px;flex-wrap:wrap;border-bottom:1px solid var(--line);}
   .team-tab{padding:8px 16px;border-radius:999px;font-size:13.5px;font-weight:800;color:var(--text-dim);border:1.5px solid transparent;cursor:pointer;}
@@ -91,22 +92,12 @@
       <div class="fine">Away dates, times, and venues are set by the host association and may change. <b>Team pages and full multi-division schedules are still being built out</b> -- 11U is the only division with real data right now.</div>
     </div>
 
-    <!-- Same pattern as WAB Knights: stream to a YouTube channel, embed it
-         here. IMPORTANT: this embed needs the CHANNEL ID (a "UC..." string),
-         NOT the @handle -- find it at YouTube Studio > Settings > Channel >
-         Advanced Settings. -->
-    <div style="padding-top:20px;">
-      <div class="live-embed-wrap">
-        <iframe
-          src="https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID"
-          title="ASL Bengals Live Stream"
-          frameborder="0"
-          allow="autoplay; encrypted-media"
-          allowfullscreen>
-        </iframe>
-      </div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-top:8px;">Live during home games, replays afterward -- streamed via YouTube.</p>
-    </div>
+    <!-- Watch Live moved to its own page (matching WAB's pattern -- they
+         don't duplicate the player inline on Schedule either), so this is
+         just a link banner now, not a second copy of the same embed. -->
+    <a href="watch-live.html" class="watch-live-banner">
+      <span class="live-dot-sm"></span> Watch games live on YouTube — Watch Live →
+    </a>
 
     <div class="team-tabs" id="teamTabs">
       <div class="team-tab" data-team="all">All Teams</div>

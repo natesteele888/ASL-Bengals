@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Watch Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  .live-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:800;color:#ff4444;margin-bottom:14px;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#ff4444;}
+  .watch-hero{text-align:center;padding:36px 0 10px;}
+  .watch-hero h1{font-size:38px;}
+  .watch-hero h1 .accent{color:var(--orange);}
+  .watch-hero p{color:var(--text-dim);font-size:14.5px;max-width:60ch;margin:12px auto 0;}
+  .watch-actions{display:flex;gap:12px;justify-content:center;margin-top:22px;flex-wrap:wrap;}
+  .btn-youtube{background:#ff0000;color:#fff;display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:6px;font-weight:800;font-size:14px;}
+
+  .live-embed-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:8px;overflow:hidden;margin-top:32px;}
+  .live-embed-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+
+  .placeholder-notice{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-top:16px;font-size:13px;color:var(--text-dim);text-align:center;}
+  .placeholder-notice b{color:var(--orange);}
+</style>
+</head>
+<body>
+
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='watch';</script>
+<script src="assets/js/nav.js"></script>
+
+  <div class="wrap">
+    <div class="watch-hero">
+      <div class="live-pill"><span class="live-dot"></span>BENGALS GAME STREAM</div>
+      <h1>Watch the <span class="accent">Bengals</span> Live</h1>
+      <p>Home games are streamed live on YouTube. Missed one? Every stream is saved so you can watch the replay anytime.</p>
+      <div class="watch-actions">
+        <a href="https://www.youtube.com/@YOUR_CHANNEL_HANDLE" class="btn-youtube">▶ Subscribe on YouTube</a>
+      </div>
+    </div>
+
+    <!-- Same embed as schedule.html used to have -- now lives here only,
+         matching WAB's pattern where Watch Live is its own destination
+         rather than duplicated inline on the schedule page too. Needs the
+         CHANNEL ID (a "UC..." string, not the @handle) from YouTube Studio
+         > Settings > Channel > Advanced Settings. -->
+    <div class="live-embed-wrap">
+      <iframe
+        src="https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID"
+        title="ASL Bengals Live Stream"
+        frameborder="0"
+        allow="autoplay; encrypted-media"
+        allowfullscreen>
+      </iframe>
+    </div>
+
+    <div class="placeholder-notice">
+      <b>Not connected yet.</b> This page is ready to go the moment there's a real YouTube channel to stream to -- swap <code>YOUR_CHANNEL_ID</code> and <code>YOUR_CHANNEL_HANDLE</code> above for the real ones.
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>Per-team replays</h2>
+      <p>Individual game replays will show up on each team's schedule once games are actually being streamed -- see <a href="schedule.html" style="color:var(--orange);">Schedule &amp; Results</a>.</p>
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
+
+<script src="assets/js/theme.js"></script>
+</body>
+</html>

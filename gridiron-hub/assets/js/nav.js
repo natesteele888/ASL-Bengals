@@ -20,6 +20,7 @@ const navHtml = `
     <div class="nav-links">
       <a href="${P}index.html"${cur('home')}>Home</a>
       <a href="${P}schedule.html"${cur('schedule')}>Schedule</a>
+      <a href="${P}watch-live.html"${cur('watch')} style="color:#ff4444;">🔴 Watch Live</a>
       <a href="${P}teams.html"${cur('teams')}>Teams</a>
       <a href="${P}photos.html"${cur('photos')}>Photos</a>
       <div class="navdrop">
