@@ -40,7 +40,7 @@
 <body>
 
   <div class="card">
-    <div class="brand"><img src="tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
+    <div class="brand"><img src="assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
     <h1 class="title" id="formTitle">Sign in</h1>
     <div class="sub" id="formSub">Coaches and parents, one login.</div>
 
@@ -67,7 +67,7 @@
   </div>
 
 <script type="module">
-  import { auth, db } from './firebase-config.js';
+  import { auth, db } from 'src/firebase-config.js';
   import {
     signInWithEmailAndPassword, createUserWithEmailAndPassword,
     GoogleAuthProvider, signInWithPopup, onAuthStateChanged
