@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gridiron Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400..600&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
@@ -19,41 +19,38 @@
   .nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px;}
   .nav-brand{display:flex;align-items:center;gap:10px;}
   .nav-brand img{width:34px;height:34px;}
-  .nav-brand span{font-family:'Fraunces',serif;font-weight:600;font-size:19px;}
+  .nav-brand span{font-family:'Anton',sans-serif;font-size:18px;}
 
-  /* hero — asymmetric split rather than full-bleed photo behind centered
-     text (the previous treatment, and also what WAB does). Photo gets a
-     true duotone (grayscale + color-blend), not a straight color image
-     with a dark gradient -- reads considered/branded rather than stock. A
-     single diagonal cut is the one "edge" move in an otherwise restrained
-     page, per the brief: classy, with exactly one sharp thing about it. */
-  .hero{position:relative;overflow:hidden;min-height:600px;display:grid;grid-template-columns:1.15fr 1fr;background:var(--ink);}
-  .hero-copy{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:60px 5vw 60px 0;margin-left:max(24px,calc((100vw - 1120px)/2 + 24px));}
-  .hero-eyebrow{color:var(--gold);font-weight:700;font-size:12.5px;letter-spacing:.08em;margin-bottom:18px;}
-  .hero-eyebrow::before{content:"";display:inline-block;width:22px;height:1px;background:var(--gold);margin-right:10px;vertical-align:middle;}
-  .hero-headline{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(40px,4.8vw,68px);line-height:1.02;letter-spacing:-.01em;color:var(--text);margin-bottom:22px;}
-  .hero-headline em{font-style:italic;font-weight:400;color:var(--gold);}
-  .hero-copy>p{color:var(--text-dim);font-size:15.5px;line-height:1.65;max-width:44ch;margin:0;}
-  .hero-actions{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap;}
-  .btn-hero-primary,.btn-hero-ghost{display:inline-flex;align-items:center;padding:14px 26px;font-weight:700;font-size:13.5px;letter-spacing:.02em;border-radius:1px;}
-  .btn-hero-primary{background:var(--gold);color:#14110d;}
-  .btn-hero-ghost{border:1px solid var(--line);color:var(--text);}
-  .hero-checks{display:flex;gap:28px;flex-wrap:wrap;margin-top:40px;padding-top:24px;border-top:1px solid var(--line);}
-  .hero-checks span{font-size:12px;color:var(--text-dim);letter-spacing:.01em;}
-
-  .hero-photo-panel{
-    position:relative;
-    clip-path:polygon(12% 0, 100% 0, 100% 100%, 0 100%);
+  /* hero */
+  .hero{position:relative;overflow:hidden;min-height:640px;display:flex;align-items:center;background:radial-gradient(ellipse at 25% 30%, #2a1408 0%, var(--ink) 60%);border-bottom:none;}
+  html[data-theme="light"] .hero{background:var(--ink);}
+  /* Photo sits behind everything; gradient overlay is darkest on the left
+     (where text lives, matching WAB Knights) fading toward transparent on
+     the right so the photo itself stays visible there. */
+  .hero-photo{position:absolute;inset:0;background-image:url('assets/img/bengals%20banner%20mockup-1.jpg');background-size:cover;background-position:50% 35%;}
+  .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg, var(--hero-ov-1) 0%, var(--hero-ov-2) 42%, var(--hero-ov-3) 65%, var(--hero-ov-4) 88%);}
+  #emberCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;}
+  .hero-inner{position:relative;z-index:2;padding-top:60px;padding-bottom:60px;width:100%;}
+  .hero-eyebrow{color:var(--orange);font-weight:800;font-size:13px;margin-bottom:10px;letter-spacing:.04em;}
+  .hero-headline{
+    font-family:'Anton',sans-serif;font-weight:400;line-height:1;
+    font-size:clamp(38px,6vw,72px);letter-spacing:.01em;margin-bottom:16px;
+    background:linear-gradient(180deg,#fff 0%,#ffd9b3 55%,var(--orange) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 60px rgba(244,105,28,.25);
   }
-  .hero-photo{position:absolute;inset:0;background-image:url('assets/img/bengals%20banner%20mockup-1.jpg');background-size:cover;background-position:50% 35%;filter:grayscale(1) contrast(1.15) brightness(.85);}
-  .hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg, var(--orange) 0%, var(--ink) 75%);mix-blend-mode:color;}
-  .hero-photo::before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg, var(--ink) 0%, transparent 18%);}
-
-  @media (max-width:900px){
-    .hero{grid-template-columns:1fr;min-height:0;}
-    .hero-copy{padding:52px 24px 40px;margin-left:0;}
-    .hero-photo-panel{clip-path:none;height:280px;order:-1;}
+  html[data-theme="light"] .hero-headline{
+    background:linear-gradient(180deg,#1c1b18 0%,#4a2f1a 55%,var(--orange) 100%);
+    -webkit-background-clip:text;background-clip:text;
   }
+  .hero-inner p{color:var(--text-dim);font-size:15px;margin-top:0;max-width:52ch;}
+  .hero-actions{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;}
+  .btn-hero-primary,.btn-hero-ghost{display:inline-flex;padding:13px 24px;border-radius:4px;font-weight:800;font-size:14px;}
+  .btn-hero-primary{background:var(--orange);color:#0e0e10;}
+  .btn-hero-ghost{border:1.5px solid var(--line);color:var(--text);}
+  .hero-checks{display:flex;gap:20px;flex-wrap:wrap;margin-top:28px;padding-top:22px;border-top:1px solid var(--line);}
+  .hero-checks span{font-size:12.5px;color:var(--text-dim);}
+  .hero-fade{position:absolute;left:0;right:0;bottom:0;height:180px;background:linear-gradient(to bottom,transparent,var(--ink));pointer-events:none;z-index:1;}
 
   /* Tiger watermark now lives behind the three lower sections as one
      continuous background rather than only in the hero -- absolutely
@@ -77,31 +74,31 @@
 
   /* this week strip */
   .week-strip{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;margin:0 -24px;padding-left:24px;padding-right:24px;}
-  .week-card{flex:0 0 210px;background:var(--ink-2);border:1px solid var(--line);border-radius:1px;padding:16px;border-top:2px solid var(--gold);}
+  .week-card{flex:0 0 210px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;border-top:3px solid var(--orange);}
   .week-card .div{font-weight:800;font-size:11.5px;color:var(--orange);margin-bottom:8px;}
   .week-card .matchup{font-weight:700;font-size:14.5px;line-height:1.3;}
   .week-card .meta{font-size:11.5px;color:var(--text-dim);margin-top:8px;}
-  .week-card .score{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin-top:8px;color:var(--text-dim);}
+  .week-card .score{font-family:'Anton',sans-serif;font-size:20px;margin-top:8px;color:var(--text-dim);}
 
   /* teams grid */
   .teams-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-  .team-card{background:var(--ink-2);border:1px solid var(--line);padding:18px;border-radius:1px;transition:border-color .15s;}
+  .team-card{background:var(--ink-2);border:1px solid var(--line);padding:18px;border-radius:6px;transition:border-color .15s;}
   .team-card:hover{border-color:var(--orange);}
-  .team-card .age{font-family:'Fraunces',serif;font-weight:600;font-size:24px;}
+  .team-card .age{font-family:'Anton',sans-serif;font-size:24px;}
   .team-card .name{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
-  .team-card .record{display:inline-block;margin-top:12px;font-weight:700;font-size:12.5px;padding:4px 9px;border-radius:1px;}
+  .team-card .record{display:inline-block;margin-top:12px;font-weight:800;font-size:12.5px;padding:4px 9px;border-radius:2px;}
   .record.good{background:var(--green-bg);color:var(--green);}
-  .record.mid{background:var(--gold-dim);color:var(--gold);}
+  .record.mid{background:rgba(244,105,28,.12);color:var(--orange);}
   .record.bye{background:rgba(128,128,128,.14);color:var(--text-dim);}
 
   /* results */
-  .results{background:var(--ink-2);border:1px solid var(--line);border-radius:1px;overflow:hidden;}
+  .results{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;overflow:hidden;}
   .result-row{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line);}
   .result-row:last-child{border-bottom:none;}
   .result-row .rdiv{width:46px;flex:0 0 auto;font-weight:800;font-size:12px;color:var(--text-dim);}
   .result-row .rteams{flex:1;font-weight:700;font-size:14.5px;}
   .result-row .rteams .win{color:var(--orange);}
-  .result-row .rscore{font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:var(--text-dim);}
+  .result-row .rscore{font-family:'Anton',sans-serif;font-size:18px;color:var(--text-dim);}
 
   @media (max-width:860px){
     .teams-grid{grid-template-columns:repeat(2,1fr);}
@@ -115,24 +112,24 @@
 <script src="assets/js/nav.js"></script>
 
   <header class="hero" id="hero">
-    <div class="hero-copy">
-      <div class="hero-eyebrow">CMYFCC MEMBER PROGRAM</div>
-      <h1 class="hero-headline">Every team.<br>One <em>program.</em></h1>
+    <div class="hero-photo" id="heroPhoto"></div>
+    <canvas id="emberCanvas"></canvas>
+    <div class="wrap hero-inner">
+      <div class="hero-eyebrow">2026 FALL SEASON — SAMPLE DATA</div>
+      <h1 class="hero-headline">EVERY TEAM.<br>ONE HOME FIELD.</h1>
       <p>Schedules, results, and rosters for every ASL Bengals team -- built for families who show up on Friday night, not people who track spreadsheets.</p>
       <div class="hero-actions">
         <a href="schedule.html" class="btn-hero-primary">This Week's Games</a>
         <a href="teams.html" class="btn-hero-ghost">All Teams</a>
       </div>
       <div class="hero-checks">
-        <span>Flex · Tackle · Cheer</span>
-        <span>Ages 6–14</span>
-        <span>6 teams · 9 game weeks</span>
-        <span>CMYFCC member</span>
+        <span>✓ Flex · Tackle · Cheer</span>
+        <span>✓ Ages 6–14</span>
+        <span>✓ 6 teams · 9 game weeks</span>
+        <span>✓ CMYFCC member</span>
       </div>
     </div>
-    <div class="hero-photo-panel">
-      <div class="hero-photo"></div>
-    </div>
+    <div class="hero-fade"></div>
   </header>
 
   <div class="lower-sections">
@@ -141,7 +138,7 @@
     <section class="section">
     <div class="wrap">
       <div class="section-head">
-        <div><h2>This week</h2><p>Every team's next game. <span style="color:var(--gold);">Sample data below except 11U.</span></p></div>
+        <div><h2>This week</h2><p>Every team's next game. <span style="color:var(--orange);">Sample data below except 11U.</span></p></div>
         <a href="schedule.html" class="section-link">Full schedule</a>
       </div>
       <div class="week-strip">
@@ -178,14 +175,68 @@
   </div>
 
 <script>
-  // Parallax fade for the lower sections' background watermark only --
-  // the ember particle canvas and hero text fade/parallax from the
-  // previous "energetic youth sports" direction are gone; this identity
-  // is one restrained motion moment at most, not continuous ambient motion.
+  // Ember particle background -- deliberately modest count ("not too much"
+  // per Nathan) rather than a dense fire simulation. Canvas over CSS
+  // animation since particle count/speed/opacity all vary per-particle,
+  // which is awkward with a fixed set of @keyframes rules.
+  const canvas = document.getElementById('emberCanvas');
+  const ctx = canvas.getContext('2d');
+  const hero = document.getElementById('hero');
+  let particles = [];
+
+  function resize() {
+    canvas.width = hero.offsetWidth;
+    canvas.height = hero.offsetHeight;
+  }
+  function spawn() {
+    return {
+      x: Math.random() * canvas.width,
+      y: canvas.height + Math.random() * 40,
+      r: 1 + Math.random() * 2.2,
+      speed: 0.3 + Math.random() * 0.7,
+      drift: (Math.random() - 0.5) * 0.4,
+      life: 0,
+      maxLife: 300 + Math.random() * 300,
+      hue: 20 + Math.random() * 20 // orange-yellow range
+    };
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  const PARTICLE_COUNT = 45;
+  for (let i = 0; i < PARTICLE_COUNT; i++) { const p = spawn(); p.y = Math.random() * canvas.height; particles.push(p); }
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.y -= p.speed;
+      p.x += p.drift;
+      p.life++;
+      const fadeIn = Math.min(1, p.life / 30);
+      const fadeOut = Math.max(0, 1 - (p.life / p.maxLife));
+      const alpha = Math.min(fadeIn, fadeOut) * 0.7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 90%, 60%, ${alpha})`;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = `hsla(${p.hue}, 90%, 55%, ${alpha})`;
+      ctx.fill();
+    });
+    particles = particles.filter(p => p.life < p.maxLife && p.y > -20);
+    while (particles.length < PARTICLE_COUNT) particles.push(spawn());
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  // Parallax + fade: background drifts slower than scroll, whole hero
+  // content fades out before the section is fully scrolled past, so it
+  // reads as "dissolving" into the next section rather than just clipping.
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
-    const watermark = document.querySelector('.lower-sections-watermark');
-    if (watermark) watermark.style.transform = `translateY(calc(-50% + ${y * 0.08}px))`;
+    const heroH = hero.offsetHeight;
+    const progress = Math.min(1, y / heroH);
+    canvas.style.transform = `translateY(${y * 0.25}px)`;
+    document.querySelector('.hero-inner').style.opacity = 1 - progress * 1.3;
+    document.querySelector('.hero-inner').style.transform = `translateY(${y * 0.2}px)`;
   }, { passive: true });
 </script>
 <script src="assets/js/theme.js"></script>
