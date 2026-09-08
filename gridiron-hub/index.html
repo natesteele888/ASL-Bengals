@@ -85,6 +85,28 @@
   .value-block h3{color:var(--orange);font-size:16px;margin-bottom:8px;}
   .value-block p{color:var(--text-dim);font-size:12.5px;line-height:1.6;margin:0;}
 
+  /* Programs -- big split rows (photo left, content right on desktop) per
+     Nathan's explicit ask: bigger than the compact card grid on
+     programs.html, since this is the homepage's featured showcase, not a
+     side-by-side comparison view. */
+  .program-row{display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:center;padding:44px 0;border-bottom:1px solid var(--line);min-height:340px;}
+  .program-row:last-of-type{border-bottom:none;}
+  .program-row-photo{border-radius:8px;overflow:hidden;aspect-ratio:16/10;height:100%;max-height:380px;}
+  .program-row-photo img{width:100%;height:100%;object-fit:cover;}
+  .program-row-content .sub{color:var(--orange);font-weight:800;font-size:12.5px;margin-bottom:6px;}
+  .program-row-content h3{font-size:28px;margin-bottom:12px;}
+  .program-row-content h3 a{color:inherit;}
+  .program-row-content>p{color:var(--text-dim);font-size:14.5px;line-height:1.65;margin:0 0 14px;max-width:52ch;}
+  .program-row-content ul{list-style:none;margin:0 0 18px;padding:0;}
+  .program-row-content li{font-size:13.5px;color:var(--text-dim);padding:5px 0;display:flex;align-items:baseline;gap:8px;}
+  .program-row-content li::before{content:"✓";color:var(--orange);font-weight:800;}
+  .program-row-meta{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .season-pill{font-size:11.5px;font-weight:700;background:rgba(128,128,128,.14);color:var(--text-dim);padding:5px 12px;border-radius:999px;}
+  .price-pill{font-family:'Anton',sans-serif;font-size:20px;color:var(--text);}
+  .program-row-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .btn-closed{background:rgba(128,128,128,.12);color:var(--text-dim);padding:12px 22px;border-radius:5px;font-weight:800;font-size:14px;}
+  .btn-email{font-size:13px;font-weight:700;color:var(--orange);}
+
   /* section */
   .section{padding:40px 0;border-bottom:1px solid var(--line);}
   .section-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;gap:20px;flex-wrap:wrap;}
@@ -124,6 +146,8 @@
     .teams-grid{grid-template-columns:repeat(2,1fr);}
     .welcome-section{grid-template-columns:1fr;}
     .gallery-grid,.values-grid{grid-template-columns:repeat(2,1fr);}
+    .program-row{grid-template-columns:1fr;gap:16px;min-height:0;}
+    .program-row-photo{max-height:none;}
   }
 </style>
 </head>
@@ -172,6 +196,50 @@
           <div class="wr-row"><span>10U</span>D1 Quarter-Final Appearance</div>
           <div class="wr-row"><span>D12</span>MA State Competition — 3rd Place</div>
           <div class="wr-row"><span>12U</span>D1 Super Bowl Runner-Up</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head"><div><h2>Programs</h2><p>From your athlete's very first snap to competitive tackle football and cheer.</p></div>
+          <a href="programs.html" class="section-link">All Programs</a>
+        </div>
+
+        <div class="program-row">
+          <div class="program-row-photo"><img src="assets/img/bengals%20banner%20tackle-1.jpg" alt="ASL Bengals Tackle Football"></div>
+          <div class="program-row-content">
+            <div class="sub">Ages 9–13 · Full Contact</div>
+            <h3><a href="programs/tackle-football.html">Tackle Football</a></h3>
+            <p>Full-contact competitive football against other Central Mass towns -- teamwork, leadership, and discipline, on top of the game itself.</p>
+            <ul><li>Certified helmet &amp; shoulder pads provided</li><li>8 regular season games + playoffs</li><li>Reversible jersey included</li></ul>
+            <div class="program-row-meta"><span class="season-pill">Late Jul – Oct · playoffs possible</span><span class="price-pill">$250</span></div>
+            <div class="program-row-actions"><div class="btn-closed">Registration Closed</div><a href="mailto:aslbengals.president@gmail.com?subject=Interested%20in%202027%20Tackle" class="btn-email">Interested in 2027? Email us →</a></div>
+          </div>
+        </div>
+
+        <div class="program-row">
+          <div class="program-row-photo"><img src="assets/img/bengals%20banner%20flex-1.jpg" alt="ASL Bengals Flex Football"></div>
+          <div class="program-row-content">
+            <div class="sub">Ages 5–8 · Limited Contact</div>
+            <h3><a href="programs/flex-football.html">Flex Football</a></h3>
+            <p>Designed by NFL players to replicate their practice regimen -- technique and game understanding in a limited-contact environment, and a natural step toward tackle.</p>
+            <ul><li>No tackling -- blocking &amp; pass rush only</li><li>Helmet, pads, flags &amp; jersey provided</li><li>Two teams: 6U and 8U</li></ul>
+            <div class="program-row-meta"><span class="season-pill">Late Jul – Oct</span><span class="price-pill">$125</span></div>
+            <div class="program-row-actions"><div class="btn-closed">Registration Closed</div><a href="mailto:aslbengals.president@gmail.com?subject=Interested%20in%202027%20Flex" class="btn-email">Interested in 2027? Email us →</a></div>
+          </div>
+        </div>
+
+        <div class="program-row">
+          <div class="program-row-photo"><img src="assets/img/bengals%20banner%20mockup%20cheer-1.jpg" alt="ASL Bengals Cheer"></div>
+          <div class="program-row-content">
+            <div class="sub">Ages 5–14 · Sideline &amp; Competition</div>
+            <h3><a href="programs/cheer.html">Cheer</a></h3>
+            <p>Sideline and competition cheer -- physical skill, discipline, and teamwork on and off the mat, with real competition results to show for it.</p>
+            <ul><li>Sideline cheer at every home game</li><li>2–5 competitions per season</li><li>Uniform &amp; pompoms provided</li></ul>
+            <div class="program-row-meta"><span class="season-pill">Late Jul – Nov · competitions</span><span class="price-pill">$125–250</span></div>
+            <div class="program-row-actions"><div class="btn-closed">Registration Closed</div><a href="mailto:aslbengals.president@gmail.com?subject=Interested%20in%202027%20Cheer" class="btn-email">Interested in 2027? Email us →</a></div>
+          </div>
         </div>
       </div>
     </section>
