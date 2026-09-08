@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,400..600&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  /* Same photo+overlay pattern as the homepage hero, just shorter --
+     280px instead of ~600px, since a team page needs this as an identity
+     banner, not a full landing moment. */
+  .team-hero{position:relative;overflow:hidden;height:280px;display:flex;align-items:flex-end;background:var(--ink-2);}
+  .team-hero-photo{position:absolute;inset:0;background-size:cover;background-position:center;}
+  .team-hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(14,14,16,.15) 0%,var(--hero-ov-1) 100%);}
+  html[data-theme="light"] .team-hero-photo::after{background:linear-gradient(180deg,rgba(250,249,246,.15) 0%,var(--hero-ov-1) 100%);}
+  .team-hero-inner{position:relative;z-index:2;padding:24px 0;width:100%;}
+  .team-hero-eyebrow{color:var(--orange);font-weight:800;font-size:12px;margin-bottom:4px;}
+  .team-hero h1{font-size:clamp(28px,4vw,42px);color:var(--text);}
+  .team-hero .record-badge{display:inline-block;margin-top:8px;font-weight:800;font-size:13px;padding:5px 12px;border-radius:5px;background:rgba(244,105,28,.14);color:var(--orange);}
+
+  .edit-banner-btn{position:absolute;top:16px;right:16px;z-index:3;background:rgba(14,14,16,.6);color:#fff;border:1px solid rgba(255,255,255,.25);padding:8px 14px;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);}
+  .edit-banner-btn:hover{background:rgba(14,14,16,.8);}
+  .edit-banner-btn input[type=file]{display:none;}
+
+  .team-quicklinks{display:flex;gap:10px;padding:20px 0;flex-wrap:wrap;}
+  .team-quicklinks a{border:1px solid var(--line);color:var(--text);padding:9px 16px;border-radius:6px;font-size:13.5px;font-weight:700;}
+  .team-quicklinks a:hover{border-color:var(--orange);color:var(--orange);}
+
+  .upload-status{font-size:12.5px;margin-top:8px;color:var(--text-dim);}
+  .upload-status.error{color:#ff6b5e;}
+</style>
+</head>
+<body>
+
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='teams';</script>
+<script src="assets/js/nav.js"></script>
+
+  <header class="team-hero" id="teamHero">
+    <div class="team-hero-photo" id="teamHeroPhoto"></div>
+    <button class="edit-banner-btn" id="editBannerBtn" style="display:none;">
+      📷 Edit Banner
+      <input type="file" id="bannerFileInput" accept="image/*">
+    </button>
+    <div class="wrap team-hero-inner">
+      <div class="team-hero-eyebrow" id="teamSport">TACKLE FOOTBALL</div>
+      <h1 id="teamName">Loading…</h1>
+      <div class="record-badge" id="teamRecord"></div>
+      <div class="upload-status" id="uploadStatus"></div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="team-quicklinks">
+      <a href="schedule.html">📅 Schedule &amp; Results</a>
+      <a href="photos.html">📸 Team Photos</a>
+      <a href="#" id="rosterLink">👥 Roster</a>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <p style="color:var(--text-dim);font-size:14px;">Roster isn't built yet -- this page is the first step toward every team having its own space here, not just an entry on the Teams grid.</p>
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
+
+<script type="module">
+  import { app, auth, db } from './src/firebase-config.js';
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+  import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
+
+  const storage = getStorage(app);
+
+  // Basic display data per team -- real record/sport, not stored in
+  // Firestore yet since there's no admin flow to edit it through besides
+  // the banner itself right now. The banner IS live-editable, which is the
+  // actual point of this page: proving teams can update their own content
+  // without a code change, even before every field has that treatment.
+  const TEAM_DISPLAY = {
+    '11u': { name: 'ASL Bengals 11U', sport: 'TACKLE FOOTBALL', record: '1-1' },
+  };
+
+  const params = new URLSearchParams(window.location.search);
+  const teamId = params.get('id') || '11u';
+  const display = TEAM_DISPLAY[teamId] || { name: teamId.toUpperCase(), sport: 'TEAM', record: '' };
+
+  document.getElementById('teamName').textContent = display.name;
+  document.getElementById('teamSport').textContent = display.sport;
+  if (display.record) document.getElementById('teamRecord').textContent = display.record;
+  document.getElementById('rosterLink').href = `schedule.html`; // placeholder until a real roster page exists
+
+  const heroPhotoEl = document.getElementById('teamHeroPhoto');
+  const editBtn = document.getElementById('editBannerBtn');
+  const fileInput = document.getElementById('bannerFileInput');
+  const statusEl = document.getElementById('uploadStatus');
+
+  async function loadBanner() {
+    try {
+      const snap = await getDoc(doc(db, 'teams', teamId));
+      if (snap.exists() && snap.data().bannerUrl) {
+        heroPhotoEl.style.backgroundImage = `url('${snap.data().bannerUrl}')`;
+      }
+    } catch (e) {
+      console.warn('Could not load team banner (Firestore rules for teams/{teamId} may not be set up yet):', e);
+    }
+  }
+  loadBanner();
+
+  // Any signed-in user can edit for now -- role-based restriction (coach
+  // for this specific team only) needs the role/orgId assignment flow that
+  // doesn't exist yet. Flagging this here rather than pretending it's
+  // already properly locked down.
+  let currentUser = null;
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    editBtn.style.display = user ? 'block' : 'none';
+  });
+
+  editBtn.addEventListener('click', (e) => {
+    if (e.target === editBtn) fileInput.click();
+  });
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file || !currentUser) return;
+    statusEl.className = 'upload-status';
+    statusEl.textContent = 'Uploading…';
+    try {
+      const path = `teams/${teamId}/photos/banner_${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, path);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      await setDoc(doc(db, 'teams', teamId), { bannerUrl: url, updatedBy: currentUser.uid, updatedAt: Date.now() }, { merge: true });
+      heroPhotoEl.style.backgroundImage = `url('${url}')`;
+      statusEl.textContent = 'Banner updated.';
+    } catch (err) {
+      statusEl.className = 'upload-status error';
+      statusEl.textContent = `Couldn't update banner: ${err.code || err.message}`;
+    }
+  });
+</script>
+
+<script src="assets/js/theme.js"></script>
+</body>
+</html>

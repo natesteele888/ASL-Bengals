@@ -4,14 +4,16 @@
    color, so the light variant is "free" once the variables are covered. */
 
 :root{
-  --ink:#0e0e10; --ink-2:#18181b; --orange:#f4691c; --orange-deep:#c94f0f;
-  --text:#e8e7e3; --text-dim:#9a988e; --line:rgba(255,255,255,.10);
-  --green:#3fae4a; --green-bg:rgba(63,174,74,.12);
+  --ink:#14110d; --ink-2:#1c1812; --orange:#c1501f; --orange-deep:#9c3f18;
+  --gold:#b08d57; --gold-dim:rgba(176,141,87,.15);
+  --text:#ede9e0; --text-dim:#948c7d; --line:rgba(237,231,224,.12);
+  --green:#5a9e4f; --green-bg:rgba(90,158,79,.14);
   --shadow: 0 1px 2px rgba(0,0,0,.4);
 }
 html[data-theme="light"]{
-  --ink:#faf9f6; --ink-2:#ffffff; --orange:#e0621a; --orange-deep:#b8460c;
-  --text:#1c1b18; --text-dim:#68665c; --line:rgba(14,14,16,.12);
+  --ink:#ede7db; --ink-2:#ffffff; --orange:#a8451c; --orange-deep:#87370f;
+  --gold:#8a6d3f; --gold-dim:rgba(138,109,63,.12);
+  --text:#1e1a14; --text-dim:#6b6252; --line:rgba(30,26,20,.12);
   --green:#2f7a2a; --green-bg:rgba(47,122,42,.10);
   --shadow: 0 1px 3px rgba(0,0,0,.08);
 }
@@ -29,7 +31,7 @@ html[data-theme="light"]{
 
 *{box-sizing:border-box;}
 body{margin:0;background:var(--ink);color:var(--text);font-family:'Karla',sans-serif;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s;}
-h1,h2,h3{font-family:'Anton',sans-serif;font-weight:400;margin:0;line-height:1;}
+h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;font-optical-sizing:auto;margin:0;line-height:1.05;letter-spacing:-.01em;}
 a{color:inherit;text-decoration:none;}
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
 
@@ -45,17 +47,18 @@ a{color:inherit;text-decoration:none;}
 .navdrop{position:relative;}
 .navdrop>span{color:var(--text-dim);font-weight:700;font-size:14px;cursor:default;padding:8px 0;display:inline-block;}
 .navdrop:hover>span{color:var(--text);}
-.navdrop-menu{position:absolute;top:100%;left:0;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:190px;display:none;flex-direction:column;gap:2px;box-shadow:var(--shadow);}
+.navdrop-menu{position:absolute;top:100%;left:0;background:var(--ink-2);border:1px solid var(--line);border-radius:2px;padding:8px;min-width:190px;display:none;flex-direction:column;gap:2px;box-shadow:var(--shadow);}
 .navdrop:hover .navdrop-menu{display:flex;}
-.navdrop-menu a{color:var(--text-dim);font-size:13.5px;font-weight:700;padding:8px 10px;border-radius:4px;}
+.navdrop-menu a{color:var(--text-dim);font-size:13.5px;font-weight:700;padding:8px 10px;border-radius:1px;}
 .navdrop-menu a:hover{background:rgba(128,128,128,.12);color:var(--text);}
-.nav-cta{background:var(--orange);color:#fff;font-weight:800;font-size:13px;padding:9px 16px;border-radius:5px;}
+.nav-cta{background:var(--gold);color:#14110d;font-weight:800;font-size:13px;padding:9px 18px;border-radius:1px;letter-spacing:.02em;}
 html[data-theme="light"] .nav-cta{color:#fff;}
-.theme-toggle{background:none;border:1px solid var(--line);color:var(--text-dim);width:34px;height:34px;border-radius:6px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+.nav-hamburger{display:none;}
+.theme-toggle{background:none;border:1px solid var(--line);color:var(--text-dim);width:34px;height:34px;border-radius:1px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
 .theme-toggle:hover{border-color:var(--orange);color:var(--text);}
 #navAuthSlot{display:flex;align-items:center;gap:10px;}
 .nav-user-email{font-size:13px;color:var(--text-dim);}
-.nav-signout-btn{background:none;border:1px solid var(--line);color:var(--text-dim);padding:7px 14px;border-radius:5px;font-size:13px;cursor:pointer;font-family:'Karla',sans-serif;}
+.nav-signout-btn{background:none;border:1px solid var(--line);color:var(--text-dim);padding:7px 14px;border-radius:1px;font-size:13px;cursor:pointer;font-family:'Karla',sans-serif;}
 .nav-signout-btn:hover{border-color:var(--orange);color:var(--text);}
 
 /* page head / sections */
@@ -71,13 +74,13 @@ html[data-theme="light"] .nav-cta{color:#fff;}
 
 /* cards */
 .card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-.card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:20px;box-shadow:var(--shadow);}
+.card{background:var(--ink-2);border:1px solid var(--line);border-radius:1px;padding:22px;box-shadow:none;}
 .card h3{font-size:16px;margin-bottom:6px;font-family:'Karla',sans-serif;font-weight:800;}
 .card p{font-size:13.5px;color:var(--text-dim);margin:0;}
-.placeholder-tag{display:inline-block;margin-top:10px;font-size:11px;font-weight:800;color:var(--orange);background:rgba(244,105,28,.1);padding:3px 8px;border-radius:3px;}
+.placeholder-tag{display:inline-block;margin-top:10px;font-size:10.5px;font-weight:800;color:var(--gold);background:var(--gold-dim);padding:3px 8px;border-radius:1px;letter-spacing:.03em;}
 
 /* buttons */
-.btn{display:inline-flex;padding:12px 22px;border-radius:5px;font-weight:800;font-size:14px;margin-top:8px;}
+.btn{display:inline-flex;padding:12px 24px;border-radius:1px;font-weight:700;font-size:14px;margin-top:8px;letter-spacing:.01em;}
 .btn-primary{background:var(--orange);color:#fff;}
 .btn-ghost{border:1.5px solid var(--line);color:var(--text);}
 
@@ -86,6 +89,40 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;
 
 @media (max-width:860px){
   .card-grid{grid-template-columns:repeat(2,1fr);}
-  .nav-links{display:none;}
+
+  /* Real mobile menu: hamburger toggles a full slide-down panel instead of
+     the old .nav-links{display:none} with no replacement, which left
+     mobile visitors with zero way to navigate at all. */
+  .nav-hamburger{display:flex;flex-direction:column;justify-content:center;gap:5px;width:30px;height:24px;background:none;border:none;cursor:pointer;padding:0;}
+  .nav-hamburger span{display:block;height:2px;background:var(--text);border-radius:2px;transition:transform .2s,opacity .2s;}
+  .nav-hamburger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+  .nav-hamburger.open span:nth-child(2){opacity:0;}
+  .nav-hamburger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+
+  .nav-links{
+    display:none;
+    position:fixed;top:64px;left:0;right:0;bottom:0;
+    background:var(--ink-2);
+    flex-direction:column;align-items:stretch;gap:0;
+    padding:8px 24px 32px;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+    border-top:1px solid var(--line);
+    z-index:40;
+  }
+  .nav-links.mobile-open{display:flex;}
+  .nav-links>a{padding:15px 0;border-bottom:1px solid var(--line);font-size:16px;}
+
+  /* Dropdowns become click-to-expand accordions on mobile -- :hover has no
+     meaning on touch, so .mobile-drop-open (toggled by nav.js) is what
+     actually shows/hides these here, not the desktop hover rule above. */
+  .navdrop{border-bottom:1px solid var(--line);}
+  .navdrop-label{display:block;padding:15px 0;font-size:16px;color:var(--text-dim);}
+  .navdrop-menu{position:static;display:none;border:none;background:none;padding:0 0 12px 14px;min-width:0;box-shadow:none;}
+  .navdrop.mobile-drop-open .navdrop-menu{display:flex;}
+  .navdrop-menu a{padding:11px 0;font-size:15px;}
+
+  .nav-links-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:20px;}
+  #navAuthSlot{flex-wrap:wrap;}
 }
+
 @media (max-width:560px){ .card-grid{grid-template-columns:1fr;} }
