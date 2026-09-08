@@ -33,10 +33,24 @@
   .nav-user button{background:none;border:1px solid var(--line);color:var(--text-dim);padding:7px 14px;border-radius:5px;font-size:13px;cursor:pointer;}
 
   /* hero */
-  .hero{padding:44px 0 36px;border-bottom:1px solid var(--line);}
-  .hero-eyebrow{color:var(--orange);font-weight:800;font-size:13px;margin-bottom:8px;}
-  .hero h1{font-size:clamp(30px,4vw,42px);}
-  .hero p{color:var(--text-dim);font-size:14.5px;margin-top:8px;max-width:56ch;}
+  .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;background:radial-gradient(ellipse at 25% 30%, #2a1408 0%, var(--ink) 60%);border-bottom:none;}
+  #emberCanvas{position:absolute;inset:0;width:100%;height:100%;}
+  .hero-tiger-watermark{position:absolute;right:-60px;top:50%;transform:translateY(-50%);width:460px;opacity:.10;pointer-events:none;}
+  .hero-tiger-watermark img{width:100%;}
+  .hero-inner{position:relative;z-index:2;padding:60px 24px;}
+  .hero-eyebrow{color:var(--orange);font-weight:800;font-size:13px;margin-bottom:10px;letter-spacing:.04em;}
+  .hero-headline{
+    font-size:clamp(38px,6vw,72px);letter-spacing:.01em;margin-bottom:16px;
+    background:linear-gradient(180deg,#fff 0%,#ffd9b3 55%,var(--orange) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 60px rgba(244,105,28,.25);
+  }
+  .hero-inner p{color:var(--text-dim);font-size:15px;margin-top:0;max-width:52ch;}
+  .hero-actions{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;}
+  .btn-hero-primary,.btn-hero-ghost{display:inline-flex;padding:13px 24px;border-radius:4px;font-weight:800;font-size:14px;}
+  .btn-hero-primary{background:var(--orange);color:var(--ink);}
+  .btn-hero-ghost{border:1.5px solid var(--line);color:var(--text);}
+  .hero-fade{position:absolute;left:0;right:0;bottom:0;height:180px;background:linear-gradient(to bottom,transparent,var(--ink));pointer-events:none;z-index:1;}
 
   /* section */
   .section{padding:40px 0;border-bottom:1px solid var(--line);}
@@ -97,12 +111,19 @@
     </div>
   </nav>
 
-  <header class="hero">
-    <div class="wrap">
+  <header class="hero" id="hero">
+    <canvas id="emberCanvas"></canvas>
+    <div class="hero-tiger-watermark"><img src="tiger-logo.png" alt=""></div>
+    <div class="wrap hero-inner">
       <div class="hero-eyebrow">2026 FALL SEASON — SAMPLE DATA</div>
-      <h1>Every team. One home field.</h1>
-      <p>This is a visual preview with sample data -- schedules, teams, and results below aren't real yet. Once this direction looks right, it gets wired to actual Firestore data per organization.</p>
+      <h1 class="hero-headline">EVERY TEAM.<br>ONE HOME FIELD.</h1>
+      <p>Schedules, results, and rosters for every ASL Bengals team -- built for families who show up on Friday night, not people who track spreadsheets.</p>
+      <div class="hero-actions">
+        <a href="#" class="btn-hero-primary">This Week's Games</a>
+        <a href="#" class="btn-hero-ghost">All Teams</a>
+      </div>
     </div>
+    <div class="hero-fade"></div>
   </header>
 
   <section class="section">
@@ -143,5 +164,71 @@
     </div>
   </section>
 
+<script>
+  // Ember particle background -- deliberately modest count ("not too much"
+  // per Nathan) rather than a dense fire simulation. Canvas over CSS
+  // animation since particle count/speed/opacity all vary per-particle,
+  // which is awkward with a fixed set of @keyframes rules.
+  const canvas = document.getElementById('emberCanvas');
+  const ctx = canvas.getContext('2d');
+  const hero = document.getElementById('hero');
+  let particles = [];
+
+  function resize() {
+    canvas.width = hero.offsetWidth;
+    canvas.height = hero.offsetHeight;
+  }
+  function spawn() {
+    return {
+      x: Math.random() * canvas.width,
+      y: canvas.height + Math.random() * 40,
+      r: 1 + Math.random() * 2.2,
+      speed: 0.3 + Math.random() * 0.7,
+      drift: (Math.random() - 0.5) * 0.4,
+      life: 0,
+      maxLife: 300 + Math.random() * 300,
+      hue: 20 + Math.random() * 20 // orange-yellow range
+    };
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  const PARTICLE_COUNT = 45;
+  for (let i = 0; i < PARTICLE_COUNT; i++) { const p = spawn(); p.y = Math.random() * canvas.height; particles.push(p); }
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.y -= p.speed;
+      p.x += p.drift;
+      p.life++;
+      const fadeIn = Math.min(1, p.life / 30);
+      const fadeOut = Math.max(0, 1 - (p.life / p.maxLife));
+      const alpha = Math.min(fadeIn, fadeOut) * 0.7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 90%, 60%, ${alpha})`;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = `hsla(${p.hue}, 90%, 55%, ${alpha})`;
+      ctx.fill();
+    });
+    particles = particles.filter(p => p.life < p.maxLife && p.y > -20);
+    while (particles.length < PARTICLE_COUNT) particles.push(spawn());
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  // Parallax + fade: background drifts slower than scroll, whole hero
+  // content fades out before the section is fully scrolled past, so it
+  // reads as "dissolving" into the next section rather than just clipping.
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    const heroH = hero.offsetHeight;
+    const progress = Math.min(1, y / heroH);
+    canvas.style.transform = `translateY(${y * 0.25}px)`;
+    document.querySelector('.hero-tiger-watermark').style.transform = `translateY(calc(-50% + ${y * 0.15}px))`;
+    document.querySelector('.hero-inner').style.opacity = 1 - progress * 1.3;
+    document.querySelector('.hero-inner').style.transform = `translateY(${y * 0.2}px)`;
+  }, { passive: true });
+</script>
 </body>
 </html>
