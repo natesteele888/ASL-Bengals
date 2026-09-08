@@ -47,6 +47,7 @@ const navHtml = `
           <a href="${P}resources/sponsors.html">Sponsors</a>
         </div>
       </div>
+      <a href="${P}faq.html"${cur('faq')}>FAQ</a>
       <button class="theme-toggle" aria-label="Toggle theme"></button>
       <span id="navAuthSlot"></span>
     </div>
