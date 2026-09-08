@@ -16,6 +16,8 @@
   .upload-hint{font-size:12.5px;color:var(--text-dim);margin-top:8px;}
   .upload-status{font-size:13px;margin-top:14px;display:none;}
   .upload-status.show{display:block;}
+  .tag-chip{font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1.5px solid var(--line);color:var(--text-dim);cursor:pointer;user-select:none;}
+  .tag-chip.selected{background:var(--orange);color:#0e0e10;border-color:var(--orange);}
   .signin-notice{font-size:13.5px;color:var(--text-dim);}
   .signin-notice a{color:var(--orange);font-weight:700;}
 
@@ -46,10 +48,14 @@
       </div>
 
       <div id="uploadCard" class="upload-card" style="display:none;">
+        <div id="tagPickerWrap" style="text-align:left;margin-bottom:14px;">
+          <div style="font-size:12.5px;font-weight:700;color:var(--text-dim);margin-bottom:8px;">Tag players in these photos (optional)</div>
+          <div id="tagPicker" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        </div>
         <div>📸 Drag photos here, or</div>
         <label class="upload-btn" for="fileInput">Choose Photos</label>
         <input type="file" id="fileInput" accept="image/*" multiple>
-        <div class="upload-hint">JPG or PNG, up to 10MB each. You can tag players after upload.</div>
+        <div class="upload-hint">JPG or PNG, up to 10MB each. Tags above apply to every photo in this batch.</div>
         <div class="upload-status" id="uploadStatus"></div>
       </div>
 
@@ -62,7 +68,7 @@
   import { app, auth, db } from './src/firebase-config.js';
   import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
   import {
-    collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp
+    collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs
   } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
   import {
     getStorage, ref, uploadBytes, getDownloadURL
@@ -74,6 +80,35 @@
   // plainly rather than failing silently.
   const storage = getStorage(app);
   const TEAM_ID = '11u'; // hardcoded for now -- becomes dynamic once multi-team pages exist
+
+  // Tag picker -- fetches the roster once, renders as toggleable chips.
+  // Selected player IDs (not names, so a later name edit doesn't orphan
+  // old tags) get attached to every photo in the current upload batch.
+  const tagPicker = document.getElementById('tagPicker');
+  let selectedPlayerIds = new Set();
+  let rosterNameMap = {}; // playerId -> "#N Name", shared with the gallery's "who" overlay below
+  getDocs(query(collection(db, 'teams', TEAM_ID, 'roster'), orderBy('number', 'asc'))).then((snap) => {
+    if (snap.empty) {
+      tagPicker.innerHTML = '<span style="font-size:12px;color:var(--text-dim);">No roster yet -- add players on the team page first.</span>';
+      return;
+    }
+    tagPicker.innerHTML = '';
+    snap.forEach((docSnap) => {
+      const p = docSnap.data();
+      rosterNameMap[docSnap.id] = `#${p.number} ${p.name}`;
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip';
+      chip.textContent = `#${p.number} ${p.name}`;
+      chip.addEventListener('click', () => {
+        if (selectedPlayerIds.has(docSnap.id)) { selectedPlayerIds.delete(docSnap.id); chip.classList.remove('selected'); }
+        else { selectedPlayerIds.add(docSnap.id); chip.classList.add('selected'); }
+      });
+      tagPicker.appendChild(chip);
+    });
+  }).catch((err) => {
+    console.warn('Roster fetch error for tag picker:', err);
+    tagPicker.innerHTML = '<span style="font-size:12px;color:var(--text-dim);">Couldn\'t load roster.</span>';
+  });
 
   const fileInput = document.getElementById('fileInput');
   const uploadCard = document.getElementById('uploadCard');
@@ -109,7 +144,7 @@
           url,
           uploadedByUid: currentUser.uid,
           uploadedByEmail: currentUser.email,
-          playerTags: [], // filled in later via a tagging UI -- not built yet
+          playerTags: [...selectedPlayerIds],
           uploadedAt: serverTimestamp()
         });
         showStatus(`${file.name} uploaded.`, false);
@@ -144,7 +179,9 @@
       const p = doc.data();
       const tile = document.createElement('div');
       tile.className = 'photo-tile';
-      const tags = (p.playerTags && p.playerTags.length) ? p.playerTags.join(', ') : '';
+      const tags = (p.playerTags && p.playerTags.length)
+        ? p.playerTags.map(id => rosterNameMap[id] || null).filter(Boolean).join(', ')
+        : '';
       tile.innerHTML = `<img src="${p.url}" alt="" loading="lazy">${tags ? `<div class="who">${tags}</div>` : ''}`;
       gridEl.appendChild(tile);
     });
