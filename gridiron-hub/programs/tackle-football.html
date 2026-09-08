@@ -9,7 +9,18 @@
 <link rel="stylesheet" href="../assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-
+  .highlight-year{margin-bottom:16px;}
+  .highlight-year .yr{font-weight:800;color:var(--orange);font-size:13px;margin-bottom:6px;}
+  .highlight-year p{font-size:13.5px;color:var(--text-dim);margin:2px 0;}
+  .faq-item{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px;}
+  .faq-item.open{border-color:var(--orange);}
+  .faq-q{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;cursor:pointer;font-weight:800;font-size:14.5px;}
+  .faq-item.open .faq-q{color:var(--orange);}
+  .faq-q .chev{color:var(--text-dim);transition:transform .15s;}
+  .faq-item.open .faq-q .chev{transform:rotate(180deg);}
+  .faq-a{max-height:0;overflow:hidden;transition:max-height .2s ease;}
+  .faq-item.open .faq-a{max-height:420px;}
+  .faq-a-inner{padding:0 20px 18px;font-size:13.5px;color:var(--text-dim);line-height:1.65;}
 </style>
 </head>
 <body>
@@ -18,21 +29,56 @@
 <script>window.NAV_DEPTH=1;window.NAV_CURRENT='';</script>
 <script src="../assets/js/nav.js"></script>
 
-
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">FOOTBALL &amp; CHEER</div>
       <h1>Tackle Football</h1>
-      <p>Full-contact competitive football across CMYFCC divisions, from 8U through 13U -- certified coaches and guaranteed playing time.</p>
+      <p>Ages 9–13. Full-contact competitive football against other Central Mass towns -- teamwork, leadership, and discipline, on top of the game itself.</p>
     </div>
+
     <div class="section">
-      <h2>Ages</h2>
-      <p>Ages 8-14 across 8U-13U divisions</p>
-      <a href="../teams.html" class="btn btn-primary">View Teams &amp; Records</a>
-      <a href="../register.html" class="btn btn-ghost">Registration Info</a>
+      <h2>Season Highlights</h2>
+      <div class="highlight-year"><div class="yr">2025 CMAYF PLAYOFFS</div>
+        <p>10U — D1 Quarter Final Appearance (4-4, #7 Seed)</p>
+        <p>12U — D1 Super Bowl Runner-Up (7-1, #3 Seed)</p>
+      </div>
+      <div class="highlight-year"><div class="yr">2024 CMAYF PLAYOFFS</div>
+        <p>4th Grade — D1 Super Bowl Runner-Up (6-3, #3 Seed)</p>
+        <p>5th Grade — D1 Semi-Final Appearance (7-2, #3 Seed)</p>
+        <p>6th Grade — D1 Semi-Final Appearance (8-1, #1 Seed)</p>
+      </div>
+      <div class="highlight-year"><div class="yr">2023 CMAYF PLAYOFFS</div>
+        <p>4th Grade — D2 Super Bowl Runner-Up</p>
+        <p>5th Grade — D1 Semi-Final Appearance</p>
+      </div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>Frequently Asked Questions</h2>
+      <div id="faqList">
+        <div class="faq-item"><div class="faq-q"><span>How are the teams structured?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Single (e.g. 10, 11, 12, 13) or combined ages if necessary (e.g. 9/10, 12/13), determined in July based on registrations. Teams compete against other Central Mass towns offering the same program.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What gear will my athlete need?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Mouth guard, helmet, shoulder pads, black integrated pants, and football cleats. Certified helmet and shoulder pads are provided by the association. Players supply their own mouth guard, integrated pants, water bottle, and cleats.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What's included with registration?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Pre-season Jamboree Game, 8 regular season games, playoffs (record dependent), and equipment: helmet, shoulder pads, reversible jersey.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What are the parental commitments?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner"><b style="color:var(--text);">Fundraising:</b> sell 10 raffle tickets ($10 each) by September 15.<br><b style="color:var(--text);">Volunteering:</b> as needed throughout the season (chains, MPRs, announcing, events).<br><b style="color:var(--text);">Equipment:</b> in-season care/cleaning, prompt return post-season.<br><b style="color:var(--text);">Paperwork:</b> player packet, original birth certificate (if new), report card, and a current physical -- all required to receive equipment.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>When and where are practices?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">90-120 minutes, three times per week. Days/times set by coaching staff, announced before the season. Held at Lunenburg High School fields or Taylor Field in Shirley. Additional practices possible around weather or playoffs, at the coach's discretion.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What can I expect on game day?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Season runs late July through October. Games run ~120 minutes. 4 home games, played at Lunenburg or Ayer-Shirley High Schools. Away games follow the CMYAF schedule across Central Mass. Players arrive 60 minutes before kickoff.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>How do I stay informed?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Email and Facebook. Team Moms communicate your team's schedule and changes -- keep your SportsEngine email current. Join the <a href="https://www.facebook.com/groups/1628833410968322" style="color:var(--orange);">Bengals Facebook Group</a> and your team's group if one exists.</div></div></div>
+      </div>
     </div>
   </div>
-
 
   <footer>
     <div class="wrap">
@@ -41,6 +87,13 @@
     </div>
   </footer>
 
+<script>
+  document.getElementById('faqList').addEventListener('click', (e) => {
+    const q = e.target.closest('.faq-q');
+    if (!q) return;
+    q.closest('.faq-item').classList.toggle('open');
+  });
+</script>
 <script src="../assets/js/theme.js"></script>
 </body>
 </html>

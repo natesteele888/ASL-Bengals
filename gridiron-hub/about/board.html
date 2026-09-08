@@ -9,7 +9,14 @@
 <link rel="stylesheet" href="../assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-
+  .board-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .board-card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:18px 20px;}
+  .board-card .role{font-size:11px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  .board-card .name{font-size:16px;font-weight:800;}
+  .board-card .email{font-size:12px;color:var(--text-dim);margin-top:4px;}
+  .board-card.unfilled{opacity:.55;}
+  @media (max-width:860px){ .board-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .board-grid{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -18,25 +25,29 @@
 <script>window.NAV_DEPTH=1;window.NAV_CURRENT='';</script>
 <script src="../assets/js/nav.js"></script>
 
-
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">ABOUT</div>
-      <h1>Board of Directors</h1>
-      <p>The volunteers who run the organization. Names and roles below are placeholders -- swap in the real board.</p>
+      <h1>2026 Executive Board</h1>
+      <p>The volunteers who run ASL Bengals football and cheer.</p>
     </div>
-    <div class="section">
-      <div class="card-grid">
-        <div class="card"><h3>President</h3><p>aslbengals.president@gmail.com</p><span class="placeholder-tag">Real contact, name pending</span></div>
-        <div class="card"><h3>Vice President</h3><p>Name pending</p><span class="placeholder-tag">Placeholder</span></div>
-        <div class="card"><h3>Treasurer</h3><p>Name pending</p><span class="placeholder-tag">Placeholder</span></div>
-        <div class="card"><h3>Football Commissioner</h3><p>Name pending</p><span class="placeholder-tag">Placeholder</span></div>
-        <div class="card"><h3>Cheer Commissioner</h3><p>Name pending</p><span class="placeholder-tag">Placeholder</span></div>
-        <div class="card"><h3>Equipment Manager</h3><p>Name pending</p><span class="placeholder-tag">Placeholder</span></div>
+    <div class="section" style="border-bottom:none;">
+      <div class="board-grid">
+        <div class="board-card"><div class="role">President</div><div class="name">Pat Bishop</div><div class="email">aslbengals.president@gmail.com</div></div>
+        <div class="board-card"><div class="role">Vice President</div><div class="name">Bill McTurk</div></div>
+        <div class="board-card"><div class="role">Co-Secretary</div><div class="name">Ali Pitre</div><div class="email">aslbengals.secretary@gmail.com</div></div>
+        <div class="board-card"><div class="role">Co-Secretary</div><div class="name">Jill Bishop</div><div class="email">aslbengals.secretary@gmail.com</div></div>
+        <div class="board-card"><div class="role">Treasurer</div><div class="name">Raj Pancholi</div></div>
+        <div class="board-card"><div class="role">Director of Football</div><div class="name">Thomas Woodward</div></div>
+        <div class="board-card"><div class="role">Director of Cheerleading</div><div class="name">Carrie Millier</div></div>
+        <div class="board-card"><div class="role">Director of Cheerleading</div><div class="name">Angela Smith</div></div>
+        <div class="board-card unfilled"><div class="role">Apparel &amp; Concessions</div><div class="name">Position open</div></div>
+        <div class="board-card"><div class="role">Fundraising &amp; Special Events</div><div class="name">Molly Crawford</div></div>
+        <div class="board-card"><div class="role">Equipment Manager</div><div class="name">Derek Sousa</div></div>
+        <div class="board-card"><div class="role">Flex Football Coordinator</div><div class="name">Rob Rozzi</div></div>
       </div>
     </div>
   </div>
-
 
   <footer>
     <div class="wrap">

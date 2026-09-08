@@ -9,7 +9,15 @@
 <link rel="stylesheet" href="../assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-
+  .faq-item{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px;}
+  .faq-item.open{border-color:var(--orange);}
+  .faq-q{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;cursor:pointer;font-weight:800;font-size:14.5px;}
+  .faq-item.open .faq-q{color:var(--orange);}
+  .faq-q .chev{color:var(--text-dim);transition:transform .15s;}
+  .faq-item.open .faq-q .chev{transform:rotate(180deg);}
+  .faq-a{max-height:0;overflow:hidden;transition:max-height .2s ease;}
+  .faq-item.open .faq-a{max-height:420px;}
+  .faq-a-inner{padding:0 20px 18px;font-size:13.5px;color:var(--text-dim);line-height:1.65;}
 </style>
 </head>
 <body>
@@ -18,21 +26,45 @@
 <script>window.NAV_DEPTH=1;window.NAV_CURRENT='';</script>
 <script src="../assets/js/nav.js"></script>
 
-
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">FOOTBALL &amp; CHEER</div>
       <h1>Flex Football</h1>
-      <p>Non-contact, fundamentals-first introduction to the game -- flag-pull tackling, route running, and rules, built for the youngest Bengals.</p>
+      <p>Designed by NFL players to replicate their practice regimen -- limited-contact football that teaches technique and game understanding, and the natural progression toward tackle.</p>
     </div>
+
     <div class="section">
-      <h2>Ages</h2>
-      <p>Ages 5-8 (placeholder -- confirm real cutoffs)</p>
-      <a href="../teams.html" class="btn btn-primary">View Teams &amp; Records</a>
-      <a href="../register.html" class="btn btn-ghost">Registration Info</a>
+      <h2>Why Flex</h2>
+      <p>Played 7-on-7 (ages 5-6) or 9-on-9 (ages 7-8), Flex is similar to flag football in that tackling is prohibited -- players learn concepts, skills, and positions in a safe environment, with more focus on the running/passing game, blocking, and pass rush than flag alone offers.</p>
+      <p style="margin-top:12px;">With nearly 50 Flex players in 2024, ASL Bengals was one of the few Central Mass programs to field two teams per division (6U &amp; 8U).</p>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>Frequently Asked Questions</h2>
+      <div id="faqList">
+        <div class="faq-item"><div class="faq-q"><span>How are the teams structured?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Two teams: 6U (ages 5-6) and 8U (ages 7-8). 6U plays 7-on-7, 8U plays 9-on-9, on a 40-yard field. Teams compete against other Central Mass towns offering the same program.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What gear will my athlete need?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Light shoulder pads, soft-shelled helmet, flags, and a game jersey -- all provided by the Bengals. Players supply their own mouth guard, black shirt/shorts, water bottle, and footwear (cleats recommended).</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What's included with registration?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Pre-season Jamboree Game, 8 regular season games, the Mighty Might Bowl, and equipment: helmet, shoulder pads, jersey, flags.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What are the parental commitments?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner"><b style="color:var(--text);">Fundraising:</b> sell 10 raffle tickets ($10 each) by September 15.<br><b style="color:var(--text);">Volunteering:</b> as needed throughout the season.<br><b style="color:var(--text);">Equipment:</b> in-season care/cleaning, prompt return post-season.<br><b style="color:var(--text);">Paperwork:</b> player packet, original birth certificate (if new), and a current physical -- required to receive equipment.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>When and where are practices?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">90 minutes, twice per week. Days set by the coach, announced before the season. Held at Lunenburg High School fields or Taylor Field in Shirley.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What can I expect on game day?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Season runs late July through October. Games run ~90 minutes. 4 home games at Lunenburg or Ayer-Shirley High Schools. Away games follow the CMYAF schedule. Players arrive 30 minutes before kickoff.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>How do I stay informed?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Email and Facebook. Team Moms communicate your team's schedule and changes -- keep your SportsEngine email current. Join the <a href="https://www.facebook.com/groups/1628833410968322" style="color:var(--orange);">Bengals Facebook Group</a> and your team's group if one exists.</div></div></div>
+      </div>
     </div>
   </div>
-
 
   <footer>
     <div class="wrap">
@@ -41,6 +73,13 @@
     </div>
   </footer>
 
+<script>
+  document.getElementById('faqList').addEventListener('click', (e) => {
+    const q = e.target.closest('.faq-q');
+    if (!q) return;
+    q.closest('.faq-item').classList.toggle('open');
+  });
+</script>
 <script src="../assets/js/theme.js"></script>
 </body>
 </html>

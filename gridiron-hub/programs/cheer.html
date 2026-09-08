@@ -9,7 +9,22 @@
 <link rel="stylesheet" href="../assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-
+  .highlight-year{margin-bottom:14px;}
+  .highlight-year .yr{font-weight:800;color:var(--orange);font-size:13px;margin-bottom:6px;}
+  .highlight-year p{font-size:13.5px;color:var(--text-dim);margin:2px 0;}
+  .comp-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .comp-table td{padding:10px 0;border-bottom:1px solid var(--line);}
+  .comp-table td:first-child{color:var(--text);font-weight:700;width:35%;}
+  .comp-table td:last-child{color:var(--text-dim);}
+  .faq-item{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px;}
+  .faq-item.open{border-color:var(--orange);}
+  .faq-q{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;cursor:pointer;font-weight:800;font-size:14.5px;}
+  .faq-item.open .faq-q{color:var(--orange);}
+  .faq-q .chev{color:var(--text-dim);transition:transform .15s;}
+  .faq-item.open .faq-q .chev{transform:rotate(180deg);}
+  .faq-a{max-height:0;overflow:hidden;transition:max-height .2s ease;}
+  .faq-item.open .faq-a{max-height:420px;}
+  .faq-a-inner{padding:0 20px 18px;font-size:13.5px;color:var(--text-dim);line-height:1.65;}
 </style>
 </head>
 <body>
@@ -18,21 +33,59 @@
 <script>window.NAV_DEPTH=1;window.NAV_CURRENT='';</script>
 <script src="../assets/js/nav.js"></script>
 
-
   <div class="wrap">
     <div class="page-head">
       <div class="page-eyebrow">FOOTBALL &amp; CHEER</div>
       <h1>Cheer</h1>
-      <p>Competitive cheer squads representing the Bengals at games and at MA State Competition -- 2025 saw a 3rd-place D12 state finish.</p>
+      <p>Sideline and competition cheer for ages 5-14 -- physical skill, discipline, and teamwork on and off the mat.</p>
     </div>
+
     <div class="section">
-      <h2>Ages</h2>
-      <p>Ages 5-14 (placeholder -- confirm real divisions)</p>
-      <a href="../teams.html" class="btn btn-primary">View Teams &amp; Records</a>
-      <a href="../register.html" class="btn btn-ghost">Registration Info</a>
+      <h2>Competition Highlights</h2>
+      <div class="highlight-year"><div class="yr">2025 MA STATE COMPETITION</div><p>D12 — 3rd place</p></div>
+      <div class="highlight-year"><div class="yr">2025 CENTRAL MASS LOCALS</div><p>D8 — 3rd place · D12 — 2nd place</p></div>
+      <div class="highlight-year"><div class="yr">2025 FUN COMPETITION (NORTH)</div><p>D8 — 3rd place · D12 — 1st place</p></div>
+      <div class="highlight-year"><div class="yr">2024 CENTRAL MASS LOCALS</div><p>D12 — 2nd place</p></div>
+    </div>
+
+    <div class="section">
+      <h2>2026 Competition Schedule</h2>
+      <table class="comp-table">
+        <tr><td>Fun Competition</td><td>September 20 @ Wachusett</td></tr>
+        <tr><td>Locals</td><td>October 17 @ Lowell Auditorium</td></tr>
+        <tr><td>States</td><td>November 8 @ Tsongas Center, Lowell</td></tr>
+        <tr><td>Regionals</td><td>November 14–15 @ URI</td></tr>
+        <tr><td>Nationals</td><td>December 2–5 @ Florida</td></tr>
+      </table>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-top:10px;">Every squad competes in at least 2 (fun &amp; local); advancing squads can compete in up to 5, depending on placement.</p>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h2>Frequently Asked Questions</h2>
+      <div id="faqList">
+        <div class="faq-item"><div class="faq-q"><span>What gear will my athlete need?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Cheer sneakers, socks, hair bow, and warm-up suit -- provided by the family. Warm-ups are ordered by the Bengals; hair bows are ordered by the coach.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What's included with registration?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Pre-season Jamboree (sideline), 8 regular season games (sideline), football playoffs if the team qualifies (sideline), 2-5 competitions depending on placement, and equipment: uniform and pompoms.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What are the parental commitments?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner"><b style="color:var(--text);">Fundraising:</b> sell 10 raffle tickets ($10 each) by September 15.<br><b style="color:var(--text);">Volunteering:</b> as needed throughout the season (game day needs, events).<br><b style="color:var(--text);">Equipment:</b> in-season care/cleaning, prompt return post-season.<br><b style="color:var(--text);">Paperwork:</b> cheerleader packet, payment, original birth certificate, report card, and a current physical -- required to receive equipment.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>When and where are practices?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">90-120 minutes, twice per week. Days/times set by coaching staff, announced before the season. Held at Taylor Field in Shirley, or the Lunenburg High School / Ayer-Shirley Middle School gyms.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What can I expect on game day?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Season runs late July through October. Squads cheer sidelines for games 90 (flex) to 120 (tackle) minutes long. 4 home games, at Lunenburg (2) and Ayer-Shirley (2) High Schools. Cheerleaders arrive 30 minutes before kickoff for warm-ups.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>What can I expect at competitions?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">All Bengals squads are competitive and compete in at least 2 (fun &amp; local), with a chance at up to 5 (states, regionals, nationals) depending on how far they advance -- see the 2026 schedule above.</div></div></div>
+
+        <div class="faq-item"><div class="faq-q"><span>How do I stay informed?</span><span class="chev">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">Email and Facebook. Coaches communicate your team's schedule and changes -- keep your SportsEngine email current. Join the <a href="https://www.facebook.com/groups/1628833410968322" style="color:var(--orange);">Bengals Facebook Group</a> and your team's group if one exists.</div></div></div>
+      </div>
     </div>
   </div>
-
 
   <footer>
     <div class="wrap">
@@ -41,6 +94,13 @@
     </div>
   </footer>
 
+<script>
+  document.getElementById('faqList').addEventListener('click', (e) => {
+    const q = e.target.closest('.faq-q');
+    if (!q) return;
+    q.closest('.faq-item').classList.toggle('open');
+  });
+</script>
 <script src="../assets/js/theme.js"></script>
 </body>
 </html>
