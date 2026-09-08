@@ -164,9 +164,9 @@
     return map[err.code] || ('Something went wrong (' + err.code + ').');
   }
 
-  // Placeholder redirect target -- swap once a real landing page exists.
+  // Real redirect now that dashboard.html exists.
   onAuthStateChanged(auth, (user) => {
-    if (user) console.log('Signed in as', user.uid, '-- next: redirect to dashboard once it exists.');
+    if (user) window.location.href = 'dashboard.html';
   });
 </script>
 
