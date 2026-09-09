@@ -155,6 +155,16 @@
     .values-grid{grid-template-columns:repeat(2,1fr);}
     .video-banner{height:280px;}
     .program-grid{grid-template-columns:1fr;}
+    /* Keep hero copy inside the gradient's dark zone -- on a narrow
+       screen the same 90deg overlay used on desktop fades to transparent
+       well before the right edge, so full-width text would spill onto
+       the brighter, low-contrast part of the photo. Smaller type too,
+       since the desktop clamp() still runs a bit large on phones. */
+    .hero-inner{max-width:78%;}
+    .hero-headline{font-size:clamp(30px,8vw,42px);}
+    .hero-inner p{font-size:13.5px;}
+    .hero-checks{gap:12px;}
+    .hero-checks span{font-size:11.5px;}
   }
 </style>
 </head>
