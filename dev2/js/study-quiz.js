@@ -172,7 +172,15 @@ window.refreshCoachToolsVisibility = function(){
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 
   const coachToolsBtn = document.getElementById('coachToolsSectionBtn');
-  if (coachToolsBtn) coachToolsBtn.style.display = approvedCoach ? '' : 'none';
+  // Nathan: "Be sure Stats and Tendencies are visible to the other coaches
+  // logged in." The tab itself has to be reachable by any coach for that
+  // to be possible at all -- what's actually visible *inside* Coach Tools
+  // once they're in is the real, precise boundary, handled by
+  // coachtools-nav.js's own minAccess/visibleTabs() filter (currently:
+  // Stats only, for a non-approved coach; everything else still needs
+  // approvedCoach). This one line used to be the entire gate by itself;
+  // now it's just "can this person open the tab at all."
+  if (coachToolsBtn) coachToolsBtn.style.display = isCoach ? '' : 'none';
 
   // Nathan: "make sure kids can't edit the plays or rename them." Same
   // approvedCoach check as everything else here -- see the comment in

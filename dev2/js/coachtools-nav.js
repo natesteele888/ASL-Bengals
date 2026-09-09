@@ -31,7 +31,7 @@
     // js/schedule-import.js -- same paste-box pattern as Standings above,
     // feeds straight into the Schedule tab everyone sees.
     { key: 'scheduleimport', label: '📅 Schedule Import', category: 'data', panel: 'coachScheduleImportPanel', init: () => window.initCoachToolsScheduleImport && window.initCoachToolsScheduleImport() },
-    { key: 'stats', label: '📊 Stats', category: 'data', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats() },
+    { key: 'stats', label: '📊 Stats', category: 'data', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats(), minAccess: 'coach' },
     { key: 'dashboard', label: '📈 Dashboard', category: 'data', panel: 'coachDashboardPanel', init: () => window.initCoachToolsDashboard && window.initCoachToolsDashboard() },
     // Nathan: "add a coaching staff section to go with the roster so we can
     // link log ins to coaches" -- js/coaching-staff.js, rendered right below
@@ -102,7 +102,28 @@
   let activeTab = 'resources';
   let searchQuery = '';
 
-  function tabsForCategory(catKey) { return TABS.filter(t => t.category === catKey); }
+  // Reaching this whole Coach Tools tab already requires approvedCoach
+  // (see study-quiz.js's refreshCoachToolsVisibility) -- everyone who gets
+  // this far is one of the 5 named coaches by default. minAccess:'coach'
+  // is the one, explicit exception: a tab a coach can reach just by
+  // having the team's shared coach code, not by being one of the 5 named
+  // profiles. Nathan: "Be sure Stats and Tendencies are visible to the
+  // other coaches logged in" -- scoped to Stats specifically for now
+  // (Tendencies lives inside it, in coachtools-stats.js's own sub-nav, so
+  // it comes along automatically); every other tab here still defaults to
+  // approvedCoach-only, unchanged, since most of them (Schedule Import,
+  // Roster, Depth Chart, Settings, etc.) are editing/data-entry tools
+  // Nathan didn't ask to open more broadly. One centralized filter here
+  // (rather than checking per render-site) so a restricted tab can't be
+  // found through the search box even if it's hidden from category
+  // browsing.
+  function visibleTabs() {
+    const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    if (approvedCoach) return TABS;
+    return TABS.filter(t => t.minAccess === 'coach');
+  }
+
+  function tabsForCategory(catKey) { return visibleTabs().filter(t => t.category === catKey); }
 
   function renderNav() {
     const nav = document.getElementById('coachToolsSubNav');
@@ -128,7 +149,7 @@
       // as a small tag so it's still obvious where each result normally
       // lives -- helps build the mental map for next time, not just this
       // one lookup.
-      const matches = TABS.filter(t => t.label.toLowerCase().indexOf(q) !== -1);
+      const matches = visibleTabs().filter(t => t.label.toLowerCase().indexOf(q) !== -1);
       const resultsWrap = document.createElement('div');
       resultsWrap.className = 'gameplanPickerGrid';
       if (!matches.length) {
@@ -158,7 +179,13 @@
     // both being plain pills. ----
     const catRow = document.createElement('div');
     catRow.className = 'coachToolsCategoryBar';
-    CATEGORIES.forEach(c => {
+    // Only show a category button if it actually has at least one visible
+    // tab -- for a non-approved coach (currently just sees 'stats' under
+    // 'data'), every other category would otherwise render as a real,
+    // clickable button that throws when clicked (tabsForCategory(...)[0]
+    // on an empty array), since visibleTabs() can now legitimately return
+    // nothing for a whole category.
+    CATEGORIES.filter(c => tabsForCategory(c.key).length > 0).forEach(c => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'coachToolsCategoryBtn' + (activeCategory === c.key ? ' active' : '');
@@ -234,7 +261,15 @@
     // auto-seed -- load it once up front regardless of which tab opens
     // first, so it's ready by the time Stats needs it.
     if (window.loadTeamRoster && !window.isTeamRosterLoaded()) window.loadTeamRoster();
-    setActiveTab(activeTab);
+    // The hardcoded 'resources' default isn't in visibleTabs() for a
+    // non-approved coach (only 'stats' is, for now) -- landing there
+    // anyway wouldn't crash (setActiveTab still finds it in the raw TABS
+    // list), but it'd show a panel with no matching nav highlight, since
+    // renderNav() only ever lists what's actually visible. Falling back
+    // to the first genuinely visible tab keeps first open coherent.
+    const startTab = TABS.find(t => t.key === activeTab && visibleTabs().includes(t))
+      ? activeTab : (visibleTabs()[0] && visibleTabs()[0].key);
+    if (startTab) setActiveTab(startTab);
   };
 
   // Deep-link straight into a specific Coach Tools tab -- used by the
