@@ -37,6 +37,23 @@
   .roster-card .num{font-family:'Anton',sans-serif;font-size:22px;color:var(--orange);width:36px;text-align:center;flex:0 0 auto;}
   .roster-card .pname{font-weight:700;font-size:14px;}
   @media (max-width:760px){ #rosterGrid{grid-template-columns:repeat(2,1fr)!important;} }
+
+  .message-item{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:14px 16px;margin-bottom:10px;}
+  .message-item .msg-meta{font-size:11px;color:var(--orange);font-weight:800;margin-bottom:6px;}
+  .message-item .msg-text{font-size:14px;line-height:1.5;white-space:pre-wrap;}
+
+  .event-card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px 18px;}
+  .event-card.cancelled{opacity:.6;border-color:#ff6b5e;}
+  .event-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+  .event-title{font-weight:800;font-size:15px;}
+  .event-when{font-size:12.5px;color:var(--text-dim);margin-top:4px;}
+  .cancelled-tag{display:inline-block;background:rgba(255,107,94,.15);color:#ff6b5e;font-weight:800;font-size:11px;padding:3px 9px;border-radius:4px;margin-left:8px;}
+  .event-cancel-btn{background:none;border:1px solid #ff6b5e;color:#ff6b5e;padding:6px 12px;border-radius:4px;font-weight:700;font-size:12px;cursor:pointer;}
+  .rsvp-row{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap;}
+  .rsvp-btn{border:1px solid var(--line);background:none;color:var(--text-dim);padding:7px 16px;border-radius:5px;font-weight:700;font-size:12.5px;cursor:pointer;}
+  .rsvp-btn.going.active{background:var(--green-bg);color:var(--green);border-color:var(--green);}
+  .rsvp-btn.not-going.active{background:rgba(255,107,94,.12);color:#ff6b5e;border-color:#ff6b5e;}
+  .rsvp-count{font-size:12px;color:var(--text-dim);margin-left:auto;}
 </style>
 </head>
 <body>
@@ -65,21 +82,64 @@
       <a href="photos.html">📸 Team Photos</a>
     </div>
 
-    <div class="section" style="border-bottom:none;">
+    <div class="section">
       <div class="section-head">
         <div><h2>Roster</h2><p>Name and number -- click a player to see their tagged photos.</p></div>
       </div>
 
-      <div id="addPlayerForm" style="display:none;margin-bottom:20px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div id="addPlayerForm" style="display:none;margin-bottom:12px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;gap:10px;flex-wrap:wrap;align-items:flex-end;">
         <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Name</label><input type="text" id="newPlayerName" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:180px;"></div>
         <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">#</label><input type="number" id="newPlayerNumber" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:70px;"></div>
         <button id="addPlayerBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Add Player</button>
-        <button id="importRosterBtn" style="display:none;background:none;color:var(--text-dim);border:1px solid var(--line);padding:9px 16px;border-radius:4px;font-weight:700;font-size:12.5px;cursor:pointer;">Import Full 11U Roster</button>
         <span id="addPlayerStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
+      </div>
+
+      <div id="pasteRosterForm" style="display:none;margin-bottom:20px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;">
+        <label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:6px;">Paste multiple players -- one per line, number and name separated by a tab or comma. Copy straight out of Excel/Sheets and paste here.</label>
+        <textarea id="pasteRosterInput" rows="4" placeholder="5&#9;Will J&#10;6&#9;Jacob W&#10;7, Henry G" style="width:100%;padding:10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);font-family:monospace;font-size:13px;resize:vertical;"></textarea>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+          <button id="pasteRosterBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Import Pasted Rows</button>
+          <span id="pasteRosterStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
+        </div>
       </div>
 
       <div id="rosterGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
       <div id="rosterEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No players added yet.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div><h2>Team Messages</h2><p>Updates from the coaching staff.</p></div>
+      </div>
+
+      <div id="postMessageForm" style="display:none;margin-bottom:18px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;">
+        <textarea id="messageInput" rows="2" placeholder="Post an update for the team..." style="width:100%;padding:10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);font-size:14px;resize:vertical;"></textarea>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+          <button id="postMessageBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Post</button>
+          <span id="postMessageStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
+        </div>
+      </div>
+
+      <div id="messagesList"></div>
+      <div id="messagesEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No messages posted yet.</div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <div class="section-head">
+        <div><h2>Practice Schedule</h2><p>RSVP so coaches know who's showing up.</p></div>
+      </div>
+
+      <div id="addEventForm" style="display:none;margin-bottom:18px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Title</label><input type="text" id="newEventTitle" placeholder="Practice" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:160px;"></div>
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Date</label><input type="date" id="newEventDate" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);"></div>
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Time</label><input type="time" id="newEventTime" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);"></div>
+        <div><label style="display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;">Location</label><input type="text" id="newEventLocation" placeholder="Lunenburg HS fields" style="padding:8px 10px;border-radius:4px;border:1px solid var(--line);background:var(--ink);color:var(--text);width:180px;"></div>
+        <button id="addEventBtn" style="background:var(--orange);color:#0e0e10;border:none;padding:9px 18px;border-radius:4px;font-weight:800;font-size:13px;cursor:pointer;">Add Practice</button>
+        <span id="addEventStatus" style="font-size:12.5px;color:var(--text-dim);"></span>
+      </div>
+
+      <div id="eventsList" style="display:flex;flex-direction:column;gap:12px;"></div>
+      <div id="eventsEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No practices scheduled yet.</div>
     </div>
   </div>
 
@@ -93,7 +153,7 @@
 <script type="module">
   import { app, auth, db } from './src/firebase-config.js';
   import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-  import { doc, getDoc, setDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+  import { doc, getDoc, setDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
   import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
 
   const storage = getStorage(app);
@@ -148,12 +208,33 @@
   // for this specific team only) needs the role/orgId assignment flow that
   // doesn't exist yet. Flagging this here rather than pretending it's
   // already properly locked down.
+  // Real permission check: any signed-in user is no longer enough --
+  // must be role 'admin', or role 'coach' with this teamId in their
+  // teamIds array. UI here only controls what's *shown*; the actual
+  // enforcement is in Firestore rules, since a hidden button is not
+  // security -- someone could still call the SDK directly.
   let currentUser = null;
-  onAuthStateChanged(auth, (user) => {
+  let canEditThisTeam = false;
+  onAuthStateChanged(auth, async (user) => {
     currentUser = user;
-    editBtn.style.display = user ? 'block' : 'none';
-    document.getElementById('addPlayerForm').style.display = user ? 'flex' : 'none';
-    updateImportBtnVisibility();
+    canEditThisTeam = false;
+    if (user) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', user.uid));
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          canEditThisTeam = u.role === 'admin' || (u.role === 'coach' && Array.isArray(u.teamIds) && u.teamIds.includes(teamId));
+        }
+      } catch (e) {
+        console.warn('Could not check coach permission:', e);
+      }
+    }
+    editBtn.style.display = canEditThisTeam ? 'block' : 'none';
+    document.getElementById('addPlayerForm').style.display = canEditThisTeam ? 'flex' : 'none';
+    document.getElementById('pasteRosterForm').style.display = canEditThisTeam ? 'block' : 'none';
+    document.getElementById('postMessageForm').style.display = canEditThisTeam ? 'block' : 'none';
+    document.getElementById('addEventForm').style.display = canEditThisTeam ? 'flex' : 'none';
+    renderEvents(); // re-render so each event's cancel button / RSVP-as-you reflects the now-known permission and identity
   });
 
   editBtn.addEventListener('click', (e) => {
@@ -166,15 +247,8 @@
   // names link to player.html, which is where tagged-photo lookup lives.
   const rosterGrid = document.getElementById('rosterGrid');
   const rosterEmpty = document.getElementById('rosterEmpty');
-  const importBtn = document.getElementById('importRosterBtn');
-  let rosterIsEmpty = null; // unknown until the first snapshot fires
-  function updateImportBtnVisibility() {
-    importBtn.style.display = (teamId === '11u' && rosterIsEmpty === true && currentUser) ? 'inline-block' : 'none';
-  }
   const rosterQuery = query(collection(db, 'teams', teamId, 'roster'), orderBy('number', 'asc'));
   onSnapshot(rosterQuery, (snap) => {
-    rosterIsEmpty = snap.empty;
-    updateImportBtnVisibility();
     if (snap.empty) {
       rosterGrid.style.display = 'none';
       rosterEmpty.style.display = 'block';
@@ -195,33 +269,45 @@
     console.warn('Roster fetch error (likely Firestore rules for teams/{teamId}/roster not set up yet):', err);
   });
 
-  // One-time bulk import for the real 11U roster Nathan provided --
-  // hardcoded on purpose (this is a single use-once helper, not meant to
-  // be a general import tool), guarded by teamId/currentUser/empty-roster
-  // above so it can't run twice or on the wrong team.
-  const ROSTER_11U = [
-    { number: 5, name: 'Will J' }, { number: 6, name: 'Jacob W' }, { number: 7, name: 'Henry G' },
-    { number: 8, name: 'Connor' }, { number: 9, name: 'Dylan' }, { number: 11, name: 'Dean A' },
-    { number: 27, name: 'Timmy S' }, { number: 33, name: 'Braden' }, { number: 44, name: 'Jaxson P' },
-    { number: 49, name: 'Emmett B' }, { number: 51, name: 'Sonny L' }, { number: 53, name: 'Wyatt M' },
-    { number: 65, name: 'Jaxon R' }, { number: 66, name: 'Jaiden L' }, { number: 76, name: 'Desmond S' },
-    { number: 77, name: 'Jagger L' }, { number: 80, name: 'Wyatt B' }, { number: 86, name: 'Caden' },
-    { number: 87, name: 'James J' }, { number: 92, name: 'Erik M' }, { number: 98, name: 'Bryce P' },
-    { number: 99, name: 'Rocco D' },
-  ];
-  importBtn.addEventListener('click', async () => {
-    importBtn.disabled = true;
-    importBtn.textContent = 'Importing…';
+  // General bulk-paste importer -- works for any team, not a one-off for
+  // 11U. Accepts tab-separated (pasting straight out of Excel/Sheets
+  // preserves tabs between cells) or comma-separated rows, one player per
+  // line, "number, name" or "number<tab>name" in either order-tolerant
+  // form. Rows that don't parse are skipped and reported rather than
+  // silently dropped or aborting the whole batch.
+  document.getElementById('pasteRosterBtn').addEventListener('click', async () => {
+    const textarea = document.getElementById('pasteRosterInput');
+    const statusEl = document.getElementById('pasteRosterStatus');
+    const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { statusEl.textContent = 'Paste some rows first.'; return; }
+
+    const parsed = [];
+    const badLines = [];
+    lines.forEach((line) => {
+      const parts = line.split(/\t|,/).map(s => s.trim()).filter(Boolean);
+      if (parts.length < 2) { badLines.push(line); return; }
+      // number can be in either column -- whichever part is purely numeric wins
+      const numPart = parts.find(p => /^\d+$/.test(p));
+      const namePart = parts.find(p => p !== numPart);
+      if (!numPart || !namePart) { badLines.push(line); return; }
+      parsed.push({ number: Number(numPart), name: namePart });
+    });
+
+    if (!parsed.length) { statusEl.textContent = 'No valid rows found -- check the format.'; return; }
+
+    statusEl.textContent = `Importing ${parsed.length}…`;
     try {
-      for (const player of ROSTER_11U) {
+      for (const player of parsed) {
         await addDoc(collection(db, 'teams', teamId, 'roster'), {
           name: player.name, number: player.number, addedByUid: currentUser.uid, createdAt: serverTimestamp()
         });
       }
-      importBtn.textContent = 'Imported ✓';
+      textarea.value = '';
+      statusEl.textContent = badLines.length
+        ? `Imported ${parsed.length}. Skipped ${badLines.length} unreadable row(s).`
+        : `Imported ${parsed.length}.`;
     } catch (err) {
-      importBtn.disabled = false;
-      importBtn.textContent = `Failed: ${err.code || err.message}`;
+      statusEl.textContent = `Failed partway through: ${err.code || err.message}`;
     }
   });
 
@@ -260,6 +346,165 @@
     } catch (err) {
       statusEl.className = 'upload-status error';
       statusEl.textContent = `Couldn't update banner: ${err.code || err.message}`;
+    }
+  });
+
+  // ---- Team Messages ----
+  // Simple flat feed, newest first. Any signed-in coach/admin can post
+  // (write is enforced server-side in Firestore rules); everyone can read.
+  // postedByName is stored on write so the feed shows real attribution
+  // without needing a join against the users collection on every read.
+  const messagesList = document.getElementById('messagesList');
+  const messagesEmpty = document.getElementById('messagesEmpty');
+  onSnapshot(query(collection(db, 'teams', teamId, 'messages'), orderBy('postedAt', 'desc')), (snap) => {
+    if (snap.empty) {
+      messagesList.style.display = 'none';
+      messagesEmpty.style.display = 'block';
+      return;
+    }
+    messagesList.style.display = 'block';
+    messagesEmpty.style.display = 'none';
+    messagesList.innerHTML = '';
+    snap.forEach((docSnap) => {
+      const m = docSnap.data();
+      const when = m.postedAt?.toDate ? m.postedAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      const div = document.createElement('div');
+      div.className = 'message-item';
+      div.innerHTML = `<div class="msg-meta">${m.postedByName || 'Coach'} · ${when}</div><div class="msg-text"></div>`;
+      div.querySelector('.msg-text').textContent = m.text; // textContent, not innerHTML -- message text is user input
+      messagesList.appendChild(div);
+    });
+  }, (err) => console.warn('Messages fetch error (check Firestore rules for teams/{teamId}/messages):', err));
+
+  document.getElementById('postMessageBtn').addEventListener('click', async () => {
+    const input = document.getElementById('messageInput');
+    const statusEl = document.getElementById('postMessageStatus');
+    const text = input.value.trim();
+    if (!text) { statusEl.textContent = 'Write something first.'; return; }
+    statusEl.textContent = 'Posting…';
+    try {
+      await addDoc(collection(db, 'teams', teamId, 'messages'), {
+        text, postedBy: currentUser.uid, postedByName: currentUser.email, postedAt: serverTimestamp()
+      });
+      input.value = '';
+      statusEl.textContent = 'Posted.';
+    } catch (err) {
+      statusEl.textContent = `Couldn't post: ${err.code || err.message}`;
+    }
+  });
+
+  // ---- Practice Schedule + RSVP ----
+  // Events are cached locally (latestEvents) so renderEvents() can be
+  // re-run whenever *either* the events snapshot changes *or* the coach
+  // permission / signed-in identity resolves, without two separate
+  // rendering code paths drifting out of sync.
+  let latestEvents = [];
+  const eventsList = document.getElementById('eventsList');
+  const eventsEmpty = document.getElementById('eventsEmpty');
+
+  function renderEvents() {
+    if (!latestEvents.length) {
+      eventsList.style.display = 'none';
+      eventsEmpty.style.display = 'block';
+      return;
+    }
+    eventsList.style.display = 'flex';
+    eventsEmpty.style.display = 'none';
+    eventsList.innerHTML = '';
+    latestEvents.forEach((ev) => {
+      const card = document.createElement('div');
+      card.className = 'event-card' + (ev.cancelled ? ' cancelled' : '');
+      const dateStr = ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+      card.innerHTML = `
+        <div class="event-top">
+          <div>
+            <div class="event-title">${ev.title}${ev.cancelled ? '<span class="cancelled-tag">CANCELLED</span>' : ''}</div>
+            <div class="event-when">${dateStr}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + ev.location : ''}</div>
+          </div>
+          ${(canEditThisTeam && !ev.cancelled) ? `<button class="event-cancel-btn" data-event-id="${ev.id}">Cancel Practice</button>` : ''}
+        </div>
+        <div class="rsvp-row" data-event-id="${ev.id}">
+          <button class="rsvp-btn going" data-status="going">✓ Going</button>
+          <button class="rsvp-btn not-going" data-status="not-going">✗ Can't make it</button>
+          <span class="rsvp-count">Loading…</span>
+        </div>`;
+      eventsList.appendChild(card);
+      wireEventCard(card, ev.id);
+    });
+  }
+
+  function wireEventCard(card, eventId) {
+    const cancelBtn = card.querySelector('.event-cancel-btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', async () => {
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Cancelling…';
+        try {
+          await updateDoc(doc(db, 'teams', teamId, 'events', eventId), { cancelled: true, cancelledAt: serverTimestamp() });
+        } catch (err) {
+          cancelBtn.disabled = false;
+          cancelBtn.textContent = `Failed: ${err.code || err.message}`;
+        }
+      });
+    }
+
+    const rsvpRow = card.querySelector('.rsvp-row');
+    const countEl = rsvpRow.querySelector('.rsvp-count');
+    const goingBtn = rsvpRow.querySelector('[data-status="going"]');
+    const notGoingBtn = rsvpRow.querySelector('[data-status="not-going"]');
+
+    // Live count + this-user's-current-response, both from the same
+    // rsvps subcollection listener.
+    onSnapshot(collection(db, 'teams', teamId, 'events', eventId, 'rsvps'), (rsvpSnap) => {
+      let going = 0, notGoing = 0, myStatus = null;
+      rsvpSnap.forEach((r) => {
+        const d = r.data();
+        if (d.status === 'going') going++;
+        else if (d.status === 'not-going') notGoing++;
+        if (currentUser && r.id === currentUser.uid) myStatus = d.status;
+      });
+      countEl.textContent = `${going} going · ${notGoing} not going`;
+      goingBtn.classList.toggle('active', myStatus === 'going');
+      notGoingBtn.classList.toggle('active', myStatus === 'not-going');
+    }, (err) => console.warn('RSVP fetch error:', err));
+
+    [goingBtn, notGoingBtn].forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!currentUser) return; // RSVP requires being signed in -- buttons are visible either way since read is public, but write needs an identity to attach the response to
+        try {
+          await setDoc(doc(db, 'teams', teamId, 'events', eventId, 'rsvps', currentUser.uid), {
+            status: btn.dataset.status, respondedByName: currentUser.email, respondedAt: serverTimestamp()
+          });
+        } catch (err) {
+          console.warn('RSVP write failed:', err);
+        }
+      });
+    });
+  }
+
+  onSnapshot(query(collection(db, 'teams', teamId, 'events'), orderBy('date', 'asc')), (snap) => {
+    latestEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderEvents();
+  }, (err) => console.warn('Events fetch error (check Firestore rules for teams/{teamId}/events):', err));
+
+  document.getElementById('addEventBtn').addEventListener('click', async () => {
+    const titleEl = document.getElementById('newEventTitle');
+    const dateEl = document.getElementById('newEventDate');
+    const timeEl = document.getElementById('newEventTime');
+    const locEl = document.getElementById('newEventLocation');
+    const statusEl = document.getElementById('addEventStatus');
+    const title = titleEl.value.trim() || 'Practice';
+    if (!dateEl.value) { statusEl.textContent = 'Pick a date first.'; return; }
+    statusEl.textContent = 'Adding…';
+    try {
+      await addDoc(collection(db, 'teams', teamId, 'events'), {
+        title, date: dateEl.value, time: timeEl.value, location: locEl.value.trim(),
+        cancelled: false, createdBy: currentUser.uid, createdAt: serverTimestamp()
+      });
+      titleEl.value = ''; dateEl.value = ''; timeEl.value = ''; locEl.value = '';
+      statusEl.textContent = 'Added.';
+    } catch (err) {
+      statusEl.textContent = `Couldn't add: ${err.code || err.message}`;
     }
   });
 </script>
