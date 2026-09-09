@@ -251,7 +251,13 @@
     a.click();
   }
 
-  renderTeam('11u');
+  // Deep-link support: ?team=9u activates that tab on load, so other
+  // pages (the homepage's "This week" cards) can link straight to a
+  // specific team's schedule instead of always landing on 11U.
+  const urlTeam = new URLSearchParams(window.location.search).get('team');
+  const initialTeam = (urlTeam && tabsEl.querySelector(`[data-team="${urlTeam}"]`)) ? urlTeam : '11u';
+  tabsEl.querySelectorAll('.team-tab').forEach(t => t.classList.toggle('active', t.dataset.team === initialTeam));
+  renderTeam(initialTeam);
 </script>
 
 <script src="assets/js/theme.js"></script>
