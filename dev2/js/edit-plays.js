@@ -3,6 +3,7 @@
 
 const BALL_COLOR = '#e0201a';
 const NOBALL_COLOR = '#123a8c';
+const BALLSTART_COLOR = '#d99000'; // gold -- "ball icon starts here" but not the credited carrier
 const DEFENSE_COLOR = '#e8720c';
 const READKEY_COLOR = '#e0201a';
 const CIRCLE_R = 36;
@@ -208,6 +209,7 @@ wireToggle(editFormationToggle, () => editorFormation, v => {
   splitEditTarget = null;
   splitSelectedHandle = null;
   settingBallCarrier = false;
+  settingBallStart = false;
   updateFormationControlsVisibility();
 });
 wireToggle(editSplitSideToggle, () => splitSide, v => { splitSide = v; splitEditTarget = null; splitSelectedHandle = null; });
@@ -313,6 +315,7 @@ wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
   splitEditTarget = null;
   splitSelectedHandle = null;
   settingBallCarrier = false;
+  settingBallStart = false;
   exportBtn.style.display = editMode ? '' : 'none';
   saveCloudBtn.style.display = editMode ? '' : 'none';
   document.getElementById('ballCarrierWrap').style.display = (editMode && editorFormation !== 'split') ? '' : 'none';
@@ -321,7 +324,20 @@ wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
 document.getElementById('ballCarrierBtn').addEventListener('click', () => {
   if (!editMode) return;
   settingBallCarrier = true;
+  settingBallStart = false;
   editTarget = null; // clear any route-editing target so the click goes to carrier selection
+  render();
+});
+
+// Ball Starts With: same tap-a-player flow as Ball Carrier, but writes
+// p.ballStart instead of p.ball -- see the HTML comment above this
+// button and selectPlayer()'s settingBallStart branch below for the full
+// mechanism (isBallStart/isBall, read by play-calls.js's animation).
+document.getElementById('ballStartsWithBtn').addEventListener('click', () => {
+  if (!editMode) return;
+  settingBallStart = true;
+  settingBallCarrier = false;
+  editTarget = null;
   render();
 });
 
@@ -625,6 +641,24 @@ function selectPlayer(n) {
     render();
     return;
   }
+  if (settingBallStart && editMode) {
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    // Tapping the SAME player who's already the credited Ball Carrier
+    // clears ballStart entirely rather than setting it to himself --
+    // "ball starts with the ball carrier" is the default with no ballStart
+    // set at all (see play-calls.js's initialEntry fallback), so keeping
+    // ballStart around in that case would be a redundant, meaningless
+    // no-op state that just clutters the data for no visual difference.
+    variant.paths.forEach(p => { if (p.player !== null && !p.optionLine) delete p.ballStart; });
+    const alreadyIsCarrier = variant.paths.find(p => p.player === n && !p.optionLine && p.ball);
+    if (!alreadyIsCarrier) {
+      const targetPath = variant.paths.find(p => p.player === n && !p.optionLine);
+      if (targetPath) targetPath.ballStart = true;
+    }
+    settingBallStart = false;
+    render();
+    return;
+  }
   if (editMode) {
     editTarget = (editTarget && editTarget.player === n) ? null : { player: n };
     selectedHandle = null;
@@ -759,39 +793,90 @@ async function playSequence() {
 
   // draw every path -- this is the play actually happening. Each path can
   // carry its own delay (e.g. Double Blast's QB starts after the blockers,
-  // since he's following behind them, not moving in lockstep).
-  const pathPromises = lastRenderedPaths.map(({el, arrowEl, delayMs, circleEl, textEl}) =>
-    animatePathDraw(el, arrowEl, animMs, (delayMs || 0) * speedMultiplier, circleEl, textEl));
+  // since he's following behind them, not moving in lockstep). startFrac/
+  // lenFrac (set on a handoff split's two segments -- see render()) scale
+  // a segment's own share of animMs by its share of the route's total
+  // drawn length, and push its start out by the other segment's share, so
+  // the two segments draw back-to-back at a matching pace instead of each
+  // taking the full animMs. Ported from js/play-calls.js's identical logic
+  // so the editor's own preview matches what Play Calls actually plays.
+  const pathPromises = lastRenderedPaths.map(({el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac}) =>
+    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
+      (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
 
-  const ballPathEntry = lastRenderedPaths.find(p => p.isBall);
-  const BALL_OFFSET_X = 0, BALL_OFFSET_Y = 50; // peeks out below the circle, clear of the number
-  if (ballPathEntry && ballPathEntry.circleEl) {
-    await wait((ballPathEntry.delayMs || 0) * speedMultiplier);
-    // travel to wherever the carrier's circle actually is right now (it may
-    // already be moving), then track it exactly -- guarantees the ball and
-    // the circle never drift apart, since it's reading the same live position.
-    const carrierCircle = ballPathEntry.circleEl;
-    const liveStart = {
-      x: Number(carrierCircle.getAttribute('cx')) + BALL_OFFSET_X,
-      y: Number(carrierCircle.getAttribute('cy')) + BALL_OFFSET_Y,
-    };
-    await tweenPoint(qbPos, liveStart, 200 * speedMultiplier, pt => {
-      ball.setAttribute('cx', pt.x);
-      ball.setAttribute('cy', pt.y);
-    });
-    let tracking = true;
-    function trackCarrier() {
-      if (!tracking) return;
-      ball.setAttribute('cx', Number(carrierCircle.getAttribute('cx')) + BALL_OFFSET_X);
-      ball.setAttribute('cy', Number(carrierCircle.getAttribute('cy')) + BALL_OFFSET_Y);
-      requestAnimationFrame(trackCarrier);
+  // isBallStart (p.ballStart) marks who the floating ball icon visually
+  // starts with, which can be a different player than isBall/p.ball (who's
+  // actually credited as the carrier -- read by Boot's swap logic, quiz
+  // answer keys, etc). Ported unchanged from js/play-calls.js's
+  // playCardAnimation -- see that file's own comments for the full
+  // Shuffle-Pass-style walkthrough of why both fields exist. Every play
+  // that only ever sets p.ball, never p.ballStart, falls straight through
+  // to the old single-carrier behavior, unchanged.
+  const OFFY = 50; // peeks out below the circle, clear of the number
+  const ballEntry = lastRenderedPaths.find(p => p.isBallStart) || lastRenderedPaths.find(p => p.isBall);
+  const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
+  const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+    : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
+  const initialDelay = !initialEntry ? 0
+    : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
+    : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+  if (initialEntry) {
+    let carrier = initialEntry.circleEl;
+    // ease toward the carrier's LIVE position every frame (never a stale
+    // snapshot target) -- the carrier may already be moving by the time
+    // this starts, so tweening to a fixed captured point goes stale and
+    // causes a visible jump once tracking begins.
+    let cx = qbPos.x, cy = qbPos.y;
+    let catchingUp = true;
+    let easing = true;
+    let tracking = false;
+    function catchUpFrame() {
+      const targetX = Number(carrier.getAttribute('cx'));
+      const targetY = Number(carrier.getAttribute('cy')) + OFFY;
+      cx += (targetX - cx) * 0.25;
+      cy += (targetY - cy) * 0.25;
+      ball.setAttribute('cx', cx);
+      ball.setAttribute('cy', cy);
+      const dist = Math.hypot(targetX - cx, targetY - cy);
+      if (catchingUp && dist > 3) {
+        requestAnimationFrame(catchUpFrame);
+      } else {
+        catchingUp = false;
+        easing = false;
+        track();
+      }
     }
-    trackCarrier();
+    function track() {
+      if (!tracking) return;
+      // paused mid-loop while a fresh catchUpFrame() eases toward a newly
+      // handed-off carrier below, instead of snapping straight to him
+      if (easing) { requestAnimationFrame(track); return; }
+      ball.setAttribute('cx', carrier.getAttribute('cx'));
+      ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
+      requestAnimationFrame(track);
+    }
+
+    // A genuinely separate initial carrier (ballEntry) can hand off
+    // mid-play to whoever's marked with handoffIndex -- if handoffEntry is
+    // what we're ALREADY starting from (the plain Shuffle-Pass case
+    // above, no separate handoffIndex elsewhere), there's no second
+    // carrier left to switch to.
+    if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
+      const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+      wait(handoffDelay).then(() => {
+        if (!tracking) return; // play already ended (or never started) -- nothing to hand off
+        carrier = handoffEntry.circleEl;
+        catchingUp = true;
+        easing = true;
+        catchUpFrame();
+      });
+    }
+
+    await wait(initialDelay);
+    tracking = true;
+    catchUpFrame();
     await wait(animMs);
     tracking = false;
-    // snap to the final resting position exactly, in case a frame was missed
-    ball.setAttribute('cx', Number(carrierCircle.getAttribute('cx')) + BALL_OFFSET_X);
-    ball.setAttribute('cy', Number(carrierCircle.getAttribute('cy')) + BALL_OFFSET_Y);
   } else {
     await wait(animMs);
   }
@@ -1106,6 +1191,7 @@ let selectedHandle = null;
 // editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
 let editTarget = null;
 let settingBallCarrier = false;
+let settingBallStart = false;
 
 const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
 const DEFENDER_IDS_4x4 = ['DE_L','DT_L','DT_R','DE_R','LB1','LB2','LB3','LB4','CB_L','CB_R','FS'];
@@ -1198,14 +1284,22 @@ const assignLabel = document.getElementById('assignLabel');
 const endTypePanel = document.getElementById('endTypePanel');
 const endTypeRunBtn = document.getElementById('endTypeRunBtn');
 const endTypeBlockBtn = document.getElementById('endTypeBlockBtn');
+const delayInput = document.getElementById('delayInput');
+const convertBlockPanel = document.getElementById('convertBlockPanel');
+const convertBlockLabel = document.getElementById('convertBlockLabel');
+const convertToRouteBtn = document.getElementById('convertToRouteBtn');
+const convertToBlockBtn = document.getElementById('convertToBlockBtn');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
   const ballStartsHereBtn = document.getElementById('ballStartsHereBtn');
+  const delayPanel = document.getElementById('delayPanel');
   if (!editMode || !editTarget) {
     editToolbar.style.display = 'none';
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
+    delayPanel.style.display = 'none';
+    convertBlockPanel.style.display = 'none';
     ballStartsHereBtn.style.display = 'none';
     return;
   }
@@ -1215,12 +1309,40 @@ function updateEditUI(variant) {
     addPointBtn.style.display = 'none';
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
+    delayPanel.style.display = 'none';
+    convertBlockPanel.style.display = 'none';
     ballStartsHereBtn.style.display = 'none';
     return;
   }
 
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
+
+  // Convert Route/Block -- only meaningful for the "assignable" positions
+  // (4/5/6), and not on an option fake (p.fake/p.optionLine already mean
+  // something different there). Both buttons always show, matching End
+  // Type's Run/Block pair, with .active marking which one reflects
+  // p.isBlocking's CURRENT state -- clicking the already-active one is a
+  // harmless no-op, not an error case that needs its own handling.
+  if ([4, 5, 6].includes(editTarget.player) && !p.optionLine && !p.fake) {
+    convertBlockPanel.style.display = 'flex';
+    convertBlockLabel.textContent = p.isBlocking ? 'Currently: fixed block' : 'Currently: route';
+    convertToRouteBtn.classList.toggle('active', !p.isBlocking);
+    convertToBlockBtn.classList.toggle('active', !!p.isBlocking);
+  } else {
+    convertBlockPanel.style.display = 'none';
+  }
+
+  // Start delay -- same field the animation engine already reads
+  // (js/play-calls.js's pathPromises/initialDelay), now settable directly
+  // instead of only hand-authored in the data. Same gate as End Type: any
+  // real drawn path, not a block assignment or option fake.
+  if (!p.optionLine && !p.fake) {
+    delayPanel.style.display = 'flex';
+    delayInput.value = p.delayMs || 0;
+  } else {
+    delayPanel.style.display = 'none';
+  }
 
   // "Ball Starts Here" -- only makes sense on a real route (editableArr,
   // same gate as Add Point) with a handle actually picked, and not on the
@@ -1297,6 +1419,51 @@ function setEditTargetEndType(newEndType) {
 }
 endTypeRunBtn.addEventListener('click', () => setEditTargetEndType('run'));
 endTypeBlockBtn.addEventListener('click', () => setEditTargetEndType('block'));
+
+// Converting TO a route clears every block-specific field, not just
+// isBlocking -- a path inherited from a duplicated play (Sweep's wings,
+// here) can carry blockRelative/dualSideBlock/motionIndependentBlock/
+// crossPoints alongside isBlocking, and getEditablePointsArray() treats
+// any of those as "structurally fixed, no add/remove" on their own, so
+// leaving one behind would silently reintroduce the exact problem this
+// button exists to fix. Converting TO a block only sets isBlocking --
+// the existing tap-a-defender flow (isAssignableBlock, above) is how a
+// coach actually assigns a target, same as setting up a block from
+// scratch already works.
+function setEditTargetBlocking(makeBlocking) {
+  const playType = DATA.playTypes.find(pt => pt.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  if (makeBlocking) {
+    p.isBlocking = true;
+  } else {
+    delete p.isBlocking;
+    delete p.blockRelative;
+    delete p.dualSideBlock;
+    delete p.motionIndependentBlock;
+    delete p.crossPoints;
+  }
+  render();
+}
+convertToRouteBtn.addEventListener('click', () => setEditTargetBlocking(false));
+convertToBlockBtn.addEventListener('click', () => setEditTargetBlocking(true));
+
+// Writes p.delayMs on whatever's currently selected. 'change' (fires on
+// blur/enter) rather than 'input' (fires per keystroke) on purpose -- a
+// full render() on every single digit typed would fight the coach mid-type
+// (delayPanel repopulates from p.delayMs, which briefly diverges from
+// whatever's still an incomplete typed value); 'change' only commits once
+// they're done editing the field.
+delayInput.addEventListener('change', () => {
+  const playType = DATA.playTypes.find(pt => pt.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  const ms = Math.max(0, Number(delayInput.value) || 0);
+  if (ms === 0) delete p.delayMs; else p.delayMs = ms;
+  render();
+});
 
 document.getElementById('doneEditingBtn').addEventListener('click', () => {
   editTarget = null;
@@ -1522,6 +1689,11 @@ function render() {
   if (ballCarrierBtn) {
     ballCarrierBtn.textContent = settingBallCarrier ? 'Tap a player…' : 'Ball Carrier';
     ballCarrierBtn.classList.toggle('active', settingBallCarrier);
+  }
+  const ballStartsWithBtn = document.getElementById('ballStartsWithBtn');
+  if (ballStartsWithBtn) {
+    ballStartsWithBtn.textContent = settingBallStart ? 'Tap a player…' : 'Ball Starts With';
+    ballStartsWithBtn.classList.toggle('active', settingBallStart);
   }
   const [vw, vh] = DATA.viewBox;
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -1763,7 +1935,13 @@ function render() {
     }
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
-    const color = effectiveBall ? BALL_COLOR : NOBALL_COLOR;
+    // Ball Starts With (p.ballStart) is a visual/timing cue distinct from
+    // who's actually credited (p.ball/effectiveBall) -- only meaningfully
+    // different from the ball-carrier color when it's set on a DIFFERENT
+    // path than the real carrier (Shuffle-Pass-style); if a coach set it
+    // on the same player who's already the carrier, effectiveBall's own
+    // color already covers it and there's nothing extra to show.
+    const color = effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR);
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
     // having the ball and his line changes to red." handoffIndex (set via
@@ -1809,7 +1987,8 @@ function render() {
       if (rightPath) {
         lastRenderedPaths.push({el: rightPath, arrowEl, player: p.player, isBall: false,
           delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
-          textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: startFracRight, lenFrac: 1 - startFracRight});
+          textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: startFracRight, lenFrac: 1 - startFracRight,
+          handoffFraction: startFracRight});
         if (isSelected) animatePaths.push({el: rightPath, arrowEl,
           circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
           startFrac: startFracRight, lenFrac: 1 - startFracRight});
@@ -1843,7 +2022,7 @@ function render() {
       pathsLayer.appendChild(wrap);
 
       lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: effectiveBall,
-        delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+        isBallStart: !!p.ballStart, delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
         textEl: ownerCircle ? ownerCircle.textEl : null});
       if (isSelected) animatePaths.push({el: path, arrowEl,
         circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null});

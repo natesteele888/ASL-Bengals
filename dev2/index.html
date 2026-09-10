@@ -1025,6 +1025,13 @@
   </div>
   <div class="inline-control" id="ballCarrierWrap" style="display:none;">
     <button class="standalone-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+    <!-- Ball Starts With: sets p.ballStart (who the floating ball ICON
+         visually starts riding with) as a separate thing from Ball Carrier
+         (p.ball, who's credited as the actual carrier). These can be two
+         different players -- Shuffle Pass is the existing example: ball
+         starts with #1 (QB), Ball Carrier stays #4 (TE) throughout. Same
+         tap-a-player flow as Ball Carrier. See js/edit-plays.js. -->
+    <button class="standalone-btn" id="ballStartsWithBtn" type="button" title="Who the ball icon visually starts with, if different from who's credited as the carrier (Ball Carrier). Leave unset if the ball should just start with the Ball Carrier directly.">Ball Starts With</button>
   </div>
   <div class="action-row">
     <button class="action-btn primary" id="playBtn">&#9654; Play</button>
@@ -1123,6 +1130,33 @@
     <span class="assign-label">Ends with:</span>
     <button id="endTypeRunBtn" class="end-type-btn" title="Player keeps running past this point">&#10148; Run</button>
     <button id="endTypeBlockBtn" class="end-type-btn" title="Player plants and blocks right here">&#9473; Block</button>
+  </div>
+  <!-- Convert Route/Block: flips p.isBlocking on whichever path is
+       selected. Only shown for players 4/5/6 (the "assignable" positions
+       -- see edit-plays.js's isAssignableChip/isAssignableBlock), the
+       only ones a fixed blocking assignment vs. a real route is even a
+       meaningful choice for. This was missing entirely before -- there
+       was no way to convert a duplicated play's inherited isBlocking
+       assignment (e.g. a wing's block on Sweep) into a real route, or
+       back, from the editor. Nathan: "I couldn't make the TEs (5 and 6)
+       run on pass routes" while building Pop Pass off a duplicated
+       Sweep -- this is that missing control. -->
+  <div class="end-type-panel" id="convertBlockPanel" style="display:none;">
+    <span class="assign-label" id="convertBlockLabel">Currently:</span>
+    <button id="convertToRouteBtn" class="end-type-btn" title="Turn this fixed block assignment into a real, freely-editable route">&#10148; Convert to Route</button>
+    <button id="convertToBlockBtn" class="end-type-btn" title="Turn this route into a fixed block assignment (tap a defender to assign it)">&#9473; Convert to Block</button>
+  </div>
+  <!-- Start Delay: sets p.delayMs on whichever path is currently selected
+       -- how long this player waits after the snap before he starts
+       moving. Same field the animation engine already reads for existing
+       plays like Double Blast and Shuffle Pass; this is the first place
+       a coach can set it directly instead of it only being hand-authored
+       in the data. Shown for the same paths End Type shows for (any real
+       drawn path, not a block assignment or option fake). -->
+  <div class="end-type-panel" id="delayPanel" style="display:none;">
+    <span class="assign-label">Start delay:</span>
+    <input type="number" id="delayInput" min="0" step="50" style="width:70px;padding:6px;border-radius:6px;border:2px solid #ccc;font-size:14px;">
+    <span class="assign-label">ms</span>
   </div>
   <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 </div>
