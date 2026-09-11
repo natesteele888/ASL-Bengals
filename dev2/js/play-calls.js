@@ -681,7 +681,7 @@ const NOBALL_COLOR = '#123a8c';
 const BALLSTART_COLOR = '#d99000'; // gold -- matches js/edit-plays.js's same constant/meaning
 const CIRCLE_R = 36;
 
-function getVariant(playType, direction, insideOutside, readPosition, counterOn) {
+function getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn) {
   // Defensive fallback for any play missing one side's data (a brand-new
   // play added via Edit Plays might only have one direction authored at
   // first) -- falls back to whichever side DOES exist instead of blanking/
@@ -883,10 +883,10 @@ window.renderCardDiagram = renderCardDiagram;
 window.renderSplitDiagram = renderSplitDiagram;
 
 // ---- Render a card's diagram into its SVG stage ----
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn);
+  const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn);
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
   // Boot: swap which path is treated as the ball carrier, purely for this
@@ -1612,10 +1612,10 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn) {
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
 
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
@@ -2064,7 +2064,7 @@ function buildCard(combo) {
 
   function rerenderDiagram() {
     if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer); return; }
-    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
   }
 
   stage.addEventListener('playerclick', (ev) => {
@@ -2089,7 +2089,7 @@ function buildCard(combo) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
   });
 
   const speedToggle = document.createElement('div');
