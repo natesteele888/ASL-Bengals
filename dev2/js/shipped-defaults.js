@@ -15145,7 +15145,7 @@ window.SHIPPED_PLAYS_JSON = {
       "wingOnly": true
     }
   ,
-  {
+    {
     "key": "pop_pass",
     "label": "Pop Pass",
     "directions": {
@@ -15394,18 +15394,24 @@ window.SHIPPED_PLAYS_JSON = {
             "player": 4,
             "ball": false,
             "width": 9,
-            "points": [
+            "sameSideOffsets": [
               [
-                360,
-                269
+                -210,
+                -29
               ],
               [
-                150,
-                240
+                -280,
+                -99
+              ]
+            ],
+            "crossOffsets": [
+              [
+                -210,
+                -29
               ],
               [
-                80,
-                170
+                -280,
+                -99
               ]
             ]
           },
@@ -15686,18 +15692,24 @@ window.SHIPPED_PLAYS_JSON = {
             "player": 4,
             "ball": false,
             "width": 9,
-            "points": [
+            "sameSideOffsets": [
               [
-                360,
-                269
+                -210,
+                -29
               ],
               [
-                150,
-                240
+                -280,
+                -99
+              ]
+            ],
+            "crossOffsets": [
+              [
+                -210,
+                -29
               ],
               [
-                80,
-                170
+                -280,
+                -99
               ]
             ]
           },
@@ -15733,7 +15745,8 @@ window.SHIPPED_PLAYS_JSON = {
           }
         ]
       }
-    }
+    },
+    "noBoot": true
   }
 ]
 };
