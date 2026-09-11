@@ -402,12 +402,12 @@ function normalizePlayData(playTypes) {
 // shuffle_pass playType (data/plays.json) to that signal.
 const PLAY_TYPE_SIGNAL_ID = {
   inside_zone: 9, outside_zone: 10, option: 15, option_pass: 16, blast: 13, double_blast: 14, sweep: 17,
-  shuffle_pass: 23,
+  shuffle_pass: 23, pop_pass: 32,
 };
 const PLAY_TYPE_SIGNAL_LABEL = {
   inside_zone: 'Inside Zone', outside_zone: 'Outside Zone', option: 'Option',
   option_pass: 'Option Pass', blast: 'Blast', double_blast: 'Double Blast', sweep: 'Sweep',
-  shuffle_pass: 'Shuffle Pass',
+  shuffle_pass: 'Shuffle Pass', pop_pass: 'Pop Pass',
 };
 
 // Split's Houston/Seattle/Florida routes (DATA.splitRoutes, saved
@@ -678,6 +678,7 @@ const DEFENSE_COLOR = '#1a3fae';
 const READKEY_COLOR = '#e0201a';
 const BALL_COLOR = '#e0201a';
 const NOBALL_COLOR = '#123a8c';
+const BALLSTART_COLOR = '#d99000'; // gold -- matches js/edit-plays.js's same constant/meaning
 const CIRCLE_R = 36;
 
 function getVariant(playType, direction, insideOutside, readPosition, counterOn) {
@@ -1143,7 +1144,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     }
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
-    const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
+    const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
     // having the ball and his line changes to red." handoffIndex (set via
@@ -1490,7 +1491,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const lastRenderedPaths = [];
   function drawPath(p) {
-    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
     const points = p.points;
     // Nathan: see the matching guard/comment in renderCardDiagram above --
     // same fix, same reason (a lineThenCurve route whose point count has
