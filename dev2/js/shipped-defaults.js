@@ -15145,7 +15145,7 @@ window.SHIPPED_PLAYS_JSON = {
       "wingOnly": true
     }
   ,
-      {
+        {
     "key": "pop_pass",
     "label": "Pop Pass",
     "directions": {
@@ -15414,7 +15414,8 @@ window.SHIPPED_PLAYS_JSON = {
                   -280,
                   -99
                 ]
-              ]
+              ],
+              "wingSeamRelative": true
             },
             {
               "player": 5,
@@ -15725,7 +15726,8 @@ window.SHIPPED_PLAYS_JSON = {
                   -280,
                   -99
                 ]
-              ]
+              ],
+              "wingSeamRelative": true
             },
             {
               "player": 5,
@@ -16025,7 +16027,8 @@ window.SHIPPED_PLAYS_JSON = {
                   -280,
                   -99
                 ]
-              ]
+              ],
+              "wingSeamRelative": true
             },
             {
               "player": 5,
@@ -16336,7 +16339,8 @@ window.SHIPPED_PLAYS_JSON = {
                   -280,
                   -99
                 ]
-              ]
+              ],
+              "wingSeamRelative": true
             },
             {
               "player": 5,
