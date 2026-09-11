@@ -19,12 +19,21 @@ let insideOutside = 'Outside';
 // direction (Normal/Counter), same shape as Inside/Outside and Read A/B,
 // authored here by dragging points same as any other play/direction.
 let counterVariant = 'Normal';
+// Nathan: "we will need the toggle for Pop Pass 2. On the toggle it will
+// just change the path of the running backs" -- same shape as Counter
+// (a real, different stored route, not a live playback swap like Boot),
+// so it follows that exact pattern: its own sub-variant level in
+// getPlayVariant() below, gated on a new hasPopVariant flag (Pop Pass
+// only), authored by dragging points same as Normal/Counter or any
+// in/out toggle.
+let popVariant = 'Pop';
 
 function getPlayVariant(playType, dir) {
   let v = playType.directions[dir];
   if (playType.hasInsideOutside) v = v[insideOutside];
   if (playType.hasReadToggle) v = v[readPosition];
   if (playType.hasCounter) v = v[counterVariant];
+  if (playType.hasPopVariant) v = v[popVariant];
   return v;
 }
 let selectedPlayer = null;
@@ -114,6 +123,25 @@ function promptForPlayToDuplicate() {
 // Save to Cloud succeeds (see saveCloudBtn below), so an abandoned/never-
 // saved duplicate never shows up as "new" to the team.
 let pendingNewPlays = [];
+
+// Nathan lost a duplicated-and-edited play (TW Sweep/Pop Pass) because
+// duplicatePlay() above only stages the new play in memory -- nothing
+// persists it until Save to Cloud actually succeeds, and a reload or
+// closed tab before that click loses it silently, with no warning at
+// all. This is the fix: the browser's own native "leave site? changes
+// won't be saved" prompt, firing whenever there's a duplicated play not
+// yet saved, or the coach is actively in edit mode (mid-route-edit on an
+// existing play carries the same real risk, even though it doesn't
+// create a new pendingNewPlays entry). Browsers don't allow a custom
+// message here (a long-standing, deliberate restriction across all of
+// them, to stop sites from writing manipulative alarm text) -- only
+// whether the prompt appears at all is in our control.
+window.addEventListener('beforeunload', (e) => {
+  if (pendingNewPlays.length > 0 || editMode) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 function duplicatePlay(original) {
   const newLabel = prompt('Name for the new play (e.g. "Inside Zone Wham"):', original.label + ' Copy');
@@ -300,6 +328,10 @@ wireToggle(readPosToggle, () => readPosition, v => readPosition = v);
 const counterGroup = document.getElementById('counterGroup');
 const counterToggle = document.getElementById('counterToggle');
 wireToggle(counterToggle, () => counterVariant, v => counterVariant = v);
+
+const popVariantGroup = document.getElementById('popVariantGroup');
+const popVariantToggle = document.getElementById('popVariantToggle');
+wireToggle(popVariantToggle, () => popVariant, v => popVariant = v);
 
 const blockingToggle = document.getElementById('blockingToggle');
 wireToggle(blockingToggle, () => (blockingEnabled ? 'on' : 'off'), v => blockingEnabled = (v === 'on'));
@@ -596,12 +628,14 @@ function updateReadPosVisibility() {
   readPosGroup.style.display = playType.hasReadToggle ? 'flex' : 'none';
   insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
   counterGroup.style.display = playType.hasCounter ? 'flex' : 'none';
+  popVariantGroup.style.display = playType.hasPopVariant ? 'flex' : 'none';
   // These groups start hidden (display:none), so their thumb couldn't be
   // measured correctly by wireToggle()'s initial call -- re-place it now
   // that they're actually laid out, whenever they're shown.
   if (playType.hasReadToggle) placeToggleThumb(readPosToggle);
   if (playType.hasInsideOutside) placeToggleThumb(insideOutsideToggle);
   if (playType.hasCounter) placeToggleThumb(counterToggle);
+  if (playType.hasPopVariant) placeToggleThumb(popVariantToggle);
   // Boot doesn't make sense on plays where #1 already has the ball or
   // already has a built-in fake (Option, Option Pass, Double Blast) --
   // hide the toggle and force it back off so a swap from a previously
@@ -1285,10 +1319,6 @@ const endTypePanel = document.getElementById('endTypePanel');
 const endTypeRunBtn = document.getElementById('endTypeRunBtn');
 const endTypeBlockBtn = document.getElementById('endTypeBlockBtn');
 const delayInput = document.getElementById('delayInput');
-const convertBlockPanel = document.getElementById('convertBlockPanel');
-const convertBlockLabel = document.getElementById('convertBlockLabel');
-const convertToRouteBtn = document.getElementById('convertToRouteBtn');
-const convertToBlockBtn = document.getElementById('convertToBlockBtn');
 
 function updateEditUI(variant) {
   const addPointBtn = document.getElementById('addPointBtn');
@@ -1299,7 +1329,6 @@ function updateEditUI(variant) {
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
     delayPanel.style.display = 'none';
-    convertBlockPanel.style.display = 'none';
     ballStartsHereBtn.style.display = 'none';
     return;
   }
@@ -1310,28 +1339,12 @@ function updateEditUI(variant) {
     assignPanel.style.display = 'none';
     endTypePanel.style.display = 'none';
     delayPanel.style.display = 'none';
-    convertBlockPanel.style.display = 'none';
     ballStartsHereBtn.style.display = 'none';
     return;
   }
 
   const editableArr = getEditablePointsArray(p);
   addPointBtn.style.display = editableArr ? '' : 'none';
-
-  // Convert Route/Block -- only meaningful for the "assignable" positions
-  // (4/5/6), and not on an option fake (p.fake/p.optionLine already mean
-  // something different there). Both buttons always show, matching End
-  // Type's Run/Block pair, with .active marking which one reflects
-  // p.isBlocking's CURRENT state -- clicking the already-active one is a
-  // harmless no-op, not an error case that needs its own handling.
-  if ([4, 5, 6].includes(editTarget.player) && !p.optionLine && !p.fake) {
-    convertBlockPanel.style.display = 'flex';
-    convertBlockLabel.textContent = p.isBlocking ? 'Currently: fixed block' : 'Currently: route';
-    convertToRouteBtn.classList.toggle('active', !p.isBlocking);
-    convertToBlockBtn.classList.toggle('active', !!p.isBlocking);
-  } else {
-    convertBlockPanel.style.display = 'none';
-  }
 
   // Start delay -- same field the animation engine already reads
   // (js/play-calls.js's pathPromises/initialDelay), now settable directly
@@ -1409,45 +1422,42 @@ function updateEditUI(variant) {
   }
 }
 
+// For players 4/5/6 specifically, Run/Block IS the single choice between
+// a real, freely-editable route and a fixed block assignment -- not just
+// a visual end-cap style layered on top of some separate mode. Nathan:
+// "We already say whether the path is a run or block path... so we
+// should be able to click 'run' on player 5 or 6 and make his path
+// whatever we want." Previously this needed a second, separate toggle
+// (isBlocking) a coach had to also know about and set correctly -- one
+// button now does both. Clearing blockRelative/dualSideBlock/
+// motionIndependentBlock/crossPoints alongside isBlocking matters because
+// a path inherited from a duplicated play (e.g. Sweep's wings) can carry
+// any of those, and getEditablePointsArray() treats each one as
+// "structurally fixed" on its own -- leaving one behind on "Run" would
+// silently reintroduce the exact same problem this exists to fix. Every
+// other position's endType (O-line, split ends, anyone not in this list)
+// is untouched -- it's still just the visual end-cap it always was.
 function setEditTargetEndType(newEndType) {
   const playType = DATA.playTypes.find(pt => pt.key === playKey);
   const variant = getPlayVariant(playType, direction);
   const p = findEditTargetPath(variant);
   if (!p) return;
   p.endType = newEndType;
+  if ([4, 5, 6].includes(editTarget.player)) {
+    if (newEndType === 'block') {
+      p.isBlocking = true;
+    } else {
+      delete p.isBlocking;
+      delete p.blockRelative;
+      delete p.dualSideBlock;
+      delete p.motionIndependentBlock;
+      delete p.crossPoints;
+    }
+  }
   render();
 }
 endTypeRunBtn.addEventListener('click', () => setEditTargetEndType('run'));
 endTypeBlockBtn.addEventListener('click', () => setEditTargetEndType('block'));
-
-// Converting TO a route clears every block-specific field, not just
-// isBlocking -- a path inherited from a duplicated play (Sweep's wings,
-// here) can carry blockRelative/dualSideBlock/motionIndependentBlock/
-// crossPoints alongside isBlocking, and getEditablePointsArray() treats
-// any of those as "structurally fixed, no add/remove" on their own, so
-// leaving one behind would silently reintroduce the exact problem this
-// button exists to fix. Converting TO a block only sets isBlocking --
-// the existing tap-a-defender flow (isAssignableBlock, above) is how a
-// coach actually assigns a target, same as setting up a block from
-// scratch already works.
-function setEditTargetBlocking(makeBlocking) {
-  const playType = DATA.playTypes.find(pt => pt.key === playKey);
-  const variant = getPlayVariant(playType, direction);
-  const p = findEditTargetPath(variant);
-  if (!p) return;
-  if (makeBlocking) {
-    p.isBlocking = true;
-  } else {
-    delete p.isBlocking;
-    delete p.blockRelative;
-    delete p.dualSideBlock;
-    delete p.motionIndependentBlock;
-    delete p.crossPoints;
-  }
-  render();
-}
-convertToRouteBtn.addEventListener('click', () => setEditTargetBlocking(false));
-convertToBlockBtn.addEventListener('click', () => setEditTargetBlocking(true));
 
 // Writes p.delayMs on whatever's currently selected. 'change' (fires on
 // blur/enter) rather than 'input' (fires per keystroke) on purpose -- a
@@ -2040,7 +2050,8 @@ function render() {
     'text-anchor':'middle', fill:'#111111'});
   title.textContent = `WING ${wingSide.toUpperCase()}` + (motionOn ? ' MOTION' : '') +
     ` ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' BOOT' : '') +
-    (playType.hasCounter && counterVariant === 'Counter' ? ' COUNTER' : '');
+    (playType.hasCounter && counterVariant === 'Counter' ? ' COUNTER' : '') +
+    (playType.hasPopVariant && popVariant === 'Pop2' ? ' 2' : '');
   stage.appendChild(title);
 
 

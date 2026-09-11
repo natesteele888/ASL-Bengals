@@ -691,6 +691,7 @@ function getVariant(playType, direction, insideOutside, readPosition, counterOn)
   if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
   if (playType.hasReadToggle) v = v[readPosition || 'A'];
   if (playType.hasCounter) v = v[counterOn ? 'Counter' : 'Normal'];
+  if (playType.hasPopVariant) v = v[popVariantOn ? 'Pop2' : 'Pop'];
   return v;
 }
 
@@ -702,7 +703,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1850,6 +1851,10 @@ function buildCard(combo) {
   // picks the Counter sub-variant authored in Edit Plays (see getVariant),
   // so a play without hasCounter simply never shows this toggle at all.
   let counterOn = false;
+  // Same idea as Counter just above, for Pop Pass 2 -- a real stored
+  // sub-variant (Pop/Pop2, see getVariant), not a live swap, gated on
+  // hasPopVariant so any other play simply never shows this toggle.
+  let popVariantOn = false;
   const isPlayingRef = { value: false };
 
   // FRONT
@@ -2006,6 +2011,14 @@ function buildCard(combo) {
     // 5th grid column just for it.
     counterToggle = buildSwitchToggle('Counter', counterOn, (v) => { if (isPlayingRef.value) return; counterOn = v; onComboChanged(); });
     readSlot.appendChild(counterToggle);
+  } else if (combo.hasPopVariant) {
+    // Pop Pass has none of Read/Counter/In-Out, so this slot is free --
+    // same reuse logic as Counter just above, no eligibility rule needed
+    // (unlike Counter, Pop Pass 2 doesn't depend on wingSide/direction
+    // alignment, so it's just always available, no disable-logic branch
+    // to add alongside updateCounterAvailability).
+    const popVariantToggle = buildSwitchToggle('Pop Pass 2', popVariantOn, (v) => { if (isPlayingRef.value) return; popVariantOn = v; onComboChanged(); });
+    readSlot.appendChild(popVariantToggle);
   }
   extrasRow.appendChild(readSlot);
 

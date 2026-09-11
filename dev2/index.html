@@ -1107,6 +1107,20 @@
         <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
       </div>
     </div>
+    <!-- Pop Pass 2: same shape as Counter just above -- a real stored
+         sub-variant (Pop/Pop2), not a live playback swap like Boot,
+         gated on hasPopVariant (Pop Pass only). Nathan: "we will need the
+         toggle for Pop Pass 2. On the toggle it will just change the
+         path of the running backs." See js/edit-plays.js's popVariant/
+         getPlayVariant. -->
+    <div class="corner-control" id="popVariantGroup" style="display:none;">
+      <label>Pop Pass 2</label>
+      <div class="toggle-group toggle-red toggle-tiny" id="popVariantToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Pop" aria-pressed="true">Pop</button>
+        <button class="toggle-btn" data-value="Pop2" aria-pressed="false">Pop 2</button>
+      </div>
+    </div>
   </div>
 
   <div class="edit-toolbar" id="editToolbar" style="display:none;">
@@ -1126,25 +1140,18 @@
   <div class="assign-panel" id="assignPanel" style="display:none;">
     <span class="assign-label" id="assignLabel">Block assignment:</span>
   </div>
+  <!-- Run/Block, for players 4/5/6, IS the single choice between a real,
+       freely-editable route and a fixed block assignment -- see
+       js/edit-plays.js's setEditTargetEndType for the full mechanism.
+       Previously this needed a second, separate toggle (a "Convert to
+       Route/Block" panel) a coach had to also know about; Nathan: "We
+       already say whether the path is a run or block path... so we
+       should be able to click 'run' on player 5 or 6 and make his path
+       whatever we want" -- these two buttons now do both. -->
   <div class="end-type-panel" id="endTypePanel" style="display:none;">
     <span class="assign-label">Ends with:</span>
     <button id="endTypeRunBtn" class="end-type-btn" title="Player keeps running past this point">&#10148; Run</button>
     <button id="endTypeBlockBtn" class="end-type-btn" title="Player plants and blocks right here">&#9473; Block</button>
-  </div>
-  <!-- Convert Route/Block: flips p.isBlocking on whichever path is
-       selected. Only shown for players 4/5/6 (the "assignable" positions
-       -- see edit-plays.js's isAssignableChip/isAssignableBlock), the
-       only ones a fixed blocking assignment vs. a real route is even a
-       meaningful choice for. This was missing entirely before -- there
-       was no way to convert a duplicated play's inherited isBlocking
-       assignment (e.g. a wing's block on Sweep) into a real route, or
-       back, from the editor. Nathan: "I couldn't make the TEs (5 and 6)
-       run on pass routes" while building Pop Pass off a duplicated
-       Sweep -- this is that missing control. -->
-  <div class="end-type-panel" id="convertBlockPanel" style="display:none;">
-    <span class="assign-label" id="convertBlockLabel">Currently:</span>
-    <button id="convertToRouteBtn" class="end-type-btn" title="Turn this fixed block assignment into a real, freely-editable route">&#10148; Convert to Route</button>
-    <button id="convertToBlockBtn" class="end-type-btn" title="Turn this route into a fixed block assignment (tap a defender to assign it)">&#9473; Convert to Block</button>
   </div>
   <!-- Start Delay: sets p.delayMs on whichever path is currently selected
        -- how long this player waits after the snap before he starts
