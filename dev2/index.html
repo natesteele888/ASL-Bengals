@@ -17,7 +17,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260902a">
+<link rel="stylesheet" href="css/styles.css?v=20260912a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -936,6 +936,7 @@
 </div>
 
 <div id="editPlaysMode" class="modePanel">
+<div class="editBuildVersion" id="editPlaysBuildVersion"></div>
 <div class="controls">
   <div class="inline-control">
     <label>Formation</label>
@@ -2166,6 +2167,13 @@ if (window.ResizeObserver) {
   // Coach Tools.
   const loginBuildVEl = document.getElementById('loginBuildVersion');
   if (loginBuildVEl) loginBuildVEl.textContent = `Build ${BUILD_V}`;
+  // Nathan: "add a rev number to the top corner of the edit screen ... so
+  // I know it's the right version" -- same idea as loginBuildVEl above,
+  // just visible on Edit Plays itself instead of only the login screen and
+  // Coach Tools > Dashboard, so a coach mid-edit-session doesn't have to
+  // navigate away just to confirm a push/sync actually landed.
+  const editBuildVEl = document.getElementById('editPlaysBuildVersion');
+  if (editBuildVEl) editBuildVEl.textContent = `Build ${BUILD_V}`;
 
   // Nathan: "make sure it's all stable and loading quickly." These ~39
   // files used to only start downloading one at a time, AFTER auth and

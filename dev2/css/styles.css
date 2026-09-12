@@ -70,6 +70,7 @@ img{max-width:100%;height:auto}
 .roleBtnIcon{font-size:26px}
 .roleBtn:active{background:rgba(255,106,19,.35);border-color:var(--bengal-orange)}
 .loginBuildVersion{position:absolute;left:0;right:0;bottom:14px;z-index:1;color:#ffffff;opacity:.35;font-size:10px;text-align:center;letter-spacing:.02em}
+.editBuildVersion{position:fixed;top:6px;right:10px;z-index:50;color:#111111;opacity:.35;font-size:10px;letter-spacing:.02em;pointer-events:none}
 @keyframes loginShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}
   40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
 .loginContent.shake{animation:loginShake .4s}
