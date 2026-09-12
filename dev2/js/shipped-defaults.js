@@ -15395,35 +15395,20 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "ball": false,
               "width": 9,
-              "sameSideOffsets": [
+              "points": [
                 [
-                  0,
-                  0
+                  360,
+                  269
                 ],
                 [
-                  -160,
-                  -147
+                  200,
+                  122
                 ],
                 [
-                  -228,
-                  -147
+                  132,
+                  122
                 ]
-              ],
-              "crossOffsets": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  -160,
-                  -147
-                ],
-                [
-                  -228,
-                  -147
-                ]
-              ],
-              "wingSeamRelative": true
+              ]
             },
             {
               "player": 5,
@@ -15713,35 +15698,20 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "ball": false,
               "width": 9,
-              "sameSideOffsets": [
+              "points": [
                 [
-                  0,
-                  0
+                  360,
+                  269
                 ],
                 [
-                  -160,
-                  -147
+                  200,
+                  122
                 ],
                 [
-                  -228,
-                  -147
+                  132,
+                  122
                 ]
-              ],
-              "crossOffsets": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  -160,
-                  -147
-                ],
-                [
-                  -228,
-                  -147
-                ]
-              ],
-              "wingSeamRelative": true
+              ]
             },
             {
               "player": 5,
@@ -16022,35 +15992,20 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "ball": false,
               "width": 9,
-              "sameSideOffsets": [
+              "points": [
                 [
-                  0,
-                  0
+                  360,
+                  269
                 ],
                 [
-                  -160,
-                  -147
+                  200,
+                  122
                 ],
                 [
-                  -228,
-                  -147
+                  132,
+                  122
                 ]
-              ],
-              "crossOffsets": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  -160,
-                  -147
-                ],
-                [
-                  -228,
-                  -147
-                ]
-              ],
-              "wingSeamRelative": true
+              ]
             },
             {
               "player": 5,
@@ -16340,35 +16295,20 @@ window.SHIPPED_PLAYS_JSON = {
               "player": 4,
               "ball": false,
               "width": 9,
-              "sameSideOffsets": [
+              "points": [
                 [
-                  0,
-                  0
+                  360,
+                  269
                 ],
                 [
-                  -160,
-                  -147
+                  200,
+                  122
                 ],
                 [
-                  -228,
-                  -147
+                  132,
+                  122
                 ]
-              ],
-              "crossOffsets": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  -160,
-                  -147
-                ],
-                [
-                  -228,
-                  -147
-                ]
-              ],
-              "wingSeamRelative": true
+              ]
             },
             {
               "player": 5,
