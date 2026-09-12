@@ -15145,7 +15145,7 @@ window.SHIPPED_PLAYS_JSON = {
       "wingOnly": true
     }
   ,
-        {
+          {
     "key": "pop_pass",
     "label": "Pop Pass",
     "directions": {
@@ -15662,7 +15662,6 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "player": 2,
-              "isBlocking": true,
               "width": 7,
               "points": [
                 [
@@ -15670,16 +15669,12 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  880,
-                  462
+                  863,
+                  545
                 ],
                 [
-                  760,
-                  468
-                ],
-                [
-                  690,
-                  440
+                  353,
+                  400
                 ]
               ]
             },
@@ -15694,14 +15689,19 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  700,
-                  410
+                  750,
+                  455
                 ],
                 [
-                  760,
-                  395
+                  870,
+                  465
+                ],
+                [
+                  950,
+                  445
                 ]
-              ]
+              ],
+              "isBlocking": true
             },
             {
               "player": 4,
@@ -16275,7 +16275,6 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "player": 2,
-              "isBlocking": true,
               "width": 7,
               "points": [
                 [
@@ -16283,16 +16282,12 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  880,
-                  462
+                  863,
+                  545
                 ],
                 [
-                  760,
-                  468
-                ],
-                [
-                  690,
-                  440
+                  353,
+                  400
                 ]
               ]
             },
@@ -16307,14 +16302,19 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  700,
-                  410
+                  750,
+                  455
                 ],
                 [
-                  760,
-                  395
+                  870,
+                  465
+                ],
+                [
+                  950,
+                  445
                 ]
-              ]
+              ],
+              "isBlocking": true
             },
             {
               "player": 4,
@@ -16377,7 +16377,8 @@ window.SHIPPED_PLAYS_JSON = {
       }
     },
     "noBoot": true,
-    "hasPopVariant": true
+    "hasPopVariant": true,
+    "noSplit": true
   }
 ]
 };

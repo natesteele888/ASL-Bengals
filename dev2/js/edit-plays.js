@@ -187,6 +187,29 @@ function wireToggle(el, getter, setter) {
   // updateReadPosVisibility() re-calls it once they're actually shown.
   placeToggleThumb(el);
 }
+// Programmatically sets a toggle's displayed state without a real click --
+// same aria-pressed + thumb-reposition steps wireToggle's own click
+// handler does, for the one case (noSplit auto-snap-back) that needs to
+// change a toggle's value from code, not a coach's tap.
+function syncToggleUI(el, value) {
+  [...el.querySelectorAll('.toggle-btn')].forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.value === value ? 'true' : 'false');
+  });
+  placeToggleThumb(el);
+}
+// Pop Pass has no Split formation data at all (Nathan: "disable the Split
+// toggle on Pop Pass as it doesn't apply") -- greys out and disables just
+// the Split button itself, rather than hiding the whole formation control,
+// so it's still clear the choice exists in general, just not for this play.
+function updateSplitButtonAvailability() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const splitBtn = editFormationToggle.querySelector('[data-value="split"]');
+  if (!splitBtn) return;
+  const disabled = !!(playType && playType.noSplit);
+  splitBtn.disabled = disabled;
+  splitBtn.style.opacity = disabled ? '0.35' : '';
+  splitBtn.style.pointerEvents = disabled ? 'none' : '';
+}
 // Exposed globally so play-calls-quiz.js (loaded after this file) can
 // reuse the exact same toggle-wiring behavior for its answer panel,
 // instead of duplicating it -- this whole file is wrapped in an IIFE, so
@@ -629,6 +652,7 @@ function updateReadPosVisibility() {
   insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
   counterGroup.style.display = playType.hasCounter ? 'flex' : 'none';
   popVariantGroup.style.display = playType.hasPopVariant ? 'flex' : 'none';
+  updateSplitButtonAvailability();
   // These groups start hidden (display:none), so their thumb couldn't be
   // measured correctly by wireToggle()'s initial call -- re-place it now
   // that they're actually laid out, whenever they're shown.
@@ -660,6 +684,17 @@ playSelect.addEventListener('change', () => {
     return;
   }
   playKey = playSelect.value;
+  // noSplit plays (Pop Pass -- no Split formation data exists for it at
+  // all) shouldn't let a coach land on a formation with nothing to show.
+  // If Split is already selected when switching to one, snap back to
+  // Shotgun; either way, refresh whether the Split button itself is even
+  // choosable for whatever's now selected.
+  const newPlayType = DATA.playTypes.find(p => p.key === playKey);
+  if (newPlayType && newPlayType.noSplit && editorFormation === 'split') {
+    editorFormation = 'shotgun';
+    syncToggleUI(editFormationToggle, 'shotgun');
+    updateFormationControlsVisibility();
+  }
   updateReadPosVisibility();
   render();
 });

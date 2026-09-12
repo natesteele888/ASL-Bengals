@@ -1660,6 +1660,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     border-color: var(--bengal-black);
     color: #fff;
   }
+  /* delayPanel reuses .end-type-panel's look (same border/background/
+     padding) but needs its OWN position -- it was sharing top:12px;
+     right:12px with the Run/Block panel above, so the two sat directly
+     on top of each other and only whichever was later in the DOM was
+     ever clickable. Stacked below it instead. */
+#editPlaysMode #delayPanel {
+    top: 58px;
+  }
 #editPlaysMode #exportModal {
     position: fixed;
     inset: 0;
