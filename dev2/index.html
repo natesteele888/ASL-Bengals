@@ -2218,17 +2218,20 @@ if (window.ResizeObserver) {
   // other changes needed.
   await loadScript(withV('js/cloud-auth.js'));
   await loadScript(withV('js/auth.js'));
-  await window.__bengalsAuthReady;
 
-  // Nathan: "make sure it's all stable and loading quickly - I noticed
-  // some features not popping up on load. Or loading as straight text."
-  // A NEW session still needs to see and use the actual login form right
-  // now -- it doesn't depend on any of the ~39 feature scripts below at
-  // all, so there's no reason to keep #appLoadingOverlay up for that case.
-  // A REMEMBERED session, though, is about to have #loginScreen hidden
-  // (by auth.js, already done by this point) and the raw app shell
-  // revealed underneath -- THAT case keeps the overlay up until every
-  // feature script has actually finished loading, further down.
+  // REAL DEADLOCK BUG (found investigating "new/incognito sessions hang on
+  // the loading screen forever"): both blocks below used to sit AFTER
+  // `await window.__bengalsAuthReady` -- but for a brand-new session, that
+  // promise ONLY resolves once login succeeds (see auth.js's two
+  // __resolveBengalsAuth() call sites), and succeeding requires clicking
+  // Log In, which #appLoadingOverlay (z-index 99998) was still sitting on
+  // top of #loginScreen (z-index 1000) to block until exactly this code
+  // ran. A brand-new device could never reach the login form at all -- not
+  // even the 20s force-hide safety net below helped, since it was never
+  // even armed yet either, waiting on the same stuck await. Moving both
+  // here, BEFORE the await, means a new session gets a real, clickable
+  // login form immediately, and the 20s timer actually starts counting
+  // down from page load instead of from a point that could never arrive.
   const appLoadingOverlay = document.getElementById('appLoadingOverlay');
   const loginScreenEl = document.getElementById('loginScreen');
   const stillNeedsLogin = loginScreenEl && !loginScreenEl.classList.contains('hide');
@@ -2247,6 +2250,17 @@ if (window.ResizeObserver) {
       setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
     }
   }, 20000);
+
+  await window.__bengalsAuthReady;
+
+  // Nathan: "make sure it's all stable and loading quickly - I noticed
+  // some features not popping up on load. Or loading as straight text."
+  // A NEW session's overlay was already hidden above, the moment the login
+  // form itself became interactive -- it doesn't depend on any of the ~39
+  // feature scripts below at all. A REMEMBERED session, though, already
+  // has #loginScreen hidden (by auth.js, before this point) and the raw
+  // app shell revealed underneath -- THAT case keeps the overlay up until
+  // every feature script below has actually finished loading.
 
   // One-time leaderboard cleanup + Houston route What's New note (see
   // cloud-auth.js) -- fire-and-forget so neither ever delays boot; both
