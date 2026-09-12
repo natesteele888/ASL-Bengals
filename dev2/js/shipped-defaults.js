@@ -15401,12 +15401,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "crossOffsets": [
@@ -15415,12 +15415,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "wingSeamRelative": true
@@ -15719,12 +15719,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "crossOffsets": [
@@ -15733,12 +15733,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "wingSeamRelative": true
@@ -16028,12 +16028,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "crossOffsets": [
@@ -16042,12 +16042,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "wingSeamRelative": true
@@ -16346,12 +16346,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "crossOffsets": [
@@ -16360,12 +16360,12 @@ window.SHIPPED_PLAYS_JSON = {
                   0
                 ],
                 [
-                  140,
-                  -50
+                  -160,
+                  -147
                 ],
                 [
-                  340,
-                  -35
+                  -228,
+                  -147
                 ]
               ],
               "wingSeamRelative": true
