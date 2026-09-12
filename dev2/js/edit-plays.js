@@ -1437,10 +1437,13 @@ function updateEditUI(variant) {
     const motionQualifier = p.motionIndependentBlock ? (motionOn ? ' (Motion ON)' : ' (Motion OFF)') : '';
     assignLabel.textContent = `${who} blocks${motionQualifier}: tap a defender on the field`;
     [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
-  } else if ([4,5,6].includes(editTarget.player)) {
+  } else if (!p.skipChip && [4,5,6].includes(editTarget.player)) {
     // a real route (going out for a pass) -- offer a quick chip block on
     // the way, which only nudges the early part of the route and leaves
-    // the release/pattern itself alone
+    // the release/pattern itself alone. p.skipChip opts a specific path
+    // out entirely (e.g. Pop Pass's #4, who never blocks or chips on this
+    // play) -- clicking straight to his draggable route with no extra
+    // step, rather than every player 4/5/6 route getting this by default.
     assignPanel.style.display = 'flex';
     assignLabel.textContent = `#${editTarget.player} chip block: tap a defender on the field, then release`;
     [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
@@ -1774,7 +1777,7 @@ function render() {
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
   const assignablePath = (editMode && editTarget) ? findEditTargetPath(variant) : null;
   const isAssignableBlock = assignablePath && assignablePath.isBlocking;
-  const isAssignableChip = assignablePath && !assignablePath.isBlocking && [4,5,6].includes(editTarget && editTarget.player);
+  const isAssignableChip = assignablePath && !assignablePath.isBlocking && !assignablePath.skipChip && [4,5,6].includes(editTarget && editTarget.player);
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;

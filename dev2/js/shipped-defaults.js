@@ -15408,7 +15408,8 @@ window.SHIPPED_PLAYS_JSON = {
                   132,
                   122
                 ]
-              ]
+              ],
+              "skipChip": true
             },
             {
               "player": 5,
@@ -15711,7 +15712,8 @@ window.SHIPPED_PLAYS_JSON = {
                   132,
                   122
                 ]
-              ]
+              ],
+              "skipChip": true
             },
             {
               "player": 5,
@@ -16005,7 +16007,8 @@ window.SHIPPED_PLAYS_JSON = {
                   132,
                   122
                 ]
-              ]
+              ],
+              "skipChip": true
             },
             {
               "player": 5,
@@ -16308,7 +16311,8 @@ window.SHIPPED_PLAYS_JSON = {
                   132,
                   122
                 ]
-              ]
+              ],
+              "skipChip": true
             },
             {
               "player": 5,
