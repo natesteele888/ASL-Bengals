@@ -15397,22 +15397,30 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 9,
               "sameSideOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "crossOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "wingSeamRelative": true
@@ -15662,6 +15670,8 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "player": 2,
+              "ball": false,
+              "fake": true,
               "width": 7,
               "points": [
                 [
@@ -15669,19 +15679,19 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  863,
-                  545
+                  870,
+                  343
                 ],
                 [
-                  353,
-                  400
+                  613,
+                  395
                 ]
-              ]
+              ],
+              "isBlocking": true
             },
             {
               "player": 3,
               "ball": false,
-              "fake": true,
               "width": 7,
               "points": [
                 [
@@ -15689,16 +15699,12 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  750,
-                  455
+                  760,
+                  545
                 ],
                 [
-                  870,
-                  465
-                ],
-                [
-                  950,
-                  445
+                  1010,
+                  395
                 ]
               ],
               "isBlocking": true
@@ -15709,22 +15715,30 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 9,
               "sameSideOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "crossOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "wingSeamRelative": true
@@ -16010,22 +16024,30 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 9,
               "sameSideOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "crossOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "wingSeamRelative": true
@@ -16275,6 +16297,8 @@ window.SHIPPED_PLAYS_JSON = {
             },
             {
               "player": 2,
+              "ball": false,
+              "fake": true,
               "width": 7,
               "points": [
                 [
@@ -16282,19 +16306,19 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  863,
-                  545
+                  870,
+                  343
                 ],
                 [
-                  353,
-                  400
+                  613,
+                  395
                 ]
-              ]
+              ],
+              "isBlocking": true
             },
             {
               "player": 3,
               "ball": false,
-              "fake": true,
               "width": 7,
               "points": [
                 [
@@ -16302,16 +16326,12 @@ window.SHIPPED_PLAYS_JSON = {
                   438
                 ],
                 [
-                  750,
-                  455
+                  760,
+                  545
                 ],
                 [
-                  870,
-                  465
-                ],
-                [
-                  950,
-                  445
+                  1010,
+                  395
                 ]
               ],
               "isBlocking": true
@@ -16322,22 +16342,30 @@ window.SHIPPED_PLAYS_JSON = {
               "width": 9,
               "sameSideOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "crossOffsets": [
                 [
-                  -210,
-                  -29
+                  0,
+                  0
                 ],
                 [
-                  -280,
-                  -99
+                  140,
+                  -50
+                ],
+                [
+                  340,
+                  -35
                 ]
               ],
               "wingSeamRelative": true
