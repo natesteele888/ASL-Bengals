@@ -168,10 +168,12 @@
     });
   }
 
+  const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
   const DEFENSE_COLOR = '#1a3fae';
-  const READKEY_COLOR = '#e0201a';
-  const BALL_COLOR = '#e0201a';
-  const NOBALL_COLOR = '#123a8c';
+  const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+  const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+  const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
+  const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
   const CIRCLE_R = 36;
 
   function getVariant(playType, direction, insideOutside, readPosition, counterOn, twSweepOn) {
@@ -374,7 +376,7 @@
       }
 
       const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
-      const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
+      const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
 
       const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
       const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1
@@ -760,7 +762,7 @@
 
     const lastRenderedPaths = [];
     function drawPath(p) {
-      const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+      const color = p.isBlocking ? BLOCK_COLOR : (p.ball ? BALL_COLOR : NOBALL_COLOR);
       const points = p.points;
       // Nathan: same 4-point-only guard as the other lineThenCurve dispatch
       // above (and in play-calls.js/edit-plays.js) -- prevents a route

@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ASL Bengals — Signal Study Guide</title>
+
+<!-- Game HUD preview theme -- per-device only (see the file's own header
+     comment). Loaded here, before styles.css and before any other script,
+     specifically so window.isGameHudPreview() exists and the
+     .gameHudPreview class is already on <html> before first paint -- no
+     flash of the normal theme, and every later script that checks the
+     flag (edit-plays.js's route colors) can rely on it being set. -->
+<script src="js/preview-theme.js?v=20260913a"></script>
+
 <!-- IMPORTANT: this ?v= is a SEPARATE, hand-maintained version string from
      BUILD_V further down this file -- it's a plain <link> tag parsed before
      any JS runs (so it can't just read window.BUILD_V), which is exactly
@@ -17,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260912a">
+<link rel="stylesheet" href="css/styles.css?v=20260913a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -2152,7 +2161,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260912v';
+  const BUILD_V = '20260913b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

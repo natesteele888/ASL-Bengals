@@ -2484,3 +2484,70 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .standingsTeamLink { background: none; border: none; padding: 0; font: inherit; font-weight: 700;
   color: var(--bengal-orange); cursor: pointer; text-decoration: underline; }
 
+/* ============================================================
+   Game HUD preview theme -- see js/preview-theme.js for how the
+   .gameHudPreview class gets onto <html> (a per-device localStorage flag,
+   never a server-side setting -- nobody else sees any of this). Every
+   rule below is scoped under that class so a device without the flag is
+   byte-for-byte unaffected; nothing here touches the unscoped selectors
+   themselves.
+
+   Deliberately dark and angled regardless of the existing light/dark
+   toggle, same principle the real header already uses (header{} is
+   black in both themes) -- extended here to the full nav chrome so it
+   reads as one consistent HUD rather than half-themed.
+   ============================================================ */
+html.gameHudPreview .headerRow,
+html.gameHudPreview .headerRow h1,
+html.gameHudPreview .headerRow p { font-family: 'Barlow', -apple-system, sans-serif; }
+
+html.gameHudPreview header {
+  position: relative;
+  overflow: hidden;
+  background: #0c0d0f;
+  border-bottom: none;
+}
+html.gameHudPreview header::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 46%; height: 100%;
+  background: linear-gradient(100deg, #ff6a13 0%, #e0570a 100%);
+  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0% 100%);
+  pointer-events: none;
+}
+html.gameHudPreview .headerRow { position: relative; z-index: 1; }
+html.gameHudPreview .headerRow h1 {
+  font-family: 'Anton', sans-serif; text-transform: uppercase;
+  font-weight: 400; letter-spacing: .01em;
+}
+html.gameHudPreview .headerRow p {
+  font-family: 'Anton', sans-serif; text-transform: uppercase;
+  color: #ffb37a; letter-spacing: .12em;
+}
+
+html.gameHudPreview .topSections {
+  background: #0c0d0f;
+  border-bottom: 4px solid #ff6a13;
+}
+html.gameHudPreview .topSections .modeBtn.active {
+  color: #17181a;
+  background: #ff6a13;
+  border-bottom-color: #ff6a13;
+}
+
+html.gameHudPreview .modeTabs {
+  background: #17181a;
+  border-bottom: none;
+}
+html.gameHudPreview .modeTabs .modeBtn {
+  color: rgba(255,255,255,.55);
+  font-family: 'Barlow', -apple-system, sans-serif;
+  font-weight: 800;
+}
+html.gameHudPreview .modeTabs .modeBtn.active {
+  color: #fff;
+  background: rgba(255,106,19,.16);
+  border-bottom-color: #ff6a13;
+}
+

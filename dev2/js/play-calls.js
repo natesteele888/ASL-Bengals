@@ -674,10 +674,12 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
   });
 }
 
+const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
 const DEFENSE_COLOR = '#1a3fae';
-const READKEY_COLOR = '#e0201a';
-const BALL_COLOR = '#e0201a';
-const NOBALL_COLOR = '#123a8c';
+const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
+const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
 const BALLSTART_COLOR = '#d99000'; // gold -- matches js/edit-plays.js's same constant/meaning
 const CIRCLE_R = 36;
 
@@ -1155,7 +1157,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     }
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
-    const color = p.isBlocking ? '#e8720c' : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
     // having the ball and his line changes to red." handoffIndex (set via
@@ -1502,7 +1504,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const lastRenderedPaths = [];
   function drawPath(p) {
-    const color = p.isBlocking ? '#e8720c' : (p.ball ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    const color = p.isBlocking ? BLOCK_COLOR : (p.ball ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
     const points = p.points;
     // Nathan: see the matching guard/comment in renderCardDiagram above --
     // same fix, same reason (a lineThenCurve route whose point count has

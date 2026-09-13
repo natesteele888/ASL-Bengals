@@ -1,12 +1,21 @@
 (function() {
 
 
-const BALL_COLOR = '#e0201a';
-const NOBALL_COLOR = '#123a8c';
+// Game HUD preview theme (see js/preview-theme.js) -- a handful of color/
+// fill constants swap here, once, at load time. The flag never changes
+// mid-session (only via a reload after the URL toggles it), so a one-time
+// check is correct; nothing below needs to be reactive.
+const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
+const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
 const BALLSTART_COLOR = '#d99000'; // gold -- "ball icon starts here" but not the credited carrier
-const DEFENSE_COLOR = '#e8720c';
+const DEFENSE_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
 const READKEY_COLOR = '#e0201a';
 const CIRCLE_R = 36;
+const STAGE_BG = GAME_HUD_PREVIEW ? '#14171a' : '#ffffff';
+// Offense circles stay white either way (matches the mockup: white player
+// dots read clearly against a dark field too) -- no new constant needed,
+// the existing fill:'#ffffff' at each drawCircle call site is unchanged.
 
 let wingSide = 'Left';
 let playKey = DATA.playTypes[0].key;
@@ -1596,7 +1605,7 @@ function renderSplitEditor() {
   const [vw, vh] = DATA.viewBox;
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   stage.innerHTML = '';
-  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:'#ffffff'}));
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
 
   const g = svgEl('g', {transform: `translate(0,${DATA.topPad})`});
   const pathsLayer = svgEl('g', {});
@@ -1759,7 +1768,7 @@ function render() {
   const [vw, vh] = DATA.viewBox;
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   stage.innerHTML = '';
-  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:'#ffffff'}));
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
 
   const g = svgEl('g', {transform: `translate(0,${DATA.topPad})`});
   const pathsLayer = svgEl('g', {});
@@ -2167,7 +2176,7 @@ function showEditPlaysLoading() {
   const [vw, vh] = DATA.viewBox;
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
   stage.innerHTML = '';
-  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:'#ffffff'}));
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
   stage.appendChild(svgEl('text', {x:vw/2, y:vh/2, 'font-size':32, 'font-weight':700,
     'text-anchor':'middle', fill:'#999999'})).textContent = 'Loading your saved plays…';
 }
