@@ -1227,7 +1227,20 @@ function writeBackPoint(p, idx, absX, absY) {
     offsets[idx] = [(absX - anchor[0]) / sign, absY - anchor[1]];
   } else if (p.player === 4 && !p.optionLine) {
     if (idx === 0) return;
-    p.points[idx] = [absX, absY];
+    // Storage is always the Left-authored (canonical) coordinates -- see
+    // the matching comment in render(). Dragging a handle gives us the
+    // point's CURRENT on-screen absolute position, which is already
+    // mirrored for display whenever #4 is actually on the right; un-mirror
+    // it back before writing, or every drag made while previewing the
+    // right side would silently corrupt the canonical (left) data with
+    // right-side coordinates -- exactly what produced the garbled routes
+    // this fix exists for.
+    if (p4Side() === 'Right') {
+      const centerX = DATA.formation.C[0];
+      p.points[idx] = [centerX + (centerX - absX), absY];
+    } else {
+      p.points[idx] = [absX, absY];
+    }
   } else {
     p.points[idx] = [absX, absY];
   }
@@ -1905,7 +1918,23 @@ function render() {
         const sign = p4Side() === 'Left' ? 1 : -1;
         points = offsets.map(([dx, dy]) => [p4Pos[0] + sign * dx, p4Pos[1] + dy]);
       } else {
-        points = [p4Pos, ...points.slice(1)];
+        // Plain points (no wingSeamRelative/blockRelative/motionIndependentBlock)
+        // are authored assuming Wing Left as the base -- same convention as
+        // every other #4 special case above, confirmed by p.points[0] itself
+        // matching DATA.wing.Left. Regression fix: this used to only swap in
+        // the live anchor for point 0, leaving the REST of the route at its
+        // literal authored (Left-side) coordinates even when #4 is actually
+        // standing on the right -- his token correctly moved, but his route
+        // stayed put, producing a route that runs clear across the field
+        // instead of mirroring with him. Mirror every point around the
+        // field's center line (DATA.formation.C[0]) whenever he's actually
+        // on the right, same math as the wingSeamRelative branch just above.
+        if (p4Side() === 'Right') {
+          const centerX = DATA.formation.C[0];
+          points = points.map(([x, y]) => [centerX + (centerX - x), y]);
+        } else {
+          points = [p4Pos, ...points.slice(1)];
+        }
       }
     }
 

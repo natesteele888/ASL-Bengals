@@ -351,7 +351,18 @@
           const sign = p4Side === 'Left' ? 1 : -1;
           points = [p4Anchor, [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]];
         } else {
-          points = [p4Anchor, ...points.slice(1)];
+          // See the matching (much longer) comment in edit-plays.js's
+          // render() -- plain points are authored assuming Wing Left as the
+          // base; mirror the whole route around field center when #4 is
+          // actually on the right, not just swap the live anchor into
+          // point 0 (which left the rest of the route at its literal
+          // Left-authored coordinates).
+          if (p4Side === 'Right') {
+            const centerX = DATA.formation.C[0];
+            points = points.map(([x, y]) => [centerX + (centerX - x), y]);
+          } else {
+            points = [p4Anchor, ...points.slice(1)];
+          }
         }
       }
       if (p.optionLine) {
