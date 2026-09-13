@@ -2551,3 +2551,70 @@ html.gameHudPreview .modeTabs .modeBtn.active {
   border-bottom-color: #ff6a13;
 }
 
+/* Edit Plays' control toolbar (.controls, its buttons, the diagram-card
+   frame) is styled with hardcoded #fff regardless of the light/dark
+   toggle -- fine normally since the diagram stage next to it was also
+   white, but next to the new dark GAME_HUD_PREVIEW stage background (see
+   STAGE_BG in js/edit-plays.js) it read as a leftover unstyled bar sitting
+   on top of the new look. Themed here, scoped the same as everything else
+   in this section. */
+html.gameHudPreview #editPlaysMode .controls {
+  background: #17181a;
+  box-shadow: none;
+  border: 1px solid #2a2c2f;
+}
+html.gameHudPreview #editPlaysMode .inline-control label {
+  color: rgba(255,255,255,.45);
+}
+html.gameHudPreview #editPlaysMode select {
+  background: #0c0d0f;
+  border-color: #3a3d42;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .standalone-btn {
+  background: #0c0d0f;
+  border-color: #4a4d52;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .standalone-btn.active {
+  background: #ff6a13;
+  border-color: #ff6a13;
+  color: #17181a;
+}
+html.gameHudPreview #editPlaysMode .action-btn {
+  background: #0c0d0f;
+  border-color: #4a4d52;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .action-btn.primary {
+  border-color: #ff6a13;
+  color: #ff6a13;
+}
+html.gameHudPreview #editPlaysMode .diagram-card {
+  background: #14171a;
+  box-shadow: none;
+  border: 1px solid #2a2c2f;
+}
+html.gameHudPreview #editPlaysMode .corner-control {
+  background: rgba(12,13,15,.9);
+  border-color: #3a3d42;
+}
+html.gameHudPreview #editPlaysMode .corner-control label {
+  color: rgba(255,255,255,.55);
+}
+html.gameHudPreview #editPlaysMode .hint {
+  color: rgba(255,255,255,.4);
+}
+/* The shared toggle pill (Wing/Dir/Motion/etc, also reused by Play Calls'
+   per-card toggles) keeps its white sliding thumb in every theme -- that's
+   what the pressed color (--toggle-color) contrasts against, and it
+   already reads fine sitting on a dark track. Only the resting track tint
+   needed a bump: the light-mode tint values (e.g. rgba(0,0,0,.06)) are
+   nearly invisible against a dark card. */
+html.gameHudPreview .toggle-group {
+  background: var(--toggle-tint-dark, rgba(255,255,255,.1));
+}
+html.gameHudPreview .toggle-group .toggle-btn {
+  color: rgba(255,255,255,.4);
+}
+

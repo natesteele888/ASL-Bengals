@@ -705,7 +705,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1909,6 +1909,14 @@ function buildCard(combo) {
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
+  // Pop Pass has no Split formation data at all (same reason edit-plays.js
+  // hides its own Split button -- see updateSplitButtonAvailability there).
+  // `formation` already defaults to 'shotgun' above and never changes for a
+  // noSplit combo, so hiding the button is the only step needed here.
+  if (combo.noSplit) {
+    const splitBtn = formationToggle.querySelector('[data-value="split"]');
+    if (splitBtn) splitBtn.style.display = 'none';
+  }
 
   // Split Side (the signal sequence always calls the second direction as
   // whichever side is opposite this, so there's no separate Direction
