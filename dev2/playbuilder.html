@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play Builder v2 (standalone preview)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; height: 100vh; color: #111; background: #ffffff; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #toolbar { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #ddd; flex-wrap: wrap; background: #ffffff; }
+  #toolbar label { font-size: 12px; font-weight: 700; color: #555; margin-right: 4px; }
+  #fieldWrap { flex: 1; overflow: auto; background: #f5f5f5; }
+  #field { width: 100%; height: 100%; display: block; touch-action: none; }
+  #sidebar { width: 260px; border-left: 1px solid #ddd; padding: 14px; overflow-y: auto; flex-shrink: 0; background: #ffffff; }
+  .toggleGroup { display: inline-flex; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+  .toggleGroup button { border: none; background: #fff; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .toggleGroup button.active { background: #111; color: #fff; }
+  #playerPanel h3 { margin-top: 0; }
+  #playerPanel .field { margin: 10px 0; }
+  #playerPanel label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 3px; }
+  #previewLockNote { font-size: 12px; color: #b45309; background: #fff7e6; border: 1px solid #f0d090; border-radius: 6px; padding: 8px; margin-bottom: 10px; }
+  select, input[type=number] { width: 100%; padding: 6px; font-size: 13px; }
+  button.primary { padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  #status { font-size: 12px; color: #777; padding: 0 14px; }
+  .instructions { font-size: 12px; color: #666; line-height: 1.5; border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; }
+</style>
+</head>
+<body>
+<div id="main">
+  <div id="toolbar">
+    <div><label>Play</label><select id="playSelect"></select></div>
+    <button id="newPlayBtn" class="primary">+ New Play</button>
+    <div><label>Formation</label><select id="formationSelect"></select></div>
+    <div><label>Wing (preview)</label><div class="toggleGroup" id="wingSideToggle">
+      <button data-value="left">L</button><button data-value="right" class="active">R</button>
+    </div></div>
+    <div><label>Direction (preview)</label><div class="toggleGroup" id="directionToggle">
+      <button data-value="left">L</button><button data-value="right" class="active">R</button>
+    </div></div>
+    <button id="saveBtn" class="primary" style="margin-left:auto">Save Play</button>
+  </div>
+  <div id="status"></div>
+  <div id="fieldWrap"><svg id="field"></svg></div>
+</div>
+<div id="sidebar">
+  <div id="playerPanel" style="display:none">
+    <h3 id="playerLabel">#4</h3>
+    <div id="previewLockNote">Switch Wing/Direction back to R/R to edit -- editing always happens on the canonical (right-side) data; the toggles above are preview-only.</div>
+    <div class="field" id="wingRouteToggle" style="display:none">
+      <label>Editing which shape?</label>
+      <div class="toggleGroup">
+        <button data-value="sameSide" class="active">Same Side</button>
+        <button data-value="crossSide">Cross Side</button>
+      </div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="hasBallCheckbox"> Has the ball</label>
+    </div>
+    <div class="field">
+      <label>Start delay (ms)</label>
+      <input type="number" id="delayInput" value="0" step="50">
+    </div>
+    <div class="field">
+      <label>Ends with</label>
+      <select id="endTypeSelect"><option value="run">Run (arrow)</option><option value="block">Block (bar)</option></select>
+    </div>
+    <div class="instructions">
+      Click the field to add a point to this player's route.<br>
+      Click a point to select it, drag to move it.<br>
+      Click a selected point's ✕ badge to remove it (min. 2 points).
+    </div>
+  </div>
+  <div class="instructions" id="noSelectionNote">Click a player to start building or editing their route.</div>
+</div>
+<script src="js/playbuilder/schema.js"></script>
+<script src="js/playbuilder/mirror.js"></script>
+<script src="js/playbuilder/seed-formations.js"></script>
+<script src="js/cloud-auth.js"></script>
+<script src="js/playbuilder/store.js"></script>
+<script src="js/playbuilder/editor.js"></script>
+</body>
+</html>
