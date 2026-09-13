@@ -197,18 +197,18 @@ function syncToggleUI(el, value) {
   });
   placeToggleThumb(el);
 }
-// Pop Pass has no Split formation data at all (Nathan: "disable the Split
-// toggle on Pop Pass as it doesn't apply") -- greys out and disables just
-// the Split button itself, rather than hiding the whole formation control,
-// so it's still clear the choice exists in general, just not for this play.
+// Pop Pass has no Split formation data at all (Nathan: "remove the Split
+// toggle on Pop Pass, it can't be run out of Split") -- hides the Split
+// button outright for a noSplit play rather than just greying it out, so
+// there's no control sitting there implying a choice that doesn't exist
+// for this play.
 function updateSplitButtonAvailability() {
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const splitBtn = editFormationToggle.querySelector('[data-value="split"]');
   if (!splitBtn) return;
   const disabled = !!(playType && playType.noSplit);
   splitBtn.disabled = disabled;
-  splitBtn.style.opacity = disabled ? '0.35' : '';
-  splitBtn.style.pointerEvents = disabled ? 'none' : '';
+  splitBtn.style.display = disabled ? 'none' : '';
 }
 // Exposed globally so play-calls-quiz.js (loaded after this file) can
 // reuse the exact same toggle-wiring behavior for its answer panel,
