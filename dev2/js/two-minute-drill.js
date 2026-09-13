@@ -2647,6 +2647,17 @@
       // index.html for the other half of this fix -- it no longer depends
       // on the external stylesheet at all).
       el.twoMinDrillOverlay.style.display = 'block';
+      // The inline background:#f4f2ee in index.html is a deliberate,
+      // permanent fallback (Nathan: doesn't depend on css/styles.css
+      // loading/being fresh -- see the comment on that element) and stays
+      // exactly as-is for that reason. But by the time this function runs
+      // the real theme is already known, so it's safe to correct the color
+      // here rather than leave every dark-mode/preview coach staring at a
+      // bright cream overlay every time they open the drill.
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (GAME_HUD_PREVIEW) el.twoMinDrillOverlay.style.background = '#0c0d0f';
+      else if (isDark) el.twoMinDrillOverlay.style.background = '#161616';
+      else el.twoMinDrillOverlay.style.background = '#f4f2ee';
     }
   };
   if (el.twoMinDrillCloseBtn) {
