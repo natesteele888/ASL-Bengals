@@ -842,15 +842,31 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
   // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
   // simplicity (noSplit hides the Split toggle for it, so it's never really
   // reachable via the branch above), but its SIGNAL still has to sound like
-  // a real Split call -- Split touch, side, then the play card -- not a Wing
-  // touch/location, since there's no actual Wing version of this play a
-  // coach would ever call.
+  // a real Split call -- Split touch, side -- not a Wing touch/location,
+  // since there's no actual Wing version of this play a coach would ever
+  // call.
   if (playKey === 'qb_sneak') {
     const side = wingSide;
     const sideFingerId = randomFingerId(side);
+    // Nathan: "QB Sneak only has 3 signals but we need to add in a dummy
+    // play call and direction between the final signal. So it would be:
+    // Split > Right > Inside Zone > Left > QB Sneak. The inside zone left
+    // doesn't mean anything but it throws off the other team if they are
+    // trying to steal signals." Both the decoy play and its direction are
+    // randomized every time (same "don't let the defense pattern-read a
+    // fixed sign" idea as Motion/Pass's random card pools) rather than
+    // literally always Inside Zone Left -- the offense already knows to
+    // disregard everything between Split: side and the QB Sneak card
+    // itself, whatever it happens to be.
+    const decoyPlayKeys = Object.keys(PLAY_TYPE_SIGNAL_ID);
+    const decoyPlayKey = decoyPlayKeys[Math.floor(Math.random() * decoyPlayKeys.length)];
+    const decoyDirection = Math.random() < 0.5 ? 'Left' : 'Right';
+    const decoyDirFingerId = randomFingerId(decoyDirection, sideFingerId);
     return [
       { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
       { src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
+      { src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID[decoyPlayKey]], label: PLAY_TYPE_SIGNAL_LABEL[decoyPlayKey] },
+      { src: SIGNAL_CARDS[decoyDirFingerId], label: `Direction: ${decoyDirection}` },
       { src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
     ];
   }
