@@ -963,6 +963,18 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const isLineSelectedForCircles = typeof selectedPlayer === 'string';
   const wingPos = DATA.wing[wingSide];
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+  // QB Sneak is a real Split Left/Right personnel grouping (Nathan: "It
+  // shows Split on the QB Sneak play but it still shows the Shotgun
+  // formation... Needs to be the split formation"), but it's rendered on
+  // this Wing/Shotgun pipeline for simplicity (see isQbSneak in buildCard).
+  // DATA.split[side] holds the real, already-digitized Split alignment for
+  // 1-6 (O-line is unchanged from DATA.formation either way) -- reuse those
+  // same positions here for 3/4/5/6 instead of this pipeline's normal
+  // Shotgun spots (DATA.wing's flexed #4, DATA.backfield's 3rd back, and
+  // DATA.formation's fixed, non-side-aware 5/6), so the diagram actually
+  // shows 6/4 tucked in on the line and 5/3 split out, matching Nathan's
+  // real Split reference diagrams instead of Shotgun's personnel.
+  const splitPositions = playType.key === 'qb_sneak' ? DATA.split[wingSide] : null;
 
   function drawCircle(x, y, label, stroke, fontSize, isSelected, r, playerNum) {
     r = r || CIRCLE_R;
@@ -1041,8 +1053,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     defenseCircles[d.id] = dc;
   });
 
+  const p5Pos = splitPositions ? splitPositions[5] : DATA.formation['5'];
   const c5Selected = selectedPlayer === 5;
-  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111', 34, c5Selected, null, 5);
+  const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111', 34, c5Selected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
   // O-line circles were never selectable/highlightable at all originally
   // (no playerNum -> no click listener) -- added so a player whose
@@ -1055,8 +1068,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, isSelected, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
+  const p6Pos = splitPositions ? splitPositions[6] : DATA.formation['6'];
   const c6Selected = selectedPlayer === 6;
-  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111', 34, c6Selected, null, 6);
+  const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111', 34, c6Selected, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   // Motion is now a pure playback choice, exactly like Wing L/R and Dir L/R
@@ -1075,7 +1089,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // about Motion/wing math below is unchanged.
   const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
   const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
-  const p4Anchor = motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide];
+  const p4Anchor = splitPositions ? splitPositions[4] : (motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide]);
   // Which side #4 is ACTUALLY standing on -- used to mirror his
   // block/seam offsets correctly. Using raw wingSide here (ignoring
   // Motion) left the mirror sign out of sync with p4Anchor whenever
@@ -1103,7 +1117,11 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
   ['3','1','2'].forEach(num => {
     const isSelected = String(selectedPlayer) === num;
-    const c = drawCircle(DATA.backfield[num][0], DATA.backfield[num][1], num, '#111', 34, isSelected, null, Number(num));
+    // #3 splits out wide in real Split personnel instead of standing in
+    // the backfield (see splitPositions above) -- 1 and 2 sit in the same
+    // spot either way, so only 3 needs the override.
+    const pos = (splitPositions && num === '3') ? splitPositions[3] : DATA.backfield[num];
+    const c = drawCircle(pos[0], pos[1], num, '#111', 34, isSelected, null, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 

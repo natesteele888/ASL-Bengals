@@ -1837,6 +1837,13 @@ function render() {
   }
   const playerCircles = {}; // player number (string) -> {circleEl, textEl, startX, startY}
 
+  // QB Sneak is a real Split personnel grouping, not Shotgun -- see the
+  // matching comment in play-calls.js's renderCardDiagram for the full
+  // story. DATA.split[side] holds the real digitized Split alignment for
+  // 3/4/5/6 (O-line unchanged either way); reused here so the Edit tool's
+  // own diagram matches what a coach actually sees on the Plays tab card.
+  const splitPositions = playKey === 'qb_sneak' ? DATA.split[wingSide] : null;
+
   // defense -- now dims too when a player is selected ("D" per the request)
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
   const assignablePath = (editMode && editTarget) ? findEditTargetPath(variant) : null;
@@ -1875,8 +1882,9 @@ function render() {
   });
 
   // formation (O-line + 5/6) -- now dims too ("line" per the request)
+  const p5Pos = splitPositions ? splitPositions[5] : DATA.formation['5'];
   const c5Dim = anyPlayerSelected && selectedPlayer !== 5;
-  const c5 = drawCircle(DATA.formation['5'][0], DATA.formation['5'][1], '5', '#111111', 34, c5Dim, null, 5);
+  const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111111', 34, c5Dim, null, 5);
   circlesLayer.appendChild(c5);
   playerCircles['5'] = c5;
   ['LT','LG','C','RG','RT'].forEach(k => {
@@ -1889,8 +1897,9 @@ function render() {
     circlesLayer.appendChild(c);
     playerCircles[k] = c;
   });
+  const p6Pos = splitPositions ? splitPositions[6] : DATA.formation['6'];
   const c6Dim = anyPlayerSelected && selectedPlayer !== 6;
-  const c6 = drawCircle(DATA.formation['6'][0], DATA.formation['6'][1], '6', '#111111', 34, c6Dim, null, 6);
+  const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111111', 34, c6Dim, null, 6);
   circlesLayer.appendChild(c6);
   playerCircles['6'] = c6;
 
@@ -1901,7 +1910,7 @@ function render() {
   // instead, and everything below anchors off that same spot so his
   // route/blocking math stays correct.
   const wingPos = DATA.wing[p4HomeSide()];
-  const p4Pos = p4Anchor();
+  const p4Pos = splitPositions ? splitPositions[4] : p4Anchor();
   const wingDim = anyPlayerSelected && selectedPlayer !== 4;
   const c4 = drawCircle(p4Pos[0], p4Pos[1], '4', '#111111', 34, wingDim, null, 4);
   circlesLayer.appendChild(c4);
@@ -1917,10 +1926,13 @@ function render() {
     circlesLayer.appendChild(motionLine);
   }
 
-  // backfield (#3, #1, #2) -- always fixed positions
+  // backfield (#3, #1, #2) -- always fixed positions, except #3 splits out
+  // wide in real Split personnel (see splitPositions above) instead of
+  // standing in the backfield -- 1 and 2 sit in the same spot either way.
   ['3','1','2'].forEach(num => {
     const dim = anyPlayerSelected && String(selectedPlayer) !== num;
-    const c = drawCircle(DATA.backfield[num][0], DATA.backfield[num][1], num, '#111111', 34, dim, null, Number(num));
+    const pos = (splitPositions && num === '3') ? splitPositions[3] : DATA.backfield[num];
+    const c = drawCircle(pos[0], pos[1], num, '#111111', 34, dim, null, Number(num));
     circlesLayer.appendChild(c);
     playerCircles[num] = c;
   });
