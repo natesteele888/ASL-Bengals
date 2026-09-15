@@ -746,6 +746,11 @@ const SPLIT_TOUCH_ID = 31;
 // shows is randomized the same way Motion picks between its two cards, to
 // keep the defense from pattern-reading a fixed sign.
 const PASS_SIGNAL_IDS = [28, 29, 30];
+// See buildSplitSignalSequence's own comment for the actual mechanic --
+// this is the SAME card QB Sneak's own standalone play entry uses as its
+// signal (signalCardId: 27), reused here as the trailing modifier any
+// OTHER Split play call can end with.
+const QB_SNEAK_SIGNAL_ID = 27;
 
 // The three named audibles (Houston/Seattle/Florida) a coach can call at
 // the line for the wide receiver and, independently, for the flexed-out
@@ -793,7 +798,7 @@ function randomFingerId(side, exclude) {
 // passOn is a plain boolean now -- Nathan: "it's just any of those signals
 // means it is pass", so which of Pass 1/2/3 actually shows is randomized,
 // same idea as MOTION_SIGNAL_IDS below, not a coach-facing choice.
-function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
+function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbSneakOn) {
   const splitFingerId = randomFingerId(splitSide);
   // Avoid showing the literal same card image twice in a row for the two
   // direction cards (both now the same side) -- same dedup approach Wing's
@@ -819,6 +824,16 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
     const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
     signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
   }
+  // Nathan: "The QB Sneak signal #27 is added at the end of any play call
+  // out of Split Formation... It can be added to the end of any Split
+  // Formation play call." A coach signals whatever split play/route call
+  // is showing (the defense sees a normal call), then flashes this card
+  // last -- secretly telling the OFFENSE to actually run QB Sneak instead
+  // of whatever was just called. Deliberately not mutually exclusive with
+  // Pass above (both can show; the sneak override still wins either way).
+  if (qbSneakOn) {
+    signals.push({ src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' });
+  }
   return signals;
 }
 
@@ -826,9 +841,25 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, qbSneakOn) {
   if (formation === 'split') {
-    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
+    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbSneakOn);
+  }
+  // QB Sneak's own card is Split formation only (see buildSplitSignalSequence's
+  // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
+  // simplicity (noSplit hides the Split toggle for it, so it's never really
+  // reachable via the branch above), but its SIGNAL still has to sound like
+  // a real Split call -- Split touch, side, then the play card -- not a Wing
+  // touch/location, since there's no actual Wing version of this play a
+  // coach would ever call.
+  if (playKey === 'qb_sneak') {
+    const side = wingSide;
+    const sideFingerId = randomFingerId(side);
+    return [
+      { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
+      { src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
+      { src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
+    ];
   }
   const wingFingerId = randomFingerId(wingSide);
   const dirFingerId = direction === wingSide
@@ -1850,6 +1881,14 @@ function buildCard(combo) {
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
+  // Nathan: "The QB Sneak signal #27 is added at the end of any play call
+  // out of Split Formation... QB walks out to the right side to tell his
+  // receivers the routes and as he walks back to the other side, he gets
+  // under center, taps the center and its a quick snap and push up the
+  // middle." A trailing modifier on top of whatever Split play/route is
+  // showing (see buildSplitSignalSequence) -- see also the standalone
+  // "QB Sneak" play itself for what actually happens on the field.
+  let qbSneakOn = false;
   // Which of Seattle/Houston/Florida is called to each SIDE of the play --
   // not a wide-receiver-vs-inside-receiver choice. The split side's two
   // receivers (wide + flex) both run whatever's called to their side;
@@ -1958,6 +1997,12 @@ function buildCard(combo) {
     onComboChanged();
   });
   formationRow.appendChild(passSwitch);
+  const qbSneakSwitch = buildSwitchToggle('QB Sneak', qbSneakOn, (v) => {
+    if (isPlayingRef.value) return;
+    qbSneakOn = v;
+    onComboChanged();
+  });
+  formationRow.appendChild(qbSneakSwitch);
   toggleRow.appendChild(formationRow);
 
   const basicsRow = document.createElement('div');
@@ -2186,7 +2231,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, qbSneakOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -2300,7 +2345,11 @@ function buildCard(combo) {
     selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
-    if (formation === 'split') {
+    if (combo.playKey === 'qb_sneak') {
+      // Matches buildSignalSequence's own special case -- this always
+      // reads as a Split call, never a Wing one.
+      parts = [`Split ${wingSide}`, 'QB Sneak'];
+    } else if (formation === 'split') {
       // Split Side IS the run direction -- "Split Right, the ball is always
       // run to the right" (Nathan). The title bar names the play the same
       // way a coach would say it -- e.g. "Split Right Inside Blast Right"
@@ -2316,6 +2365,7 @@ function buildCard(combo) {
       parts.push(combo.label);
       parts.push(splitSide);
       if (passOn) parts.push('Pass');
+      if (qbSneakOn) parts.push('QB Sneak');
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
       // after the wing spot is set), then In/Out if this play has it, then
