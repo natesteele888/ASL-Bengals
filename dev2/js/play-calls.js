@@ -2028,7 +2028,15 @@ function buildCard(combo) {
   const basicsRow = document.createElement('div');
   basicsRow.className = 'toggle-row-basics';
 
-  const wingToggle = buildToggleGroup('orange', [
+  // QB Sneak is a Split-only play (see isQbSneak above) -- this toggle
+  // still drives the same wingSide state everything else does (the title
+  // bar's "Split ${wingSide}" and the Split: side signal card), it just
+  // reads "Split L/R" here instead of "Wing L/R" since there's no Wing
+  // version of this play a coach would ever actually call.
+  const wingToggle = buildToggleGroup('orange', isQbSneak ? [
+    { value: 'Left', label: 'Split L' },
+    { value: 'Right', label: 'Split R' },
+  ] : [
     { value: 'Left', label: 'Wing L' },
     { value: 'Right', label: 'Wing R' },
   ], wingSide, (v) => { if (isPlayingRef.value) return; wingSide = v; onComboChanged(); });
