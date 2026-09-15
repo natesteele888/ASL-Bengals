@@ -1680,6 +1680,15 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
   renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+  // QB Sneak: "walks out to talk to receivers... as he walks back... he
+  // gets under center, taps the center and its a quick snap." He carries no
+  // ball at all during that walk -- the football only exists from the snap
+  // on. playType.delayedSnapBall (set only on qb_sneak) skips the normal
+  // unconditional presnap ball tween below and keeps the floating ball icon
+  // hidden until the credited ball path's own delayMs (the snap/dive
+  // segment) actually starts, instead of showing it sitting at the QB's
+  // empty backfield spot for the whole walk.
+  const playType = DATA.playTypes.find(p => p.key === playKey);
 
   const animMs = 1400 * speedMultiplier;
   const mainGroup = stage._mainGroup;
@@ -1721,7 +1730,11 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   }
 
   await wait(250 * speedMultiplier);
-  await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+  if (playType && playType.delayedSnapBall) {
+    ball.style.opacity = '0';
+  } else {
+    await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+  }
   await wait(150 * speedMultiplier);
 
   // startFrac/lenFrac (set on a handoff split's two segments -- see
@@ -1771,8 +1784,13 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     // ease toward the carrier's LIVE position every frame (never a stale
     // snapshot target) -- the carrier is already moving along his own path
     // by this point, so tweening to a fixed captured point goes stale and
-    // causes a visible jump once tracking begins
-    let cx = qbPos.x, cy = qbPos.y;
+    // causes a visible jump once tracking begins. delayedSnapBall plays
+    // (QB Sneak) skipped the presnap centerPos->qbPos tween above, so the
+    // ball's real first appearance is the snap itself -- ease it in from
+    // the center (where it's actually hidden/revealed, see delayedSnapBall
+    // above), not from the QB's now-irrelevant original backfield spot.
+    let cx = (playType && playType.delayedSnapBall) ? centerPos.x : qbPos.x;
+    let cy = (playType && playType.delayedSnapBall) ? centerPos.y : qbPos.y;
     let catchingUp = true;
     let easing = true;
     let tracking = false;
@@ -1824,6 +1842,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     }
 
     await wait(initialDelay);
+    if (playType && playType.delayedSnapBall) { ball.style.opacity = '1'; }
     tracking = true;
     catchUpFrame();
     await wait(animMs);
