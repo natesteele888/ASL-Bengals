@@ -2057,7 +2057,17 @@ function buildCard(combo) {
   ] : [
     { value: 'Left', label: 'Wing L' },
     { value: 'Right', label: 'Wing R' },
-  ], wingSide, (v) => { if (isPlayingRef.value) return; wingSide = v; onComboChanged(); });
+  ], wingSide, (v) => {
+    if (isPlayingRef.value) return;
+    wingSide = v;
+    // QB Sneak has no real Dir L/R of its own (dirToggle is hidden below) --
+    // keep direction in lockstep with this toggle instead, so getVariant's
+    // playType.directions[direction] lookup actually picks the side the
+    // coach just selected. Nathan: "split left, he goes to the left, split
+    // right he goes to the right."
+    if (isQbSneak) direction = v;
+    onComboChanged();
+  });
   basicsRow.appendChild(wingToggle);
 
   const dirToggle = buildToggleGroup('black', [

@@ -225,7 +225,16 @@ function updateSplitButtonAvailability() {
 // without this the bare name isn't reachable from other scripts.
 window.wireToggle = wireToggle;
 
-wireToggle(wingToggle, () => wingSide, v => wingSide = v);
+// QB Sneak (Split-only, no real Dir L/R of its own -- see isQbSneak in
+// play-calls.js's buildCard) keeps direction in lockstep with wingSide, so
+// every existing getPlayVariant(playType, direction) call site picks the
+// side-correct route data (the QB walks out to the actual split side)
+// without each one needing its own qb_sneak special case. Nathan: "split
+// left, he goes to the left, split right he goes to the right."
+wireToggle(wingToggle, () => wingSide, v => {
+  wingSide = v;
+  if (playKey === 'qb_sneak') { direction = v; syncToggleUI(dirToggle, v); }
+});
 wireToggle(dirToggle, () => direction, v => direction = v);
 
 // Formation -- Shotgun (existing editor, unchanged above) vs Split. Split
@@ -735,6 +744,10 @@ playSelect.addEventListener('change', () => {
     return;
   }
   playKey = playSelect.value;
+  // Keep direction synced to whatever Wing L/R is already showing (see the
+  // wireToggle call above) -- landing on QB Sneak shouldn't require a
+  // coach to re-tap Wing just to get direction lined up with it.
+  if (playKey === 'qb_sneak') { direction = wingSide; syncToggleUI(dirToggle, wingSide); }
   // noSplit plays (Pop Pass -- no Split formation data exists for it at
   // all) shouldn't let a coach land on a formation with nothing to show.
   // If Split is already selected when switching to one, snap back to
