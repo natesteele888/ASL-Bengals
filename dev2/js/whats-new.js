@@ -135,7 +135,41 @@
   }
   window.refreshNotifyBtn = refreshNotifyBtn;
 
-  window.showWhatsNew = async function () {
+  // Renders one play's diagram into a mini <svg> -- reuses play-calls.js's
+  // own renderCardDiagram/playCardAnimation completely unmodified (both
+  // already read the play they draw off window.DATA.playTypes by key, and
+  // nothing else they touch -- DATA.wing/DATA.formation/DATA.viewBox etc.
+  // -- is play-specific), by temporarily swapping in just the ONE snapshot
+  // play object being shown, rendering, then immediately swapping the real
+  // data back. Wing/Left is just a fixed, readable default view -- this is
+  // a "here's roughly what changed" glance, not the full toggle-everything
+  // Play Calls card (that's still one tap away via "Watch it run" below,
+  // no snapshot/swap involved -- see wireWatchButtons).
+  function renderSnapshotDiagram(svgEl, playObj, animate) {
+    if (!svgEl || !playObj || !window.DATA) return;
+    const savedTypes = window.DATA.playTypes;
+    window.DATA.playTypes = [playObj];
+    try {
+      if (animate && window.playCardAnimation) {
+        window.playCardAnimation(svgEl, playObj.key, 'Left', 'Left', 1, { value: false }, null, 'base', 'Outside', false, false, 'A', false, false);
+      } else if (window.renderCardDiagram) {
+        window.renderCardDiagram(svgEl, playObj.key, 'Left', 'Left', null, 'base', 'Outside', false, false, 'A', false, false);
+      }
+    } catch (e) { /* a snapshot from an older/incompatible data shape shouldn't break the panel -- the mini diagram just stays blank */ }
+    window.DATA.playTypes = savedTypes;
+  }
+
+  // Nathan: "This gets really lost... I need it to be just the play that
+  // was updated. Maybe show the old play and show what changed. Have them
+  // acknowledge before going into the app. A visual of the play running."
+  // onlyUnseen filters to entries newer than lastSeen (the auto-popup
+  // below) instead of the full history (the profile-menu button still
+  // shows everything -- a real "browse the whole log" surface has its own
+  // place); before/after snapshots (see edit-plays.js's capturePlaySnapshot)
+  // get real side-by-side diagrams instead of just a text description when
+  // both are present on an entry.
+  window.showWhatsNew = async function (opts) {
+    const onlyUnseen = !!(opts && opts.onlyUnseen);
     const overlay = document.getElementById('whatsNewOverlay');
     const body = document.getElementById('whatsNewBody');
     if (!overlay || !body) return;
@@ -146,26 +180,65 @@
       body.innerHTML = '<div class="lbEmpty">⚠️ Could not reach the team server — check your connection and try again.</div>';
       return;
     }
-    const sorted = entries.slice().sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
-    body.innerHTML = sorted.length
-      ? sorted.map(e => `<div class="lbRow">
-          <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(e.addedAt)}</div>
-          <div class="lbNameTip"><div class="lbNameTipTitle wnTitle">🏈 ${escapeHtml(e.label || e.key || 'Play update')}</div>${
-            e.note
-              ? `<div class="lbTip">${escapeHtml(e.note)}${e.addedBy ? ` — ${escapeHtml(e.addedBy)}` : ''}</div>`
-              : e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''
-          }</div>
-        </div>`).join('')
-      : '<div class="lbEmpty">Nothing new in the playbook yet -- check back later!</div>';
+    const lastSeen = getLastSeen();
+    const base = onlyUnseen ? entries.filter(e => e.addedAt && e.addedAt > lastSeen) : entries;
+    const sorted = base.slice().sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+
+    if (!sorted.length) {
+      body.innerHTML = `<div class="lbEmpty">${onlyUnseen ? "Nothing new since you last checked!" : "Nothing in the playbook log yet -- check back later!"}</div>`;
+    } else {
+      body.innerHTML = sorted.map(e => {
+        const hasComparison = e.before && e.after;
+        return `<div class="wnEntry" data-entry-id="${escapeHtml(e.id)}">
+          <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted);padding:0;">${fmtWhen(e.addedAt)}</div>
+          <div class="lbNameTipTitle wnTitle">🏈 ${escapeHtml(e.label || e.key || 'Play update')}</div>
+          ${e.note ? `<div class="lbTip">${escapeHtml(e.note)}</div>` : ''}
+          ${e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''}
+          ${hasComparison ? `<div class="wnDiagramRow">
+              <div class="wnDiagramCol"><div class="lbSub">Before</div><svg class="wnMiniDiagram" data-role="before"></svg></div>
+              <div class="wnDiagramCol"><div class="lbSub">After</div><svg class="wnMiniDiagram" data-role="after"></svg></div>
+            </div>
+            <button type="button" class="navBtn secondary wnWatchBtn" data-watch-key="${escapeHtml(e.id)}">▶ Watch it run</button>`
+            : (e.after ? `<svg class="wnMiniDiagram wnMiniDiagramSolo" data-role="after"></svg>
+              <button type="button" class="navBtn secondary wnWatchBtn" data-watch-key="${escapeHtml(e.id)}">▶ Watch it run</button>` : '')}
+        </div>`;
+      }).join('');
+
+      // Draw every snapshot diagram now that its <svg> is actually in the
+      // DOM (renderCardDiagram measures/positions against real layout).
+      sorted.forEach(e => {
+        if (!e.before && !e.after) return;
+        const card = body.querySelector(`[data-entry-id="${CSS.escape(e.id)}"]`);
+        if (!card) return;
+        if (e.before) renderSnapshotDiagram(card.querySelector('svg[data-role="before"]'), e.before, false);
+        if (e.after) renderSnapshotDiagram(card.querySelector('svg[data-role="after"]'), e.after, false);
+      });
+      body.querySelectorAll('.wnWatchBtn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const entry = sorted.find(e => e.id === btn.dataset.watchKey);
+          const svg = btn.closest('.wnEntry').querySelector('svg[data-role="after"]');
+          if (entry && entry.after && svg) renderSnapshotDiagram(svg, entry.after, true);
+        });
+      });
+    }
 
     // Mark everything as seen the moment this is opened -- matches how the
     // rest of the app's "seen" flags behave (e.g. the Play Calls tutorial).
-    const newestAt = sorted.length ? sorted[0].addedAt : new Date().toISOString();
-    setLastSeen(newestAt);
+    // Uses the newest entry in the FULL feed (not just what was shown) so
+    // opening this while only unseen entries are visible still correctly
+    // clears the badge/auto-popup for everything up to right now.
+    const newestOverall = entries.reduce((max, e) => (e.addedAt && e.addedAt > max ? e.addedAt : max), '');
+    setLastSeen(newestOverall || new Date().toISOString());
     const dot = document.getElementById('whatsNewDot');
     const countEl = document.getElementById('whatsNewCount');
     if (dot) dot.style.display = 'none';
     if (countEl) countEl.style.display = 'none';
+    // Nathan: "have them acknowledge before going into the app" -- reads as
+    // a real acknowledgment (not just a dismiss) when this is the unseen-
+    // only auto-popup specifically; the profile-menu's full-history browse
+    // keeps a plain Close.
+    const closeBtn = document.getElementById('whatsNewCloseBtn');
+    if (closeBtn) closeBtn.textContent = onlyUnseen && sorted.length ? "Got it, I'm ready" : 'Close';
   };
 
   // Nathan (in-season): "hey this is what is new this week for play calls,
@@ -182,7 +255,7 @@
       const lastSeen = getLastSeen();
       const unseen = entries.some(e => e.addedAt && e.addedAt > lastSeen);
       if (!unseen) return;
-      window.showWhatsNew();
+      window.showWhatsNew({ onlyUnseen: true });
     } catch (e) { /* best-effort -- a failed check shouldn't block login */ }
   };
 

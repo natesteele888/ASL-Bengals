@@ -508,13 +508,32 @@ async function logToWhatsNew(entries) {
     console.error('Could not log to What\'s New:', err);
   }
 }
-function whatsNewEntry(key, label, note) {
+function whatsNewEntry(key, label, note, before, after) {
   const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
   return {
     id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     key, label, note: note || null,
+    // Full play snapshots from just before/after this save, so the What's
+    // New panel can actually draw an old-vs-new diagram instead of just a
+    // text description -- Nathan: "show the old play and show what
+    // changed." null for a brand-new play (nothing to compare against).
+    before: before || null, after: after || null,
     addedAt: new Date().toISOString(), addedBy: (session && session.name) || null,
   };
+}
+// Reads the play's CURRENT in-memory (about-to-be-saved) state as "after",
+// and whatever's still live in playEdits.json (not yet overwritten by this
+// save) as "before" -- must run before the save's own PUT below, or
+// "before" would just read back the same data as "after".
+async function capturePlaySnapshot(key) {
+  const after = DATA.playTypes.find(p => p.key === key) || null;
+  let before = null;
+  try {
+    const url = await window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`);
+    const saved = await fetch(url).then(r => r.ok ? r.json() : null);
+    if (Array.isArray(saved)) before = saved.find(p => p.key === key) || null;
+  } catch (e) { /* best-effort -- a missing before-snapshot just means no comparison shows */ }
+  return { before, after };
 }
 
 saveCloudBtn.addEventListener('click', async () => {
@@ -534,7 +553,10 @@ saveCloudBtn.addEventListener('click', async () => {
     const playType = DATA.playTypes.find(p => p.key === playKey);
     if (playType) {
       const note = prompt(`Let the team know what changed on "${playType.label}"? Leave blank to save quietly.`, '');
-      if (note && note.trim()) toLog.push(whatsNewEntry(playType.key, playType.label, note.trim()));
+      if (note && note.trim()) {
+        const { before, after } = await capturePlaySnapshot(playType.key);
+        toLog.push(whatsNewEntry(playType.key, playType.label, note.trim(), before, after));
+      }
     }
   }
 
