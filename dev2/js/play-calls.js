@@ -726,6 +726,13 @@ const BOOT_SIGNAL_ID = 26;
 // never updated to actually call it out, so the flip-card signal sequence
 // silently looked identical for Normal and Counter this whole time.
 const COUNTER_SIGNAL_ID = 18;
+// Nathan: "On Pop Pass 2, there are 4 signals, the final signal should be
+// Pass #2 (signal #29)" -- same "modifier tacked on at the end" pattern as
+// Boot/Counter above, a fixed single card (not randomized from
+// PASS_SIGNAL_IDS -- that pool means "it's a pass" generically; this one
+// specifically has to mean "it's the crossing-block Pop Pass 2 variant,"
+// so it can't be ambiguous with anything else).
+const POP2_SIGNAL_ID = 29;
 
 // ---- Split formation (added alongside Wing, doesn't touch anything above) ----
 // Split's own touch/identity card, parallel to WING_TOUCH_ID. Real photo is
@@ -819,7 +826,7 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn) {
   if (formation === 'split') {
     return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
   }
@@ -866,6 +873,13 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
   }
   if (counterOn) {
     signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
+  }
+  // Pop Pass 2's own modifier -- see POP2_SIGNAL_ID above. Only ever
+  // applies to Pop Pass itself; the toggle can't even be on for any other
+  // play (see hasPopVariant), but the playKey check keeps this safe even
+  // if that ever changes.
+  if (popVariantOn && playKey === 'pop_pass') {
+    signals.push({ src: SIGNAL_CARDS[POP2_SIGNAL_ID], label: 'Pop Pass 2' });
   }
   return signals;
 }
@@ -2165,7 +2179,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more

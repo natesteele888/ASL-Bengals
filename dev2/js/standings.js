@@ -44,55 +44,129 @@
     return cols;
   }
 
+  // The league site started prepending its own rank number as the first
+  // column (Nathan's paste now starts "1  Leominster · Tackle 11U...")
+  // where it used to start straight with the team name -- that column is
+  // redundant (this file computes its own sort order in sortedTeams()
+  // anyway) and would otherwise shift every other column over by one, so
+  // strip a lone-integer leading column before reading the real ones.
+  function stripLeadingRankCol(cols) {
+    return (cols.length > 1 && /^\d+$/.test(cols[0])) ? cols.slice(1) : cols;
+  }
+
+  // The league site also started appending a same-cell status badge with
+  // no separator onto the division tag for teams with an unresolved
+  // tiebreaker -- "Tackle 11UCOIN FLIP PENDING" -- rather than a real part
+  // of the division name. Strips any run of unspaced caps text glued
+  // directly onto a "<digits>U" grade tag (11U, 10U, ...); a clean
+  // division with nothing glued on passes through untouched.
+  function cleanDivision(s) {
+    return String(s || '').replace(/(\d+U)[A-Z][A-Z ]*$/, '$1').trim();
+  }
+
   function parseStandingsText(text) {
     const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const teams = [];
     const warnings = [];
     lines.forEach((line, i) => {
-      // Header row ("Team  Record  PF  PA") -- skip it rather than treat it
-      // as a broken data row.
+      // Header row ("Team  Record  PF  PA" or "#  Team  Record  Win%  Diff")
+      // -- skip it rather than treat it as a broken data row.
       if (/^team\b/i.test(line) && /record/i.test(line)) return;
-      const cols = splitCols(line);
+      if (/^#?\s*team\b/i.test(line) && /win%|record/i.test(line)) return;
+      const cols = stripLeadingRankCol(splitCols(line));
       if (cols.length < 4) {
         warnings.push(`Line ${i + 1}: couldn't read "${line}" -- skipped.`);
         return;
       }
-      const [nameRaw, recordRaw, pfRaw, paRaw] = cols;
+      const [nameRaw, recordRaw, col3Raw, col4Raw] = cols;
       const rec = parseRecord(recordRaw);
       if (!rec) {
         warnings.push(`Line ${i + 1}: couldn't read record "${recordRaw}" for "${nameRaw}" -- skipped.`);
         return;
       }
-      const pf = Number(pfRaw), pa = Number(paRaw);
-      if (Number.isNaN(pf) || Number.isNaN(pa)) {
-        warnings.push(`Line ${i + 1}: couldn't read PF/PA for "${nameRaw}" -- skipped.`);
-        return;
+      // Two shapes the league site has used for the last two columns:
+      // PF/PA (both raw point totals) or Win%/Diff (a percentage, then a
+      // single point-differential number) -- the presence of a "%" in the
+      // 3rd column reliably tells them apart. Diff is kept either way
+      // (computed from PF/PA in the old shape, read directly in the new
+      // one) since that's what sortedTeams()'s tiebreak and the power
+      // ranking below actually need; PF/PA themselves are cosmetic display
+      // only and simply aren't available anymore in the new shape.
+      let pf = null, pa = null, diff;
+      if (/%/.test(col3Raw)) {
+        diff = Number(String(col4Raw).replace(/[^0-9.-]/g, ''));
+        if (Number.isNaN(diff)) {
+          warnings.push(`Line ${i + 1}: couldn't read point differential "${col4Raw}" for "${nameRaw}" -- skipped.`);
+          return;
+        }
+      } else {
+        pf = Number(col3Raw);
+        pa = Number(col4Raw);
+        if (Number.isNaN(pf) || Number.isNaN(pa)) {
+          warnings.push(`Line ${i + 1}: couldn't read PF/PA for "${nameRaw}" -- skipped.`);
+          return;
+        }
+        diff = pf - pa;
       }
       // "Ayer/Shirley/Lunenburg · Tackle 11U" -- team name, then a division
       // tag separated by " · ". Keep both, but the tag is cosmetic only.
       const parts = nameRaw.split('·').map(s => s.trim()).filter(Boolean);
       teams.push({
         team: parts[0] || nameRaw,
-        division: parts[1] || '',
+        division: cleanDivision(parts[1] || ''),
         wins: rec.w, losses: rec.l, ties: rec.t,
-        pf: pf, pa: pa,
+        pf: pf, pa: pa, diff: diff,
       });
     });
     return { teams, warnings };
   }
 
+  function teamDiff(t) {
+    return t.diff != null ? t.diff : (t.pf != null && t.pa != null ? t.pf - t.pa : 0);
+  }
+  function winPct(t) {
+    const gp = t.wins + t.losses + t.ties;
+    return gp ? (t.wins + t.ties * 0.5) / gp : 0;
+  }
+
   // Standard win-pct (ties count half a win/loss each) with point
   // differential as the tiebreaker -- close enough to how any real
-  // standings page ranks a one-division league like this.
+  // standings page ranks a one-division league like this. This SAME order
+  // is what "power rank" below actually is -- see computePowerRanks().
   function sortedTeams(teams) {
     return teams.slice().sort((a, b) => {
-      const gpA = a.wins + a.losses + a.ties, gpB = b.wins + b.losses + b.ties;
-      const pctA = gpA ? (a.wins + a.ties * 0.5) / gpA : 0;
-      const pctB = gpB ? (b.wins + b.ties * 0.5) / gpB : 0;
+      const pctA = winPct(a), pctB = winPct(b);
       if (pctB !== pctA) return pctB - pctA;
-      const diffA = a.pf - a.pa, diffB = b.pf - b.pa;
+      const diffA = teamDiff(a), diffB = teamDiff(b);
       if (diffB !== diffA) return diffB - diffA;
-      return b.pf - a.pf;
+      return (b.pf || 0) - (a.pf || 0);
+    });
+  }
+
+  // Nathan: "trending like they do in the NFL showing an arrow up or down
+  // for where they moved since the last week." Power rank IS just this
+  // same sorted order (win% then point differential) -- the standard
+  // blend when a full schedule-strength calculation isn't possible from a
+  // pasted aggregate table (no opponent-by-opponent data, just each team's
+  // own record/diff). Trend compares this week's rank position for each
+  // team against its position in the PREVIOUS saved snapshot (matched by
+  // name, same token-overlap matching matchScheduleOpponent uses below,
+  // since the league site doesn't always spell a team name identically
+  // week to week) -- computed once here at save time and persisted on
+  // each team, so the read-only Standings tab never has to re-derive it or
+  // keep its own history log.
+  function computePowerRanks(teams, previousTeams) {
+    const ordered = sortedTeams(teams);
+    const prevOrdered = previousTeams && previousTeams.length ? sortedTeams(previousTeams) : null;
+    return ordered.map((t, i) => {
+      const powerRank = i + 1;
+      let trend = null;
+      if (prevOrdered) {
+        const tTokens = teamTokens(t.team);
+        const prevIdx = prevOrdered.findIndex(p => teamTokens(p.team).some(tok => tTokens.includes(tok)));
+        if (prevIdx !== -1) trend = (prevIdx + 1) - powerRank; // positive = moved up
+      }
+      return Object.assign({}, t, { powerRank, trend });
     });
   }
 
@@ -185,7 +259,14 @@
   }
 
   async function saveStandings(teams, rawText, statusEl) {
-    const payload = { updatedAt: new Date().toISOString(), rawText: rawText || '', teams: teams };
+    // Power rank + trend computed against whatever was the PREVIOUS save
+    // (not re-fetched -- standingsData/loaded already holds it from
+    // whatever loaded this Coach Tools screen) before it gets overwritten
+    // below, so the read-only tab can just read t.powerRank/t.trend
+    // straight off each saved team.
+    const previousTeams = loaded && standingsData && Array.isArray(standingsData.teams) ? standingsData.teams : null;
+    const rankedTeams = computePowerRanks(teams, previousTeams);
+    const payload = { updatedAt: new Date().toISOString(), rawText: rawText || '', teams: rankedTeams };
     if (statusEl) statusEl.textContent = 'Saving…';
     try {
       const url = await window.firebaseAuthed(STANDINGS_URL);
@@ -204,6 +285,21 @@
     }
   }
 
+  // Nathan: "Show the power rank number next to them and whether they went
+  // up or down since the last week." trend/powerRank are computed once at
+  // save time (see saveStandings/computePowerRanks) and persisted on each
+  // team -- this just renders whatever's there. Falls back to the live
+  // sort position (no trend arrow) for the Coach Tools paste box's own
+  // preview, which renders straight from the just-parsed teams before
+  // Save has run computePowerRanks on them yet.
+  function powerRankCellHtml(t, fallbackRank) {
+    const rank = t.powerRank != null ? t.powerRank : fallbackRank;
+    if (t.trend == null) return `${rank}`;
+    if (t.trend === 0) return `${rank} <span class="standingsTrend standingsTrendSame">–</span>`;
+    const up = t.trend > 0;
+    return `${rank} <span class="standingsTrend ${up ? 'standingsTrendUp' : 'standingsTrendDown'}">${up ? '▲' : '▼'}${Math.abs(t.trend)}</span>`;
+  }
+
   function renderTable(container, data, games) {
     if (!container) return;
     if (!data || !Array.isArray(data.teams) || !data.teams.length) {
@@ -217,19 +313,20 @@
     let html = '';
     if (updated) html += `<div class="lbSub" style="text-align:center;margin-bottom:10px;">Last updated ${escapeHtml(updated)}</div>`;
     html += '<div class="standingsTableWrap"><table class="standingsTable"><thead><tr>' +
-      '<th>#</th><th>Team</th><th>Record</th><th>PF</th><th>PA</th><th>Diff</th></tr></thead><tbody>';
+      '<th>Power</th><th>Team</th><th>Record</th><th>Win%</th><th>Diff</th></tr></thead><tbody>';
     ordered.forEach((t, i) => {
-      const diff = t.pf - t.pa;
+      const diff = teamDiff(t);
       const diffStr = (diff > 0 ? '+' : '') + diff;
+      const pctStr = (winPct(t) * 100).toFixed(1) + '%';
       const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
       const nameCell = matchedGame
         ? `<button type="button" class="standingsTeamLink" data-open-opponent="${escapeHtml(matchedGame.id)}">${escapeHtml(t.team)} ›</button>`
         : escapeHtml(t.team);
       html += `<tr class="${isBengalsRow(t) ? 'standingsRowUs' : ''}">` +
-        `<td>${i + 1}</td>` +
+        `<td class="standingsPowerCell">${powerRankCellHtml(t, i + 1)}</td>` +
         `<td>${nameCell}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +
         `<td>${escapeHtml(recordStr(t))}</td>` +
-        `<td>${t.pf}</td><td>${t.pa}</td><td>${diffStr}</td></tr>`;
+        `<td>${pctStr}</td><td>${diffStr}</td></tr>`;
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
@@ -241,13 +338,12 @@
   }
 
   function opponentPageHtml(game, teamRow) {
-    const diff = teamRow ? teamRow.pf - teamRow.pa : null;
-    const diffStr = diff != null ? (diff > 0 ? '+' : '') + diff : '';
+    const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
     const hasFootage = !!game.opponentFilmUrl;
     let html = `<div class="lbHeroHeader">
         <div class="lbHeroTrophy">🏈</div>
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
-        ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; PF ${teamRow.pf} / PA ${teamRow.pa} (${escapeHtml(diffStr)})</div>` : ''}
+        ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
     if (hasFootage) {
       html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
@@ -312,7 +408,7 @@
     if (!wrap) return;
     const data = await loadStandings();
     wrap.innerHTML =
-      '<textarea id="standingsPasteBox" placeholder="Paste the standings table here -- Team, Record, PF, PA columns" style="width:100%;min-height:220px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:monospace;white-space:pre;margin-bottom:8px;">' +
+      '<textarea id="standingsPasteBox" placeholder="Paste the standings table here -- Team, Record, and either PF/PA or Win%/Diff columns" style="width:100%;min-height:220px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:monospace;white-space:pre;margin-bottom:8px;">' +
       escapeHtml((data && data.rawText) || '') +
       '</textarea>' +
       '<button type="button" class="navBtn" id="standingsSaveBtn" style="display:block;width:100%;">💾 Save Standings</button>' +
@@ -325,14 +421,18 @@
       const statusEl = document.getElementById('standingsSaveStatus');
       const { teams, warnings } = parseStandingsText(text);
       if (!teams.length) {
-        statusEl.textContent = "Nothing readable in there -- check the paste (Team, Record, PF, PA columns) and try again.";
+        statusEl.textContent = "Nothing readable in there -- check the paste (Team, Record, and either PF/PA or Win%/Diff columns) and try again.";
         return;
       }
       const result = await saveStandings(teams, text, statusEl);
       if (result.ok) {
         statusEl.textContent = `Saved -- ${teams.length} team${teams.length === 1 ? '' : 's'} now showing on the Standings tab.` +
           (warnings.length ? ` (${warnings.length} line${warnings.length === 1 ? '' : 's'} skipped -- ${warnings[0]})` : '');
-        renderTable(previewWrap, { teams: teams, updatedAt: new Date().toISOString() });
+        // standingsData now holds the just-saved payload, powerRank/trend
+        // already computed against last week's snapshot -- render that
+        // (not the raw un-ranked `teams`) so the preview matches exactly
+        // what the read-only Standings tab will show.
+        renderTable(previewWrap, standingsData);
       }
     });
   };
