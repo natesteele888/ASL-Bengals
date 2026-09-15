@@ -746,10 +746,13 @@ const SPLIT_TOUCH_ID = 31;
 // shows is randomized the same way Motion picks between its two cards, to
 // keep the defense from pattern-reading a fixed sign.
 const PASS_SIGNAL_IDS = [28, 29, 30];
-// See buildSplitSignalSequence's own comment for the actual mechanic --
-// this is the SAME card QB Sneak's own standalone play entry uses as its
-// signal (signalCardId: 27), reused here as the trailing modifier any
-// OTHER Split play call can end with.
+// QB Sneak's own signal card (matches its signalCardId: 27) -- see
+// buildSignalSequence's qb_sneak special case below. Nathan: "any play can
+// be called such as Split Right Inside Zone Left QB Sneak" -- that's a real
+// coaching technique (call a normal-looking play, then flash QB Sneak last
+// so only the offense knows to disregard it), but it's not something the
+// app needs its own toggle for -- a coach just pulls up the standalone QB
+// Sneak card at the end of whatever else was called.
 const QB_SNEAK_SIGNAL_ID = 27;
 
 // The three named audibles (Houston/Seattle/Florida) a coach can call at
@@ -798,7 +801,7 @@ function randomFingerId(side, exclude) {
 // passOn is a plain boolean now -- Nathan: "it's just any of those signals
 // means it is pass", so which of Pass 1/2/3 actually shows is randomized,
 // same idea as MOTION_SIGNAL_IDS below, not a coach-facing choice.
-function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbSneakOn) {
+function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
   const splitFingerId = randomFingerId(splitSide);
   // Avoid showing the literal same card image twice in a row for the two
   // direction cards (both now the same side) -- same dedup approach Wing's
@@ -824,16 +827,6 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbS
     const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
     signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
   }
-  // Nathan: "The QB Sneak signal #27 is added at the end of any play call
-  // out of Split Formation... It can be added to the end of any Split
-  // Formation play call." A coach signals whatever split play/route call
-  // is showing (the defense sees a normal call), then flashes this card
-  // last -- secretly telling the OFFENSE to actually run QB Sneak instead
-  // of whatever was just called. Deliberately not mutually exclusive with
-  // Pass above (both can show; the sneak override still wins either way).
-  if (qbSneakOn) {
-    signals.push({ src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' });
-  }
   return signals;
 }
 
@@ -841,9 +834,9 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbS
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, qbSneakOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn) {
   if (formation === 'split') {
-    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, qbSneakOn);
+    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
   }
   // QB Sneak's own card is Split formation only (see buildSplitSignalSequence's
   // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
@@ -1889,6 +1882,14 @@ function buildCard(combo) {
   const inner = document.createElement('div');
   inner.className = 'card-inner';
 
+  // QB Sneak is always Split, never has a real direction (Nathan: "There is
+  // no Left or Right direction its just up the middle"), and its diagram
+  // doesn't move for Motion -- it only lives on the Wing/Shotgun rendering
+  // pipeline as an implementation detail (see noSplit below). Hides the
+  // Shotgun/Split, Dir L/R, and Motion controls further down so the card
+  // doesn't show toggles that don't actually do anything for this play.
+  const isQbSneak = combo.playKey === 'qb_sneak';
+
   let wingSide = 'Left';
   let direction = 'Left';
   // Split formation -- a second, independent formation alongside Shotgun
@@ -1909,14 +1910,6 @@ function buildCard(combo) {
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
-  // Nathan: "The QB Sneak signal #27 is added at the end of any play call
-  // out of Split Formation... QB walks out to the right side to tell his
-  // receivers the routes and as he walks back to the other side, he gets
-  // under center, taps the center and its a quick snap and push up the
-  // middle." A trailing modifier on top of whatever Split play/route is
-  // showing (see buildSplitSignalSequence) -- see also the standalone
-  // "QB Sneak" play itself for what actually happens on the field.
-  let qbSneakOn = false;
   // Which of Seattle/Houston/Florida is called to each SIDE of the play --
   // not a wide-receiver-vs-inside-receiver choice. The split side's two
   // receivers (wide + flex) both run whatever's called to their side;
@@ -1997,11 +1990,16 @@ function buildCard(combo) {
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
-  // Pop Pass has no Split formation data at all (same reason edit-plays.js
-  // hides its own Split button -- see updateSplitButtonAvailability there).
-  // `formation` already defaults to 'shotgun' above and never changes for a
-  // noSplit combo, so hiding the button is the only step needed here.
-  if (combo.noSplit) {
+  if (isQbSneak) {
+    // Not just "no Split option" (below) -- Shotgun isn't right either, so
+    // hide the whole Shotgun/Split toggle rather than leave a single
+    // Shotgun pill implying that's the formation.
+    formationToggle.style.display = 'none';
+  } else if (combo.noSplit) {
+    // Pop Pass has no Split formation data at all (same reason edit-plays.js
+    // hides its own Split button -- see updateSplitButtonAvailability there).
+    // `formation` already defaults to 'shotgun' above and never changes for a
+    // noSplit combo, so hiding the button is the only step needed here.
     const splitBtn = formationToggle.querySelector('[data-value="split"]');
     if (splitBtn) splitBtn.style.display = 'none';
   }
@@ -2025,12 +2023,6 @@ function buildCard(combo) {
     onComboChanged();
   });
   formationRow.appendChild(passSwitch);
-  const qbSneakSwitch = buildSwitchToggle('QB Sneak', qbSneakOn, (v) => {
-    if (isPlayingRef.value) return;
-    qbSneakOn = v;
-    onComboChanged();
-  });
-  formationRow.appendChild(qbSneakSwitch);
   toggleRow.appendChild(formationRow);
 
   const basicsRow = document.createElement('div');
@@ -2047,6 +2039,7 @@ function buildCard(combo) {
     { value: 'Right', label: 'Dir R' },
   ], direction, (v) => { if (isPlayingRef.value) return; direction = v; onComboChanged(); });
   basicsRow.appendChild(dirToggle);
+  if (isQbSneak) dirToggle.style.display = 'none';
 
   toggleRow.appendChild(basicsRow);
 
@@ -2144,7 +2137,7 @@ function buildCard(combo) {
     basicsRow.style.display = isSplit ? 'none' : '';
     splitSideToggle.style.display = isSplit ? '' : 'none';
     passSwitch.style.display = isSplit ? '' : 'none';
-    motionToggle.style.display = isSplit ? 'none' : '';
+    motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
     rightCallWrap.style.display = isSplit ? '' : 'none';
@@ -2259,7 +2252,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, qbSneakOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -2393,7 +2386,6 @@ function buildCard(combo) {
       parts.push(combo.label);
       parts.push(splitSide);
       if (passOn) parts.push('Pass');
-      if (qbSneakOn) parts.push('QB Sneak');
     } else {
       // Same order as the actual signal call: Wing side, then Motion (right
       // after the wing spot is set), then In/Out if this play has it, then
