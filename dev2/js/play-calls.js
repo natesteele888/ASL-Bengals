@@ -1784,13 +1784,8 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     // ease toward the carrier's LIVE position every frame (never a stale
     // snapshot target) -- the carrier is already moving along his own path
     // by this point, so tweening to a fixed captured point goes stale and
-    // causes a visible jump once tracking begins. delayedSnapBall plays
-    // (QB Sneak) skipped the presnap centerPos->qbPos tween above, so the
-    // ball's real first appearance is the snap itself -- ease it in from
-    // the center (where it's actually hidden/revealed, see delayedSnapBall
-    // above), not from the QB's now-irrelevant original backfield spot.
-    let cx = (playType && playType.delayedSnapBall) ? centerPos.x : qbPos.x;
-    let cy = (playType && playType.delayedSnapBall) ? centerPos.y : qbPos.y;
+    // causes a visible jump once tracking begins.
+    let cx = qbPos.x, cy = qbPos.y;
     let catchingUp = true;
     let easing = true;
     let tracking = false;
@@ -1842,7 +1837,21 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     }
 
     await wait(initialDelay);
-    if (playType && playType.delayedSnapBall) { ball.style.opacity = '1'; }
+    if (playType && playType.delayedSnapBall) {
+      // Nathan: "the ball shouldn't be hiked. just go forward with QB and
+      // Center after QB does his pre-snap walk over" -- no visible center-
+      // to-QB flight at all here (unlike every other play, which DOES show
+      // that hike/snap motion via the catchUpFrame ease below). Snap the
+      // ball straight onto the carrier's current spot and skip the ease --
+      // it's just already in his hands the instant he squares up to dive.
+      cx = Number(carrier.getAttribute('cx'));
+      cy = Number(carrier.getAttribute('cy')) + OFFY;
+      ball.setAttribute('cx', cx);
+      ball.setAttribute('cy', cy);
+      ball.style.opacity = '1';
+      catchingUp = false;
+      easing = false;
+    }
     tracking = true;
     catchUpFrame();
     await wait(animMs);
