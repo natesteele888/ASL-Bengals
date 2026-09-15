@@ -864,7 +864,14 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
   } else {
     signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
   }
-  signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
+  // Nathan: "There is no direction for Pop Pass, the 4th signal is the Pass
+  // 2 signal" -- unlike every other play, Pop Pass never calls a direction
+  // finger card at all; Pop Pass 2's own modifier below takes that 4th
+  // slot instead, and plain Pop Pass (no variant) just ends after the play
+  // card, 3 signals total.
+  if (playKey !== 'pop_pass') {
+    signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
+  }
   // Boot and Counter are both modifiers tacked on at the very end, after
   // direction is set -- and mutually exclusive (see updateBootAvailability/
   // updateCounterAvailability above), so at most one of these ever fires.
