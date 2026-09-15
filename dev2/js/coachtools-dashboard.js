@@ -538,6 +538,7 @@
       </div>
       <button class="navBtn secondary adminBackBtn" id="coachDashBackBtn" style="display:none;">‹ Back to Dashboard</button>
       <div class="adminPanel" data-panel="activity" style="display:none;">
+        ${yesterdayActivityHtml(standardResults, timedResults, pcqResults, sessions)}
         <div class="lbSectionHeader">📈 Team Snapshot</div>
         <div class="adminStatGrid">
           ${statCard(usageRatePct !== null ? usageRatePct + '%' : '—', 'Usage Rate')}
@@ -662,18 +663,18 @@
   };
 
   // ---------------------------------------------------------------------------
-  // Daily coach digest -- Nathan: "Do a daily pop up notification to the
-  // coaches on how the team is doing with the app and top performers from
-  // the previous day." This app has no backend/scheduled push (nothing fires
-  // on its own at a fixed time) -- so instead of a literal push, this fires
-  // the first time an approved coach opens the app on a NEW calendar day,
-  // same trigger-point pattern as player-identity.js's other post-session
-  // "maybeShowXXX" checks (maybeShowCancellationPanel, maybeNotifyNewDroneClips,
-  // etc.) -- see the call added there. Once-per-real-day gating tracked in
-  // localStorage, same spirit as touchLastSeen's streak math -- this is a
-  // per-device "have I already seen today's digest" flag, not real team
-  // data worth syncing to the cloud.
-  const DIGEST_SHOWN_KEY = 'aslBengalsCoachDigestShown';
+  // Yesterday's activity -- originally a daily pop-up (Nathan: "Do a daily
+  // pop up notification to the coaches on how the team is doing... top
+  // performers from the previous day"). Moved into the dashboard itself
+  // (Nathan, in-season: this and the app-features intro were reading as
+  // "who's been on, or something pointless" stacked on login right when
+  // what a coach actually needs on open is the play-call callout instead --
+  // see js/whats-new.js's maybeAutoShowWhatsNew, which took over that
+  // trigger point). Still genuinely useful, just as a section a coach can
+  // check on their own time rather than a popup blocking the app -- lives
+  // at the top of the Player Activity & Highlights panel below, computed
+  // from the exact same yesterday-only slice of the data this dashboard
+  // already fetches for its own 7-day view (no extra network round trip).
   function isYesterday(iso, now) {
     if (!iso) return false;
     const d = new Date(iso);
@@ -682,89 +683,58 @@
     y.setDate(y.getDate() - 1);
     return d.toDateString() === y.toDateString();
   }
-  window.maybeShowCoachDailyDigest = async function () {
-    try {
-      if (!window.isApprovedCoachProfile || !window.isApprovedCoachProfile()) return;
-      const overlay = document.getElementById('coachDigestOverlay');
-      const headline = document.getElementById('coachDigestHeadline');
-      const body = document.getElementById('coachDigestBody');
-      if (!overlay || !headline || !body) return;
-      let shown = null;
-      try { shown = localStorage.getItem(DIGEST_SHOWN_KEY); } catch (e) { /* ignore */ }
-      const today = new Date().toDateString();
-      if (shown === today) return;
-      const now = new Date();
-      const [standardResults, timedResults, pcqResults, sessions] = await Promise.all([
-        cloudFetch('analytics/standardResults'), cloudFetch('analytics/timedResults'),
-        cloudFetch('analytics/pcqResults'), cloudFetch('analytics/sessions'),
-      ]);
-      const quizY = (standardResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
-      const timedY = (timedResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
-      const pcqY = (pcqResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
-      const sessionsY = (sessions || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.startedAt, now));
+  function yesterdayActivityHtml(standardResults, timedResults, pcqResults, sessions) {
+    const now = new Date();
+    const quizY = (standardResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
+    const timedY = (timedResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
+    const pcqY = (pcqResults || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.date, now));
+    const sessionsY = (sessions || []).filter(r => r && r.name && !isCoachName(r.name) && isYesterday(r.startedAt, now));
 
-      const totalCompletions = quizY.length + timedY.length + pcqY.length;
-      const activeNames = new Set();
-      quizY.concat(timedY, pcqY, sessionsY).forEach(r => activeNames.add(norm(r.name)));
+    const totalCompletions = quizY.length + timedY.length + pcqY.length;
+    const activeNames = new Set();
+    quizY.concat(timedY, pcqY, sessionsY).forEach(r => activeNames.add(norm(r.name)));
 
-      // Most active: most total completions across all three games yesterday.
-      const countByName = {};
-      quizY.concat(timedY, pcqY).forEach(r => {
-        const k = norm(r.name);
-        countByName[k] = countByName[k] || { name: r.name, count: 0 };
-        countByName[k].count++;
-      });
-      const mostActive = Object.values(countByName).sort((a, b) => b.count - a.count)[0] || null;
+    // Most active: most total completions across all three games yesterday.
+    const countByName = {};
+    quizY.concat(timedY, pcqY).forEach(r => {
+      const k = norm(r.name);
+      countByName[k] = countByName[k] || { name: r.name, count: 0 };
+      countByName[k].count++;
+    });
+    const mostActive = Object.values(countByName).sort((a, b) => b.count - a.count)[0] || null;
 
-      // Best score: highest Quiz Scores run, else highest Play Calls Quiz
-      // run, whichever's better as a percentage -- Timed Quiz's "best"
-      // (fastest + fewest mistakes) isn't a comparable percentage, so it
-      // gets its own separate callout below instead.
-      let bestScore = null;
-      quizY.forEach(r => {
-        if (r.total == null) return;
-        const pct = r.score / r.total;
-        if (!bestScore || pct > bestScore.pct) bestScore = { name: r.name, text: `${r.score}/${r.total} on Quiz Scores`, pct };
-      });
-      pcqY.forEach(r => {
-        if (!r.maxScore) return;
-        const pct = r.score / r.maxScore;
-        if (!bestScore || pct > bestScore.pct) bestScore = { name: r.name, text: `${r.score}/${r.maxScore} on Play Calls Quiz`, pct };
-      });
-      let fastestTimed = null;
-      timedY.forEach(r => {
-        if (r.timeMs == null) return;
-        if (!fastestTimed || r.timeMs < fastestTimed.timeMs) fastestTimed = { name: r.name, timeMs: r.timeMs };
-      });
+    // Best score: highest Quiz Scores run, else highest Play Calls Quiz
+    // run, whichever's better as a percentage -- Timed Quiz's "best"
+    // (fastest + fewest mistakes) isn't a comparable percentage, so it
+    // gets its own separate callout below instead.
+    let bestScore = null;
+    quizY.forEach(r => {
+      if (r.total == null) return;
+      const pct = r.score / r.total;
+      if (!bestScore || pct > bestScore.pct) bestScore = { name: r.name, text: `${r.score}/${r.total} on Quiz Scores`, pct };
+    });
+    pcqY.forEach(r => {
+      if (!r.maxScore) return;
+      const pct = r.score / r.maxScore;
+      if (!bestScore || pct > bestScore.pct) bestScore = { name: r.name, text: `${r.score}/${r.maxScore} on Play Calls Quiz`, pct };
+    });
+    let fastestTimed = null;
+    timedY.forEach(r => {
+      if (r.timeMs == null) return;
+      if (!fastestTimed || r.timeMs < fastestTimed.timeMs) fastestTimed = { name: r.name, timeMs: r.timeMs };
+    });
 
-      headline.textContent = "Yesterday's App Activity";
-      if (!totalCompletions && !activeNames.size) {
-        body.innerHTML = '<div class="lbEmpty">No app activity yesterday -- might be worth a reminder to the team!</div>';
-      } else {
-        const highlights = [];
-        if (mostActive) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">🏅</span><span class="spotlightText"><b>${escapeHtml(mostActive.name)}</b> was most active -- ${mostActive.count} ${mostActive.count === 1 ? 'quiz' : 'quizzes'}!</span></div>`);
-        if (bestScore) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">🎯</span><span class="spotlightText"><b>${escapeHtml(bestScore.name)}</b> scored ${bestScore.text}!</span></div>`);
-        if (fastestTimed) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">⏱️</span><span class="spotlightText"><b>${escapeHtml(fastestTimed.name)}</b> posted the fastest Timed Quiz -- ${formatClock(fastestTimed.timeMs)}!</span></div>`);
-        body.innerHTML = `<div class="adminStatGrid">${statCard(activeNames.size, 'Kids Active')}${statCard(totalCompletions, 'Quizzes Completed')}</div>` +
-          (highlights.length ? `<div class="lbSpotlightWrap" style="margin-top:2px;">${highlights.join('')}</div>` : '');
-      }
-      overlay.classList.add('show');
-      try { localStorage.setItem(DIGEST_SHOWN_KEY, today); } catch (e) { /* ignore */ }
-    } catch (e) { /* best-effort -- a failed digest fetch shouldn't block anything else */ }
-  };
-  // This script loads dynamically well after the static index.html markup
-  // (including #coachDigestOverlay) has already parsed -- same reasoning as
-  // every other overlay's close button in this app (e.g. study-quiz.js's
-  // myStatsCloseBtn), wired directly here rather than behind a
-  // DOMContentLoaded listener that would never fire this late.
-  function closeCoachDigest() {
-    const overlay = document.getElementById('coachDigestOverlay');
-    if (overlay) overlay.classList.remove('show');
+    if (!totalCompletions && !activeNames.size) {
+      return `<div class="lbSectionHeader">🌅 Yesterday's Activity</div><div class="lbEmpty">No app activity yesterday -- might be worth a reminder to the team!</div>`;
+    }
+    const highlights = [];
+    if (mostActive) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">🏅</span><span class="spotlightText"><b>${escapeHtml(mostActive.name)}</b> was most active -- ${mostActive.count} ${mostActive.count === 1 ? 'quiz' : 'quizzes'}!</span></div>`);
+    if (bestScore) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">🎯</span><span class="spotlightText"><b>${escapeHtml(bestScore.name)}</b> scored ${bestScore.text}!</span></div>`);
+    if (fastestTimed) highlights.push(`<div class="spotlightRow"><span class="spotlightIcon">⏱️</span><span class="spotlightText"><b>${escapeHtml(fastestTimed.name)}</b> posted the fastest Timed Quiz -- ${formatClock(fastestTimed.timeMs)}!</span></div>`);
+    return `<div class="lbSectionHeader">🌅 Yesterday's Activity</div>` +
+      `<div class="adminStatGrid">${statCard(activeNames.size, 'Kids Active')}${statCard(totalCompletions, 'Quizzes Completed')}</div>` +
+      (highlights.length ? `<div class="lbSpotlightWrap" style="margin-top:2px;">${highlights.join('')}</div>` : '');
   }
-  const coachDigestCloseBtn = document.getElementById('coachDigestCloseBtn');
-  if (coachDigestCloseBtn) coachDigestCloseBtn.addEventListener('click', closeCoachDigest);
-  const coachDigestOkBtn = document.getElementById('coachDigestOkBtn');
-  if (coachDigestOkBtn) coachDigestOkBtn.addEventListener('click', closeCoachDigest);
 
   // ---------------------------------------------------------------------------
   // Parent digest -- Nathan: "Parents should get notifications of how many

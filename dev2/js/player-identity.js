@@ -1319,12 +1319,18 @@
       // hype (also enforced via z-index -- see css/styles.css). See
       // js/gameday.js's maybeShowGameDaySplash.
       if (typeof window.maybeShowGameDaySplash === 'function') window.maybeShowGameDaySplash();
-      // Nathan: "Do a daily pop up notification to the coaches on how the
-      // team is doing with the app and top performers from the previous
-      // day." Same trigger point as the other post-session checks here --
-      // gates itself to an approved coach + once-per-real-day internally.
-      // See js/coachtools-dashboard.js's maybeShowCoachDailyDigest.
-      if (typeof window.maybeShowCoachDailyDigest === 'function') window.maybeShowCoachDailyDigest();
+      // Nathan (in-season): "hey this is what is new this week for play
+      // calls, pay attention." Same trigger point as the other post-session
+      // checks here -- gates itself internally (only fires when there's a
+      // real unseen entry in the plays feed). Replaces two earlier popups
+      // that used to fire here (the coach's daily activity digest -- now a
+      // permanent section in Coach Tools > Dashboard instead, see
+      // js/coachtools-dashboard.js's yesterdayActivityHtml -- and a one-time
+      // app-features/gamification tour) once Nathan flagged both as reading
+      // like "who's been on, or something pointless" stacked on login right
+      // when a coach needs the play-call callout instead. See
+      // js/whats-new.js's maybeAutoShowWhatsNew.
+      if (typeof window.maybeAutoShowWhatsNew === 'function') window.maybeAutoShowWhatsNew();
       // Nathan: "Parents should get notifications of how many times their
       // player signed in and used the app... pop up notifications of when
       // the last time their player signed in." Same trigger point as the
@@ -1338,17 +1344,6 @@
       // sessions, only shows the full intro once per player). See
       // js/study-quiz.js's maybeShowBadgesIntro.
       if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
-      // Nathan: "We would also need a callout to speak to the new features"
-      // -- a one-time, one-screen tour of this round's additions (weekly
-      // leaderboard, most-improved, streak nudge, playbook badges, the
-      // rotating banner itself). Deliberately its OWN overlay rather than
-      // reusing js/whats-new.js -- Nathan already said of that feature
-      // "needs to be just new plays," so a second, separate mechanism
-      // handles "new app features" instead. Gates itself internally
-      // (skips parent sessions, shows once per device via localStorage,
-      // same pattern as maybeShowBadgesIntro above). See
-      // js/study-quiz.js's maybeShowNewFeaturesIntro.
-      if (typeof window.maybeShowNewFeaturesIntro === 'function') window.maybeShowNewFeaturesIntro();
       // Nathan: "If a player logs in and doesn't use the app to it's
       // fullest, we should have a pop-up wizard saying something like 'New
       // to the app? Here's what to do.'" Same trigger point as the other

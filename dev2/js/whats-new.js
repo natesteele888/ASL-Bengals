@@ -150,9 +150,13 @@
     body.innerHTML = sorted.length
       ? sorted.map(e => `<div class="lbRow">
           <div class="lbRank" style="font-size:10px;width:auto;background:transparent;color:var(--muted)">${fmtWhen(e.addedAt)}</div>
-          <div class="lbNameTip"><div class="lbNameTipTitle wnTitle">🏈 ${escapeHtml(e.label || e.key || 'New play')}</div>${e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''}</div>
+          <div class="lbNameTip"><div class="lbNameTipTitle wnTitle">🏈 ${escapeHtml(e.label || e.key || 'Play update')}</div>${
+            e.note
+              ? `<div class="lbTip">${escapeHtml(e.note)}${e.addedBy ? ` — ${escapeHtml(e.addedBy)}` : ''}</div>`
+              : e.addedBy ? `<div class="lbTip">Added by ${escapeHtml(e.addedBy)}</div>` : ''
+          }</div>
         </div>`).join('')
-      : '<div class="lbEmpty">No new plays added yet -- check back later!</div>';
+      : '<div class="lbEmpty">Nothing new in the playbook yet -- check back later!</div>';
 
     // Mark everything as seen the moment this is opened -- matches how the
     // rest of the app's "seen" flags behave (e.g. the Play Calls tutorial).
@@ -162,6 +166,24 @@
     const countEl = document.getElementById('whatsNewCount');
     if (dot) dot.style.display = 'none';
     if (countEl) countEl.style.display = 'none';
+  };
+
+  // Nathan (in-season): "hey this is what is new this week for play calls,
+  // pay attention" -- during the season this needs to actually surface on
+  // open, not sit behind a profile-menu tap nobody thinks to check. Reuses
+  // this exact feed and its "seen" tracking (opening this auto-popup marks
+  // the same lastSeen the manual panel above uses, and vice versa) --
+  // still plays-only, still nothing else folded in. Called from
+  // player-identity.js's gate() in place of the old app-features intro.
+  window.maybeAutoShowWhatsNew = async function () {
+    try {
+      const entries = await loadEntries();
+      if (!entries || !entries.length) return;
+      const lastSeen = getLastSeen();
+      const unseen = entries.some(e => e.addedAt && e.addedAt > lastSeen);
+      if (!unseen) return;
+      window.showWhatsNew();
+    } catch (e) { /* best-effort -- a failed check shouldn't block login */ }
   };
 
   const btn = document.getElementById('whatsNewMenuBtn');

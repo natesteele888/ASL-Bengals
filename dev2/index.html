@@ -1560,25 +1560,6 @@
   </div>
 </div>
 
-<!-- Nathan: "We would also need a callout to speak to the new features" --
-     a one-time, one-screen tour fired by js/study-quiz.js's
-     maybeShowNewFeaturesIntro() the first time this round of gamification
-     features exists for a signed-in session (once ever per device). A
-     SEPARATE mechanism from js/whats-new.js on purpose -- Nathan already
-     said that feature "needs to be just new plays." -->
-<div class="lbOverlay" id="newFeaturesOverlay">
-  <div class="lbCard lbCardCool">
-    <button class="lbXClose" id="newFeaturesCloseBtn" aria-label="Close">&times;</button>
-    <div class="lbHeroHeader rankUpHeroHeader">
-      <div class="lbHeroTrophy">🆕</div>
-      <h3>What's New</h3>
-      <div class="lbSub">A few new ways to compete and keep your streak going</div>
-    </div>
-    <div id="newFeaturesBody" class="nfList"></div>
-    <button class="navBtn" id="newFeaturesOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it! 🚀</button>
-  </div>
-</div>
-
 <!-- Nathan: "If a player logs in and doesn't use the app to it's fullest,
      we should have a pop-up wizard saying something like 'New to the app?
      Here's what to do.'" Fired by js/study-quiz.js's
@@ -1588,8 +1569,8 @@
      closest real signal this app has for "hasn't really used it yet,"
      same rank lookup the old engagement-carousel slides used to use for
      their "you're not on the leaderboard yet" message. Shows once ever per
-     device (localStorage), same pattern as badgesIntroOverlay/
-     newFeaturesOverlay above. Each row is clickable and jumps straight to
+     device (localStorage), same pattern as badgesIntroOverlay above. Each
+     row is clickable and jumps straight to
      that step (closing this overlay first) instead of just describing it. -->
 <div class="lbOverlay" id="gettingStartedOverlay">
   <div class="lbCard lbCardCool">
@@ -1626,26 +1607,6 @@
   </div>
 </div>
 
-<!-- Nathan: "Do a daily pop up notification to the coaches on how the team
-     is doing with the app and top performers from the previous day." Fired
-     by js/coachtools-dashboard.js's maybeShowCoachDailyDigest() the first
-     time an approved coach opens the app on a new calendar day -- gates
-     itself internally (isApprovedCoachProfile + a once-per-day localStorage
-     flag), see that function's comment for why this fires on open rather
-     than a true scheduled push (no backend to fire one from). -->
-<div class="lbOverlay" id="coachDigestOverlay">
-  <div class="lbCard lbCardCool">
-    <button class="lbXClose" id="coachDigestCloseBtn" aria-label="Close">&times;</button>
-    <div class="lbHeroHeader digestHeroHeader">
-      <div class="lbHeroTrophy">📋</div>
-      <h3 id="coachDigestHeadline">Yesterday's App Activity</h3>
-      <div class="lbSub">Coaches only</div>
-    </div>
-    <div id="coachDigestBody"></div>
-    <button class="navBtn" id="coachDigestOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it</button>
-  </div>
-</div>
-
 <!-- Nathan: "Parents should get notifications of how many times their
      player signed in and used the app... Give parents pop up notifications
      of when the last time their player signed in." Combined into one
@@ -1668,16 +1629,20 @@
 </div>
 
 <!-- Nathan: "within the whats new, it would be good to show new plays added
-     to the playbook." A play only shows up here once it's an actual new
-     PLAY (created via the Duplicate flow in Edit Plays, not a route tweak
-     to an existing one) and a coach has hit Save to Cloud -- see
-     pendingNewPlays/flushPendingNewPlaysToWhatsNew in edit-plays.js. Visible
-     to everyone (players included) -- this one's meant as a discovery feed
-     for the team, unlike This Week/Schedule/Coach Tools. -->
+     to the playbook" -- and later, in-season: "hey this is what is new this
+     week for play calls, pay attention." A brand-new play (via Duplicate in
+     Edit Plays) always logs here automatically; a coach can also flag a
+     real edit to an EXISTING play's routes (the note prompt on Save to
+     Cloud) -- see pendingNewPlays/flushPendingNewPlaysToWhatsNew and the
+     Save to Cloud handler in edit-plays.js. Visible to everyone (players
+     included) -- this one's meant as a discovery feed for the team, unlike
+     This Week/Schedule/Coach Tools. Auto-opens on login when there's
+     something unseen (js/whats-new.js's maybeAutoShowWhatsNew), on top of
+     still being reachable from the profile menu any time. -->
 <div class="lbOverlay" id="whatsNewOverlay">
   <div class="lbCard">
-    <h3>🆕 What's New</h3>
-    <div class="lbSub">New plays added to the playbook</div>
+    <h3>🆕 What's New in the Playbook</h3>
+    <div class="lbSub">New plays and play-call updates -- pay attention!</div>
     <div id="whatsNewBody"><div class="lbEmpty">Loading…</div></div>
     <button class="navBtn secondary lbCloseBtn" id="whatsNewCloseBtn">Close</button>
   </div>
@@ -2161,7 +2126,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260913d';
+  const BUILD_V = '20260914a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

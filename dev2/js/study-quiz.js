@@ -1798,7 +1798,7 @@ window.celebrateNewBadges = async function(){
   } catch(e){ /* best-effort -- badge celebration should never break the app */ }
 };
 // Called once a name/session is known (player-identity.js's gate() wrapper,
-// same hook point as refreshWhatsNewBadge/maybeShowCoachDailyDigest etc.).
+// same hook point as refreshWhatsNewBadge/maybeAutoShowWhatsNew etc.).
 window.maybeShowBadgesIntro = async function(){
   try {
     const session = window.PlayerIdentity ? window.PlayerIdentity.getSession() : null;
@@ -1825,63 +1825,6 @@ window.maybeShowBadgesIntro = async function(){
 };
 
 // ---------------------------------------------------------------------------
-// New-features intro (Nathan: "We would also need a callout to speak to the
-// new features") -- a one-time, one-screen tour covering everything added
-// in this round: the collapsed nav, the rotating banner itself, the weekly
-// leaderboard, Most Improved, the streak nudge, and the playbook-coverage
-// badges. Modeled on showBadgesIntro/maybeShowBadgesIntro just above (same
-// once-per-device localStorage gate, same lbCard/lbHeroHeader chrome) but
-// kept entirely separate from js/whats-new.js -- Nathan was explicit that
-// feature "needs to be just new plays," so a second app-feature-announcement
-// channel lives here instead of folding into it.
-// NEW_FEATURES_VERSION is a plain version tag, not a date -- bump it (and
-// the copy in newFeaturesListHtml) any time a new round of features ships
-// that's worth re-announcing; everyone sees the tour again exactly once.
-const NEW_FEATURES_VERSION = '2026-09-gamification-2';
-const NEW_FEATURES_SEEN_KEY = 'aslBengalsNewFeaturesSeen_' + NEW_FEATURES_VERSION;
-function newFeatureRowHtml(icon, title, desc){
-  return `<div class="nfRow">
-    <div class="nfIcon">${icon}</div>
-    <div class="nfText">
-      <div class="nfTitle">${title}</div>
-      <div class="nfDesc">${desc}</div>
-    </div>
-  </div>`;
-}
-function newFeaturesListHtml(){
-  return [
-    newFeatureRowHtml('🎡', 'New banner up top', "A colorful, rotating banner now sits right below the header -- tap any slide to jump straight to the leaderboard or this week's schedule."),
-    newFeatureRowHtml('📅', 'Weekly Leaderboard', "A leaderboard that resets every week now sits alongside the all-time board, so everyone gets a fresh shot."),
-    newFeatureRowHtml('📈', 'Most Improved', "Climbing the standings fast now gets you called out on the Leaderboard and in the banner up top."),
-    newFeatureRowHtml('🔥', "Don't break your streak", "Your login streak now shows up right in the rotating banner, with a nudge to come back tomorrow."),
-    newFeatureRowHtml('📖', 'Playbook badges', "New badges for knowing more of the playbook -- Quarter, Half, Most, and the Whole Playbook."),
-  ].join('');
-}
-// Called once a name/session is known (player-identity.js's gate() wrapper,
-// same hook point as maybeShowBadgesIntro just above). Parents get almost
-// none of this (Schedule is their whole app), so they're skipped entirely --
-// everyone else (players and coaches) sees the tour once per device.
-window.maybeShowNewFeaturesIntro = function(){
-  try {
-    if(window.isParentSession) return;
-    let alreadySeen = false;
-    try { alreadySeen = localStorage.getItem(NEW_FEATURES_SEEN_KEY) === '1'; } catch(e){ /* ignore */ }
-    if(alreadySeen) return;
-    const overlay = document.getElementById('newFeaturesOverlay');
-    const body = document.getElementById('newFeaturesBody');
-    if(!overlay || !body) return;
-    body.innerHTML = newFeaturesListHtml();
-    overlay.classList.add('show');
-    try { localStorage.setItem(NEW_FEATURES_SEEN_KEY, '1'); } catch(e){ /* ignore */ }
-    const closeAndClear = () => overlay.classList.remove('show');
-    const okBtn = document.getElementById('newFeaturesOkBtn');
-    const closeBtn = document.getElementById('newFeaturesCloseBtn');
-    if(okBtn) okBtn.onclick = closeAndClear;
-    if(closeBtn) closeBtn.onclick = closeAndClear;
-  } catch(e) { /* best-effort -- new-features awareness shouldn't block login */ }
-};
-
-// ---------------------------------------------------------------------------
 // "Getting Started" wizard (Nathan, 2026-09-01): "If a player logs in and
 // doesn't use the app to it's fullest, we should have a pop-up wizard...
 // Lead them through a course - learn the signals, then try the quiz. once
@@ -1890,7 +1833,7 @@ window.maybeShowNewFeaturesIntro = function(){
 // see the play signals. Then try the play quiz. the more you play, the
 // higher you climb on the leaderboard. Then put it all together with the
 // new 2 minute drill." Same trigger point/gating pattern as
-// maybeShowBadgesIntro/maybeShowNewFeaturesIntro just above (fired from
+// maybeShowBadgesIntro just above (fired from
 // player-identity.js's gate(), once ever per device) -- but only for
 // someone who's actually "not using the app to its fullest": no rank at
 // all on the combined leaderboard, i.e. they've never finished a single

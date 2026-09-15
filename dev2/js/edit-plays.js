@@ -491,34 +491,53 @@ const cloudStatusEl = document.getElementById('cloudStatus');
 const SPLIT_ROUTES_URL = `${FIREBASE_URL}/splitRouteEdits.json`;
 const WHATS_NEW_URL = `${FIREBASE_URL}/whatsNew.json`;
 
-// Appends whatever's queued in pendingNewPlays to the shared What's New log
-// (read-modify-write, same pattern as Drive Builder/Schedule's whole-array
-// PUT) -- fire-and-forget from the caller's point of view; a failure here
-// shouldn't block or roll back the play save that already succeeded, it
-// just means the feed doesn't mention it this time.
-async function flushPendingNewPlaysToWhatsNew() {
-  if (!pendingNewPlays.length) return;
-  const toLog = pendingNewPlays.slice();
-  pendingNewPlays = [];
+// Appends entries to the shared What's New log (read-modify-write, same
+// pattern as Drive Builder/Schedule's whole-array PUT) -- fire-and-forget
+// from the caller's point of view; a failure here shouldn't block or roll
+// back the play save that already succeeded, it just means the feed
+// doesn't mention it this time.
+async function logToWhatsNew(entries) {
+  if (!entries.length) return;
   try {
     const url = await window.firebaseAuthed(WHATS_NEW_URL);
     const existing = await fetch(url).then(r => r.ok ? r.json() : null);
     const list = Array.isArray(existing) ? existing : [];
-    const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
-    const now = new Date().toISOString();
-    toLog.forEach(p => {
-      list.push({
-        id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        key: p.key, label: p.label, addedAt: now, addedBy: (session && session.name) || null,
-      });
-    });
+    list.push(...entries);
     await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) });
   } catch (err) {
-    console.error('Could not log new play(s) to What\'s New:', err);
+    console.error('Could not log to What\'s New:', err);
   }
+}
+function whatsNewEntry(key, label, note) {
+  const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
+  return {
+    id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    key, label, note: note || null,
+    addedAt: new Date().toISOString(), addedBy: (session && session.name) || null,
+  };
 }
 
 saveCloudBtn.addEventListener('click', async () => {
+  // Brand-new plays (via Duplicate) always announce themselves -- no
+  // prompt needed, that's inherently news. A coach editing an EXISTING
+  // play's routes can ALSO flag it for the team, in-season Nathan: "hey
+  // this is what is new this week for play calls, pay attention" --
+  // skipped when this save is already a new-play save (that's covered
+  // above) or nothing's open to attribute a note to. Asked up front,
+  // before the save actually starts, so it isn't confused with the save
+  // itself failing/succeeding.
+  // pendingNewPlays itself isn't cleared until the save actually succeeds
+  // below -- it also drives the beforeunload warning (see the listener
+  // above this function), which needs to stay armed if this save fails.
+  const toLog = pendingNewPlays.map(p => whatsNewEntry(p.key, p.label, null));
+  if (!toLog.length) {
+    const playType = DATA.playTypes.find(p => p.key === playKey);
+    if (playType) {
+      const note = prompt(`Let the team know what changed on "${playType.label}"? Leave blank to save quietly.`, '');
+      if (note && note.trim()) toLog.push(whatsNewEntry(playType.key, playType.label, note.trim()));
+    }
+  }
+
   saveCloudBtn.textContent = 'Saving\u2026';
   const [playsUrl, splitUrl] = await Promise.all([
     window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`),
@@ -537,9 +556,10 @@ saveCloudBtn.addEventListener('click', async () => {
     }),
   ]).then(async ([r1, r2]) => {
     if (r1.ok && r2.ok) {
+      pendingNewPlays = [];
       saveCloudBtn.textContent = 'Saved!';
       cloudStatusEl.textContent = 'Showing the latest saved play edits.';
-      flushPendingNewPlaysToWhatsNew();
+      logToWhatsNew(toLog);
     } else {
       const failed = !r1.ok ? r1 : r2;
       const bodyText = await failed.text().catch(() => '');
