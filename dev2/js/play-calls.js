@@ -979,6 +979,51 @@ function alignment(formationId, side, opts) {
 // follow a new formation on their own; shifting them too would move them twice.
 const SHIFTABLE = ['points', 'points4x4'];
 
+// Per-alignment assignment overrides.
+//
+// Shifting a route by how far its owner moved keeps the SHAPE, which is the
+// right default and is provably free for the formation a play was authored
+// in. It is not the same as being right. Overload carries the back-side tight
+// end 801 units across the formation and hands him his old block, which lands
+// near the right defensive end rather than on him -- because Overload creates
+// a body the play was never authored for. An I-formation back running a
+// sweep shape from a spot 130 units deeper has the same problem.
+//
+// So: shift is the default, and a coach can overwrite any individual
+// assignment for a specific alignment. Stored on the play as
+//
+//   playType.assignments['wing+overload']['5'] = { points, points4x4, endType }
+//
+// keyed by alignmentKey (formation + modifiers) then by the path's owner --
+// `player` for a numbered man, `id` for a lineman. `pathIndex` picks which of
+// that owner's paths when he has more than one (a quarterback's fake and his
+// real carry); it defaults to the first.
+//
+// Absent overrides, this is the identity, so every play that has not been
+// reviewed still behaves exactly as before.
+function applyAssignmentOverrides(paths, playType, alignKey) {
+  const table = playType && playType.assignments && playType.assignments[alignKey];
+  if (!table || !paths) return paths;
+  const seen = {};
+  return paths.map(p => {
+    const owner = p.player != null ? String(p.player) : p.id;
+    if (!owner) return p;
+    const n = (seen[owner] = (seen[owner] === undefined ? 0 : seen[owner] + 1));
+    const ov = table[owner];
+    if (!ov) return p;
+    if ((ov.pathIndex || 0) !== n) return p;
+    const out = Object.assign({}, p);
+    if (ov.points) out.points = ov.points.map(pt => pt.slice());
+    if (ov.points4x4) out.points4x4 = ov.points4x4.map(pt => pt.slice());
+    if (ov.endType) out.endType = ov.endType;
+    if (ov.isBlocking !== undefined) out.isBlocking = ov.isBlocking;
+    // An override is authored AT the target alignment, so it must not then be
+    // shifted again. Marked so the caller can tell the two apart.
+    out.__overridden = true;
+    return out;
+  });
+}
+
 function shiftPathsToFormation(paths, fromAlign, toAlign) {
   if (!paths || fromAlign === toAlign) return paths;
   return paths.map(p => {
@@ -1030,8 +1075,13 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // spot changes, his route and his block follow, with no separate notion of
   // what Overload means anywhere downstream. Identical alignments make every
   // delta zero, so a plain Wing call is untouched.
+  // Shift first, then let any authored override win outright -- an override is
+  // drawn at the alignment it belongs to, so shifting it would move it twice.
+  const alignKey = window.Formations.alignmentKey(formationId, { overload: overloadOn });
   const variant = Object.assign({}, authoredVariant, {
-    paths: shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
+    paths: applyAssignmentOverrides(
+      shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
+      playType, alignKey),
   });
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
@@ -1425,6 +1475,12 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   stage._mainGroup = g;
   stage._circlesLayerRef = circlesLayer;
   stage._lastRenderedPaths = lastRenderedPaths;
+  // The path DATA actually drawn -- after the formation shift and any
+  // assignment override. _lastRenderedPaths holds render artifacts (elements,
+  // circles) rather than geometry, so anything that needs to know where an
+  // assignment finished needs this instead. Used by the assignment editor to
+  // place its handles on the real end points.
+  stage._resolvedPaths = variant.paths;
 }
 
 // ---- Render the Split formation's lineup, plus whichever of the play's

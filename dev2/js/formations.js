@@ -208,6 +208,33 @@
     return pos;
   }
 
+  // A stable name for an ALIGNMENT -- a formation plus any modifier that moves
+  // people. Assignment overrides are stored against this, not against the
+  // formation id, because Overload changes where players stand and therefore
+  // changes what their assignment should be, exactly as a different formation
+  // does. 'wing', 'wing+overload', 'iform', 'iform+overload'.
+  function alignmentKey(id, opts) {
+    var rid = resolveId(id) || id;
+    return (opts && opts.overload) ? rid + '+overload' : rid;
+  }
+
+  // Which of the eleven actually stand somewhere different between two
+  // alignments. This is the whole review list: a play's authored assignments
+  // are still correct for everyone who did not move, so those are not worth a
+  // coach's attention, and a screen that asked him to check all eleven would
+  // get skipped.
+  function movedSlots(fromId, fromOpts, toId, toOpts, side) {
+    var a = positions(fromId, side, fromOpts);
+    var b = positions(toId, side, toOpts);
+    if (!a || !b) return [];
+    var out = [];
+    Object.keys(b).forEach(function (k) {
+      if (!a[k]) { out.push(k); return; }
+      if (a[k][0] !== b[k][0] || a[k][1] !== b[k][1]) out.push(k);
+    });
+    return out;
+  }
+
   // Whether this formation can be overloaded at all -- the toggle should not
   // offer a call that would do nothing.
   function supportsOverload(id) {
@@ -333,6 +360,8 @@
     get: get,
     resolveId: resolveId,
     positions: positions,
+    alignmentKey: alignmentKey,
+    movedSlots: movedSlots,
     supportsOverload: supportsOverload,
     lineSlots: lineSlots,
     isLine: isLine,

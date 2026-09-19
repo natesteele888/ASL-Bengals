@@ -119,6 +119,7 @@
   <div class="steps">
     <button id="tab1" class="on">1&nbsp; Formation</button>
     <button id="tab2">2&nbsp; Plays</button>
+    <button id="tab3">3&nbsp; Assignments</button>
   </div>
   <div class="spacer"></div>
   <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
@@ -188,6 +189,45 @@
   </div>
 </div>
 
+<div id="step3" style="display:none">
+  <div class="gridhead">
+    <h2>Check who moved</h2><span class="who" id="whoFor3"></span>
+  </div>
+  <div class="gridsub" id="movedNote"></div>
+  <div class="wrap" style="padding:0">
+    <div class="fieldcard"><svg id="assignField"></svg></div>
+    <div class="panel">
+      <label class="lbl">Play</label>
+      <select id="playSel"></select>
+
+      <label class="lbl">Side</label>
+      <div class="seg" id="sideSeg3">
+        <button data-side="Left">Left</button>
+        <button data-side="Right" class="on">Right</button>
+      </div>
+
+      <label class="lbl">Overload</label>
+      <div class="seg" id="ovSeg">
+        <button data-ov="off" class="on">Off</button>
+        <button data-ov="on">On</button>
+      </div>
+
+      <div id="movedList"></div>
+
+      <button class="btn primary" id="saveAssignBtn">Save assignments</button>
+      <button class="btn" id="resetAssignBtn">Reset to auto</button>
+      <div class="status" id="assignStatus"></div>
+
+      <div class="hint">
+        <b>Drag the orange handle</b> to where this player's block or route
+        should actually finish. Only the players this formation <i>moved</i>
+        get one &mdash; everyone else still has the assignment the play was
+        drawn with.
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- DOM play-calls.js touches while loading. Not used by this page. -->
 <div id="stubs">
   <div id="playCallsGrid"></div><div id="playCallsCloudStatus"></div>
@@ -209,6 +249,7 @@
 <script src="js/formations.js"></script>
 <script src="js/formation-builder.js"></script>
 <script src="js/play-calls.js"></script>
+<script src="js/assignment-editor.js"></script>
 <script>
 (function(){
   'use strict';
@@ -221,6 +262,7 @@
 
   var LS_KEY   = 'devPreviewFormations';
   var LS_PICKS = 'devPreviewFormationPlays';
+  var LS_ASSIGN = 'devPreviewAssignments';
   var statusEl = document.getElementById('status');
   var nameInput = document.getElementById('nameInput');
   var seedSel = document.getElementById('seedSel');
@@ -401,11 +443,137 @@
       list.length + ' of ' + playsFor().length + ' plays selected';
   }
 
+  // ---- Step 3: fix what the formation broke ----
+  //
+  // Only the players this alignment MOVED get a handle. Everyone else still
+  // has the assignment the play was authored with, and it is still right, so
+  // asking a coach to re-check all eleven would just train him to skip the
+  // screen.
+  var assignEditor = null;
+
+  function assignKeyFor(){
+    return currentFormationId + '::' + assignEditor.alignKey() + '::'
+      + assignEditor.side + '::' + assignEditor.playKey;
+  }
+  function loadAssign(){
+    try { return JSON.parse(localStorage.getItem(LS_ASSIGN) || '{}'); } catch(e){ return {}; }
+  }
+  function saveAssign(map){
+    try { localStorage.setItem(LS_ASSIGN, JSON.stringify(map)); } catch(e){}
+  }
+
+  function refreshMovedList(){
+    var moved = assignEditor.movedSlots();
+    var host = document.getElementById('movedList');
+    document.getElementById('movedNote').textContent = moved.length
+      ? 'This formation moves ' + moved.length + ' player' + (moved.length===1?'':'s')
+        + '. Their assignments were shifted automatically -- drag to correct anything that doesn\'t look right.'
+      : 'Nobody moves in this alignment, so every assignment is still the one the play was drawn with.';
+    var editable = assignEditor.editableSlots();
+    host.innerHTML = moved.length
+      ? '<label class="lbl">Moved players</label>' + moved.map(function(k){
+          var state, colour;
+          if (editable.indexOf(k) === -1) {
+            // No single point IS this assignment -- see editableSlots().
+            state = 'no fixed target to drag'; colour = 'var(--muted)';
+          } else if (assignEditor.hasOverride(k)) {
+            state = 'edited'; colour = 'var(--accent)';
+          } else {
+            state = 'auto-shifted'; colour = 'var(--muted)';
+          }
+          return '<div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:4px 0">'
+            + '<span style="width:26px;height:26px;border-radius:50%;border:2px solid var(--ink);'
+            + 'display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">'+k+'</span>'
+            + '<span style="color:'+colour+'">'+state+'</span></div>';
+        }).join('')
+      : '';
+  }
+
+  function refreshPlaySel(){
+    var picks = pickMap()[currentFormationId] || [];
+    var list = picks.length ? picks : playsFor().map(function(p){ return p.key; });
+    var sel = document.getElementById('playSel');
+    sel.innerHTML = '';
+    list.forEach(function(k){
+      var pt = playsFor().find(function(p){ return p.key === k; });
+      if (!pt) return;
+      var o = document.createElement('option');
+      o.value = k; o.textContent = pt.label || k;
+      sel.appendChild(o);
+    });
+    return sel.value;
+  }
+
+  function initAssignStep(){
+    if (!assignEditor) {
+      assignEditor = new window.AssignmentEditor({
+        svg: document.getElementById('assignField'),
+        formationId: currentFormationId,
+        side: 'Right',
+        onChange: function(){
+          document.getElementById('assignStatus').textContent = 'Unsaved changes.';
+          refreshMovedList();
+        },
+      });
+      document.getElementById('playSel').addEventListener('change', function(){
+        loadEditorFor(this.value);
+      });
+      document.getElementById('sideSeg3').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-side]'); if(!b) return;
+        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+        assignEditor.side = b.getAttribute('data-side');
+        loadEditorFor(assignEditor.playKey);
+      });
+      document.getElementById('ovSeg').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-ov]'); if(!b) return;
+        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+        assignEditor.overload = b.getAttribute('data-ov') === 'on';
+        loadEditorFor(assignEditor.playKey);
+      });
+      document.getElementById('saveAssignBtn').addEventListener('click', function(){
+        var all = loadAssign();
+        all[assignKeyFor()] = assignEditor.toJSON();
+        saveAssign(all);
+        document.getElementById('assignStatus').textContent =
+          'Saved for ' + assignEditor.alignKey() + ' / ' + assignEditor.side + '.';
+        refreshMovedList();
+      });
+      document.getElementById('resetAssignBtn').addEventListener('click', function(){
+        assignEditor.clearAll();
+        var all = loadAssign(); delete all[assignKeyFor()]; saveAssign(all);
+        document.getElementById('assignStatus').textContent = 'Back to the automatic shift.';
+        refreshMovedList();
+      });
+    }
+    assignEditor.formationId = currentFormationId;
+    var first = refreshPlaySel();
+    loadEditorFor(first);
+  }
+
+  function loadEditorFor(playKey){
+    assignEditor.playKey = playKey;
+    assignEditor.setOverrides(loadAssign()[assignKeyFor()] || {});
+    document.getElementById('assignStatus').textContent = '';
+    refreshMovedList();
+  }
+
   function goStep(n, formationId){
     document.getElementById('step1').style.display = n === 1 ? '' : 'none';
     document.getElementById('step2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('step3').style.display = n === 3 ? '' : 'none';
     document.getElementById('tab1').classList.toggle('on', n === 1);
     document.getElementById('tab2').classList.toggle('on', n === 2);
+    document.getElementById('tab3').classList.toggle('on', n === 3);
+    if (n === 3) {
+      currentFormationId = formationId || currentFormationId || seedId;
+      var f3 = window.Formations.get(currentFormationId);
+      document.getElementById('whoFor3').textContent =
+        'in ' + (f3 ? f3.name : currentFormationId);
+      initAssignStep();
+      return;
+    }
     if (n === 2) {
       currentFormationId = formationId || seedId;
       var f = window.Formations.get(currentFormationId);
@@ -417,12 +585,14 @@
 
   document.getElementById('tab1').addEventListener('click', function(){ goStep(1); });
   document.getElementById('tab2').addEventListener('click', function(){ goStep(2, seedId); });
+  document.getElementById('tab3').addEventListener('click', function(){ goStep(3, currentFormationId || seedId); });
   document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
   document.getElementById('savePicksBtn').addEventListener('click', function(){
     var list = pickMap()[currentFormationId] || [];
     document.getElementById('pickStatus').textContent =
       'Saved \u2014 ' + list.length + ' play' + (list.length === 1 ? '' : 's')
       + ' callable from this formation.';
+    goStep(3, currentFormationId);
   });
 
   var themeBtn = document.getElementById('themeBtn');
