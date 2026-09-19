@@ -987,6 +987,16 @@ function alignment(formationId, side) {
 // Paths with no `player` (the O-line's id-keyed blocks) shift by that
 // lineman's own delta when the formation moves the line, and otherwise stay
 // put.
+// Deliberately only the two absolute fields. The rest of a path's coordinate
+// arrays are RELATIVE and must not be touched:
+//   sameSideOffsets / crossOffsets      -- offsets from player 4's anchor
+//   sameSidePoints* / crossPoints*      -- index [1] is read as a DELTA off
+//                                          that same anchor (see the
+//                                          blockRelative branch below)
+// Player 4's anchor already comes from the formation registry, so those paths
+// follow a new formation on their own; shifting them too would move them twice.
+const SHIFTABLE = ['points', 'points4x4'];
+
 function shiftPathsToFormation(paths, fromAlign, toAlign) {
   if (!paths || fromAlign === toAlign) return paths;
   return paths.map(p => {
@@ -997,9 +1007,15 @@ function shiftPathsToFormation(paths, fromAlign, toAlign) {
     const dx = to[0] - from[0], dy = to[1] - from[1];
     if (dx === 0 && dy === 0) return p;
     const moved = Object.assign({}, p);
-    if (p.points) {
-      moved.points = p.points.map(pt => (pt ? [pt[0] + dx, pt[1] + dy] : pt));
-    }
+    // `points` and `points4x4` are the two ABSOLUTE-coordinate fields, and both
+    // must move. points4x4 matters more than its name suggests: the app is
+    // pinned to the 4x4 defense, and 190 of the 350 authored paths carry a
+    // points4x4 -- every one of them a blocking path. Shifting only `points`
+    // left every lineman's block sitting at his old spot the moment a
+    // formation moved the line, which is exactly the data a lineman needs.
+    SHIFTABLE.forEach(key => {
+      if (p[key]) moved[key] = p[key].map(pt => (pt ? [pt[0] + dx, pt[1] + dy] : pt));
+    });
     return moved;
   });
 }

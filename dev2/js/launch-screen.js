@@ -3,15 +3,22 @@
 // Nathan: "Currently there are several popups at the start that need to go
 // away. It should only be set from a screen the coaches choose for that week."
 //
-// NINE separate features had each quietly earned themselves a launch popup,
+// TEN separate features had each quietly earned themselves a launch popup,
 // added one at a time over months, each individually reasonable. Nobody ever
 // saw the stack: a kid opening the app on a game day could be handed a tips
 // overlay, a game-day splash, a What's New play feed, a badges intro and a
 // getting-started wizard before reaching anything they actually came for.
 //
 // The point of this file is that "what interrupts a kid at launch" becomes ONE
-// decision in ONE place, instead of nine scattered ones that can only be
-// counted by reading five files. Adding a tenth should mean editing this list.
+// decision in ONE place, instead of ten scattered ones that could only be
+// counted by reading five files. Adding an eleventh means editing this list --
+// and an undeclared name returns false, so a new popup cannot fire without
+// being written down here first.
+//
+// Nine of the ten chained through player-identity.js's post-session block. The
+// tenth (welcomeTour) fires at module load in auth.js instead, over the login
+// screen, which is exactly why it survived the first sweep -- worth knowing
+// before assuming one grep has found them all.
 //
 // WHAT STAYS ON, AND WHY
 // Two kinds survive, and neither is promotional:
@@ -49,6 +56,11 @@
     mergePrompt: true,
 
     // --- announcements: off ---
+    // A 6-step crash course shown over the LOGIN screen -- the first thing a
+    // brand-new kid ever saw. It fires at module load in js/auth.js rather
+    // than through the post-session chain, which is how it survived the first
+    // sweep: it is not a maybeShow* call, so it never reached that block.
+    welcomeTour: false,     // still on the Help button
     tipsOverlay: false,     // still on the Help button
     gameDaySplash: false,
     whatsNew: false,        // still in its own feed, with its unread badge

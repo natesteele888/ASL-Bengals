@@ -53,7 +53,12 @@
   }
 
   showStep(0);
-  if(!alreadySeen()){
+  // The first thing a brand-new kid saw: a 6-step crash course over the login
+  // screen. It fires at module load rather than through player-identity.js's
+  // post-session chain, which is why it survived the first pass at clearing
+  // these -- it is not a maybeShow* call and never reached that block.
+  // Still reachable from the Help button like the rest. See js/launch-screen.js.
+  if(!alreadySeen() && window.LaunchScreen && window.LaunchScreen.allows('welcomeTour')){
     overlay.classList.add('show');
   }
 
@@ -259,7 +264,9 @@ window.exitPlayerPreview = function(){
     // instant this fires -- poll briefly.
     (function waitForPlayerIdentity(){
       if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){
-        window.LaunchScreen.gate('tipsOverlay', function(){ maybeShowTips(); });
+        // Bare-call safe: a missing policy file leaves the popup unshown,
+        // which is the right failure for an announcement.
+        if(window.LaunchScreen && window.LaunchScreen.allows('tipsOverlay')) maybeShowTips();
       }); }
       else setTimeout(waitForPlayerIdentity, 50);
     })();
