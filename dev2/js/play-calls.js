@@ -2037,9 +2037,26 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // along with the QB at that moment, then the existing carrier-switch
   // logic below (ballEntry && handoffEntry, different circleEl) eases it
   // over to the TE exactly when his route reaches the real handoff point.
-  const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+  // An authored ball path replaces the single-handoff machinery below with a
+  // real carrier schedule -- as many exchanges as the play has. Built here so
+  // the rest of this function can stay one code path: the ball still follows
+  // ONE `carrier` element at a time, there are just now N of them instead of
+  // at most two.
+  const authoredBallPath = (window.BallPath && window.BallPath.isValid(playType && playType.ballPath))
+    ? window.BallPath.schedule(playType.ballPath, (player) => {
+        const entry = lastRenderedPaths.find(p => String(p.player) === String(player) && p.circleEl);
+        if (!entry) return null;
+        const src = (stage._resolvedPaths || []).find(p => String(p.player) === String(player) && p.points);
+        return { circleEl: entry.circleEl, points: src && src.points };
+      }, animMs)
+    : null;
+
+  const initialEntry = authoredBallPath && authoredBallPath.length
+    ? { circleEl: authoredBallPath[0].circleEl, delayMs: 0 }
+    : (ballEntry && ballEntry.circleEl) ? ballEntry
     : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
   const initialDelay = !initialEntry ? 0
+    : (authoredBallPath && authoredBallPath.length) ? 0
     : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
     : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
   if (initialEntry) {
@@ -2088,7 +2105,21 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     // mid-play -- if handoffEntry is what we're ALREADY starting from
     // (initialEntry === handoffEntry, the Shuffle Pass case above), there's
     // no second carrier left to switch to.
-    if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
+    if (authoredBallPath && authoredBallPath.length > 1) {
+      // One scheduled switch per exchange. Each waits from the same time
+      // origin as the path drawing, so "when #4 reaches the pitch point" means
+      // the moment his own route is drawn to it.
+      authoredBallPath.slice(1).forEach((leg) => {
+        wait(leg.atMs * speedMultiplier).then(() => {
+          if (!tracking) return; // play ended before this exchange came round
+          if (leg.circleEl === carrier) return;
+          carrier = leg.circleEl;
+          catchingUp = true;
+          easing = true;
+          catchUpFrame();
+        });
+      });
+    } else if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
       const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
       wait(handoffDelay).then(() => {
         if (!tracking) return; // play already ended (or never started) -- nothing to hand off
@@ -2127,6 +2158,12 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   ball.remove();
   isPlayingRef.value = false;
 }
+// js/whats-new.js has always called window.playCardAnimation and guarded on
+// its existence -- but it was never exported, so that guard has been silently
+// falling through to the static diagram ever since it was written. Exporting
+// it makes the What's New snapshot actually animate, and is what lets the
+// ball path be exercised from outside this file.
+window.playCardAnimation = playCardAnimation;
 
 // Signed-in player's stored position (player-identity.js), translated into
 // whatever renderCardDiagram/renderSplitDiagram's selectedPlayer expects --

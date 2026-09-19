@@ -166,6 +166,71 @@
     return layer;
   }
 
+  // --- Timing -----------------------------------------------------------
+  //
+  // An exchange has a place but not a time, because a coach places the point
+  // and should not then have to tell us WHEN. So the time is derived: find how
+  // far along the receiver's own route he is when he reaches the exchange
+  // point, and hand the ball over then. Every route is stroked linearly over
+  // the same animation window, so a distance fraction IS a time fraction.
+  //
+  // Measured along the receiver rather than the giver because the receiver is
+  // the one arriving to take it -- a giver can be standing still at the mesh
+  // point long before the exchange, which would hand off far too early.
+  function fractionAlongPath(points, target) {
+    if (!points || points.length < 2 || !target) return null;
+    var segs = [], total = 0;
+    for (var i = 1; i < points.length; i++) {
+      var a = points[i - 1], b = points[i];
+      var len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      segs.push({ a: a, b: b, len: len, before: total });
+      total += len;
+    }
+    if (!total) return null;
+
+    var best = null, bestDist = Infinity;
+    segs.forEach(function (sg) {
+      var dx = sg.b[0] - sg.a[0], dy = sg.b[1] - sg.a[1];
+      var t = sg.len ? (((target[0] - sg.a[0]) * dx + (target[1] - sg.a[1]) * dy) / (sg.len * sg.len)) : 0;
+      t = Math.max(0, Math.min(1, t));
+      var px = sg.a[0] + dx * t, py = sg.a[1] + dy * t;
+      var d = Math.hypot(target[0] - px, target[1] - py);
+      if (d < bestDist) { bestDist = d; best = (sg.before + sg.len * t) / total; }
+    });
+    return best;
+  }
+
+  // Turn an authored ball path into a carrier schedule the animation can run:
+  // [{ player, circleEl, atMs }], in order.
+  //
+  // `lookup(player)` hands back that player's rendered circle and the points
+  // actually drawn for him. A leg whose man was never drawn is dropped rather
+  // than stalling the ball on a carrier that does not exist.
+  function schedule(bp, lookup, animMs) {
+    if (!isValid(bp)) return [];
+    var out = [];
+    for (var i = 0; i < bp.length; i++) {
+      var found = lookup(bp[i].player);
+      if (!found || !found.circleEl) continue;
+      var at = 0;
+      if (i > 0) {
+        var frac = fractionAlongPath(found.points, bp[i].at);
+        // No usable route for the receiver (a blocker taking a handoff, say)
+        // -- fall back to spacing the exchange evenly through the play rather
+        // than dropping it.
+        at = (frac == null ? (i / bp.length) : frac) * animMs;
+      }
+      out.push({ player: bp[i].player, circleEl: found.circleEl, atMs: at });
+    }
+    // An exchange cannot happen before the one before it, whatever the
+    // geometry says -- a receiver whose route crosses the mesh point early
+    // would otherwise be handed the ball before the previous carrier has it.
+    for (var j = 1; j < out.length; j++) {
+      if (out[j].atMs <= out[j - 1].atMs) out[j].atMs = out[j - 1].atMs + Math.max(120, animMs * 0.08);
+    }
+    return out;
+  }
+
   function clearOverlay(stage) {
     if (stage._ballPathLayer && stage._ballPathLayer.parentNode) {
       stage._ballPathLayer.parentNode.removeChild(stage._ballPathLayer);
@@ -180,6 +245,8 @@
     legsFor: legsFor,
     legStart: legStart,
     drawOverlay: drawOverlay,
+    fractionAlongPath: fractionAlongPath,
+    schedule: schedule,
     clearOverlay: clearOverlay,
   };
 })();
