@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Formation Builder — dev preview</title>
+<title>Play Builder — dev preview</title>
 <!--
   DEV PREVIEW ONLY. This page exists so the new formation work can be seen and
   signed off on before anything merges into the live app.
@@ -80,20 +80,51 @@
   .saved{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
   .saved b{color:var(--ink)}
   code{background:var(--paper);padding:1px 5px;border-radius:4px;font-size:11px}
+
+  .steps{display:flex;gap:8px}
+  .steps button{border:1px solid var(--line);background:var(--paper);color:var(--muted);
+    padding:7px 15px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer;
+    font-family:inherit;width:auto;margin:0}
+  .steps button.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+  #step2{padding:18px}
+  .gridhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .gridhead h2{font-size:17px;margin:0;font-weight:800}
+  .gridhead .who{font-size:13px;color:var(--muted);font-weight:700}
+  .gridsub{font-size:13px;color:var(--muted);margin:6px 0 16px}
+  .playgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .playtile{background:var(--card);border:2px solid var(--line);border-radius:13px;
+            overflow:hidden;cursor:pointer;transition:border-color .12s,transform .12s}
+  .playtile:hover{transform:translateY(-2px)}
+  .playtile.on{border-color:var(--bengal-orange)}
+  .playtile svg{width:100%;height:auto;display:block;background:var(--fb-turf)}
+  .playtile .cap{display:flex;align-items:center;gap:8px;padding:9px 11px;
+                 border-top:1px solid var(--line)}
+  .playtile .nm{font-weight:800;font-size:14px;flex:1}
+  .tick{width:21px;height:21px;border-radius:50%;border:2px solid var(--line);
+        display:flex;align-items:center;justify-content:center;font-size:12px;
+        color:transparent;flex-shrink:0}
+  .playtile.on .tick{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+  .bar{display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap}
+  .bar .count{font-size:13px;color:var(--muted);font-weight:700}
+  .bar button{width:auto;margin:0;padding:10px 18px}
+  #stubs{display:none}
 </style>
 </head>
 <body>
 <div class="devbar">DEV PREVIEW — branch <code style="background:#552a00;color:#ffd9b8">formation-engine</code> — not live, saves only to this browser</div>
 
 <header>
-  <div>
-    <h1>Formation Builder</h1>
-    <div class="sub">Start from a formation that works. Move who needs moving. Save.</div>
+  <h1>Play Builder</h1>
+  <div class="steps">
+    <button id="tab1" class="on">1&nbsp; Formation</button>
+    <button id="tab2">2&nbsp; Plays</button>
   </div>
   <div class="spacer"></div>
   <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
 </header>
 
+<div id="step1">
 <div class="wrap">
   <div class="fieldcard">
     <svg id="field"></svg>
@@ -141,25 +172,55 @@
     </div>
   </div>
 </div>
+</div>
+
+<div id="step2" style="display:none">
+  <div class="gridhead">
+    <h2>Which plays can you call</h2><span class="who" id="whoFor"></span>
+  </div>
+  <div class="gridsub">Every diagram below is the real play, drawn in this formation. Tap the ones you want available.</div>
+  <div class="playgrid" id="playGrid"></div>
+  <div class="bar">
+    <span class="count" id="pickCount"></span>
+    <button class="btn" id="backBtn">&larr; Back to formation</button>
+    <button class="btn primary" id="savePicksBtn">Save play list</button>
+    <span class="status" id="pickStatus" style="margin:0"></span>
+  </div>
+</div>
+
+<!-- DOM play-calls.js touches while loading. Not used by this page. -->
+<div id="stubs">
+  <div id="playCallsGrid"></div><div id="playCallsCloudStatus"></div>
+  <div id="playCallsInfoOverlay"></div><div id="playCallsGate"></div>
+  <input id="pcGateInput"><div id="pcGateError"></div>
+  <button id="pcGateSubmitBtn"></button><div id="pcTutorialSteps"></div>
+  <div id="pcTutorialDots"></div><button id="pcTutorialBackBtn"></button>
+  <button id="pcTutorialNextBtn"></button><button id="pcInfoBtn"></button>
+</div>
 
 <script src="js/shipped-defaults.js"></script>
+<script>
+  // Must be set BEFORE play-calls.js, which reads both at load time. Stands in
+  // for the live Firebase boot: the same shipped play data the real site
+  // starts from, so the diagrams on this page are the real ones.
+  window.DATA = window.SHIPPED_PLAYS_JSON;
+  window.ALL_CARDS = [];
+</script>
 <script src="js/formations.js"></script>
 <script src="js/formation-builder.js"></script>
+<script src="js/play-calls.js"></script>
 <script>
 (function(){
   'use strict';
 
-  // Stand in for the live Firebase boot: the preview reads the same shipped
-  // play data the real site starts from, so the coordinates on screen are the
-  // real ones, not mock-ups.
-  window.DATA = window.SHIPPED_PLAYS_JSON;
   if (!window.DATA) {
     document.body.innerHTML = '<p style="padding:24px;font:14px system-ui">'
       + 'Could not load js/shipped-defaults.js — serve this page over http, not file://</p>';
     return;
   }
 
-  var LS_KEY = 'devPreviewFormations';
+  var LS_KEY   = 'devPreviewFormations';
+  var LS_PICKS = 'devPreviewFormationPlays';
   var statusEl = document.getElementById('status');
   var nameInput = document.getElementById('nameInput');
   var seedSel = document.getElementById('seedSel');
@@ -266,7 +327,102 @@
     refreshSeedOptions(id);
     refreshSavedList();
     seedId = id;
-    statusEl.textContent = 'Saved “' + name + '”. It is now in Start from.';
+    statusEl.textContent = 'Saved “' + name + '”.';
+    goStep(2, id);
+  });
+
+  // ---- Step 2: which plays can be called out of this formation ----
+  //
+  // The formation x play matrix, made concrete. Today that question is
+  // answered by three surfaces that already disagree: a negative `noSplit`
+  // boolean in Play Calls and Edit Plays, a separate `wingOnly` flag in the
+  // 2-minute drill, and a hardcoded 8-key list in that same drill. One
+  // explicit list per formation replaces all three.
+  var currentFormationId = null;
+  function playsFor(){ return (window.DATA.playTypes || []); }
+
+  // The REAL renderer, not a mock-up -- that is the whole point of this
+  // screen. Each tile is renderCardDiagram drawing that play in this
+  // formation, via the formationId argument added for exactly this.
+  function miniDiagram(playKey, formationId){
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS,'svg');
+    var pt = playsFor().find(function(p){ return p.key === playKey; });
+    try {
+      window.renderCardDiagram(svg, playKey, 'Right', 'Right', null, '4x4',
+        (pt && pt.hasInsideOutside) ? 'Outside' : null, false, false, 'A', false, false,
+        formationId);
+      // The renderer reserves ~400 units above the line for the defense; crop
+      // to the offensive half so the play reads at thumbnail size.
+      svg.setAttribute('viewBox', '0 250 1600 760');
+    } catch (e) {
+      svg.setAttribute('viewBox','0 0 200 40');
+      var t = document.createElementNS(NS,'text');
+      t.setAttribute('x',6); t.setAttribute('y',25); t.setAttribute('font-size',13);
+      t.setAttribute('fill','#c0392b'); t.textContent = 'render failed: ' + e.message;
+      svg.appendChild(t);
+    }
+    return svg;
+  }
+
+  function renderPlayGrid(){
+    var chosen = pickMap()[currentFormationId] || [];
+    var grid = document.getElementById('playGrid');
+    grid.innerHTML = '';
+    playsFor().forEach(function(pt){
+      var tile = document.createElement('div');
+      tile.className = 'playtile' + (chosen.indexOf(pt.key) !== -1 ? ' on' : '');
+      tile.appendChild(miniDiagram(pt.key, currentFormationId));
+      var cap = document.createElement('div'); cap.className = 'cap';
+      var nm  = document.createElement('span'); nm.className = 'nm';
+      nm.textContent = pt.label || pt.key;
+      var tick = document.createElement('span'); tick.className = 'tick'; tick.textContent = '\u2713';
+      cap.appendChild(nm); cap.appendChild(tick); tile.appendChild(cap);
+      tile.addEventListener('click', function(){
+        var cur = pickMap(), list = cur[currentFormationId] || [];
+        var i = list.indexOf(pt.key);
+        if (i === -1) list.push(pt.key); else list.splice(i,1);
+        cur[currentFormationId] = list;
+        try { localStorage.setItem(LS_PICKS, JSON.stringify(cur)); } catch(e){}
+        tile.classList.toggle('on');
+        updateCount();
+      });
+      grid.appendChild(tile);
+    });
+    updateCount();
+  }
+
+  function pickMap(){
+    try { return JSON.parse(localStorage.getItem(LS_PICKS) || '{}'); } catch(e){ return {}; }
+  }
+  function updateCount(){
+    var list = pickMap()[currentFormationId] || [];
+    document.getElementById('pickCount').textContent =
+      list.length + ' of ' + playsFor().length + ' plays selected';
+  }
+
+  function goStep(n, formationId){
+    document.getElementById('step1').style.display = n === 1 ? '' : 'none';
+    document.getElementById('step2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('tab1').classList.toggle('on', n === 1);
+    document.getElementById('tab2').classList.toggle('on', n === 2);
+    if (n === 2) {
+      currentFormationId = formationId || seedId;
+      var f = window.Formations.get(currentFormationId);
+      document.getElementById('whoFor').textContent =
+        'out of ' + (f ? f.name : currentFormationId);
+      renderPlayGrid();
+    }
+  }
+
+  document.getElementById('tab1').addEventListener('click', function(){ goStep(1); });
+  document.getElementById('tab2').addEventListener('click', function(){ goStep(2, seedId); });
+  document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
+  document.getElementById('savePicksBtn').addEventListener('click', function(){
+    var list = pickMap()[currentFormationId] || [];
+    document.getElementById('pickStatus').textContent =
+      'Saved \u2014 ' + list.length + ' play' + (list.length === 1 ? '' : 's')
+      + ' callable from this formation.';
   });
 
   var themeBtn = document.getElementById('themeBtn');
@@ -275,6 +431,7 @@
     document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
     themeBtn.textContent = dark ? 'Dark' : 'Light';
     builder.render();
+    if (document.getElementById('step2').style.display !== 'none') renderPlayGrid();
   });
 })();
 </script>

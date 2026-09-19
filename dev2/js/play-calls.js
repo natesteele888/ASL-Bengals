@@ -958,7 +958,14 @@ window.renderSplitDiagram = renderSplitDiagram;
 // The registry returns one flat map of all 11 for a given formation and side,
 // reassembled from those same keys -- identical numbers, one lookup.
 function alignment(formationId, side) {
-  return window.Formations.positions(formationId, side);
+  const pos = window.Formations.positions(formationId, side);
+  // Fail loudly and by name. The alternative -- quietly falling back to Wing
+  // -- is exactly the silent-wrongness failure this registry exists to
+  // remove: a card that claims one formation and draws another. A play
+  // pointing at a formation that no longer exists is a data problem the
+  // coach needs told about, not papered over.
+  if (!pos) throw new Error('Unknown formation: "' + formationId + '"');
+  return pos;
 }
 
 // Translate a play's authored routes into a different formation.
@@ -990,7 +997,9 @@ function shiftPathsToFormation(paths, fromAlign, toAlign) {
     const dx = to[0] - from[0], dy = to[1] - from[1];
     if (dx === 0 && dy === 0) return p;
     const moved = Object.assign({}, p);
-    if (p.points) moved.points = p.points.map(([x, y]) => [x + dx, y + dy]);
+    if (p.points) {
+      moved.points = p.points.map(pt => (pt ? [pt[0] + dx, pt[1] + dy] : pt));
+    }
     return moved;
   });
 }
