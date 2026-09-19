@@ -961,10 +961,61 @@ function alignment(formationId, side) {
   return window.Formations.positions(formationId, side);
 }
 
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
+// Translate a play's authored routes into a different formation.
+//
+// Routes are authored against Wing, and they do NOT all begin on the
+// player's lineup spot: 56 of the 182 authored paths deliberately start a
+// step or two into the play. So a route cannot simply be re-anchored onto
+// the new formation's spot the way reanchorRoute() moves one player's shape
+// onto another player -- that would snap out the authoring nuance and shift
+// some routes by ~30 units.
+//
+// Shift by the DELTA between where that player stands in the two formations
+// instead. Same shape, same authored head start, new starting point. When
+// the target IS the authoring formation every delta is zero, so this is
+// exactly the identity -- which is what lets the existing Wing diagrams stay
+// byte-for-byte unchanged while the same code renders a formation that did
+// not exist when the routes were drawn.
+//
+// Paths with no `player` (the O-line's id-keyed blocks) shift by that
+// lineman's own delta when the formation moves the line, and otherwise stay
+// put.
+function shiftPathsToFormation(paths, fromAlign, toAlign) {
+  if (!paths || fromAlign === toAlign) return paths;
+  return paths.map(p => {
+    const key = p.player != null ? String(p.player) : p.id;
+    const from = key && fromAlign[key];
+    const to = key && toAlign[key];
+    if (!from || !to) return p;
+    const dx = to[0] - from[0], dy = to[1] - from[1];
+    if (dx === 0 && dy === 0) return p;
+    const moved = Object.assign({}, p);
+    if (p.points) moved.points = p.points.map(([x, y]) => [x + dx, y + dy]);
+    return moved;
+  });
+}
+
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId) {
+  // Defaults to the formation these routes were authored against, so every
+  // existing caller -- including the PDF exporters and This Week, which pass
+  // these arguments positionally -- keeps its exact current behaviour.
+  formationId = formationId || 'wing';
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn);
+
+  // Where this play's routes were drawn, and where the eleven actually stand
+  // for the formation being asked for. Identical objects' worth of numbers
+  // when formationId is 'wing'.
+  const authoredAlign = alignment('wing', wingSide);
+  const wingAlign = alignment(formationId, wingSide);
+
+  const authoredVariant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn);
+  // Present the play in the requested formation by moving each authored route
+  // as far as its owner moved. A no-op for the authoring formation, so the
+  // Wing diagrams below are untouched.
+  const variant = formationId === 'wing' ? authoredVariant : Object.assign({}, authoredVariant, {
+    paths: shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
+  });
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
   // Boot: swap which path is treated as the ball carrier, purely for this
@@ -992,7 +1043,6 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // matching numbered circle. Defenders are never selectable, so they
   // never glow either way.
   const isLineSelectedForCircles = typeof selectedPlayer === 'string';
-  const wingAlign = alignment('wing', wingSide);
   const wingPos = wingAlign['4'];
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
   // QB Sneak is a real Split Left/Right personnel grouping (Nathan: "It
