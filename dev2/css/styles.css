@@ -699,6 +699,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .sgRow{background:var(--paper);border-radius:10px;padding:9px 12px;margin-bottom:7px}
 .sgPlay{font-size:12.5px;font-weight:800;color:var(--bengal-orange-dark);margin-bottom:2px}
 .sgText{font-size:13px;color:var(--ink);line-height:1.4}
+/* The pre-snap half of a lineman's key -- who is lined up over him before the
+   ball moves. Quieter than the assignment above it: it is what he looks at,
+   not what he does. */
+.sgKey{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:3px}
+/* The same key hoisted out of every row when it doesn't vary by play. */
+.sgSharedKey{font-size:12px;color:var(--ink);background:var(--paper);border-left:3px solid var(--bengal-orange);
+  border-radius:0 8px 8px 0;padding:7px 11px;margin-bottom:9px;line-height:1.4}
 
 /* ===== My Stats -- rank progress bars ===== */
 .msStatList{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}

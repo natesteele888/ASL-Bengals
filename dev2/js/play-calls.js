@@ -697,6 +697,31 @@ function getVariant(playType, direction, insideOutside, readPosition, counterOn,
   return v;
 }
 
+// Exported so other screens describe a play from the SAME resolution the
+// diagram uses, rather than re-implementing the walk down the variant tree.
+// js/study-guide.js re-implemented it and stopped two levels early, which
+// silently dropped every hasCounter play (Outside Zone, Blast, Option) out of
+// a player's study guide entirely -- the walk is four levels deep and varies
+// per play, so a partial copy returns an interior node with no `paths` and the
+// caller just skips it. Note the name: edit-plays.js already owns a global
+// getPlayVariant() with a different (2-arg) signature.
+window.resolvePlayVariant = getVariant;
+
+// Which coordinate array the diagram ACTUALLY draws for a path. The 4x4
+// defense is what the app pins to (see defenseMode in buildCard), and 190 of
+// the 350 authored paths carry a separate points4x4 -- every one of them a
+// blocking path. Reading `points` instead means describing a block that lands
+// somewhere the player never sees.
+window.renderedPointsFor = function (p, defenseMode) {
+  return (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock
+    && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
+};
+
+// The defense actually on screen for a variant, same 4x4 pin.
+window.renderedDefenseFor = function (variant, defenseMode) {
+  return (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+};
+
 // ---- Build every base play x direction combo (wing is a per-card toggle, not a filter) ----
 const BASE_PLAY_ORDER = ['inside_zone', 'outside_zone', 'option', 'option_pass', 'blast', 'double_blast'];
 function buildPlayList() {
