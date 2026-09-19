@@ -258,7 +258,9 @@ window.exitPlayerPreview = function(){
     // behind the database data fetch), so don't assume it's ready the
     // instant this fires -- poll briefly.
     (function waitForPlayerIdentity(){
-      if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
+      if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){
+        window.LaunchScreen.gate('tipsOverlay', function(){ maybeShowTips(); });
+      }); }
       else setTimeout(waitForPlayerIdentity, 50);
     })();
   }

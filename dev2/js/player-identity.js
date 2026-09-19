@@ -1308,7 +1308,15 @@
       // trigger point as the other post-session checks above, now that a
       // session (coach, player, or parent -- everyone sees this) is known.
       // See js/practice-cancel.js.
-      if (typeof window.maybeShowCancellationPanel === 'function') window.maybeShowCancellationPanel();
+      // Deliberately NOT LaunchScreen.gate(): every other interruption below
+      // stays silent if launch-screen.js somehow failed to load, which is the
+      // safe default for an announcement. For a cancelled practice it is the
+      // opposite -- a missing config file must never be the reason a kid gets
+      // dropped at an empty field -- so this one runs unless it is explicitly
+      // switched off.
+      if (!window.LaunchScreen || window.LaunchScreen.allows('cancellationPanel')) {
+        if (typeof window.maybeShowCancellationPanel === 'function') window.maybeShowCancellationPanel();
+      }
       // Nathan: "The app will display a full image background on Gamedays
       // when you first open the app that day." Same trigger point as the
       // other post-session full-screen checks here -- gates itself
@@ -1318,7 +1326,9 @@
       // safety-relevant and should never be visually buried under gameday
       // hype (also enforced via z-index -- see css/styles.css). See
       // js/gameday.js's maybeShowGameDaySplash.
-      if (typeof window.maybeShowGameDaySplash === 'function') window.maybeShowGameDaySplash();
+      window.LaunchScreen.gate('gameDaySplash', function () {
+        if (typeof window.maybeShowGameDaySplash === 'function') window.maybeShowGameDaySplash();
+      });
       // Nathan (in-season): "hey this is what is new this week for play
       // calls, pay attention." Same trigger point as the other post-session
       // checks here -- gates itself internally (only fires when there's a
@@ -1330,32 +1340,40 @@
       // like "who's been on, or something pointless" stacked on login right
       // when a coach needs the play-call callout instead. See
       // js/whats-new.js's maybeAutoShowWhatsNew.
-      if (typeof window.maybeAutoShowWhatsNew === 'function') window.maybeAutoShowWhatsNew();
+      window.LaunchScreen.gate('whatsNew', function () {
+        if (typeof window.maybeAutoShowWhatsNew === 'function') window.maybeAutoShowWhatsNew();
+      });
       // Nathan: "Parents should get notifications of how many times their
       // player signed in and used the app... pop up notifications of when
       // the last time their player signed in." Same trigger point as the
       // coach digest above -- gates itself to a parent with a linked child
       // + once-per-real-day internally. See coachtools-dashboard.js's
       // maybeShowParentDigest.
-      if (typeof window.maybeShowParentDigest === 'function') window.maybeShowParentDigest();
+      window.LaunchScreen.gate('parentDigest', function () {
+        if (typeof window.maybeShowParentDigest === 'function') window.maybeShowParentDigest();
+      });
       // Nathan: "love the gamification stuff - make sure they are aware of
       // the badges when they log in." Same trigger point as the other
       // post-session checks here -- gates itself internally (skips coach
       // sessions, only shows the full intro once per player). See
       // js/study-quiz.js's maybeShowBadgesIntro.
-      if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
+      window.LaunchScreen.gate('badgesIntro', function () {
+        if (typeof window.maybeShowBadgesIntro === 'function') window.maybeShowBadgesIntro();
+      });
       // Nathan: "If a player logs in and doesn't use the app to it's
       // fullest, we should have a pop-up wizard saying something like 'New
       // to the app? Here's what to do.'" Same trigger point as the other
       // post-session checks here -- gates itself internally (players only,
       // only if they have no real activity yet, once per device). See
       // js/study-quiz.js's maybeShowGettingStartedIntro.
-      if (typeof window.maybeShowGettingStartedIntro === 'function') window.maybeShowGettingStartedIntro();
+      window.LaunchScreen.gate('gettingStarted', function () {
+        if (typeof window.maybeShowGettingStartedIntro === 'function') window.maybeShowGettingStartedIntro();
+      });
       // Nathan: "make sure players are only using one sign in... ask them
       // upon [next] log in if those submissions belong to them." Same
       // trigger point as the other post-session checks here -- see the
       // duplicate-login merge block above for the full design.
-      maybeShowMergePrompt(getSession());
+      window.LaunchScreen.gate('mergePrompt', function () { maybeShowMergePrompt(getSession()); });
       // A drone-footage notification tapped while the app was closed opens
       // a fresh tab via ?practice=<id> (sw.js's notificationclick can't run
       // JS in a not-yet-loaded page) -- jump straight to that practice now
@@ -1390,7 +1408,9 @@
       onReady();
       // Fire-and-forget, same as the fresh-sign-in path above -- covers
       // every returning player whose account predates this feature.
-      maybeShowRolePrompt(session, false).catch(() => {});
+      window.LaunchScreen.gate('rolePrompt', function () {
+        maybeShowRolePrompt(session, false).catch(() => {});
+      });
       return;
     }
     pendingReady = onReady;

@@ -2198,6 +2198,9 @@ if (window.ResizeObserver) {
   // auth.js at load time (only inside functions called later, well after
   // both scripts are in), so simply loading it first fixes this with no
   // other changes needed.
+  // Must precede auth.js and player-identity.js -- both consult it at launch
+  // to decide whether they may interrupt the player. See js/launch-screen.js.
+  await loadScript(withV('js/launch-screen.js'));
   await loadScript(withV('js/cloud-auth.js'));
   await loadScript(withV('js/auth.js'));
 
