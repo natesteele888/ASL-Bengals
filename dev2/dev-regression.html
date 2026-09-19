@@ -222,6 +222,10 @@ document.write('<' + 'script src="js/play-calls.js?harness=1" defer><' + '/scrip
     var t0 = performance.now();
     last = capture();
     if (!last) return;
+    // Exposed so a console session can diff at CASE level, not just per play --
+    // the page only prints the per-play summary, and "which 44 of 956 moved"
+    // is exactly the question worth asking after an intentional change.
+    window.__lastCapture = last;
     var ms = Math.round(performance.now() - t0);
     log('cases rendered : ' + last.total);
     log('threw          : ' + last.errors, last.errors ? 'bad' : 'ok');

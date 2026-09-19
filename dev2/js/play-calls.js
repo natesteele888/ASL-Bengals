@@ -864,9 +864,12 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, pro
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn) {
+  // protection/overloadOn appended last for the same reason formation/
+  // splitSide/passOn were: play-calls-quiz.js and the PDF exporters pass
+  // these positionally and stop short.
   if (formation === 'split') {
-    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
+    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, protection, overloadOn);
   }
   // QB Sneak's own card is Split formation only (see buildSplitSignalSequence's
   // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
@@ -1324,7 +1327,14 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     let arrowEl = null;
     let ownerCircle = null;
-    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    // `p.player != null` (loose) on purpose. Firebase strips null values, so
+    // a cloud-loaded O-line path has NO player key at all rather than a null
+    // one -- and the synthesized Split protection paths never had one either.
+    // With a strict !==, `undefined !== null` is true, so ownerKey became the
+    // string "undefined", playerCircles lookup missed, and the five O-line
+    // circles silently failed to travel with their blocks on every Split
+    // Pass press of the play button.
+    const ownerKey = p.player != null ? String(p.player) : p.id;
     ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
 
     if (hasHandoffSplit) {
@@ -1482,7 +1492,69 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 //      player 4) are unaffected either way -- getSplitRoutePaths already
 //      draws their routes regardless of run/pass, per "even if the team
 //      runs the receivers still run their assigned routes."
-function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
+// ---- Pass protection schemes ----
+//
+// Nathan: the linemen "need to work in a pass pocket protection vs a straight
+// pass block". Two calls, because they are two different jobs.
+//
+// What shipped before was neither: every one of the five linemen got the
+// SAME hardcoded 22-unit segment straight backwards, and so did the tight
+// end. Five identical stubs is not a protection -- it tells a kid nothing
+// about who he has or where to set, and it looked the same whichever way the
+// play was going.
+//
+// Both schemes below are derived from where the players actually stand and
+// where the defense actually is, so they hold up in any formation rather than
+// only in the one they were drawn against.
+
+// POCKET: everyone sets back and the ends set deepest, forming a cup around
+// the quarterback. Depth and width both scale with how far out a man starts
+// from the center -- which is what makes it a pocket shape instead of a flat
+// wall, and means a shifted or unbalanced line still forms a sensible cup.
+function pocketProtectionEnd(start, centerX) {
+  const dx = start[0] - centerX;
+  // The base depth is not cosmetic: the O-line circles are drawn at r=22, so
+  // a set shorter than that disappears inside its own man. The center's set is
+  // the shallowest of the five, so it sets the floor for all of them.
+  const depth = 34 + Math.abs(dx) * 0.12;
+  const widen = Math.sign(dx) * Math.abs(dx) * 0.1;
+  return [Math.round(start[0] + widen), Math.round(start[1] + depth)];
+}
+
+// STRAIGHT: he fires out at the man over him. The target is the nearest DOWN
+// lineman (DE/DT) -- not just the nearest defender, or a lineman would be
+// sent at a linebacker he has no business climbing to in protection -- and
+// the segment stops short of him, because a pass block is a punch and a
+// reset, not a drive downfield.
+function straightBlockEnd(start, defense) {
+  const front = (defense || []).filter(d => d && d.pos && (d.label === 'DE' || d.label === 'DT'));
+  if (!front.length) return [start[0], start[1] - 34];
+  let best = null, bestDist = Infinity;
+  front.forEach(d => {
+    const dx = d.pos[0] - start[0], dy = d.pos[1] - start[1];
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) { bestDist = dist; best = d; }
+  });
+  const dx = best.pos[0] - start[0], dy = best.pos[1] - start[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const reach = Math.min(46, len - 12);
+  return [Math.round(start[0] + (dx / len) * reach), Math.round(start[1] + (dy / len) * reach)];
+}
+
+function protectionPath(key, start, scheme, centerX, defense) {
+  const end = scheme === 'straight'
+    ? straightBlockEnd(start, defense)
+    : pocketProtectionEnd(start, centerX);
+  const path = { isBlocking: true, endType: 'block', width: 7, points: [start.slice(), end] };
+  // Numbered players carry `player`; the O-line carries `id`. Both are needed
+  // -- renderSplitDiagram looks the owner's circle up by whichever is present,
+  // so a path missing both never animates with its man.
+  if (/^[0-9]+$/.test(String(key))) path.player = Number(key);
+  else path.id = key;
+  return path;
+}
+
+function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition, scheme) {
   // One map for all eleven: the registry's Split alignment carries the
   // offensive line too, so the line no longer has to be fetched from a
   // different DATA key than the players it blocks alongside.
@@ -1490,17 +1562,19 @@ function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPos
   const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
   const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
   const paths = [];
+  const centerX = pos.C ? pos.C[0] : 806;
+  const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
+  const defense = variant ? (variant.defense4x4 || variant.defense) : null;
+  const useScheme = scheme === 'straight' ? 'straight' : 'pocket';
 
   window.Formations.lineSlots('split').forEach(k => {
-    const [x, y] = pos[k];
-    paths.push({ id: k, isBlocking: true, endType: 'block', width: 7, points: [[x, y], [x, y + 22]] });
+    paths.push(protectionPath(k, pos[k], useScheme, centerX, defense));
   });
 
-  const [tx, ty] = pos[tightNum];
-  paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
+  // The tight end who stays in blocks with the line, on the same call.
+  paths.push(protectionPath(String(tightNum), pos[tightNum], useScheme, centerX, defense));
 
   const [cx] = pos[companionNum]; // only the x is needed now, for the QB's mesh-step direction below
-  const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
   const realBallPath = variant && (variant.paths || []).find(p => p.player === companionNum && p.ball && !p.optionLine);
   if (realBallPath) {
     // Just run the path -- no separate block segment tacked on after it.
@@ -1605,7 +1679,9 @@ function getSplitDefense() {
   ];
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer) {
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection) {
+  // Appended last, defaulting to the pocket, so playbook-pdf.js and the
+  // 2-minute drill -- both of which pass these positionally -- are unchanged.
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
   stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -1684,7 +1760,14 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
       placeArrowAtFraction(arrowEl, pathEl, 1);
     }
     pathsLayer.appendChild(wrap);
-    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    // `p.player != null` (loose) on purpose. Firebase strips null values, so
+    // a cloud-loaded O-line path has NO player key at all rather than a null
+    // one -- and the synthesized Split protection paths never had one either.
+    // With a strict !==, `undefined !== null` is true, so ownerKey became the
+    // string "undefined", playerCircles lookup missed, and the five O-line
+    // circles silently failed to travel with their blocks on every Split
+    // Pass press of the play button.
+    const ownerKey = p.player != null ? String(p.player) : p.id;
     const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
     lastRenderedPaths.push({
       el: pathEl, arrowEl, player: p.player, id: p.id, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
@@ -1694,7 +1777,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const playType = DATA.playTypes.find(p => p.key === playKey);
   if (passOn) {
-    getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+    getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition, protection).forEach(drawPath);
   } else if (playType) {
     getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
   }
@@ -2022,6 +2105,14 @@ function buildCard(combo) {
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
+  // Which protection the line is on when the call is a pass. Nathan: pass
+  // pocket vs a straight pass block. Only meaningful with Pass on, so the
+  // toggle only appears then.
+  let protection = 'pocket';
+  // Nathan: "new signal for Overload which tells the non-wing side TE to play
+  // over as a second TE on the wing side." Declared here so the call can be
+  // signalled now; the alignment change it describes is still to come.
+  let overloadOn = false;
   // Which of Seattle/Houston/Florida is called to each SIDE of the play --
   // not a wide-receiver-vs-inside-receiver choice. The split side's two
   // receivers (wide + flex) both run whatever's called to their side;
@@ -2135,6 +2226,29 @@ function buildCard(combo) {
     onComboChanged();
   });
   formationRow.appendChild(passSwitch);
+
+  // Which protection the line is on. Only meaningful once the call IS a pass,
+  // so it appears with Pass and hides with it -- a run has no pocket.
+  const protectionToggle = buildToggleGroup('brown', [
+    { value: 'pocket', label: 'Pocket', short: 'PKT' },
+    { value: 'straight', label: 'Straight', short: 'STR' },
+  ], protection, (v) => {
+    if (isPlayingRef.value) return;
+    protection = v;
+    onComboChanged();
+  });
+  formationRow.appendChild(protectionToggle);
+
+  // Overload: the back-side tight end comes over as a second TE on the wing
+  // side. Signalled now; the alignment change is still to come, so the switch
+  // is here to be called and taught, not to move anyone yet.
+  const overloadSwitch = buildSwitchToggle('Overload', overloadOn, (v) => {
+    if (isPlayingRef.value) return;
+    overloadOn = v;
+    onComboChanged();
+  });
+  formationRow.appendChild(overloadSwitch);
+
   toggleRow.appendChild(formationRow);
 
   const basicsRow = document.createElement('div');
@@ -2267,6 +2381,9 @@ function buildCard(combo) {
     basicsRow.style.display = isSplit ? 'none' : '';
     splitSideToggle.style.display = isSplit ? '' : 'none';
     passSwitch.style.display = isSplit ? '' : 'none';
+    // Protection only exists inside a pass; Overload only inside Split.
+    protectionToggle.style.display = (isSplit && passOn) ? '' : 'none';
+    overloadSwitch.style.display = isSplit ? '' : 'none';
     motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
@@ -2300,7 +2417,7 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer); return; }
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection); return; }
     renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
   }
 
@@ -2382,7 +2499,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
