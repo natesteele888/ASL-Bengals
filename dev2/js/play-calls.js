@@ -946,6 +946,21 @@ window.renderCardDiagram = renderCardDiagram;
 window.renderSplitDiagram = renderSplitDiagram;
 
 // ---- Render a card's diagram into its SVG stage ----
+// Where the eleven players line up, from the formation registry
+// (js/formations.js) instead of from DATA's three scattered position keys.
+//
+// DATA never had a formation axis: Wing's personnel was spread across
+// DATA.formation (the line AND tight ends 5/6), DATA.backfield (1/2/3) and
+// DATA.wing (player 4's anchor), while Split kept all six numbered players in
+// DATA.split[side]. Every renderer below had to know which of those keys held
+// which player, which is exactly why a third formation had nowhere to live.
+//
+// The registry returns one flat map of all 11 for a given formation and side,
+// reassembled from those same keys -- identical numbers, one lookup.
+function alignment(formationId, side) {
+  return window.Formations.positions(formationId, side);
+}
+
 function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
@@ -977,7 +992,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // matching numbered circle. Defenders are never selectable, so they
   // never glow either way.
   const isLineSelectedForCircles = typeof selectedPlayer === 'string';
-  const wingPos = DATA.wing[wingSide];
+  const wingAlign = alignment('wing', wingSide);
+  const wingPos = wingAlign['4'];
   const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
   // QB Sneak is a real Split Left/Right personnel grouping (Nathan: "It
   // shows Split on the QB Sneak play but it still shows the Shotgun
@@ -990,7 +1006,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // DATA.formation's fixed, non-side-aware 5/6), so the diagram actually
   // shows 6/4 tucked in on the line and 5/3 split out, matching Nathan's
   // real Split reference diagrams instead of Shotgun's personnel.
-  const splitPositions = playType.key === 'qb_sneak' ? DATA.split[wingSide] : null;
+  const splitPositions = playType.key === 'qb_sneak' ? alignment('split', wingSide) : null;
 
   function drawCircle(x, y, label, stroke, fontSize, isSelected, r, playerNum) {
     r = r || CIRCLE_R;
@@ -1069,7 +1085,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     defenseCircles[d.id] = dc;
   });
 
-  const p5Pos = splitPositions ? splitPositions[5] : DATA.formation['5'];
+  const p5Pos = splitPositions ? splitPositions[5] : wingAlign['5'];
   const c5Selected = selectedPlayer === 5;
   const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111', 34, c5Selected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
@@ -1081,10 +1097,10 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // these alone, same as it always has.
   ['LT','LG','C','RG','RT'].forEach(k => {
     const isSelected = isLineSelectedForCircles && selectedPlayer === k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, isSelected, null, k);
+    const c = drawCircle(wingAlign[k][0], wingAlign[k][1], k, '#111', 22, isSelected, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
-  const p6Pos = splitPositions ? splitPositions[6] : DATA.formation['6'];
+  const p6Pos = splitPositions ? splitPositions[6] : wingAlign['6'];
   const c6Selected = selectedPlayer === 6;
   const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111', 34, c6Selected, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
@@ -1105,7 +1121,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // about Motion/wing math below is unchanged.
   const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
   const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
-  const p4Anchor = splitPositions ? splitPositions[4] : (motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide]);
+  const p4Anchor = splitPositions ? splitPositions[4]
+    : (motionOn ? alignment('wing', p4MotionedSide)['4'] : alignment('wing', p4HomeSide)['4']);
   // Which side #4 is ACTUALLY standing on -- used to mirror his
   // block/seam offsets correctly. Using raw wingSide here (ignoring
   // Motion) left the mirror sign out of sync with p4Anchor whenever
@@ -1124,7 +1141,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // motion arrow is drawn from his real (opposite-side) starting spot
     // instead of the coach's literal Wing L/R setting, which for this kind
     // of play is the opposite end of the same line.
-    const p4HomeAnchor = DATA.wing[p4HomeSide];
+    const p4HomeAnchor = alignment('wing', p4HomeSide)['4'];
     circlesLayer.appendChild(svgEl('path', {
       d: `M ${p4HomeAnchor[0]} ${p4HomeAnchor[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
       fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
@@ -1136,7 +1153,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // #3 splits out wide in real Split personnel instead of standing in
     // the backfield (see splitPositions above) -- 1 and 2 sit in the same
     // spot either way, so only 3 needs the override.
-    const pos = (splitPositions && num === '3') ? splitPositions[3] : DATA.backfield[num];
+    const pos = (splitPositions && num === '3') ? splitPositions[3] : wingAlign[num];
     const c = drawCircle(pos[0], pos[1], num, '#111', 34, isSelected, null, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
@@ -1194,7 +1211,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         if (motionOn && p[motionKey]) {
           points = [p4Anchor, p[motionKey][1]];
         } else {
-          const noMotionAnchor = DATA.wing[p4HomeSide];
+          const noMotionAnchor = alignment('wing', p4HomeSide)['4'];
           const stored = p[baseKey] || p.points;
           const [dx, dy] = stored[1];
           const sign = p4HomeSide === 'Left' ? 1 : -1;
@@ -1220,7 +1237,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         // the right, not just swap the live anchor into point 0 (which left
         // the rest of the route at its literal Left-authored coordinates).
         if (p4Side === 'Right') {
-          const centerX = DATA.formation.C[0];
+          const centerX = wingAlign.C[0];
           points = points.map(([x, y]) => [centerX + (centerX - x), y]);
         } else {
           points = [p4Anchor, ...points.slice(1)];
@@ -1413,13 +1430,16 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 //      draws their routes regardless of run/pass, per "even if the team
 //      runs the receivers still run their assigned routes."
 function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
-  const pos = DATA.split[splitSide];
+  // One map for all eleven: the registry's Split alignment carries the
+  // offensive line too, so the line no longer has to be fetched from a
+  // different DATA key than the players it blocks alongside.
+  const pos = alignment('split', splitSide);
   const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
   const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
   const paths = [];
 
-  ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
-    const [x, y] = DATA.formation[k];
+  window.Formations.lineSlots('split').forEach(k => {
+    const [x, y] = pos[k];
     paths.push({ id: k, isBlocking: true, endType: 'block', width: 7, points: [[x, y], [x, y + 22]] });
   });
 
@@ -1500,7 +1520,8 @@ function getSplitRoutePaths(splitSide, leftCall, rightCall) {
   const oppositeSide = splitSide === 'Right' ? 'Left' : 'Right';
   const oppositeCall = splitSide === 'Right' ? leftCall : rightCall;
   const oppositeFlexSource = routes[oppositeSide] && routes[oppositeSide].flex;
-  const fourPos = DATA.split[splitSide] && DATA.split[splitSide]['4'];
+  const splitAlign = alignment('split', splitSide);
+  const fourPos = splitAlign && splitAlign['4'];
   if (oppositeFlexSource && oppositeFlexSource[oppositeCall] && fourPos) {
     out.push({ points: reanchorRoute(oppositeFlexSource[oppositeCall], fourPos), player: 4, width: 7 });
   }
@@ -1538,7 +1559,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
-  const pos = DATA.split[splitSide];
+  const pos = alignment('split', splitSide);
 
   // Auto-highlight the signed-in player's own position, same idea as
   // renderCardDiagram (Shotgun). Also now click-to-toggle just like
@@ -1572,7 +1593,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     // Same rule as renderCardDiagram's Shotgun O-line circles: only glows
     // for a LINE selection, not a numbered one.
     const isSelected = isLineSelected && selectedPlayer === k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22, null, null, isSelected, k);
+    const c = drawCircle(pos[k][0], pos[k][1], k, 22, null, null, isSelected, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
@@ -1649,8 +1670,9 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
   const lastRenderedPaths = stage._lastRenderedPaths || [];
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
-  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
-  const qbPos = { x: DATA.split[splitSide]['1'][0], y: DATA.split[splitSide]['1'][1] };
+  const splitAlign = alignment('split', splitSide);
+  const centerPos = { x: splitAlign['C'][0], y: splitAlign['C'][1] };
+  const qbPos = { x: splitAlign['1'][0], y: splitAlign['1'][1] };
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
 
@@ -1728,8 +1750,9 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   const lastRenderedPaths = stage._lastRenderedPaths;
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
-  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
-  const qbPos = { x: DATA.backfield['1'][0], y: DATA.backfield['1'][1] };
+  const wingAlign = alignment('wing', wingSide);
+  const centerPos = { x: wingAlign['C'][0], y: wingAlign['C'][1] };
+  const qbPos = { x: wingAlign['1'][0], y: wingAlign['1'][1] };
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
 
@@ -1744,8 +1767,10 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     const p4Entry = lastRenderedPaths.find(p => p.player === 4);
     if (p4Entry && p4Entry.circleEl) {
       const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
-      const startPos = { x: DATA.wing[wingSide][0], y: DATA.wing[wingSide][1] };
-      const endPos = { x: DATA.wing[oppositeSide][0], y: DATA.wing[oppositeSide][1] };
+      const here = alignment('wing', wingSide)['4'];
+      const there = alignment('wing', oppositeSide)['4'];
+      const startPos = { x: here[0], y: here[1] };
+      const endPos = { x: there[0], y: there[1] };
       p4Entry.circleEl.setAttribute('cx', startPos.x); p4Entry.circleEl.setAttribute('cy', startPos.y);
       if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', startPos.x); p4Entry.textEl.setAttribute('y', startPos.y + 12); }
       await tweenPoint(startPos, endPos, 2200 * speedMultiplier, pt => {
