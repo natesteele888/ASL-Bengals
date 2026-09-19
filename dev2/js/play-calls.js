@@ -907,6 +907,7 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
   return window.Signals.sequenceFor(recipeNameFor(playType, 'wing'), {
     playKey, wingSide, direction, insideOutside,
     motionOn, bootOn, counterOn, popVariantOn,
+    overloadOn: !!overloadOn,
     playSignalId: playSignalIdFor(playType, playKey),
     playSignalLabel: playSignalLabelFor(playType, playKey),
   });
@@ -938,8 +939,8 @@ window.renderSplitDiagram = renderSplitDiagram;
 //
 // The registry returns one flat map of all 11 for a given formation and side,
 // reassembled from those same keys -- identical numbers, one lookup.
-function alignment(formationId, side) {
-  const pos = window.Formations.positions(formationId, side);
+function alignment(formationId, side, opts) {
+  const pos = window.Formations.positions(formationId, side, opts);
   // Fail loudly and by name. The alternative -- quietly falling back to Wing
   // -- is exactly the silent-wrongness failure this registry exists to
   // remove: a card that claims one formation and draws another. A play
@@ -1001,7 +1002,7 @@ function shiftPathsToFormation(paths, fromAlign, toAlign) {
   });
 }
 
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn) {
   // Defaults to the formation these routes were authored against, so every
   // existing caller -- including the PDF exporters and This Week, which pass
   // these arguments positionally -- keeps its exact current behaviour.
@@ -1013,13 +1014,23 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // for the formation being asked for. Identical objects' worth of numbers
   // when formationId is 'wing'.
   const authoredAlign = alignment('wing', wingSide);
-  const wingAlign = alignment(formationId, wingSide);
+  const wingAlign = alignment(formationId, wingSide, { overload: overloadOn });
+
+  // Player 4's spot for a given side. Overload pushes him out past the tight
+  // end that came over -- but only on the side the formation is actually set
+  // to, so motioning him away from an overloaded side lands him on that
+  // side's ordinary wing spot, not an overloaded one.
+  const p4AnchorOn = (side) =>
+    alignment('wing', side, { overload: overloadOn && side === wingSide })['4'];
 
   const authoredVariant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn);
-  // Present the play in the requested formation by moving each authored route
-  // as far as its owner moved. A no-op for the authoring formation, so the
-  // Wing diagrams below are untouched.
-  const variant = formationId === 'wing' ? authoredVariant : Object.assign({}, authoredVariant, {
+  // Present the play at the alignment the players are ACTUALLY standing in by
+  // moving each authored route as far as its owner moved. That covers both a
+  // different formation and an alignment call like Overload -- once a man's
+  // spot changes, his route and his block follow, with no separate notion of
+  // what Overload means anywhere downstream. Identical alignments make every
+  // delta zero, so a plain Wing call is untouched.
+  const variant = Object.assign({}, authoredVariant, {
     paths: shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
   });
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
@@ -1178,7 +1189,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
   const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
   const p4Anchor = splitPositions ? splitPositions[4]
-    : (motionOn ? alignment('wing', p4MotionedSide)['4'] : alignment('wing', p4HomeSide)['4']);
+    : (motionOn ? p4AnchorOn(p4MotionedSide) : p4AnchorOn(p4HomeSide));
   // Which side #4 is ACTUALLY standing on -- used to mirror his
   // block/seam offsets correctly. Using raw wingSide here (ignoring
   // Motion) left the mirror sign out of sync with p4Anchor whenever
@@ -1197,7 +1208,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // motion arrow is drawn from his real (opposite-side) starting spot
     // instead of the coach's literal Wing L/R setting, which for this kind
     // of play is the opposite end of the same line.
-    const p4HomeAnchor = alignment('wing', p4HomeSide)['4'];
+    const p4HomeAnchor = p4AnchorOn(p4HomeSide);
     circlesLayer.appendChild(svgEl('path', {
       d: `M ${p4HomeAnchor[0]} ${p4HomeAnchor[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
       fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
@@ -1267,7 +1278,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         if (motionOn && p[motionKey]) {
           points = [p4Anchor, p[motionKey][1]];
         } else {
-          const noMotionAnchor = alignment('wing', p4HomeSide)['4'];
+          const noMotionAnchor = p4AnchorOn(p4HomeSide);
           const stored = p[baseKey] || p.points;
           const [dx, dy] = stored[1];
           const sign = p4HomeSide === 'Left' ? 1 : -1;
@@ -2240,8 +2251,10 @@ function buildCard(combo) {
   formationRow.appendChild(protectionToggle);
 
   // Overload: the back-side tight end comes over as a second TE on the wing
-  // side. Signalled now; the alignment change is still to come, so the switch
-  // is here to be called and taught, not to move anyone yet.
+  // side. It belongs to Wing, not Split -- "the non-wing side TE" only means
+  // something in the formation that has a wing. The registry says which
+  // formations can be overloaded at all, so the switch is never offered where
+  // it would do nothing.
   const overloadSwitch = buildSwitchToggle('Overload', overloadOn, (v) => {
     if (isPlayingRef.value) return;
     overloadOn = v;
@@ -2383,7 +2396,8 @@ function buildCard(combo) {
     passSwitch.style.display = isSplit ? '' : 'none';
     // Protection only exists inside a pass; Overload only inside Split.
     protectionToggle.style.display = (isSplit && passOn) ? '' : 'none';
-    overloadSwitch.style.display = isSplit ? '' : 'none';
+    overloadSwitch.style.display =
+      (!isSplit && window.Formations.supportsOverload(formation)) ? '' : 'none';
     motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
@@ -2418,7 +2432,7 @@ function buildCard(combo) {
 
   function rerenderDiagram() {
     if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection); return; }
-    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, undefined, overloadOn);
   }
 
   stage.addEventListener('playerclick', (ev) => {

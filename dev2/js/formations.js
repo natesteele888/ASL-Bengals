@@ -108,6 +108,14 @@
       lineSlots: OLINE.slice(),
       sides: ['Left', 'Right'],
       derive: wingPositions,
+      // Nathan: "new signal for Overload which tells the non-wing side TE to
+      // play over as a second TE on the wing side."
+      //
+      // Declared rather than hardcoded because only a formation that HAS a
+      // wing side and a tight end on each edge can be overloaded. Split has
+      // no wing, so it has no overload -- and says so by omitting this.
+      overload: { tightEnds: { Left: '5', Right: '6' }, flanker: '4',
+                  edgeTackle: { Left: 'LT', Right: 'RT' } },
     },
     split: {
       id: 'split',
@@ -149,17 +157,62 @@
     return out;
   }
 
+  // Bring the back-side tight end over as a second tight end on the wing
+  // side, and push the flanker out past him so the two do not stack.
+  //
+  // Every number is measured off the formation's own spacing rather than
+  // written down: the new tight end lines up one natural TE-split outside the
+  // tight end already there, and the flanker keeps the same gap from the end
+  // man that he had before. So a formation with a wider or tighter split
+  // overloads at ITS spacing, not at Wing's.
+  function applyOverload(pos, f, side) {
+    var o = f.overload;
+    if (!o) return pos; // formation has no wing side; nothing to overload
+    var frontTE = o.tightEnds[side];
+    var backTE = o.tightEnds[side === 'Right' ? 'Left' : 'Right'];
+    var tackle = o.edgeTackle[side];
+    var flanker = o.flanker;
+    if (!pos[frontTE] || !pos[backTE] || !pos[tackle]) return pos;
+
+    var sign = side === 'Right' ? 1 : -1;
+    var teSplit = Math.abs(pos[frontTE][0] - pos[tackle][0]);
+    pos[backTE] = [Math.round(pos[frontTE][0] + sign * teSplit), pos[frontTE][1]];
+
+    if (pos[flanker]) {
+      var gap = Math.abs(pos[flanker][0] - pos[frontTE][0]);
+      pos[flanker] = [Math.round(pos[backTE][0] + sign * gap), pos[flanker][1]];
+    }
+    return pos;
+  }
+
   // The one call every renderer should make: give me all 11 spots for this
   // formation on this side.
-  function positions(id, side) {
+  //
+  // `opts.overload` is an ALIGNMENT modifier, which is the whole reason it
+  // lives here: once a player's spot changes, the renderer shifts his routes
+  // and blocks by the difference automatically, so nothing downstream needs
+  // its own idea of what Overload means.
+  function positions(id, side, opts) {
     var f = get(id);
     if (!f) return null;
     var s = side === 'Left' ? 'Left' : 'Right';
+    var pos;
     if (f.derive) {
       var D = data();
-      return D ? f.derive(D, s) : null;
+      if (!D) return null;
+      pos = f.derive(D, s);
+    } else {
+      pos = f.positions && f.positions[s] ? clone(f.positions[s]) : null;
     }
-    return f.positions && f.positions[s] ? clone(f.positions[s]) : null;
+    if (pos && opts && opts.overload) pos = applyOverload(pos, f, s);
+    return pos;
+  }
+
+  // Whether this formation can be overloaded at all -- the toggle should not
+  // offer a call that would do nothing.
+  function supportsOverload(id) {
+    var f = get(id);
+    return !!(f && f.overload);
   }
 
   function lineSlots(id) {
@@ -280,6 +333,7 @@
     get: get,
     resolveId: resolveId,
     positions: positions,
+    supportsOverload: supportsOverload,
     lineSlots: lineSlots,
     isLine: isLine,
     slots: slots,

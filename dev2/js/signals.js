@@ -185,6 +185,11 @@
       { card: WING_TOUCH, label: 'Wing' },
       { card: function (c) { return (c.wingFinger = pickFinger(c.wingSide)); },
         label: function (c) { return 'Wing Location: ' + c.wingSide; } },
+      // Overload is an alignment call, so it comes while the pre-snap picture
+      // is still being set -- before the play itself, and before Motion, since
+      // it decides where the tight end lines up and Motion moves someone from
+      // wherever they ended up.
+      { when: function (c) { return c.overloadOn; }, card: 102, label: 'Overload' },
       // Motion is called right after the wing spot is set: it is part of the
       // pre-snap picture, and that is where the toggle sits in the UI too.
       { when: function (c) { return c.motionOn; },
@@ -231,8 +236,6 @@
         card: 103, label: 'Pass Pocket' },
       { when: function (c) { return c.passOn && c.protection === 'straight'; },
         card: 104, label: 'Straight Pass Block' },
-      // Overload moves the back-side tight end over as a second wing-side TE.
-      { when: function (c) { return c.overloadOn; }, card: 102, label: 'Overload' },
     ],
   };
 
