@@ -54,7 +54,7 @@
   }
 
   AssignmentEditor.prototype.alignKey = function () {
-    return window.Formations.alignmentKey(this.formationId, { overload: this.overload });
+    return window.Formations.alignmentKey(this.formationId, this.side, { overload: this.overload });
   };
 
   // Who this alignment actually moved, relative to the one the plays were

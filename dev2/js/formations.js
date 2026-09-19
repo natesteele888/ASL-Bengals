@@ -208,14 +208,21 @@
     return pos;
   }
 
-  // A stable name for an ALIGNMENT -- a formation plus any modifier that moves
-  // people. Assignment overrides are stored against this, not against the
+  // A stable name for an ALIGNMENT -- a formation, a side, and any modifier
+  // that moves people. Assignment overrides are stored against this, not against the
   // formation id, because Overload changes where players stand and therefore
   // changes what their assignment should be, exactly as a different formation
   // does. 'wing', 'wing+overload', 'iform', 'iform+overload'.
-  function alignmentKey(id, opts) {
+  //
+  // SIDE IS PART OF THE KEY. Wing Right and Wing Left put players in different
+  // places, so an assignment corrected for one is not corrected for the other
+  // -- and a key that left side out would let a Right-side fix silently claim
+  // to be a Left-side one. Reads as 'wing:Right', 'wing:Right+overload'. All
+  // characters are legal in a Firebase key.
+  function alignmentKey(id, side, opts) {
     var rid = resolveId(id) || id;
-    return (opts && opts.overload) ? rid + '+overload' : rid;
+    var s = side === 'Left' ? 'Left' : 'Right';
+    return rid + ':' + s + ((opts && opts.overload) ? '+overload' : '');
   }
 
   // Which of the eleven actually stand somewhere different between two

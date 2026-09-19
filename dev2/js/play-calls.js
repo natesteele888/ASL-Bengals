@@ -1077,7 +1077,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // delta zero, so a plain Wing call is untouched.
   // Shift first, then let any authored override win outright -- an override is
   // drawn at the alignment it belongs to, so shifting it would move it twice.
-  const alignKey = window.Formations.alignmentKey(formationId, { overload: overloadOn });
+  const alignKey = window.Formations.alignmentKey(formationId, wingSide, { overload: overloadOn });
   const variant = Object.assign({}, authoredVariant, {
     paths: applyAssignmentOverrides(
       shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
@@ -2820,7 +2820,11 @@ function buildGrid() {
       // bare-array shape -- fetched alongside so coach-saved route edits
       // show up here too, not just in the builder tool.
       window.firebaseAuthed(`${FIREBASE_DB_URL}/splitRouteEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
-    ]).then(([saved, savedSplitRoutes]) => {
+      // Per-alignment assignment overrides, on their own narrow key so a save
+      // touches one alignment rather than re-writing every play -- see
+      // js/assignment-store.js for why that matters here specifically.
+      window.AssignmentStore ? window.AssignmentStore.loadAll() : Promise.resolve(null),
+    ]).then(([saved, savedSplitRoutes, savedAssignments]) => {
       let gotAny = false;
       if (saved && Array.isArray(saved) && saved.length) {
         DATA.playTypes = normalizePlayData(saved);
@@ -2829,6 +2833,12 @@ function buildGrid() {
       if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
         DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
         gotAny = true;
+      }
+      // Applied AFTER playEdits replaces DATA.playTypes above -- overrides
+      // hang off the play objects, so merging them into the old array would
+      // lose them the moment cloud data arrived.
+      if (savedAssignments && window.AssignmentStore) {
+        if (window.AssignmentStore.applyTo(DATA.playTypes, savedAssignments)) gotAny = true;
       }
       liveEditsLoaded = true;
       return gotAny;

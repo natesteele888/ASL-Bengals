@@ -249,6 +249,7 @@
 <script src="js/formations.js"></script>
 <script src="js/formation-builder.js"></script>
 <script src="js/play-calls.js"></script>
+<script src="js/assignment-store.js"></script>
 <script src="js/assignment-editor.js"></script>
 <script>
 (function(){
@@ -451,15 +452,16 @@
   // screen.
   var assignEditor = null;
 
-  function assignKeyFor(){
-    return currentFormationId + '::' + assignEditor.alignKey() + '::'
-      + assignEditor.side + '::' + assignEditor.playKey;
+  // Persistence goes through js/assignment-store.js, which writes Firebase in
+  // the real app and this browser's storage in the preview. Same code path
+  // either way, so what gets exercised here is what ships.
+  var assignAll = {};
+  function refreshAssignAll(){
+    return window.AssignmentStore.loadAll().then(function(all){ assignAll = all || {}; return assignAll; });
   }
-  function loadAssign(){
-    try { return JSON.parse(localStorage.getItem(LS_ASSIGN) || '{}'); } catch(e){ return {}; }
-  }
-  function saveAssign(map){
-    try { localStorage.setItem(LS_ASSIGN, JSON.stringify(map)); } catch(e){}
+  function currentOverrides(){
+    var forPlay = assignAll[assignEditor.playKey];
+    return (forPlay && forPlay[assignEditor.alignKey()]) || {};
   }
 
   function refreshMovedList(){
@@ -533,29 +535,40 @@
         loadEditorFor(assignEditor.playKey);
       });
       document.getElementById('saveAssignBtn').addEventListener('click', function(){
-        var all = loadAssign();
-        all[assignKeyFor()] = assignEditor.toJSON();
-        saveAssign(all);
-        document.getElementById('assignStatus').textContent =
-          'Saved for ' + assignEditor.alignKey() + ' / ' + assignEditor.side + '.';
-        refreshMovedList();
+        var st = document.getElementById('assignStatus');
+        st.textContent = 'Saving\u2026';
+        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), assignEditor.toJSON())
+          .then(function(res){
+            // Say which store actually took it. A preview that saved to this
+            // browser must not imply the team has the change.
+            st.textContent = res.backend === 'cloud'
+              ? 'Saved to the team playbook \u2014 ' + assignEditor.alignKey() + '.'
+              : 'Saved on this device only (no login here) \u2014 ' + assignEditor.alignKey() + '.';
+            return refreshAssignAll();
+          })
+          .then(refreshMovedList)
+          .catch(function(e){ st.textContent = 'Save failed: ' + e.message; });
       });
       document.getElementById('resetAssignBtn').addEventListener('click', function(){
         assignEditor.clearAll();
-        var all = loadAssign(); delete all[assignKeyFor()]; saveAssign(all);
-        document.getElementById('assignStatus').textContent = 'Back to the automatic shift.';
-        refreshMovedList();
+        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), {})
+          .then(refreshAssignAll)
+          .then(function(){
+            document.getElementById('assignStatus').textContent = 'Back to the automatic shift.';
+            refreshMovedList();
+          });
       });
     }
     assignEditor.formationId = currentFormationId;
     var first = refreshPlaySel();
-    loadEditorFor(first);
+    refreshAssignAll().then(function(){ loadEditorFor(first); });
   }
 
   function loadEditorFor(playKey){
     assignEditor.playKey = playKey;
-    assignEditor.setOverrides(loadAssign()[assignKeyFor()] || {});
-    document.getElementById('assignStatus').textContent = '';
+    assignEditor.setOverrides(currentOverrides());
+    document.getElementById('assignStatus').textContent =
+      window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
     refreshMovedList();
   }
 
