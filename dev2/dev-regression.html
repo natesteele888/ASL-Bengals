@@ -64,12 +64,22 @@
 <script>
   // play-calls.js reads these two globals at load time.
   window.DATA = window.SHIPPED_PLAYS_JSON;
-  window.ALL_CARDS = [];
+  // Real deck, fetched synchronously before play-calls.js runs: signal
+  // fingerprints have to compare against the cards a kid actually sees.
+  window.ALL_CARDS = (function () {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', 'data/cards.json', false);
+      x.send(null);
+      return JSON.parse(x.responseText);
+    } catch (e) { return []; }
+  })();
 </script>
 <script>
 // cards.json is fetched rather than inlined so signal labels are real. Loaded
 // before play-calls.js, which snapshots ALL_CARDS into SIGNAL_CARDS on entry.
 document.write('<' + 'script src="js/formations.js"><' + '/script>');
+document.write('<' + 'script src="js/signals.js"><' + '/script>');
 document.write('<' + 'script src="js/play-calls.js?harness=1" defer><' + '/script>');
 </script>
 <script>

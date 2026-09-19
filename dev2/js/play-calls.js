@@ -550,8 +550,18 @@ function buildSwitchToggle(label, checked, onChange, extraClass) {
 }
 
 (function() {
-  const SIGNAL_CARDS = {};
-  ALL_CARDS.forEach(c => { SIGNAL_CARDS[c.id] = c.img; });
+  // The deck now comes from js/signals.js, which adds the calls that exist but
+  // have not been photographed yet (Overload, I-Formation, the two pass-
+  // protection calls) and hands back a generated placeholder card for them
+  // instead of a broken image. SIGNAL_CARDS stays a plain id -> src map so
+  // every existing call site is unchanged.
+  if (window.Signals) window.Signals.load(ALL_CARDS);
+  const SIGNAL_CARDS = new Proxy({}, {
+    get: function (_t, id) {
+      return window.Signals ? window.Signals.src(Number(id)) : undefined;
+    },
+    has: function () { return true; },
+  });
 
 const NS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs) {
@@ -801,6 +811,19 @@ const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'F
 // buildToggleGroup's optional `short` option field below.
 const SPLIT_ROUTE_SHORT_LABELS = { seattle: 'SEA', houston: 'HOU', florida: 'FLO', boston: 'BOS' };
 
+// A play may name its own signal series -- playType.signalRecipe -- which is
+// how a new formation's plays get a series assigned without editing code.
+// Falls back to the formation's own recipe.
+function recipeNameFor(playType, formationRecipe) {
+  return (playType && playType.signalRecipe) || formationRecipe;
+}
+function playSignalIdFor(playType, playKey) {
+  return (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
+}
+function playSignalLabelFor(playType, playKey) {
+  return (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
+}
+
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
   const options = exclude !== undefined ? pool.filter(id => id !== exclude) : pool;
@@ -826,33 +849,15 @@ function randomFingerId(side, exclude) {
 // passOn is a plain boolean now -- Nathan: "it's just any of those signals
 // means it is pass", so which of Pass 1/2/3 actually shows is randomized,
 // same idea as MOTION_SIGNAL_IDS below, not a coach-facing choice.
-function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
-  const splitFingerId = randomFingerId(splitSide);
-  // Avoid showing the literal same card image twice in a row for the two
-  // direction cards (both now the same side) -- same dedup approach Wing's
-  // Direction card already uses when direction === wingSide.
-  const dirFingerId = randomFingerId(splitSide, splitFingerId);
+function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, protection, overloadOn) {
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
-  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
-  const signals = [
-    { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
-    { src: SIGNAL_CARDS[splitFingerId], label: `Split: ${splitSide}` },
-  ];
-  if (playKey === 'blast' || playKey === 'double_blast') {
-    if (insideOutside === 'Outside') {
-      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
-    }
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  } else {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  }
-  signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${splitSide}` });
-  if (passOn) {
-    const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
-    signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
-  }
-  return signals;
+  return window.Signals.sequenceFor(recipeNameFor(playType, 'split'), {
+    playKey, splitSide, insideOutside, passOn,
+    protection: protection || null,
+    overloadOn: !!overloadOn,
+    playSignalId: playSignalIdFor(playType, playKey),
+    playSignalLabel: playSignalLabelFor(playType, playKey),
+  });
 }
 
 // formation/splitSide/passOn are new, optional, and appended at the end
@@ -895,65 +900,13 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
       { src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
     ];
   }
-  const wingFingerId = randomFingerId(wingSide);
-  const dirFingerId = direction === wingSide
-    ? randomFingerId(direction, wingFingerId)
-    : randomFingerId(direction);
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
-  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
-  const signals = [
-    { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
-    { src: SIGNAL_CARDS[wingFingerId], label: `Wing Location: ${wingSide}` },
-  ];
-  // Motion is called right after the wing spot is set, since it's part of
-  // the pre-snap picture -- matches where the Motion toggle sits in the UI.
-  if (motionOn) {
-    const motionId = MOTION_SIGNAL_IDS[Math.floor(Math.random() * MOTION_SIGNAL_IDS.length)];
-    signals.push({ src: SIGNAL_CARDS[motionId], label: 'Motion' });
-  }
-  if (playKey === 'blast' || playKey === 'double_blast') {
-    // Inside is a silent default for BOTH Blast and Double Blast -- no
-    // extra card at all, just the play card then direction. Outside is
-    // the one that gets called out explicitly, with the real Outside Zone
-    // card inserted BEFORE the play card (same "modifier before play name"
-    // order as every other play -- see the onComboChanged() comment above
-    // and Nathan's own example: "Wing, Right, Outside, Double Blast,
-    // Right"). Blast used to show an explicit Inside/Outside card either
-    // way (reusing plain finger-count images) -- that was wrong; both
-    // plays behave identically here.
-    if (insideOutside === 'Outside') {
-      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
-    }
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  } else {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  }
-  // Nathan: "There is no direction for Pop Pass, the 4th signal is the Pass
-  // 2 signal" -- unlike every other play, Pop Pass never calls a direction
-  // finger card at all; Pop Pass 2's own modifier below takes that 4th
-  // slot instead, and plain Pop Pass (no variant) just ends after the play
-  // card, 3 signals total.
-  if (playKey !== 'pop_pass') {
-    signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
-  }
-  // Boot and Counter are both modifiers tacked on at the very end, after
-  // direction is set -- and mutually exclusive (see updateBootAvailability/
-  // updateCounterAvailability above), so at most one of these ever fires.
-  if (bootOn) {
-    signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
-  }
-  if (counterOn) {
-    signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
-  }
-  // Pop Pass 2's own modifier -- see POP2_SIGNAL_ID above. Only ever
-  // applies to Pop Pass itself; the toggle can't even be on for any other
-  // play (see hasPopVariant), but the playKey check keeps this safe even
-  // if that ever changes.
-  if (popVariantOn && playKey === 'pop_pass') {
-    signals.push({ src: SIGNAL_CARDS[POP2_SIGNAL_ID], label: 'Pop Pass 2' });
-  }
-  return signals;
+  return window.Signals.sequenceFor(recipeNameFor(playType, 'wing'), {
+    playKey, wingSide, direction, insideOutside,
+    motionOn, bootOn, counterOn, popVariantOn,
+    playSignalId: playSignalIdFor(playType, playKey),
+    playSignalLabel: playSignalLabelFor(playType, playKey),
+  });
 }
 // Exposed globally so play-calls-quiz.js (loaded after this file) can
 // reuse the exact same signal-sequence logic instead of duplicating it --
