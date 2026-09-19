@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formation Builder — dev preview</title>
+<!--
+  DEV PREVIEW ONLY. This page exists so the new formation work can be seen and
+  signed off on before anything merges into the live app.
+
+  It is deliberately standalone:
+    * no login gate     -- it never calls auth, so it opens straight up
+    * no Firebase       -- it reads js/shipped-defaults.js, the same play data
+                           the live site boots from, and saves only to this
+                           browser's own storage
+    * no writes to live -- nothing here can change what the team sees
+
+  It lives on the `formation-engine` branch. GitHub Pages serves `main`, so
+  this file cannot reach the live site until it is deliberately merged.
+-->
+<style>
+  :root{
+    --bengal-orange:#ff6a13; --bengal-orange-dark:#e0570a;
+    --ink:#1b1b1b; --paper:#f4f2ee; --card:#ffffff; --line:#e6e2da; --muted:#8a8a8a;
+    --accent:var(--bengal-orange-dark);
+    --fb-turf:#eceae4; --fb-yardline:#b9b4a8; --fb-los:#e0570a;
+    --fb-line-fill:#1b1b1b; --fb-line-stroke:#1b1b1b; --fb-line-text:#ffffff;
+    --fb-skill-fill:#ffffff; --fb-skill-stroke:#1b1b1b; --fb-skill-text:#1b1b1b;
+    --fb-accent:var(--bengal-orange);
+  }
+  :root[data-theme="dark"]{
+    --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
+    --accent:var(--bengal-orange);
+    --fb-turf:#1d1d1d; --fb-yardline:#4a4a4a; --fb-los:#ff6a13;
+    --fb-line-fill:#eee9e2; --fb-line-stroke:#eee9e2; --fb-line-text:#161616;
+    --fb-skill-fill:#232323; --fb-skill-stroke:#eee9e2; --fb-skill-text:#eee9e2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;}
+  .devbar{background:#7a3b00;color:#ffd9b8;font-size:12px;font-weight:700;
+          padding:7px 14px;text-align:center;letter-spacing:.02em}
+  header{display:flex;align-items:center;gap:12px;padding:14px 18px;
+         border-bottom:1px solid var(--line);background:var(--card);flex-wrap:wrap}
+  h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.01em}
+  .sub{font-size:12px;color:var(--muted);font-weight:600}
+  .spacer{flex:1}
+  .wrap{display:flex;gap:18px;padding:18px;align-items:flex-start;flex-wrap:wrap}
+  .fieldcard{flex:1 1 560px;min-width:320px;background:var(--card);
+             border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .panel{flex:0 0 300px;min-width:260px;background:var(--card);
+         border:1px solid var(--line);border-radius:14px;padding:16px}
+  @media (max-width:820px){ .panel{flex:1 1 100%} }
+  svg#field{width:100%;height:auto;display:block;touch-action:none}
+  label.lbl{display:block;font-size:11px;font-weight:800;color:var(--muted);
+            text-transform:uppercase;letter-spacing:.06em;margin:16px 0 6px}
+  label.lbl:first-child{margin-top:0}
+  select,input[type=text]{width:100%;padding:9px 10px;font-size:14px;
+    border:1px solid var(--line);border-radius:9px;background:var(--paper);
+    color:var(--ink);font-family:inherit}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;
+       overflow:hidden;width:100%}
+  .seg button{flex:1;border:0;background:var(--paper);color:var(--ink);
+    padding:9px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .seg button.on{background:var(--bengal-orange);color:#fff}
+  button.btn{width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);
+    background:var(--paper);color:var(--ink);font-weight:800;font-size:14px;
+    cursor:pointer;margin-top:9px;font-family:inherit}
+  button.btn.primary{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+  button.btn:disabled{opacity:.45;cursor:not-allowed}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55;margin-top:14px;
+        border-top:1px solid var(--line);padding-top:12px}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);
+          padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:50%;
+       margin-right:5px;vertical-align:-1px;border:2px solid var(--ink)}
+  .dot.line{background:var(--ink)}
+  .dot.skill{background:var(--card)}
+  .status{font-size:12px;font-weight:700;color:var(--accent);min-height:17px;margin-top:9px}
+  .saved{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .saved b{color:var(--ink)}
+  code{background:var(--paper);padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="devbar">DEV PREVIEW — branch <code style="background:#552a00;color:#ffd9b8">formation-engine</code> — not live, saves only to this browser</div>
+
+<header>
+  <div>
+    <h1>Formation Builder</h1>
+    <div class="sub">Start from a formation that works. Move who needs moving. Save.</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
+</header>
+
+<div class="wrap">
+  <div class="fieldcard">
+    <svg id="field"></svg>
+    <div class="legend">
+      <span><span class="dot line"></span>Linemen — block (LT LG C RG RT)</span>
+      <span><span class="dot skill"></span>Skill — run routes (1–6)</span>
+      <span style="color:var(--fb-los);font-weight:700">– – –  Line of scrimmage</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label class="lbl">Start from</label>
+    <select id="seedSel"></select>
+
+    <label class="lbl">Side</label>
+    <div class="seg" id="sideSeg">
+      <button data-side="Left">Left</button>
+      <button data-side="Right" class="on">Right</button>
+    </div>
+    <button class="btn" id="mirrorBtn">Mirror this side → other side</button>
+
+    <div id="anchorBox" style="display:none">
+      <label class="lbl">Selected player</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="selName" style="font-weight:800;font-size:15px"></span>
+        <label style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="anchorChk"> stays put when mirrored
+        </label>
+      </div>
+    </div>
+
+    <label class="lbl">Formation name</label>
+    <input type="text" id="nameInput" placeholder="e.g. I-Formation">
+
+    <button class="btn primary" id="saveBtn">Save formation</button>
+    <button class="btn" id="resetBtn">Reset to start</button>
+    <div class="status" id="status"></div>
+    <div class="saved" id="savedList"></div>
+
+    <div class="hint">
+      <b>Drag any of the 11</b> — linemen included — to set where they line up.
+      The line of scrimmage follows the center, so you can shift the whole front.<br><br>
+      Build one side, hit <b>Mirror</b>, then fix up anything that shouldn't
+      flip. Real formations often aren't symmetric.
+    </div>
+  </div>
+</div>
+
+<script src="js/shipped-defaults.js"></script>
+<script src="js/formations.js"></script>
+<script src="js/formation-builder.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  // Stand in for the live Firebase boot: the preview reads the same shipped
+  // play data the real site starts from, so the coordinates on screen are the
+  // real ones, not mock-ups.
+  window.DATA = window.SHIPPED_PLAYS_JSON;
+  if (!window.DATA) {
+    document.body.innerHTML = '<p style="padding:24px;font:14px system-ui">'
+      + 'Could not load js/shipped-defaults.js — serve this page over http, not file://</p>';
+    return;
+  }
+
+  var LS_KEY = 'devPreviewFormations';
+  var statusEl = document.getElementById('status');
+  var nameInput = document.getElementById('nameInput');
+  var seedSel = document.getElementById('seedSel');
+
+  function loadSaved(){
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+    catch(e){ return {}; }
+  }
+  function persist(map){
+    try { localStorage.setItem(LS_KEY, JSON.stringify(map)); } catch(e){}
+  }
+
+  window.Formations.loadCustom(loadSaved());
+
+  var builder = new window.FormationBuilder({
+    svg: document.getElementById('field'),
+    viewBox: window.DATA.viewBox || [1600,1030],
+    topPad: typeof window.DATA.topPad === 'number' ? window.DATA.topPad : 400,
+    onChange: function(){ statusEl.textContent = ''; },
+    onSelect: function(){ syncSelection(); }
+  });
+
+  function refreshSeedOptions(keepId){
+    seedSel.innerHTML = '';
+    window.Formations.list().forEach(function(f){
+      var o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = f.name + (f.builtIn ? '' : '  (yours)');
+      seedSel.appendChild(o);
+    });
+    if (keepId) seedSel.value = keepId;
+  }
+
+  function refreshSavedList(){
+    var saved = loadSaved();
+    var ids = Object.keys(saved);
+    document.getElementById('savedList').innerHTML = ids.length
+      ? 'Saved here: ' + ids.map(function(i){ return '<b>'+saved[i].name+'</b>'; }).join(', ')
+      : '';
+  }
+
+  var anchorBox = document.getElementById('anchorBox');
+  var anchorChk = document.getElementById('anchorChk');
+  var selName   = document.getElementById('selName');
+
+  function syncSelection(){
+    var sel = builder.selected;
+    if (!sel) { anchorBox.style.display = 'none'; return; }
+    anchorBox.style.display = 'block';
+    selName.textContent = builder.isLine(sel) ? sel : 'Player ' + sel;
+    anchorChk.checked = builder.isAnchored(sel);
+  }
+  anchorChk.addEventListener('change', function(){
+    if (builder.selected) builder.toggleAnchor(builder.selected);
+  });
+
+  // Exposed deliberately: this is the dev preview, and having the live
+  // builder reachable from the console is what makes it inspectable.
+  window.__builder = builder;
+
+  var seedId = 'wing';
+  refreshSeedOptions(seedId);
+  refreshSavedList();
+  builder.seedFrom(seedId);
+
+  seedSel.addEventListener('change', function(){
+    seedId = seedSel.value;
+    builder.seedFrom(seedId);
+    var f = window.Formations.get(seedId);
+    nameInput.value = f && !f.builtIn ? f.name : '';
+    statusEl.textContent = '';
+  });
+
+  document.getElementById('sideSeg').addEventListener('click', function(ev){
+    var b = ev.target.closest('button[data-side]');
+    if (!b) return;
+    [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    builder.setSide(b.getAttribute('data-side'));
+  });
+
+  document.getElementById('mirrorBtn').addEventListener('click', function(){
+    var other = builder.mirrorToOtherSide();
+    statusEl.textContent = 'Mirrored ' + builder.side + ' → ' + other + '.';
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function(){
+    builder.seedFrom(seedId);
+    statusEl.textContent = 'Reset to ' + (window.Formations.get(seedId) || {}).name + '.';
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    var name = (nameInput.value || '').trim();
+    if (!name) { statusEl.textContent = 'Give the formation a name first.'; return; }
+    var id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    if (window.Formations.get(id) && window.Formations.get(id).builtIn) {
+      statusEl.textContent = 'That name collides with a built-in formation — pick another.';
+      return;
+    }
+    var saved = loadSaved();
+    saved[id] = builder.toFormation({ id: id, name: name, createdAt: new Date().toISOString() });
+    persist(saved);
+    window.Formations.loadCustom(saved);
+    refreshSeedOptions(id);
+    refreshSavedList();
+    seedId = id;
+    statusEl.textContent = 'Saved “' + name + '”. It is now in Start from.';
+  });
+
+  var themeBtn = document.getElementById('themeBtn');
+  themeBtn.addEventListener('click', function(){
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    themeBtn.textContent = dark ? 'Dark' : 'Light';
+    builder.render();
+  });
+})();
+</script>
+</body>
+</html>

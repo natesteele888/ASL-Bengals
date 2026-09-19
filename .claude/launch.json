@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bengals-dev2",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/private/tmp/claude-501/-Volumes-AutoNuvo-1-ASL-Bengals/cfc63ed5-34bf-4ac5-b01e-15a0435ac71f/scratchpad/serve.js"],
+      "port": 8777
+    }
+  ]
+}
