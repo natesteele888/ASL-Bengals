@@ -58,6 +58,8 @@
   <button id="pcTutorialBackBtn"></button>
   <button id="pcTutorialNextBtn"></button>
   <button id="pcInfoBtn"></button>
+  <div id="studyGuideOverlay"></div><div id="studyGuideBody"></div>
+  <button id="studyGuideCloseBtn"></button>
 </div>
 
 <script src="js/shipped-defaults.js"></script>
@@ -80,7 +82,11 @@
 // before play-calls.js, which snapshots ALL_CARDS into SIGNAL_CARDS on entry.
 document.write('<' + 'script src="js/formations.js"><' + '/script>');
 document.write('<' + 'script src="js/signals.js"><' + '/script>');
+document.write('<' + 'script src="js/ball-path.js"><' + '/script>');
 document.write('<' + 'script src="js/play-calls.js?harness=1" defer><' + '/script>');
+// Loaded so the harness can exercise the position-specific wording too -- it
+// reads the same play data and must not disagree with the diagram.
+document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/script>');
 </script>
 <script>
 (function(){

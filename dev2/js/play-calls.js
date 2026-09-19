@@ -1481,6 +1481,14 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // assignment finished needs this instead. Used by the assignment editor to
   // place its handles on the real end points.
   stage._resolvedPaths = variant.paths;
+
+  // The ball's journey, over the top of everyone's assignments. Only drawn
+  // for a play that has one authored -- so nothing that has not been through
+  // the ball-path editor changes, and a coach opts a play in by describing it
+  // rather than by finding a setting.
+  if (window.BallPath && window.BallPath.isValid(playType && playType.ballPath)) {
+    window.BallPath.drawOverlay(stage, playType.ballPath, wingAlign);
+  }
 }
 
 // ---- Render the Split formation's lineup, plus whichever of the play's
@@ -2824,7 +2832,8 @@ function buildGrid() {
       // touches one alignment rather than re-writing every play -- see
       // js/assignment-store.js for why that matters here specifically.
       window.AssignmentStore ? window.AssignmentStore.loadAll() : Promise.resolve(null),
-    ]).then(([saved, savedSplitRoutes, savedAssignments]) => {
+      window.AssignmentStore ? window.AssignmentStore.loadBallPaths() : Promise.resolve(null),
+    ]).then(([saved, savedSplitRoutes, savedAssignments, savedBallPaths]) => {
       let gotAny = false;
       if (saved && Array.isArray(saved) && saved.length) {
         DATA.playTypes = normalizePlayData(saved);
@@ -2839,6 +2848,9 @@ function buildGrid() {
       // lose them the moment cloud data arrived.
       if (savedAssignments && window.AssignmentStore) {
         if (window.AssignmentStore.applyTo(DATA.playTypes, savedAssignments)) gotAny = true;
+      }
+      if (savedBallPaths && window.AssignmentStore) {
+        if (window.AssignmentStore.applyBallPaths(DATA.playTypes, savedBallPaths)) gotAny = true;
       }
       liveEditsLoaded = true;
       return gotAny;

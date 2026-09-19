@@ -120,6 +120,7 @@
     <button id="tab1" class="on">1&nbsp; Formation</button>
     <button id="tab2">2&nbsp; Plays</button>
     <button id="tab3">3&nbsp; Assignments</button>
+    <button id="tab4">4&nbsp; Ball</button>
   </div>
   <div class="spacer"></div>
   <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
@@ -228,6 +229,41 @@
   </div>
 </div>
 
+<div id="step4" style="display:none">
+  <div class="gridhead">
+    <h2>Where the ball goes</h2><span class="who" id="whoFor4"></span>
+  </div>
+  <div class="gridsub">Tap the players in the order they touch it. Tap the last one again to undo.</div>
+  <div class="wrap" style="padding:0">
+    <div class="fieldcard"><svg id="ballField"></svg></div>
+    <div class="panel">
+      <label class="lbl">Play</label>
+      <select id="ballPlaySel"></select>
+
+      <label class="lbl">Side</label>
+      <div class="seg" id="ballSideSeg">
+        <button data-side="Left">Left</button>
+        <button data-side="Right" class="on">Right</button>
+      </div>
+
+      <label class="lbl">Sequence</label>
+      <div id="ballSeq"></div>
+      <div id="ballPlain" style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px"></div>
+
+      <button class="btn primary" id="saveBallBtn">Save ball path</button>
+      <button class="btn" id="clearBallBtn">Clear</button>
+      <div class="status" id="ballStatus"></div>
+
+      <div class="hint">
+        The exchange point places itself between the two players &mdash;
+        <b>drag a numbered badge</b> only if it&rsquo;s in the wrong spot.
+        Set the word on each leg: a <b>pitch</b> and a <b>pass</b> are taught
+        differently, and on a pop pass the pass leg is where it gets released.
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- DOM play-calls.js touches while loading. Not used by this page. -->
 <div id="stubs">
   <div id="playCallsGrid"></div><div id="playCallsCloudStatus"></div>
@@ -251,6 +287,8 @@
 <script src="js/play-calls.js"></script>
 <script src="js/assignment-store.js"></script>
 <script src="js/assignment-editor.js"></script>
+<script src="js/ball-path.js"></script>
+<script src="js/ball-path-editor.js"></script>
 <script>
 (function(){
   'use strict';
@@ -572,13 +610,137 @@
     refreshMovedList();
   }
 
+  // ---- Step 4: the ball's journey ----
+  var ballEditor = null, ballAll = {}, ballSide = 'Right';
+
+  function refreshBallAll(){
+    return window.AssignmentStore.loadBallPaths().then(function(all){ ballAll = all || {}; return ballAll; });
+  }
+
+  function renderBallSeq(){
+    var bp = ballEditor.get();
+    var host = document.getElementById('ballSeq');
+    if (!bp.length) {
+      host.innerHTML = '<div style="font-size:12px;color:var(--muted)">Nothing yet &mdash; tap a player on the field.</div>';
+      document.getElementById('ballPlain').textContent = '';
+      return;
+    }
+    var WORDS = Object.keys(window.BallPath.EXCHANGES).filter(function(k){ return k !== 'snap'; });
+    host.innerHTML = bp.map(function(leg, i){
+      var badge = '<span style="width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--paper);'
+        + 'display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0">'+(i+1)+'</span>';
+      var who = '<b style="min-width:30px">#'+leg.player+'</b>';
+      var how = i === 0
+        ? '<span style="font-size:12px;color:var(--muted)">snap</span>'
+        : '<select data-leg="'+i+'" style="width:auto;padding:3px 6px;font-size:12px">'
+          + WORDS.map(function(w){
+              return '<option value="'+w+'"'+((leg.how||'handoff')===w?' selected':'')+'>'
+                + window.BallPath.EXCHANGES[w].label + '</option>'; }).join('')
+          + '</select>';
+      var rm = '<button data-rm="'+i+'" style="margin-left:auto;border:0;background:none;color:var(--muted);'
+        + 'cursor:pointer;font-size:15px;font-weight:800;padding:0 4px">&times;</button>';
+      return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'+badge+who+how+rm+'</div>';
+    }).join('');
+    document.getElementById('ballPlain').textContent = window.BallPath.describe(bp);
+
+    [].forEach.call(host.querySelectorAll('select[data-leg]'), function(sel){
+      sel.addEventListener('change', function(){
+        ballEditor.setHow(Number(this.getAttribute('data-leg')), this.value);
+      });
+    });
+    [].forEach.call(host.querySelectorAll('button[data-rm]'), function(b){
+      b.addEventListener('click', function(){
+        ballEditor.removeAt(Number(this.getAttribute('data-rm')));
+      });
+    });
+  }
+
+  function ballPlayKey(){ return document.getElementById('ballPlaySel').value; }
+
+  function drawBallPlay(){
+    var svg = document.getElementById('ballField');
+    var key = ballPlayKey();
+    var pt = playsFor().find(function(p){ return p.key === key; });
+    if (!pt) return;
+    window.renderCardDiagram(svg, key, ballSide, ballSide, null, '4x4',
+      pt.hasInsideOutside ? 'Outside' : null, false, false, 'A', false, false,
+      currentFormationId, false);
+    svg.setAttribute('viewBox', '0 250 1600 760');
+  }
+
+  function loadBallFor(key){
+    ballEditor.setAlign(window.Formations.positions(currentFormationId, ballSide));
+    ballEditor.set(ballAll[key] || []);
+    document.getElementById('ballStatus').textContent =
+      window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
+    renderBallSeq();
+  }
+
+  function initBallStep(){
+    if (!ballEditor) {
+      ballEditor = new window.BallPathEditor({
+        svg: document.getElementById('ballField'),
+        renderPlay: drawBallPlay,
+        onChange: function(){
+          renderBallSeq();
+          document.getElementById('ballStatus').textContent = 'Unsaved changes.';
+        },
+      });
+      document.getElementById('ballPlaySel').addEventListener('change', function(){ loadBallFor(this.value); });
+      document.getElementById('ballSideSeg').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-side]'); if(!b) return;
+        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+        ballSide = b.getAttribute('data-side');
+        loadBallFor(ballPlayKey());
+      });
+      document.getElementById('saveBallBtn').addEventListener('click', function(){
+        var st = document.getElementById('ballStatus');
+        st.textContent = 'Saving\u2026';
+        window.AssignmentStore.saveBallPath(ballPlayKey(), ballEditor.get())
+          .then(function(res){
+            st.textContent = res.backend === 'cloud'
+              ? 'Saved to the team playbook.'
+              : 'Saved on this device only (no login here).';
+            return refreshBallAll();
+          })
+          .catch(function(e){ st.textContent = 'Save failed: ' + e.message; });
+      });
+      document.getElementById('clearBallBtn').addEventListener('click', function(){
+        ballEditor.clear();
+        window.AssignmentStore.saveBallPath(ballPlayKey(), []).then(refreshBallAll);
+        document.getElementById('ballStatus').textContent = 'Cleared.';
+      });
+    }
+    var sel = document.getElementById('ballPlaySel');
+    var picks = pickMap()[currentFormationId] || [];
+    var list = picks.length ? picks : playsFor().map(function(p){ return p.key; });
+    sel.innerHTML = '';
+    list.forEach(function(k){
+      var pt = playsFor().find(function(p){ return p.key === k; });
+      if (!pt) return;
+      var o = document.createElement('option'); o.value = k; o.textContent = pt.label || k;
+      sel.appendChild(o);
+    });
+    refreshBallAll().then(function(){ loadBallFor(sel.value); });
+  }
+
   function goStep(n, formationId){
     document.getElementById('step1').style.display = n === 1 ? '' : 'none';
     document.getElementById('step2').style.display = n === 2 ? '' : 'none';
     document.getElementById('step3').style.display = n === 3 ? '' : 'none';
+    document.getElementById('step4').style.display = n === 4 ? '' : 'none';
     document.getElementById('tab1').classList.toggle('on', n === 1);
     document.getElementById('tab2').classList.toggle('on', n === 2);
     document.getElementById('tab3').classList.toggle('on', n === 3);
+    document.getElementById('tab4').classList.toggle('on', n === 4);
+    if (n === 4) {
+      currentFormationId = formationId || currentFormationId || seedId;
+      var f4 = window.Formations.get(currentFormationId);
+      document.getElementById('whoFor4').textContent = 'in ' + (f4 ? f4.name : currentFormationId);
+      initBallStep();
+      return;
+    }
     if (n === 3) {
       currentFormationId = formationId || currentFormationId || seedId;
       var f3 = window.Formations.get(currentFormationId);
@@ -599,6 +761,7 @@
   document.getElementById('tab1').addEventListener('click', function(){ goStep(1); });
   document.getElementById('tab2').addEventListener('click', function(){ goStep(2, seedId); });
   document.getElementById('tab3').addEventListener('click', function(){ goStep(3, currentFormationId || seedId); });
+  document.getElementById('tab4').addEventListener('click', function(){ goStep(4, currentFormationId || seedId); });
   document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
   document.getElementById('savePicksBtn').addEventListener('click', function(){
     var list = pickMap()[currentFormationId] || [];

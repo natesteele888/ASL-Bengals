@@ -153,7 +153,86 @@
       });
   }
 
+  // --- Ball paths -------------------------------------------------------
+  // Same store, its own key: /ballPaths/<playKey> -> the ordered legs.
+  //
+  // NOT keyed by alignment, unlike assignment overrides. Who touches the ball
+  // and in what order is the play -- a reverse is a reverse out of any
+  // formation. Only the exchange POINTS are positional, and they travel with
+  // the formation the same way every other coordinate does.
+  var BALL_PATH = 'ballPaths';
+  var LS_BALL = 'bengalsBallPaths';
+
+  function toLegList(v) {
+    if (!v) return null;
+    var arr = Array.isArray(v) ? v : Object.keys(v)
+      .sort(function (a, b) { return Number(a) - Number(b); })
+      .map(function (k) { return v[k]; });
+    var out = [];
+    arr.forEach(function (leg) {
+      if (!leg || leg.player == null) return;
+      var clean = { player: leg.player };
+      if (leg.how) clean.how = leg.how;
+      if (leg.at) {
+        var x = Array.isArray(leg.at) ? leg.at[0] : leg.at['0'];
+        var y = Array.isArray(leg.at) ? leg.at[1] : leg.at['1'];
+        if (typeof x === 'number' && typeof y === 'number') clean.at = [x, y];
+      }
+      out.push(clean);
+    });
+    return out.length ? out : null;
+  }
+
+  function loadBallPaths() {
+    if (!hasCloud()) {
+      try { return Promise.resolve(JSON.parse(localStorage.getItem(LS_BALL) || '{}')); }
+      catch (e) { return Promise.resolve({}); }
+    }
+    return window.firebaseAuthed(DB + '/' + BALL_PATH + '.json')
+      .then(function (url) { return fetch(url); })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) { return raw || {}; })
+      .catch(function () { return {}; });
+  }
+
+  function applyBallPaths(playTypes, all) {
+    if (!playTypes || !all) return 0;
+    var n = 0;
+    playTypes.forEach(function (pt) {
+      var legs = toLegList(all[pt.key]);
+      if (legs) { pt.ballPath = legs; n++; }
+    });
+    return n;
+  }
+
+  function saveBallPath(playKey, legs) {
+    var body = (legs && legs.length) ? legs : null;
+    if (!hasCloud()) {
+      var all = {};
+      try { all = JSON.parse(localStorage.getItem(LS_BALL) || '{}'); } catch (e) {}
+      if (body) all[playKey] = body; else delete all[playKey];
+      try { localStorage.setItem(LS_BALL, JSON.stringify(all)); } catch (e) {}
+      return Promise.resolve({ ok: true, backend: 'local' });
+    }
+    var leaf = DB + '/' + BALL_PATH + '/' + encodeURIComponent(playKey) + '.json';
+    return window.firebaseAuthed(leaf)
+      .then(function (url) {
+        return fetch(url, {
+          method: body ? 'PUT' : 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('save failed (' + r.status + ')');
+        return { ok: true, backend: 'cloud' };
+      });
+  }
+
   window.AssignmentStore = {
+    loadBallPaths: loadBallPaths,
+    applyBallPaths: applyBallPaths,
+    saveBallPath: saveBallPath,
     backend: backend,
     loadAll: loadAll,
     load: load,

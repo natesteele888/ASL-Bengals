@@ -131,7 +131,27 @@ function studyGuideDescribeRoute(path, defenseMode, lineY) {
   return 'You run your assigned path on this play.';
 }
 
+// If the play has an authored ball path and this player is in it, that is the
+// single most important thing he does -- said first, in the coach's own word
+// for the exchange. Falls through to the route/block description when the play
+// has no ball path, which is every play until one is authored.
+function studyGuideBallSentence(pt, position) {
+  if (!window.BallPath || !window.BallPath.isValid(pt.ballPath)) return null;
+  const legs = window.BallPath.legsFor(pt.ballPath, position);
+  if (!legs.length) return null;
+  const leg = legs[0];
+  const EX = window.BallPath.EXCHANGES;
+  const gets = leg.index === 0
+    ? 'You take the snap'
+    : 'You get the ball on the ' + ((EX[leg.gets] || EX.handoff).label.toLowerCase());
+  if (leg.givesTo == null) return gets + ' and you finish with it.';
+  return gets + ', then ' + (EX[leg.givesHow] || EX.handoff).verb
+    + ' to #' + leg.givesTo + '.';
+}
+
 function studyGuideDescribePath(pt, position, path, defense, defenseMode, lineY) {
+  const ballSentence = studyGuideBallSentence(pt, position);
+  if (ballSentence) return ballSentence;
   const isQB = position === '1' || position === 1;
   if (isQB) {
     if (pt.key === 'option_pass') return 'You fake the run mesh, then throw to your target.';
