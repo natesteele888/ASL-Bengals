@@ -166,7 +166,11 @@
       var pos = self.current()[slot];
       self._drag = { slot: slot, dx: pos[0] - p.x, dy: pos[1] - p.y, moved: false };
       self.selected = slot;
-      self.svg.setPointerCapture(ev.pointerId);
+      // Wrapped like the matching releasePointerCapture calls below --
+      // a synthetic or already-ended pointer (rare, but real: seen from an
+      // automated test firing PointerEvents with a pointerId that was never
+      // actually active) throws NotFoundError here uncaught otherwise.
+      try { self.svg.setPointerCapture(ev.pointerId); } catch (e) {}
       self.render();
       self.onSelect(slot);
     });

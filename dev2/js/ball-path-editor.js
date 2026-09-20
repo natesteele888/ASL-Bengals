@@ -145,7 +145,11 @@
       ev.preventDefault();
       ev.stopPropagation();
       self._drag = step;
-      self.svg.setPointerCapture(ev.pointerId);
+      // Wrapped like the matching releasePointerCapture calls below --
+      // a synthetic or already-ended pointer (rare, but real: seen from an
+      // automated test firing PointerEvents with a pointerId that was never
+      // actually active) throws NotFoundError here uncaught otherwise.
+      try { self.svg.setPointerCapture(ev.pointerId); } catch (e) {}
     });
 
     this.svg.addEventListener('pointermove', function (ev) {

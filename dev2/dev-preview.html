@@ -196,7 +196,14 @@
   </div>
   <div class="gridsub" id="movedNote"></div>
   <div class="wrap" style="padding:0">
-    <div class="fieldcard"><svg id="assignField"></svg></div>
+    <div class="fieldcard">
+      <svg id="assignField"></svg>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)">
+        <button class="btn primary" id="assignPlayBtn" style="width:auto;margin:0;padding:9px 18px">&#9654; Play</button>
+        <input type="range" id="assignScrub" min="0" max="1000" value="1000" style="flex:1">
+        <span id="assignScrubLabel" style="font-size:12px;font-weight:800;color:var(--muted);min-width:32px;text-align:right">100%</span>
+      </div>
+    </div>
     <div class="panel">
       <label class="lbl">Play</label>
       <select id="playSel"></select>
@@ -553,8 +560,38 @@
         onChange: function(){
           document.getElementById('assignStatus').textContent = 'Unsaved changes.';
           refreshMovedList();
+          resetScrubUI(); // any drag/insert/delete leaves the diagram fully drawn again
         },
       });
+
+      // ---- Play / Scrub -- Nathan: "Need to be able to play it or scrub
+      // through to time things up." ----
+      var scrubEl = document.getElementById('assignScrub');
+      var scrubLabelEl = document.getElementById('assignScrubLabel');
+      var playBtnEl = document.getElementById('assignPlayBtn');
+
+      function resetScrubUI(){
+        scrubEl.value = 1000;
+        scrubLabelEl.textContent = '100%';
+      }
+
+      scrubEl.addEventListener('input', function(){
+        var frac = Number(this.value) / 1000;
+        scrubLabelEl.textContent = Math.round(frac * 100) + '%';
+        assignEditor.seek(frac);
+      });
+
+      playBtnEl.addEventListener('click', function(){
+        if (assignEditor.isPlaying()) return;
+        playBtnEl.disabled = true;
+        scrubEl.disabled = true;
+        assignEditor.play(function(){
+          playBtnEl.disabled = false;
+          scrubEl.disabled = false;
+          resetScrubUI();
+        });
+      });
+
       document.getElementById('playSel').addEventListener('change', function(){
         loadEditorFor(this.value);
       });
@@ -608,6 +645,9 @@
     document.getElementById('assignStatus').textContent =
       window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
     refreshMovedList();
+    var scrubEl = document.getElementById('assignScrub');
+    scrubEl.value = 1000;
+    document.getElementById('assignScrubLabel').textContent = '100%';
   }
 
   // ---- Step 4: the ball's journey ----

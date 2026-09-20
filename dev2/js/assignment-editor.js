@@ -66,6 +66,7 @@
     // same as Edit Plays clears selectedHandle after those.
     this._picked = null;
     this._drag = null;
+    this._isPlayingRef = { value: false };
     this._wire();
   }
 
@@ -278,7 +279,11 @@
           owner: t.__owner, pathIndex: t.__pathIndex, ptIndex: t.__ptIndex,
           startClient: [ev.clientX, ev.clientY], moved: false,
         };
-        self.svg.setPointerCapture(ev.pointerId);
+        // Wrapped like the matching releasePointerCapture calls below --
+      // a synthetic or already-ended pointer (rare, but real: seen from an
+      // automated test firing PointerEvents with a pointerId that was never
+      // actually active) throws NotFoundError here uncaught otherwise.
+      try { self.svg.setPointerCapture(ev.pointerId); } catch (e) {}
       }
     });
 
@@ -336,6 +341,64 @@
 
   AssignmentEditor.prototype.hasOverride = function (owner) {
     return !!this.overrides[owner];
+  };
+
+  // Nathan: "Need to be able to play it or scrub through to time things up."
+  // Two ways to check the shape a coach just edited actually plays right.
+
+  // Jump to an instant (0..1, a fraction of the play) without leaving the
+  // editor. Deliberately does NOT reinstall the override first -- it reads
+  // whatever render() already left on this.svg, which already reflects the
+  // current overrides, so scrubbing is free of the render()/revert dance and
+  // cannot itself go stale relative to an edit in progress.
+  AssignmentEditor.prototype.seek = function (fraction) {
+    if (!this.playKey || !window.seekCardAnimation) return;
+    var animMs = 1400; // matches playCardAnimation's own constant
+    window.seekCardAnimation(this.svg, Math.max(0, Math.min(1, fraction)) * animMs, 1);
+  };
+
+  // Run the REAL animation (the same one the ▶ button in Play Calls runs),
+  // with the current unsaved overrides installed for its duration -- render()
+  // already does this install/revert dance for the static view; Play needs
+  // its own copy because playCardAnimation calls renderCardDiagram itself,
+  // wiping this.svg and rebuilding it from playType.assignments fresh, so the
+  // override has to be sitting there again when that happens.
+  AssignmentEditor.prototype.play = function (onDone) {
+    var self = this;
+    if (this._isPlayingRef.value || !this.playKey) return;
+    var playType = window.DATA.playTypes.find(function (p) { return p.key === self.playKey; });
+    if (!playType) return;
+
+    var key = this.alignKey();
+    var hadAssignments = playType.assignments;
+    playType.assignments = Object.assign({}, hadAssignments || {});
+    playType.assignments[key] = this.overrides;
+
+    var finish = function () {
+      if (hadAssignments) playType.assignments = hadAssignments;
+      else delete playType.assignments;
+      // playCardAnimation's own renderCardDiagram call wiped this.svg and
+      // drew it fresh with no editor handles at all -- render() rebuilds the
+      // static view AND the handles, same as after any other edit.
+      self.render();
+      if (onDone) onDone();
+    };
+
+    try {
+      var result = window.playCardAnimation(
+        this.svg, this.playKey, this.side, this.side, 1, this._isPlayingRef, null, '4x4',
+        playType.hasInsideOutside ? 'Outside' : null,
+        false, false, 'A', false, false, this.overload);
+      if (result && typeof result.then === 'function') result.then(finish, finish);
+      else finish();
+    } catch (e) {
+      this._isPlayingRef.value = false;
+      finish();
+    }
+  };
+
+  AssignmentEditor.prototype.isPlaying = function () {
+    return this._isPlayingRef.value;
   };
 
   AssignmentEditor.prototype.toJSON = function () {
