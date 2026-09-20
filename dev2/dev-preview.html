@@ -116,8 +116,9 @@
 
 <header>
   <h1>Play Builder</h1>
-  <div class="steps">
-    <button id="tab1" class="on">1&nbsp; Formation</button>
+  <button class="btn" id="homeBtn" style="width:auto;margin:0;padding:8px 14px;display:none">&larr; Home</button>
+  <div class="steps" id="stepsBar" style="display:none">
+    <button id="tab1">1&nbsp; Formation</button>
     <button id="tab2">2&nbsp; Plays</button>
     <button id="tab3">3&nbsp; Assignments</button>
     <button id="tab4">4&nbsp; Ball</button>
@@ -126,7 +127,59 @@
   <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
 </header>
 
-<div id="step1">
+<!--
+  Home: two separate, complete jobs, not one forced march.
+
+  Nathan: "Once you complete setting up the formation and you say save, that
+  should be done. That is the process to add a formation. Then you can
+  choose in another spot to Create a Play -- from there you choose your
+  formation, and then assign what happens." Building a formation used to
+  auto-advance straight into picking plays for it, which conflated two
+  different jobs a coach does at different times: laying out a NEW
+  formation once, versus configuring a play (any time, against a formation
+  that already exists, built-in or custom).
+-->
+<div id="home">
+  <div class="gridhead"><h2>What do you want to do</h2></div>
+  <div class="gridsub">Two separate jobs. Building a formation ends when you save it -- configuring a play is its own flow that starts by picking a formation that already exists.</div>
+  <div class="wrap" style="padding:0;margin-top:4px">
+    <button class="fieldcard" id="goBuildBtn" style="cursor:pointer;text-align:left;border:2px solid var(--line);padding:20px;font:inherit;color:inherit;background:var(--card)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:6px">🏈 Build a Formation</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Start from Wing or Split (or one you already made), drag players into a new alignment, save it. Done when you save it.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:10px" id="homeFormationCount"></div>
+    </button>
+    <button class="fieldcard" id="goCreatePlayBtn" style="cursor:pointer;text-align:left;border:2px solid var(--line);padding:20px;font:inherit;color:inherit;background:var(--card)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:6px">📋 Create a Play</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Pick a formation that already exists, choose which plays it can call, then fine-tune assignments and the ball path for each.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:10px" id="homePlayCount"></div>
+    </button>
+  </div>
+</div>
+
+<!--
+  Create a Play, step 1: pick a formation that ALREADY EXISTS -- built-in
+  (Wing, Split) or one saved from the builder above. This is deliberately
+  not the drag-and-drop builder; a coach configuring a play is not laying
+  out a new alignment, he is choosing one that is already settled.
+-->
+<div id="stepChooseFormation" style="display:none;padding:18px">
+  <div class="gridhead"><h2>Which formation is this play out of</h2></div>
+  <div class="gridsub">Built-in formations and anything you've saved from the formation builder.</div>
+  <div class="panel" style="max-width:360px">
+    <label class="lbl">Formation</label>
+    <select id="cpFormationSel"></select>
+
+    <label class="lbl">Side</label>
+    <div class="seg" id="cpSideSeg">
+      <button data-side="Left">Left</button>
+      <button data-side="Right" class="on">Right</button>
+    </div>
+
+    <button class="btn primary" id="cpNextBtn">Next: choose a play &rarr;</button>
+  </div>
+</div>
+
+<div id="step1" style="display:none">
 <div class="wrap">
   <div class="fieldcard">
     <svg id="field"></svg>
@@ -415,8 +468,7 @@
     refreshSeedOptions(id);
     refreshSavedList();
     seedId = id;
-    statusEl.textContent = 'Saved “' + name + '”.';
-    goStep(2, id);
+    statusEl.textContent = 'Saved “' + name + '”. Done -- head back to Home to create a play with it, or keep building.';
   });
 
   // ---- Step 2: which plays can be called out of this formation ----
@@ -427,7 +479,15 @@
   // 2-minute drill, and a hardcoded 8-key list in that same drill. One
   // explicit list per formation replaces all three.
   var currentFormationId = null;
+  var chosenSide = 'Right'; // set by Create-a-Play's own formation/side step
   function playsFor(){ return (window.DATA.playTypes || []); }
+
+  function setSegUI(segId, side){
+    var seg = document.getElementById(segId);
+    [].forEach.call(seg.querySelectorAll('button'), function(b){
+      b.classList.toggle('on', b.getAttribute('data-side') === side);
+    });
+  }
 
   // The REAL renderer, not a mock-up -- that is the whole point of this
   // screen. Each tile is renderCardDiagram drawing that play in this
@@ -556,7 +616,7 @@
       assignEditor = new window.AssignmentEditor({
         svg: document.getElementById('assignField'),
         formationId: currentFormationId,
-        side: 'Right',
+        side: chosenSide,
         onChange: function(){
           document.getElementById('assignStatus').textContent = 'Unsaved changes.';
           refreshMovedList();
@@ -634,6 +694,7 @@
           });
       });
     }
+    setSegUI('sideSeg3', assignEditor.side);
     assignEditor.formationId = currentFormationId;
     var first = refreshPlaySel();
     refreshAssignAll().then(function(){ loadEditorFor(first); });
@@ -651,7 +712,7 @@
   }
 
   // ---- Step 4: the ball's journey ----
-  var ballEditor = null, ballAll = {}, ballSide = 'Right';
+  var ballEditor = null, ballAll = {}, ballSide = chosenSide;
 
   function refreshBallAll(){
     return window.AssignmentStore.loadBallPaths().then(function(all){ ballAll = all || {}; return ballAll; });
@@ -718,6 +779,7 @@
 
   function initBallStep(){
     if (!ballEditor) {
+      ballSide = chosenSide;
       ballEditor = new window.BallPathEditor({
         svg: document.getElementById('ballField'),
         renderPlay: drawBallPlay,
@@ -752,6 +814,7 @@
         document.getElementById('ballStatus').textContent = 'Cleared.';
       });
     }
+    setSegUI('ballSideSeg', ballSide);
     var sel = document.getElementById('ballPlaySel');
     var picks = pickMap()[currentFormationId] || [];
     var list = picks.length ? picks : playsFor().map(function(p){ return p.key; });
@@ -765,16 +828,76 @@
     refreshBallAll().then(function(){ loadBallFor(sel.value); });
   }
 
+  // ---- Top-level navigation: Home, the standalone Formation Builder, and
+  // the Create-a-Play flow (its own 4 sub-steps). Three separate screens
+  // groups, never shown at once. ----
+  var ALL_SCREENS = ['home', 'stepChooseFormation', 'step1', 'step2', 'step3', 'step4'];
+  function hideAllScreens(){
+    ALL_SCREENS.forEach(function(id){ document.getElementById(id).style.display = 'none'; });
+  }
+
+  function refreshHomeCounts(){
+    var formCount = window.Formations.list().length;
+    document.getElementById('homeFormationCount').textContent =
+      formCount + ' formation' + (formCount === 1 ? '' : 's') + ' available right now.';
+    var picks = pickMap();
+    var playCount = Object.keys(picks).reduce(function(n, k){ return n + (picks[k] || []).length; }, 0);
+    document.getElementById('homePlayCount').textContent =
+      playCount ? playCount + ' play' + (playCount === 1 ? '' : 's') + ' configured so far.' : 'Nothing configured yet.';
+  }
+
+  function goHome(){
+    hideAllScreens();
+    document.getElementById('home').style.display = '';
+    document.getElementById('homeBtn').style.display = 'none';
+    document.getElementById('stepsBar').style.display = 'none';
+    refreshHomeCounts();
+  }
+
+  // Formation Builder: a single standalone screen now, entered only from
+  // Home. Saving it is the whole job -- see the Save button's own handler,
+  // which no longer chains anywhere.
+  function enterBuildFlow(){
+    hideAllScreens();
+    document.getElementById('step1').style.display = '';
+    document.getElementById('homeBtn').style.display = '';
+    document.getElementById('stepsBar').style.display = 'none';
+  }
+
+  // Create a Play: its own 4-step flow, entered only from Home, always
+  // starting at "which formation" -- never the drag-and-drop builder, since
+  // configuring a play means picking a formation that already exists.
+  function populateFormationPicker(){
+    var sel = document.getElementById('cpFormationSel');
+    var keep = sel.value;
+    sel.innerHTML = '';
+    window.Formations.list().forEach(function(f){
+      var o = document.createElement('option');
+      o.value = f.id; o.textContent = f.name + (f.builtIn ? '' : '  (yours)');
+      sel.appendChild(o);
+    });
+    if (keep && window.Formations.get(keep)) sel.value = keep;
+  }
+
   function goStep(n, formationId){
-    document.getElementById('step1').style.display = n === 1 ? '' : 'none';
-    document.getElementById('step2').style.display = n === 2 ? '' : 'none';
-    document.getElementById('step3').style.display = n === 3 ? '' : 'none';
-    document.getElementById('step4').style.display = n === 4 ? '' : 'none';
+    hideAllScreens();
+    document.getElementById('homeBtn').style.display = '';
+    document.getElementById('stepsBar').style.display = '';
     document.getElementById('tab1').classList.toggle('on', n === 1);
     document.getElementById('tab2').classList.toggle('on', n === 2);
     document.getElementById('tab3').classList.toggle('on', n === 3);
     document.getElementById('tab4').classList.toggle('on', n === 4);
+
+    if (n === 1) {
+      document.getElementById('stepChooseFormation').style.display = '';
+      populateFormationPicker();
+      if (currentFormationId && window.Formations.get(currentFormationId)) {
+        document.getElementById('cpFormationSel').value = currentFormationId;
+      }
+      return;
+    }
     if (n === 4) {
+      document.getElementById('step4').style.display = '';
       currentFormationId = formationId || currentFormationId || seedId;
       var f4 = window.Formations.get(currentFormationId);
       document.getElementById('whoFor4').textContent = 'in ' + (f4 ? f4.name : currentFormationId);
@@ -782,6 +905,7 @@
       return;
     }
     if (n === 3) {
+      document.getElementById('step3').style.display = '';
       currentFormationId = formationId || currentFormationId || seedId;
       var f3 = window.Formations.get(currentFormationId);
       document.getElementById('whoFor3').textContent =
@@ -790,6 +914,7 @@
       return;
     }
     if (n === 2) {
+      document.getElementById('step2').style.display = '';
       currentFormationId = formationId || seedId;
       var f = window.Formations.get(currentFormationId);
       document.getElementById('whoFor').textContent =
@@ -798,8 +923,35 @@
     }
   }
 
+  // ---- Home wiring ----
+  document.getElementById('goBuildBtn').addEventListener('click', enterBuildFlow);
+  document.getElementById('goCreatePlayBtn').addEventListener('click', function(){ goStep(1); });
+  document.getElementById('homeBtn').addEventListener('click', goHome);
+
+  // ---- Create a Play, step 1: choose an existing formation ----
+  document.getElementById('cpSideSeg').addEventListener('click', function(ev){
+    var b = ev.target.closest('button[data-side]'); if (!b) return;
+    [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+  });
+  document.getElementById('cpNextBtn').addEventListener('click', function(){
+    var fid = document.getElementById('cpFormationSel').value;
+    chosenSide = document.querySelector('#cpSideSeg button.on').getAttribute('data-side');
+    currentFormationId = fid;
+    // Steps 3/4 read chosenSide when THEY first construct their editors (see
+    // initAssignStep/initBallStep) -- setting it here, before either exists
+    // yet on a first pass through the flow, is what makes "I picked Left"
+    // actually stick instead of silently reverting to Right.
+    if (assignEditor) { assignEditor.side = chosenSide; setSegUI('sideSeg3', chosenSide); }
+    if (ballEditor) { ballSide = chosenSide; setSegUI('ballSideSeg', chosenSide); }
+    goStep(2, fid);
+  });
+
+  // Tabs jump within the Create-a-Play flow. Tab 1 goes to the formation
+  // PICKER -- never the drag-and-drop builder, which only Home's own
+  // "Build a Formation" button leads to.
   document.getElementById('tab1').addEventListener('click', function(){ goStep(1); });
-  document.getElementById('tab2').addEventListener('click', function(){ goStep(2, seedId); });
+  document.getElementById('tab2').addEventListener('click', function(){ goStep(2, currentFormationId || seedId); });
   document.getElementById('tab3').addEventListener('click', function(){ goStep(3, currentFormationId || seedId); });
   document.getElementById('tab4').addEventListener('click', function(){ goStep(4, currentFormationId || seedId); });
   document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
@@ -819,6 +971,8 @@
     builder.render();
     if (document.getElementById('step2').style.display !== 'none') renderPlayGrid();
   });
+
+  goHome(); // land on Home, not mid-flow
 })();
 </script>
 </body>
