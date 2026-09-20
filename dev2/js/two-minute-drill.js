@@ -615,10 +615,19 @@
   // "Option-style relative blocking isn't wired for Split yet" (same
   // caveat as play-calls.js) -- optionLine/dualSideBlock paths are
   // dropped rather than shown wrong.
+  // Who is split wide vs flexed, shared from js/play-calls.js (window.splitPersonnel)
+  // rather than kept as this file's own copy. This exact ternary used to be
+  // hardcoded here too, with the SAME mistake -- flexBackNum wrong for Right
+  // -- independently of play-calls.js's copy, which is how a personnel bug can
+  // ship fixed in one screen and still wrong in another. See play-calls.js's
+  // splitPersonnel for the full story and the data it is derived from.
+  function splitPersonnelFallback(splitSide) {
+    return { wideNum: splitSide === 'Right' ? 6 : 5, flexNum: 3 };
+  }
   function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
     const variant = getVariant(playType, splitSide, insideOutside, readPosition);
-    const wideNum = splitSide === 'Right' ? 6 : 5;
-    const flexBackNum = splitSide === 'Right' ? 2 : 3;
+    const { wideNum, flexNum: flexBackNum } = window.splitPersonnel
+      ? window.splitPersonnel(splitSide) : splitPersonnelFallback(splitSide);
     const excluded = new Set([wideNum, flexBackNum, 4]);
     return (variant.paths || []).filter(p => {
       if (p.optionLine || p.dualSideBlock) return false;
@@ -628,8 +637,10 @@
 
   function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
     const pos = DATA.split[splitSide];
-    const tightNum = splitSide === 'Right' ? 5 : 6;
-    const companionNum = splitSide === 'Right' ? 3 : 2;
+    const { wideNum, flexNum } = window.splitPersonnel
+      ? window.splitPersonnel(splitSide) : splitPersonnelFallback(splitSide);
+    const tightNum = wideNum === 5 ? 6 : 5;
+    const companionNum = flexNum === 2 ? 3 : 2;
     const paths = [];
     ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
       const [x, y] = DATA.formation[k];

@@ -1519,10 +1519,49 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 // routes"), and the actual route shapes (Houston/Seattle/Florida) aren't
 // authored yet, so those three are left out of the reused paths rather than
 // shown blocking, which would be wrong.
+// Who is split out wide, and who is the flexed-out back, on a given side --
+// derived from DATA.splitRoutes rather than hand-guessed, because a guess is
+// exactly how this went wrong.
+//
+// Split Right shipped with the flex back hardcoded as #2 in THREE places
+// (here, and twice in getSplitPassProtectionPaths below) while the actual
+// route data -- splitRoutes.Right.flex.player, digitized from Nathan's real
+// reference diagram -- says #3. That is not a coordinate typo: #3's route
+// starts at [1364,270], exactly the flexed-out spot in DATA.split.Right,
+// while #2 sits at [985,438], an ordinary backfield spot. The DATA was right;
+// the code's assumption about which back gets flexed was wrong, and it was
+// wrong on Right only -- Left's hardcoded guess (#3) happened to already
+// match its data.
+//
+// So blocking exclusion and route drawing now read the SAME field instead of
+// each carrying their own guess about who is out there. The literal
+// fallback survives only for a side with no splitRoutes authored yet (a
+// brand-new formation, say), so this never throws on missing data -- it
+// just falls back to the same guess that was wrong once already, which is
+// better than nothing but worth a coach's eye if it ever actually fires.
+function splitPersonnel(splitSide) {
+  const sr = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+  const wideNum = (sr && sr.wide && sr.wide.player != null) ? sr.wide.player : (splitSide === 'Right' ? 6 : 5);
+  // Unlike wideNum, the real reference data puts the SAME back (#3) at the
+  // flex spot on both sides -- not a side-mirrored pair like 5/6 are. So the
+  // fallback is a flat 3, not a per-side guess; a per-side guess is exactly
+  // what produced the Right-side bug this function exists to prevent.
+  const flexNum = (sr && sr.flex && sr.flex.player != null) ? sr.flex.player : 3;
+  return { wideNum, flexNum };
+}
+
+// Shared with js/edit-plays.js and js/two-minute-drill.js, which each carry
+// their own copy of Split's rendering pipeline (a known, pre-existing
+// duplication -- see the architecture notes on formation-engine). Exporting
+// this one function is what stops "who is the flexed-out back" from being a
+// fact three files can each get wrong independently, which is exactly how it
+// went wrong the first time: this same ternary, with the same mistake, was
+// copy-pasted into both of those files too.
+window.splitPersonnel = splitPersonnel;
+
 function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
   const variant = getVariant(playType, splitSide, insideOutside, readPosition);
-  const wideNum = splitSide === 'Right' ? 6 : 5;
-  const flexBackNum = splitSide === 'Right' ? 2 : 3;
+  const { wideNum, flexNum: flexBackNum } = splitPersonnel(splitSide);
   const excluded = new Set([wideNum, flexBackNum, 4]);
   return (variant.paths || []).filter(p => {
     if (p.optionLine || p.dualSideBlock) return false; // Option-style relative blocking isn't wired for Split yet
@@ -1634,8 +1673,9 @@ function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPos
   // offensive line too, so the line no longer has to be fetched from a
   // different DATA key than the players it blocks alongside.
   const pos = alignment('split', splitSide);
-  const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
-  const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
+  const { wideNum, flexNum } = splitPersonnel(splitSide);
+  const tightNum = wideNum === 5 ? 6 : 5; // whichever of 5/6 is NOT split out wide stays in
+  const companionNum = flexNum === 2 ? 3 : 2; // the backfield player NOT flexed out
   const paths = [];
   const centerX = pos.C ? pos.C[0] : 806;
   const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;

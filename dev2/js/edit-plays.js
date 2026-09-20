@@ -1684,8 +1684,13 @@ function renderSplitEditor() {
     circlesLayer.appendChild(drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22));
   });
 
-  const wideNum = splitSide === 'Right' ? 6 : 5;
-  const flexNum = splitSide === 'Right' ? 2 : 3;
+  // Shared from js/play-calls.js (window.splitPersonnel) rather than this
+  // file's own guess -- this exact ternary was hardcoded here too, with the
+  // SAME mistake (flexNum wrong for Right), independently of play-calls.js's
+  // copy. See play-calls.js's splitPersonnel for the data it comes from.
+  const { wideNum, flexNum } = window.splitPersonnel
+    ? window.splitPersonnel(splitSide)
+    : { wideNum: splitSide === 'Right' ? 6 : 5, flexNum: 3 };
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
     const role = (Number(num) === wideNum) ? 'wide' : (Number(num) === flexNum) ? 'flex' : null;
     const isTarget = role && splitEditTarget === role;
