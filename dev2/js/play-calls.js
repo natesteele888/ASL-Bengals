@@ -1481,6 +1481,10 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // assignment finished needs this instead. Used by the assignment editor to
   // place its handles on the real end points.
   stage._resolvedPaths = variant.paths;
+  // What seekCardAnimation (below) needs to reproduce the ball's position
+  // deterministically at an arbitrary instant -- wingSide for the QB/center
+  // anchor, playType for its authored ballPath if any.
+  stage._animCtx = { wingSide, playType };
 
   // The ball's journey, over the top of everyone's assignments. Only drawn
   // for a play that has one authored -- so nothing that has not been through
@@ -2218,6 +2222,162 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
 // it makes the What's New snapshot actually animate, and is what lets the
 // ball path be exercised from outside this file.
 window.playCardAnimation = playCardAnimation;
+
+// ---- Scrub: the same animation, evaluated at one instant instead of played
+// forward ----
+//
+// Nathan: "Need to be able to play it or scrub through to time things up."
+// playCardAnimation answers "play it"; this answers "scrub through" -- drag a
+// slider and see exactly where every route and the ball are at that moment,
+// with no requestAnimationFrame loop and no waiting.
+//
+// It is deterministic ON PURPOSE, which is why it does not simply replay
+// playCardAnimation up to a cutoff: that function's ball-follow is a SPRING
+// (catchUpFrame eases 25% of the remaining distance per frame), whose
+// position at a given instant depends on every frame that came before it,
+// not just the instant itself. A slider that jumps around would have to
+// replay the whole spring from t=0 every time it moved, and "where exactly is
+// the ball 400ms in" would still be an approximation of a physics simulation
+// rather than an answer. So scrubbing shows the EXACT position an exchange
+// happens at, which is more useful for checking timing than reproducing
+// Play's cosmetic ease -- Play still has the polish; this has the truth.
+//
+// It reuses the live animation's own machinery for the one part that must
+// not drift: revealing a path's progress. animatePathDraw strokes a path via
+// getTotalLength/getPointAtLength on the path's own live DOM element, so
+// asking that same element for its point at a given fraction, synchronously,
+// produces the pixel-identical frame Play would have shown at that instant --
+// same geometry, same math, just evaluated once instead of once per frame.
+//
+// Requires a render (renderCardDiagram) to have already run on this stage --
+// reads _lastRenderedPaths/_resolvedPaths/_animCtx it left behind, same
+// contract playCardAnimation itself depends on.
+function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
+  speedMultiplier = speedMultiplier || 1;
+  const animMs = 1400 * speedMultiplier;
+  const ctx = stage._animCtx;
+  const lastRenderedPaths = stage._lastRenderedPaths || [];
+  const resolvedPaths = stage._resolvedPaths || [];
+  if (!ctx || !lastRenderedPaths.length) return;
+
+  // Same formula animatePathDraw/pathPromises already use: a path starts
+  // revealing at its own delay (plus, for a "Ball Starts Here" split
+  // segment, its startFrac share of animMs) and draws over its own share
+  // (lenFrac) of animMs.
+  function pathFracAt(entry) {
+    const dur = (entry.lenFrac != null ? entry.lenFrac : 1) * animMs;
+    const delay = (entry.delayMs || 0) * speedMultiplier + (entry.startFrac || 0) * animMs;
+    if (dur <= 0) return 1;
+    return Math.max(0, Math.min(1, (elapsedMs - delay) / dur));
+  }
+
+  lastRenderedPaths.forEach((entry) => {
+    if (!entry.el) return;
+    const frac = pathFracAt(entry);
+    const len = entry.el.getTotalLength();
+    entry.el.style.strokeDasharray = `${len} ${len}`;
+    entry.el.style.strokeDashoffset = `${len * (1 - frac)}`;
+    if (entry.arrowEl) {
+      entry.arrowEl.style.opacity = frac > 0 ? '1' : '0';
+      placeArrowAtFraction(entry.arrowEl, entry.el, frac);
+    }
+    if (entry.circleEl) {
+      const pt = entry.el.getPointAtLength(len * frac);
+      entry.circleEl.setAttribute('cx', pt.x);
+      entry.circleEl.setAttribute('cy', pt.y);
+      if (entry.textEl) { entry.textEl.setAttribute('x', pt.x); entry.textEl.setAttribute('y', pt.y + 12); }
+    }
+  });
+
+  // Where a carrier's OWN path puts him right now -- ask his path, the same
+  // principle as above, rather than trust whatever his circle's cx/cy
+  // happens to already hold (which a previous seek call may have left mid-
+  // reveal at a different instant).
+  function circleNow(circleEl) {
+    const entry = lastRenderedPaths.find((p) => p.circleEl === circleEl);
+    if (!entry || !entry.el) {
+      return { x: Number(circleEl.getAttribute('cx')), y: Number(circleEl.getAttribute('cy')) };
+    }
+    const frac = pathFracAt(entry);
+    const len = entry.el.getTotalLength();
+    const pt = entry.el.getPointAtLength(len * frac);
+    return { x: pt.x, y: pt.y };
+  }
+
+  const OFFY = 50;
+  const ball = stage._scrubBall || (stage._scrubBall = svgEl('ellipse', {
+    rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3,
+  }));
+  if (!ball.parentNode && stage._mainGroup && stage._circlesLayerRef) {
+    stage._mainGroup.insertBefore(ball, stage._circlesLayerRef);
+  }
+
+  const wingAlign = alignment('wing', ctx.wingSide);
+  const qbPos = wingAlign['1'];
+  const playType = ctx.playType;
+
+  const authoredBallPath = (window.BallPath && window.BallPath.isValid(playType && playType.ballPath))
+    ? window.BallPath.schedule(playType.ballPath, (player) => {
+        const entry = lastRenderedPaths.find((p) => String(p.player) === String(player) && p.circleEl);
+        if (!entry) return null;
+        const src = resolvedPaths.find((p) => String(p.player) === String(player) && p.points);
+        return { circleEl: entry.circleEl, points: src && src.points };
+      }, animMs)
+    : null;
+
+  if (authoredBallPath && authoredBallPath.length) {
+    let active = authoredBallPath[0];
+    for (let i = 1; i < authoredBallPath.length; i++) {
+      if (authoredBallPath[i].atMs <= elapsedMs) active = authoredBallPath[i]; else break;
+    }
+    const pt = circleNow(active.circleEl);
+    ball.setAttribute('cx', pt.x);
+    ball.setAttribute('cy', pt.y + OFFY);
+    ball.style.opacity = '1';
+    return;
+  }
+
+  // The plain single-handoff model every other shipped play still uses.
+  const ballEntry = lastRenderedPaths.find((p) => p.isBallStart) || lastRenderedPaths.find((p) => p.isBall);
+  if (!ballEntry || !ballEntry.circleEl) { ball.style.opacity = '0'; return; }
+  const handoffEntry = lastRenderedPaths.find((p) => p.handoffFraction != null && p.circleEl);
+  const handoffAt = handoffEntry
+    ? (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs
+    : Infinity;
+  const ballDelay = (ballEntry.delayMs || 0) * speedMultiplier;
+
+  if (elapsedMs < ballDelay) {
+    ball.setAttribute('cx', qbPos[0]);
+    ball.setAttribute('cy', qbPos[1]);
+  } else {
+    const activeCircle = (handoffEntry && elapsedMs >= handoffAt) ? handoffEntry.circleEl : ballEntry.circleEl;
+    const pt = circleNow(activeCircle);
+    ball.setAttribute('cx', pt.x);
+    ball.setAttribute('cy', pt.y + OFFY);
+  }
+  ball.style.opacity = '1';
+}
+window.seekCardAnimation = seekCardAnimation;
+
+// Removes a scrub's leftover ball element and resets every path back to
+// fully drawn -- what renderCardDiagram already draws by default, so this is
+// only needed to undo a PRIOR seek before treating the diagram as static
+// again (e.g. before saving a screenshot, or before playCardAnimation takes
+// over and wants a clean plate to animate from).
+function clearSeek(stage) {
+  if (stage._scrubBall && stage._scrubBall.parentNode) stage._scrubBall.remove();
+  stage._scrubBall = null;
+  (stage._lastRenderedPaths || []).forEach((entry) => {
+    if (!entry.el) return;
+    entry.el.style.strokeDasharray = '';
+    entry.el.style.strokeDashoffset = '';
+    if (entry.arrowEl) {
+      entry.arrowEl.style.opacity = '1';
+      placeArrowAtFraction(entry.arrowEl, entry.el, 1);
+    }
+  });
+}
+window.clearSeekAnimation = clearSeek;
 
 // Signed-in player's stored position (player-identity.js), translated into
 // whatever renderCardDiagram/renderSplitDiagram's selectedPlayer expects --
