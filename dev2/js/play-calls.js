@@ -1976,10 +1976,24 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
+// overloadOn appended last, same convention as renderCardDiagram's own
+// formationId/overloadOn. Its OWN internal renderCardDiagram call below used
+// to never receive this flag at all -- Overload had no effect on the ▶
+// button, only on the static card, which is a real bug: pressing Play under
+// Overload silently re-rendered the animation frame in plain Wing geometry
+// (#5's circle snapping from 1263 back to 462, mid-play), throwing away
+// exactly the shift a coach turned Overload on to see. Confirmed by running
+// the real animation and reading the DOM mid-play before this fix existed.
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, overloadOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+  // formationId left undefined (defaults to 'wing' inside renderCardDiagram)
+  // -- Play Calls has no formation-picker wired into its real UI yet, only
+  // Overload. C and the backfield never move under Overload (only the
+  // tight end and flanker do -- see js/formations.js's applyOverload), so
+  // the ball's own center/QB anchors below stay correct without also
+  // needing overloadOn threaded into them.
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, undefined, overloadOn);
   // QB Sneak: "walks out to talk to receivers... as he walks back... he
   // gets under center, taps the center and its a quick snap." He carries no
   // ball at all during that walk -- the football only exists from the snap
@@ -2598,7 +2612,7 @@ function buildCard(combo) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, overloadOn);
   });
 
   const speedToggle = document.createElement('div');
