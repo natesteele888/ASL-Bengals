@@ -23,22 +23,34 @@
 // whose spot changed between the authoring alignment and this one, which is
 // usually two or three. Everyone else is drawn normally and left alone.
 //
-// WHAT IT EDITS
-// The END of the assignment -- where the block lands or the route finishes --
-// because that is what goes wrong when a man moves and what a lineman is
-// actually taught. The start stays pinned to where he now lines up, since
-// that is not a choice.
+// THE FULL SHAPE IS EDITABLE, NOT JUST THE END
+// The first version dragged only the last point of the path, leaving every
+// interior point exactly where it was authored. A route with 3+ points is a
+// curve -- chainedCurvePathD/quadPathD/multiCurvePathD all read the INTERIOR
+// points to decide how it bends -- so moving only the tail left the bend
+// itself pointing at the old, un-shifted spot: "renders a convex or concave
+// line which doesn't change based on end point." Every point past the start
+// is now its own handle, draggable, with the same add/insert-a-point and
+// delete-a-point interaction the Edit Plays route editor already has, so a
+// coach can shape the whole path, not nudge its tail.
+//
+// The START (index 0) stays pinned and gets no handle -- it is where the
+// player now lines up, which is not a choice, unlike everywhere else in
+// index.html's editor where the start of a fresh route genuinely is one.
 
 (function () {
   'use strict';
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
+  var TAP_SLOP = 6; // px of movement below which a press is a tap, not a drag
 
   function el(tag, attrs) {
     var e = document.createElementNS(SVG_NS, tag);
     for (var k in attrs) e.setAttribute(k, attrs[k]);
     return e;
   }
+
+  function clonePts(pts) { return pts.map(function (p) { return p.slice(); }); }
 
   function AssignmentEditor(opts) {
     this.svg = opts.svg;
@@ -49,6 +61,10 @@
     this.playKey = opts.playKey || null;
     // { ownerKey: { pathIndex, points, points4x4 } } for THIS alignment only
     this.overrides = {};
+    // The one handle currently picked -- shows its add/delete badges. Cleared
+    // by any structural edit (insert/delete) or a play/side/formation switch,
+    // same as Edit Plays clears selectedHandle after those.
+    this._picked = null;
     this._drag = null;
     this._wire();
   }
@@ -66,11 +82,13 @@
 
   AssignmentEditor.prototype.setPlay = function (playKey) {
     this.playKey = playKey;
+    this._picked = null;
     this.render();
   };
 
   AssignmentEditor.prototype.setOverrides = function (map) {
     this.overrides = map ? JSON.parse(JSON.stringify(map)) : {};
+    this._picked = null;
     this.render();
   };
 
@@ -105,48 +123,90 @@
     this._drawHandles();
   };
 
-  // A grab-handle on the end of each moved player's assignment. Drawn into the
-  // renderer's own transformed group so handle coordinates and path
-  // coordinates are the same numbers.
-  AssignmentEditor.prototype._drawHandles = function () {
-    var self = this;
-    var g = this.svg._mainGroup;
-    var paths = this.svg._resolvedPaths || [];
-    if (!g) return;
+  // Every path belonging to a moved player, as drawn RIGHT NOW -- after the
+  // formation shift and any saved override, so a handle always starts from
+  // what is actually on screen. { owner, pathIndex, points } per path.
+  AssignmentEditor.prototype._editablePaths = function () {
     var moved = this.movedSlots();
-    this._handles = [];
-
-    var seen = {};
+    var paths = this.svg._resolvedPaths || [];
+    var seen = {}, out = [];
     paths.forEach(function (p) {
       var owner = p.player != null ? String(p.player) : p.id;
       if (!owner || moved.indexOf(owner) === -1) return;
       var n = (seen[owner] = (seen[owner] === undefined ? 0 : seen[owner] + 1));
-      var pts = p.points;
-      if (!pts || pts.length < 2) return;
-      var end = pts[pts.length - 1];
+      if (!p.points || p.points.length < 2) return;
+      out.push({ owner: owner, pathIndex: n, points: p.points });
+    });
+    return out;
+  };
 
-      var handle = el('circle', {
-        cx: end[0], cy: end[1], r: 26,
-        fill: 'rgba(255,106,19,0.30)', stroke: '#ff6a13', 'stroke-width': 5,
-        style: 'cursor:grab',
+  // A grab-handle on every point past the start, for every moved player's
+  // path(s). Drawn into the renderer's own transformed group so handle
+  // coordinates and path coordinates are the same numbers.
+  AssignmentEditor.prototype._drawHandles = function () {
+    var self = this;
+    var g = this.svg._mainGroup;
+    if (!g) { this._handles = []; return; }
+    this._handles = [];
+
+    this._editablePaths().forEach(function (entry) {
+      entry.points.forEach(function (pt, idx) {
+        if (idx === 0) return; // the start -- where he lines up, not a choice
+        var isPicked = self._picked && self._picked.owner === entry.owner
+          && self._picked.pathIndex === entry.pathIndex && self._picked.ptIndex === idx;
+
+        var handle = el('circle', {
+          cx: pt[0], cy: pt[1], r: isPicked ? 22 : 18,
+          fill: isPicked ? 'rgba(255,106,19,0.55)' : 'rgba(255,106,19,0.30)',
+          stroke: '#ff6a13', 'stroke-width': isPicked ? 6 : 4,
+          style: 'cursor:grab',
+        });
+        handle.__owner = entry.owner;
+        handle.__pathIndex = entry.pathIndex;
+        handle.__ptIndex = idx;
+        g.appendChild(handle);
+        self._handles.push(handle);
+
+        if (!isPicked) return;
+
+        var canDelete = entry.points.length > 2; // start + at least one more
+        if (canDelete) {
+          var dx = pt[0] + 28, dy = pt[1] - 28;
+          var delBadge = el('g', { style: 'cursor:pointer' });
+          delBadge.appendChild(el('circle', { cx: dx, cy: dy, r: 16, fill: '#e0201a', stroke: '#fff', 'stroke-width': 2 }));
+          var xMark = el('text', { x: dx, y: dy + 6, 'text-anchor': 'middle', 'font-size': 19, 'font-weight': 900, fill: '#fff' });
+          xMark.textContent = '✕';
+          delBadge.appendChild(xMark);
+          delBadge.__delete = { owner: entry.owner, pathIndex: entry.pathIndex, ptIndex: idx };
+          g.appendChild(delBadge);
+          self._handles.push(delBadge);
+        }
+
+        var ax = pt[0] - 28, ay = pt[1] - 28;
+        var addBadge = el('g', { style: 'cursor:pointer' });
+        addBadge.appendChild(el('circle', { cx: ax, cy: ay, r: 16, fill: '#1a8c3a', stroke: '#fff', 'stroke-width': 2 }));
+        var plusMark = el('text', { x: ax, y: ay + 6, 'text-anchor': 'middle', 'font-size': 21, 'font-weight': 900, fill: '#fff' });
+        plusMark.textContent = '+';
+        addBadge.appendChild(plusMark);
+        addBadge.__insert = { owner: entry.owner, pathIndex: entry.pathIndex, ptIndex: idx };
+        g.appendChild(addBadge);
+        self._handles.push(addBadge);
       });
-      handle.__owner = owner;
-      handle.__pathIndex = n;
-      g.appendChild(handle);
-      self._handles.push(handle);
     });
   };
 
-  // Which moved players actually got a handle.
+  // Which moved players got at least one draggable point.
   //
-  // Not every assignment has one fixed end to drag. Player 4's dualSideBlock
-  // resolves its target live from which side the wing is on, so there is no
-  // single point that IS the assignment -- the same reason the study guide
-  // refuses to name a defender for it. A moved player with no editable end is
-  // reported as such rather than listed as editable and then quietly having
-  // no handle, which would read as a broken screen.
+  // Not every assignment has one. Player 4's dualSideBlock resolves its
+  // target live from which side the wing is on, so there is no fixed shape to
+  // hand-edit -- the same reason the study guide refuses to name a defender
+  // for it. A moved player with nothing editable is reported as such rather
+  // than listed as editable and then quietly having no handle, which would
+  // read as a broken screen.
   AssignmentEditor.prototype.editableSlots = function () {
-    return (this._handles || []).map(function (h) { return h.__owner; });
+    var owners = {};
+    (this._handles || []).forEach(function (h) { if (h.__owner) owners[h.__owner] = true; });
+    return Object.keys(owners);
   };
 
   AssignmentEditor.prototype._toLocal = function (ev) {
@@ -158,67 +218,118 @@
     return [Math.round(p.x), Math.round(p.y)];
   };
 
+  // The live, mutable point array for one path -- seeded from an existing
+  // override if there is one, or from what is currently drawn (the
+  // auto-shifted default) the first time this path is touched at all. Once
+  // seeded it lives in this.overrides, so every further edit -- drag, insert,
+  // delete -- mutates the same array the next render will read back.
+  AssignmentEditor.prototype._workingPoints = function (owner, pathIndex) {
+    var ov = this.overrides[owner];
+    if (ov && (ov.pathIndex || 0) === pathIndex && ov.points) return ov.points;
+
+    var found = null;
+    this._editablePaths().forEach(function (entry) {
+      if (entry.owner === owner && entry.pathIndex === pathIndex) found = entry.points;
+    });
+    if (!found) return null;
+    this.overrides[owner] = { pathIndex: pathIndex, points: clonePts(found), points4x4: clonePts(found) };
+    return this.overrides[owner].points;
+  };
+
+  AssignmentEditor.prototype._syncPoints4x4 = function (owner) {
+    var ov = this.overrides[owner];
+    if (ov) ov.points4x4 = clonePts(ov.points);
+  };
+
   AssignmentEditor.prototype._wire = function () {
     var self = this;
 
     this.svg.addEventListener('pointerdown', function (ev) {
       var t = ev.target;
-      if (!t.__owner) return;
-      ev.preventDefault();
-      self._drag = { owner: t.__owner, pathIndex: t.__pathIndex };
-      self.svg.setPointerCapture(ev.pointerId);
+      if (t.__insert) {
+        var ins = t.__insert;
+        var pts = self._workingPoints(ins.owner, ins.pathIndex);
+        if (pts) {
+          var a = pts[ins.ptIndex], b = pts[Math.min(ins.ptIndex + 1, pts.length - 1)];
+          var mid = [Math.round((a[0] + b[0]) / 2), Math.round((a[1] + b[1]) / 2) - 20];
+          pts.splice(ins.ptIndex + 1, 0, mid);
+          self._syncPoints4x4(ins.owner);
+          self._picked = null;
+          self.render();
+          self.onChange();
+        }
+        return;
+      }
+      if (t.__delete) {
+        var del = t.__delete;
+        var dpts = self._workingPoints(del.owner, del.pathIndex);
+        if (dpts && dpts.length > 2) {
+          dpts.splice(del.ptIndex, 1);
+          self._syncPoints4x4(del.owner);
+          self._picked = null;
+          self.render();
+          self.onChange();
+        }
+        return;
+      }
+      if (t.__owner) {
+        ev.preventDefault();
+        self._drag = {
+          owner: t.__owner, pathIndex: t.__pathIndex, ptIndex: t.__ptIndex,
+          startClient: [ev.clientX, ev.clientY], moved: false,
+        };
+        self.svg.setPointerCapture(ev.pointerId);
+      }
     });
 
     this.svg.addEventListener('pointermove', function (ev) {
       if (!self._drag) return;
       ev.preventDefault();
+      var d = self._drag;
+      if (!d.moved) {
+        var dx = ev.clientX - d.startClient[0], dy = ev.clientY - d.startClient[1];
+        if (Math.hypot(dx, dy) < TAP_SLOP) return; // still within tap tolerance -- not a drag yet
+        d.moved = true;
+      }
       var p = self._toLocal(ev);
       if (!p) return;
-      self._setEnd(self._drag.owner, self._drag.pathIndex, p);
+      var pts = self._workingPoints(d.owner, d.pathIndex);
+      if (!pts || !pts[d.ptIndex]) return;
+      pts[d.ptIndex] = p;
+      self._syncPoints4x4(d.owner);
       self.render();
     });
 
     function end(ev) {
-      if (!self._drag) return;
+      var d = self._drag;
+      if (!d) return;
       try { self.svg.releasePointerCapture(ev.pointerId); } catch (e) {}
       self._drag = null;
-      self.onChange();
+      if (d.moved) {
+        self.onChange();
+      } else {
+        // A tap, not a drag -- toggle this handle's picked state so its
+        // insert/delete badges show, same as Edit Plays' click-to-select.
+        var isSame = self._picked && self._picked.owner === d.owner
+          && self._picked.pathIndex === d.pathIndex && self._picked.ptIndex === d.ptIndex;
+        self._picked = isSame ? null : { owner: d.owner, pathIndex: d.pathIndex, ptIndex: d.ptIndex };
+        self.render();
+      }
     }
     this.svg.addEventListener('pointerup', end);
     this.svg.addEventListener('pointercancel', end);
   };
 
-  // Move one assignment's end point. The rest of the path -- and its start,
-  // which is where he lines up -- is taken from whatever is currently drawn,
-  // so dragging edits the shifted default rather than starting from nothing.
-  AssignmentEditor.prototype._setEnd = function (owner, pathIndex, point) {
-    var paths = this.svg._resolvedPaths || [];
-    var seen = {}, src = null;
-    paths.forEach(function (p) {
-      var o = p.player != null ? String(p.player) : p.id;
-      if (!o) return;
-      var n = (seen[o] = (seen[o] === undefined ? 0 : seen[o] + 1));
-      if (o === owner && n === pathIndex) src = p;
-    });
-    if (!src || !src.points) return;
-
-    var pts = src.points.map(function (q) { return q.slice(); });
-    pts[pts.length - 1] = point.slice();
-    // Both coordinate arrays move together. points4x4 is what actually renders
-    // for a blocking path against the 4-4 front, and leaving it behind would
-    // make the edit appear to do nothing for exactly the linemen this is for.
-    var ov = { pathIndex: pathIndex, points: pts, points4x4: pts.map(function (q) { return q.slice(); }) };
-    this.overrides[owner] = ov;
-  };
-
   AssignmentEditor.prototype.clear = function (owner) {
     delete this.overrides[owner];
+    if (this._picked && this._picked.owner === owner) this._picked = null;
     this.render();
     this.onChange();
   };
 
   AssignmentEditor.prototype.clearAll = function () {
     this.overrides = {};
+    this._picked = null;
     this.render();
     this.onChange();
   };
