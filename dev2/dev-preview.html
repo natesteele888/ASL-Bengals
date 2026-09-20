@@ -153,6 +153,37 @@
       <div style="font-size:13px;color:var(--muted);line-height:1.5">Pick a formation that already exists, choose which plays it can call, then fine-tune assignments and the ball path for each.</div>
       <div style="font-size:12px;color:var(--muted);margin-top:10px" id="homePlayCount"></div>
     </button>
+    <button class="fieldcard" id="goQuickRefBtn" style="cursor:pointer;text-align:left;border:2px solid var(--line);padding:20px;font:inherit;color:inherit;background:var(--card)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:6px">🖨️ Weekly Quick Reference</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Pick this week's plays out of everything the team can call, then print a sideline sheet -- one formation per page, no electronics needed.</div>
+    </button>
+  </div>
+</div>
+
+<!--
+  Weekly Quick Reference -- Nathan: "coaches can't use any electronics on
+  the sideline... built digitally and then printed as a PDF... Each week
+  the coach can choose the plays that are going into the booklet so they
+  can remove plays that they shouldn't call based on the other team's
+  defense." The full formation->plays matrix (built in Create a Play) is
+  everything the team can EVER call; this screen narrows it to one week's
+  subset and prints exactly that.
+-->
+<div id="stepQuickRef" style="display:none;padding:18px">
+  <div class="gridhead"><h2>Weekly Quick Reference</h2></div>
+  <div class="gridsub">Uncheck anything you don't want callable this week. Save keeps it under this label; Print always uses what's checked right now, saved or not.</div>
+  <div class="wrap" style="padding:0;align-items:flex-start">
+    <div class="panel" style="flex:0 0 280px">
+      <label class="lbl">Week / opponent</label>
+      <input type="text" id="qrWeekInput" placeholder="e.g. Week 6 vs Eagles">
+      <label class="lbl">Load a saved week</label>
+      <select id="qrWeekSel"><option value="">— none —</option></select>
+      <button class="btn" id="qrLoadBtn">Load</button>
+      <button class="btn primary" id="qrSaveBtn">Save this week's sheet</button>
+      <button class="btn primary" id="qrPrintBtn" style="background:var(--ink);border-color:var(--ink)">🖨️ Print PDF</button>
+      <div class="status" id="qrStatus"></div>
+    </div>
+    <div class="panel" style="flex:1 1 480px" id="qrFormations"></div>
   </div>
 </div>
 
@@ -349,6 +380,9 @@
 <script src="js/assignment-editor.js"></script>
 <script src="js/ball-path.js"></script>
 <script src="js/ball-path-editor.js"></script>
+<script src="js/play-modifiers.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="js/formation-quickref-pdf.js"></script>
 <script>
 (function(){
   'use strict';
@@ -532,6 +566,11 @@
         if (i === -1) list.push(pt.key); else list.splice(i,1);
         cur[currentFormationId] = list;
         try { localStorage.setItem(LS_PICKS, JSON.stringify(cur)); } catch(e){}
+        // Fire-and-forget, same instant-persist feel as the local write --
+        // this is what makes the matrix durable instead of a preview-only
+        // fake. saveFormationPlays writes the WHOLE list (a coach toggling
+        // tiles is naturally "here is the new list", not one at a time).
+        window.AssignmentStore.saveFormationPlays(currentFormationId, list);
         tile.classList.toggle('on');
         updateCount();
       });
@@ -828,10 +867,155 @@
     refreshBallAll().then(function(){ loadBallFor(sel.value); });
   }
 
+  // ---- Weekly Quick Reference -- narrow the full matrix to one week, print it ----
+  function fullMatrix(){
+    // The full team playbook: everything any formation is allowed to call,
+    // per the durable formationPlays store (falls back to this browser's
+    // own cache the instant before that resolves).
+    return window.AssignmentStore.loadFormationPlays();
+  }
+
+  function qrFormationsWithPlays(matrix){
+    return window.Formations.list()
+      .map(function(f){ return { id: f.id, name: f.name, plays: matrix[f.id] || [] }; })
+      .filter(function(f){ return f.plays.length; });
+  }
+
+  var qrSelection = {}; // formationId -> Set-like array of CURRENTLY CHECKED playKeys
+
+  function renderQuickRefChecklist(formations){
+    var host = document.getElementById('qrFormations');
+    host.innerHTML = '';
+    if (!formations.length) {
+      host.innerHTML = '<div class="gridsub">Nothing to print yet -- go configure some plays in Create a Play first.</div>';
+      return;
+    }
+    formations.forEach(function(f){
+      var box = document.createElement('div');
+      box.style.cssText = 'margin-bottom:18px';
+      var checked = qrSelection[f.id] || f.plays;
+      box.innerHTML = '<label class="lbl">' + f.name + '</label>';
+      var list = document.createElement('div');
+      list.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
+      f.plays.forEach(function(key){
+        var pt = playsFor().find(function(p){ return p.key === key; });
+        var label = pt ? (pt.label || key) : key;
+        var isOn = checked.indexOf(key) !== -1;
+        var chip = document.createElement('label');
+        chip.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;'
+          + 'border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;'
+          + 'background:' + (isOn ? 'var(--paper)' : 'transparent') + ';'
+          + 'opacity:' + (isOn ? '1' : '.5');
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = isOn;
+        cb.addEventListener('change', function(){
+          var cur = (qrSelection[f.id] || f.plays.slice()).slice();
+          var i = cur.indexOf(key);
+          if (cb.checked && i === -1) cur.push(key);
+          if (!cb.checked && i !== -1) cur.splice(i, 1);
+          qrSelection[f.id] = cur;
+          chip.style.background = cb.checked ? 'var(--paper)' : 'transparent';
+          chip.style.opacity = cb.checked ? '1' : '.5';
+        });
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(label));
+        list.appendChild(chip);
+      });
+      box.appendChild(list);
+      host.appendChild(box);
+    });
+  }
+
+  var qrFormationsCache = [];
+
+  // Refreshes ONLY the "load a saved week" dropdown -- separate from
+  // initQuickRefStep on purpose. That function resets the checklist back to
+  // "everything checked" and clears the status line, which is exactly wrong
+  // to run right after Save: a coach who just unchecked three plays and hit
+  // Save would watch them get re-checked in front of him, and his own
+  // confirmation message would vanish in the same tick it appeared.
+  function refreshWeekList(){
+    return window.AssignmentStore.listWeeklyCallSheets().then(function(weeks){
+      var sel = document.getElementById('qrWeekSel');
+      var keep = sel.value;
+      sel.innerHTML = '<option value="">— none —</option>';
+      weeks.sort().forEach(function(w){
+        var o = document.createElement('option'); o.value = w; o.textContent = w;
+        sel.appendChild(o);
+      });
+      if (keep && weeks.indexOf(keep) !== -1) sel.value = keep;
+    });
+  }
+
+  function initQuickRefStep(){
+    document.getElementById('qrStatus').textContent = '';
+    Promise.all([fullMatrix(), window.AssignmentStore.listWeeklyCallSheets()]).then(function(res){
+      var matrix = res[0], weeks = res[1];
+      qrFormationsCache = qrFormationsWithPlays(matrix);
+      qrSelection = {}; // default: everything in the matrix is checked
+      renderQuickRefChecklist(qrFormationsCache);
+
+      var sel = document.getElementById('qrWeekSel');
+      sel.innerHTML = '<option value="">— none —</option>';
+      weeks.sort().forEach(function(w){
+        var o = document.createElement('option'); o.value = w; o.textContent = w;
+        sel.appendChild(o);
+      });
+    });
+  }
+
+  document.getElementById('qrLoadBtn').addEventListener('click', function(){
+    var label = document.getElementById('qrWeekSel').value;
+    if (!label) return;
+    document.getElementById('qrWeekInput').value = label;
+    window.AssignmentStore.loadWeeklyCallSheet(label).then(function(sel){
+      qrSelection = sel || {};
+      renderQuickRefChecklist(qrFormationsCache);
+      document.getElementById('qrStatus').textContent = sel
+        ? 'Loaded “' + label + '”.'
+        : 'No saved sheet under that name yet -- starting from everything.';
+    });
+  });
+
+  document.getElementById('qrSaveBtn').addEventListener('click', function(){
+    var label = (document.getElementById('qrWeekInput').value || '').trim();
+    if (!label) { document.getElementById('qrStatus').textContent = 'Name the week or opponent first.'; return; }
+    // Persist exactly what is checked -- a formation the coach never
+    // touched is saved as its full current list, not silently dropped.
+    var toSave = {};
+    qrFormationsCache.forEach(function(f){ toSave[f.id] = qrSelection[f.id] || f.plays; });
+    window.AssignmentStore.saveWeeklyCallSheet(label, toSave).then(function(res){
+      document.getElementById('qrStatus').textContent =
+        (res.backend === 'cloud' ? 'Saved to the team playbook' : 'Saved on this device only (no login here)')
+        + ' as “' + label + '”.';
+      refreshWeekList(); // just the dropdown -- leaves the checklist and this message alone
+    });
+  });
+
+  document.getElementById('qrPrintBtn').addEventListener('click', function(){
+    var btn = document.getElementById('qrPrintBtn');
+    var toPrint = {};
+    qrFormationsCache.forEach(function(f){ toPrint[f.id] = qrSelection[f.id] || f.plays; });
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = '📄 Generating…';
+    window.generateFormationQuickRefPDF(toPrint)
+      .then(function(doc){
+        doc.save('ASL_Bengals_Quick_Reference.pdf');
+        btn.textContent = '✅ Saved!';
+      })
+      .catch(function(e){
+        console.error('Quick reference PDF failed:', e);
+        btn.textContent = '⚠️ Failed — tap to retry';
+        document.getElementById('qrStatus').textContent = 'Print failed: ' + e.message;
+      })
+      .finally(function(){ setTimeout(function(){ btn.textContent = original; btn.disabled = false; }, 2200); });
+  });
+
   // ---- Top-level navigation: Home, the standalone Formation Builder, and
   // the Create-a-Play flow (its own 4 sub-steps). Three separate screens
   // groups, never shown at once. ----
-  var ALL_SCREENS = ['home', 'stepChooseFormation', 'step1', 'step2', 'step3', 'step4'];
+  var ALL_SCREENS = ['home', 'stepChooseFormation', 'step1', 'step2', 'step3', 'step4', 'stepQuickRef'];
   function hideAllScreens(){
     ALL_SCREENS.forEach(function(id){ document.getElementById(id).style.display = 'none'; });
   }
@@ -919,13 +1103,28 @@
       var f = window.Formations.get(currentFormationId);
       document.getElementById('whoFor').textContent =
         'out of ' + (f ? f.name : currentFormationId);
-      renderPlayGrid();
+      // Durable copy wins over whatever this browser had cached locally --
+      // same "cloud is truth" rule assignment overrides and ball paths
+      // already follow.
+      window.AssignmentStore.loadFormationPlays().then(function(all){
+        var cur = pickMap();
+        if (all[currentFormationId]) cur[currentFormationId] = all[currentFormationId];
+        try { localStorage.setItem(LS_PICKS, JSON.stringify(cur)); } catch(e){}
+        renderPlayGrid();
+      });
     }
   }
 
   // ---- Home wiring ----
   document.getElementById('goBuildBtn').addEventListener('click', enterBuildFlow);
   document.getElementById('goCreatePlayBtn').addEventListener('click', function(){ goStep(1); });
+  document.getElementById('goQuickRefBtn').addEventListener('click', function(){
+    hideAllScreens();
+    document.getElementById('stepQuickRef').style.display = '';
+    document.getElementById('homeBtn').style.display = '';
+    document.getElementById('stepsBar').style.display = 'none';
+    initQuickRefStep();
+  });
   document.getElementById('homeBtn').addEventListener('click', goHome);
 
   // ---- Create a Play, step 1: choose an existing formation ----
@@ -957,9 +1156,12 @@
   document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
   document.getElementById('savePicksBtn').addEventListener('click', function(){
     var list = pickMap()[currentFormationId] || [];
-    document.getElementById('pickStatus').textContent =
-      'Saved \u2014 ' + list.length + ' play' + (list.length === 1 ? '' : 's')
-      + ' callable from this formation.';
+    window.AssignmentStore.saveFormationPlays(currentFormationId, list).then(function(res){
+      document.getElementById('pickStatus').textContent =
+        (res.backend === 'cloud' ? 'Saved to the team playbook' : 'Saved on this device only (no login here)')
+        + ' \u2014 ' + list.length + ' play' + (list.length === 1 ? '' : 's')
+        + ' callable from this formation.';
+    });
     goStep(3, currentFormationId);
   });
 

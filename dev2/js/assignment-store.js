@@ -239,5 +239,158 @@
     applyTo: applyTo,
     save: save,
     normalizeOwnerMap: normalizeOwnerMap,
+    loadFormationPlays: loadFormationPlays,
+    saveFormationPlays: saveFormationPlays,
+    loadWeeklyCallSheet: loadWeeklyCallSheet,
+    saveWeeklyCallSheet: saveWeeklyCallSheet,
+    listWeeklyCallSheets: listWeeklyCallSheets,
   };
+
+  // --- Formation -> plays matrix ------------------------------------------
+  // Which plays a formation can call at all. This used to live ONLY in the
+  // dev preview's own localStorage (devPreviewFormationPlays) -- real for
+  // trying the wizard, but not a fact any other screen, device, or coach
+  // could ever read. It is the one durable thing every later feature here
+  // (the quick-reference PDF, a weekly call sheet) has to read from, so it
+  // gets the same narrow-key treatment as everything else in this file:
+  //
+  //   formationPlays
+  //     wing: ["inside_zone", "outside_zone", ...]
+  //     split: [...]
+  //     test-formation: [...]
+  var FORMATION_PLAYS = 'formationPlays';
+  var LS_FORMATION_PLAYS = 'bengalsFormationPlays';
+
+  function toKeyList(v) {
+    if (!Array.isArray(v)) {
+      if (!v || typeof v !== 'object') return [];
+      // Firebase can hand back a sparse array as an object keyed "0","1",...
+      return Object.keys(v).sort(function (a, b) { return Number(a) - Number(b); }).map(function (k) { return v[k]; });
+    }
+    return v.filter(function (k) { return typeof k === 'string'; });
+  }
+
+  function loadFormationPlays() {
+    if (!hasCloud()) {
+      try { return Promise.resolve(JSON.parse(localStorage.getItem(LS_FORMATION_PLAYS) || '{}')); }
+      catch (e) { return Promise.resolve({}); }
+    }
+    return window.firebaseAuthed(DB + '/' + FORMATION_PLAYS + '.json')
+      .then(function (url) { return fetch(url); })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) {
+        var out = {};
+        Object.keys(raw || {}).forEach(function (fid) { out[fid] = toKeyList(raw[fid]); });
+        return out;
+      })
+      .catch(function () { return {}; });
+  }
+
+  // Writes ONE formation's whole play list -- a coach toggling tiles on a
+  // grid is naturally "here is the new list", not one add/remove at a time,
+  // so unlike the override/ball-path saves above this is not a merge.
+  function saveFormationPlays(formationId, playKeys) {
+    var body = (playKeys && playKeys.length) ? playKeys : null;
+    if (!hasCloud()) {
+      var all = {};
+      try { all = JSON.parse(localStorage.getItem(LS_FORMATION_PLAYS) || '{}'); } catch (e) {}
+      if (body) all[formationId] = body; else delete all[formationId];
+      try { localStorage.setItem(LS_FORMATION_PLAYS, JSON.stringify(all)); } catch (e) {}
+      return Promise.resolve({ ok: true, backend: 'local' });
+    }
+    var leaf = DB + '/' + FORMATION_PLAYS + '/' + encodeURIComponent(formationId) + '.json';
+    return window.firebaseAuthed(leaf)
+      .then(function (url) {
+        return fetch(url, {
+          method: body ? 'PUT' : 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('save failed (' + r.status + ')');
+        return { ok: true, backend: 'cloud' };
+      });
+  }
+
+  // --- Weekly call sheet ---------------------------------------------------
+  // Nathan: "Each week the coach can choose the plays that are going into
+  // the booklet so they can remove plays that they shouldn't call based on
+  // the other teams defense." The full formationPlays matrix above is
+  // everything the TEAM can ever call; a weekly call sheet is a named,
+  // saved SUBSET of it for one week/opponent -- deselecting, never adding
+  // a play the matrix itself does not already allow.
+  //
+  //   weeklyCallSheets
+  //     "Week 6 vs Eagles"
+  //       wing: ["inside_zone", "sweep"]
+  //       split: ["inside_zone"]
+  //
+  // Keyed by whatever label the coach types (an opponent name reads more
+  // useful on a sideline than a calendar week number), not a computed date
+  // -- Date.now()/new Date() are avoided elsewhere in this codebase's
+  // workflow scripts for determinism, but there is no such restriction on
+  // a plain browser file like this one; the label is free text by choice,
+  // not by a technical constraint.
+  var WEEKLY = 'weeklyCallSheets';
+  var LS_WEEKLY = 'bengalsWeeklyCallSheets';
+
+  function loadWeeklyCallSheet(weekLabel) {
+    if (!weekLabel) return Promise.resolve(null);
+    if (!hasCloud()) {
+      try {
+        var all = JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}');
+        return Promise.resolve(all[weekLabel] || null);
+      } catch (e) { return Promise.resolve(null); }
+    }
+    return window.firebaseAuthed(DB + '/' + WEEKLY + '/' + encodeURIComponent(weekLabel) + '.json')
+      .then(function (url) { return fetch(url); })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) {
+        if (!raw) return null;
+        var out = {};
+        Object.keys(raw).forEach(function (fid) { out[fid] = toKeyList(raw[fid]); });
+        return out;
+      })
+      .catch(function () { return null; });
+  }
+
+  function saveWeeklyCallSheet(weekLabel, selection) {
+    if (!weekLabel) return Promise.reject(new Error('a week/opponent label is required'));
+    if (!hasCloud()) {
+      var all = {};
+      try { all = JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}'); } catch (e) {}
+      all[weekLabel] = selection || {};
+      try { localStorage.setItem(LS_WEEKLY, JSON.stringify(all)); } catch (e) {}
+      return Promise.resolve({ ok: true, backend: 'local' });
+    }
+    var leaf = DB + '/' + WEEKLY + '/' + encodeURIComponent(weekLabel) + '.json';
+    return window.firebaseAuthed(leaf)
+      .then(function (url) {
+        return fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection || {}),
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('save failed (' + r.status + ')');
+        return { ok: true, backend: 'cloud' };
+      });
+  }
+
+  // Every saved week/opponent label, for a picker -- newest first is not
+  // knowable from Realtime Database key order, so this returns them
+  // alphabetically and lets the caller sort however it likes.
+  function listWeeklyCallSheets() {
+    if (!hasCloud()) {
+      try { return Promise.resolve(Object.keys(JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}'))); }
+      catch (e) { return Promise.resolve([]); }
+    }
+    return window.firebaseAuthed(DB + '/' + WEEKLY + '.json?shallow=true')
+      .then(function (url) { return fetch(url); })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) { return raw ? Object.keys(raw) : []; })
+      .catch(function () { return []; });
+  }
 })();
