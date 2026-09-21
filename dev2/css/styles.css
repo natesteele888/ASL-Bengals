@@ -946,6 +946,84 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     padding: 20px;
   }
 
+  /* Formation-first browsing: pick a formation, then its plays as a fixed
+     2-column grid (run above pass), tap one to open the detail card below. */
+  .pc-back-btn {
+    display: inline-block;
+    background: none;
+    border: none;
+    padding: 6px 0 10px;
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--bengal-orange-dark);
+    cursor: pointer;
+  }
+  .formation-picker {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .formation-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 22px 10px;
+    font-weight: 800;
+    font-size: 15px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .formation-play-title {
+    text-align: center;
+    font-weight: 800;
+    font-size: 16px;
+    margin: 0 0 10px;
+  }
+  .formation-play-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .play-tile {
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--card);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .play-tile svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .play-tile-cap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 9px;
+    border-top: 1px solid var(--line);
+  }
+  .play-tile-nm {
+    flex: 1;
+    font-weight: 800;
+    font-size: 12.5px;
+  }
+  .play-tile-pill {
+    flex-shrink: 0;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    color: #fff;
+  }
+  .play-tile-pill.run { background: var(--bengal-orange); }
+  .play-tile-pill.pass { background: #2a78d6; }
+
   /* the flip card */
   .card-outer {
     perspective: 1400px;

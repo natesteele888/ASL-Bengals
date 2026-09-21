@@ -740,7 +740,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -2991,45 +2991,138 @@ function buildCard(combo) {
   return outer;
 }
 
-// ---- Build an accordion: list of play names, tap to open/close one card at a time ----
-let openAccordionItem = null;
+// ---- Formation-first browsing: pick a formation, see its plays as a
+// 2-column grid (run plays above pass, a RUN/PASS pill per tile), tap one
+// to open the existing rich detail card. Replaces the old flat accordion
+// of every play regardless of formation (Nathan: "once you choose the
+// formation you should see the plays like this 2 column list... ordered
+// with running plays on top, and pass plays on the bottom"). The detail
+// card itself (buildCard) is untouched and still opens showing
+// Shotgun/Split -- it doesn't yet know about registry formations like a
+// custom I-Heavy, only the browsing grid you tap it from does. Extending
+// buildCard's own toggle to start on/offer a custom formation is real,
+// separate follow-up work, not folded in here.
 function buildGrid() {
   const grid = document.getElementById('playCallsGrid');
   grid.innerHTML = '';
-  openAccordionItem = null;
-  buildPlayList().forEach(combo => {
-    const item = document.createElement('div');
-    item.className = 'accordion-item';
+  renderFormationPicker(grid);
+}
 
-    const header = document.createElement('button');
-    header.className = 'accordion-header';
-    header.innerHTML = `<span>${combo.label}</span><span class="accordion-chevron">&#9660;</span>`;
+function pcBackButton(label, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'pc-back-btn';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
 
-    const body = document.createElement('div');
-    body.className = 'accordion-body';
-
-    header.addEventListener('click', () => {
-      const isOpen = item.classList.contains('open');
-      if (openAccordionItem && openAccordionItem !== item) {
-        openAccordionItem.classList.remove('open');
-      }
-      if (isOpen) {
-        item.classList.remove('open');
-        openAccordionItem = null;
-      } else {
-        if (!body.dataset.built) {
-          body.dataset.built = '1';
-          body.appendChild(buildCard(combo));
-        }
-        item.classList.add('open');
-        openAccordionItem = item;
-      }
-    });
-
-    item.appendChild(header);
-    item.appendChild(body);
-    grid.appendChild(item);
+function renderFormationPicker(container) {
+  container.innerHTML = '';
+  const formations = (window.Formations ? window.Formations.list() : []).filter(f => f.side === 'offense');
+  if (!formations.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.textContent = 'No formations available.';
+    container.appendChild(note);
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'formation-picker';
+  formations.forEach(f => {
+    const card = document.createElement('button');
+    card.className = 'formation-card';
+    card.textContent = f.name;
+    card.addEventListener('click', () => renderFormationPlays(container, f.id, f.name));
+    wrap.appendChild(card);
   });
+  container.appendChild(wrap);
+}
+
+function renderFormationPlays(container, formationId, formationName) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← Formations', () => renderFormationPicker(container)));
+
+  const title = document.createElement('h3');
+  title.className = 'formation-play-title';
+  title.textContent = formationName;
+  container.appendChild(title);
+
+  const gridEl = document.createElement('div');
+  gridEl.className = 'formation-play-grid';
+  container.appendChild(gridEl);
+
+  const allCombos = buildPlayList();
+  window.AssignmentStore.loadFormationPlays().then(all => {
+    const curated = all[formationId];
+    // A formation with nothing curated yet (true for Wing/Split today --
+    // formationPlays is a new concept, nobody's ever set it for them)
+    // falls back to every play, matching what Play Calls has always shown.
+    const list = (curated && curated.length)
+      ? curated.map(key => allCombos.find(c => c.playKey === key)).filter(Boolean)
+      : allCombos;
+    const sorted = list.slice().sort((a, b) => (a.isPass ? 1 : 0) - (b.isPass ? 1 : 0));
+    gridEl.innerHTML = '';
+    if (!sorted.length) {
+      const note = document.createElement('p');
+      note.className = 'empty-note';
+      note.textContent = 'No plays configured for this formation yet.';
+      gridEl.appendChild(note);
+      return;
+    }
+    sorted.forEach(combo => gridEl.appendChild(buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationName))));
+  });
+}
+
+function buildPlayTile(combo, formationId, onOpen) {
+  const tile = document.createElement('div');
+  tile.className = 'play-tile';
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  try {
+    window.renderCardDiagram(svg, combo.playKey, 'Right', 'Right', null, '4x4',
+      combo.hasInsideOutside ? 'Outside' : null, false, false, 'A', false, false, formationId);
+    // Same crop dev-preview's own tile uses -- drop the reserved defense
+    // band above the line so the tile reads at thumbnail size.
+    svg.setAttribute('viewBox', '0 250 1600 760');
+  } catch (e) {
+    svg.setAttribute('viewBox', '0 0 200 40');
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', 6); t.setAttribute('y', 25); t.setAttribute('font-size', 13);
+    t.setAttribute('fill', '#c0392b'); t.textContent = 'render failed';
+    svg.appendChild(t);
+  }
+  tile.appendChild(svg);
+
+  const cap = document.createElement('div');
+  cap.className = 'play-tile-cap';
+  const nm = document.createElement('span');
+  nm.className = 'play-tile-nm';
+  nm.textContent = combo.label;
+  const pill = document.createElement('span');
+  pill.className = 'play-tile-pill ' + (combo.isPass ? 'pass' : 'run');
+  pill.textContent = combo.isPass ? 'PASS' : 'RUN';
+  cap.appendChild(nm);
+  cap.appendChild(pill);
+  tile.appendChild(cap);
+
+  tile.addEventListener('click', onOpen);
+  return tile;
+}
+
+function renderPlayDetail(container, combo, formationId, formationName) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← ' + formationName + ' plays', () => renderFormationPlays(container, formationId, formationName)));
+
+  // Same accordion-item/accordion-body wrapper the old flat list used,
+  // pre-opened -- buildCard's own flip-card CSS (.accordion-body .card-outer)
+  // is scoped to render correctly only inside this wrapper.
+  const item = document.createElement('div');
+  item.className = 'accordion-item open';
+  const body = document.createElement('div');
+  body.className = 'accordion-body';
+  body.appendChild(buildCard(combo));
+  item.appendChild(body);
+  container.appendChild(item);
 }
 
 
