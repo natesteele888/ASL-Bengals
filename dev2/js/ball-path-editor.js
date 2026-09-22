@@ -29,10 +29,48 @@
     this.align = opts.align || null;
     this.ballPath = [];
     this._drag = null;
+    this._isPlayingRef = { value: false };
     this._wire();
   }
 
   BallPathEditor.prototype.setAlign = function (align) { this.align = align; };
+
+  BallPathEditor.prototype.isPlaying = function () { return this._isPlayingRef.value; };
+
+  // Nathan: "it doesn't show me an animation of it happening" -- until now
+  // this screen only ever drew the STATIC badges-and-dashed-line overlay
+  // (see render()/BallPath.drawOverlay), never actually ran the ball. Same
+  // install/revert dance as AssignmentEditor's own play(): temporarily
+  // installs the sequence being authored here -- unsaved edits included --
+  // onto playType.ballPath, runs the exact same animation Play Calls' own ▶
+  // button runs, then reverts and redraws the static editor view so nothing
+  // here is mistaken for saved.
+  BallPathEditor.prototype.play = function (playKey, side, formationId, onDone) {
+    var self = this;
+    if (this._isPlayingRef.value || !playKey) return;
+    var playType = window.DATA.playTypes.find(function (p) { return p.key === playKey; });
+    if (!playType) return;
+
+    var had = playType.ballPath;
+    playType.ballPath = this.ballPath;
+
+    var finish = function () {
+      if (had !== undefined) playType.ballPath = had; else delete playType.ballPath;
+      self.render();
+      if (onDone) onDone();
+    };
+    try {
+      var result = window.playCardAnimation(
+        this.svg, playKey, side, side, 1, this._isPlayingRef, null, '4x4',
+        playType.hasInsideOutside ? 'Outside' : null,
+        false, false, 'A', false, false, formationId, false);
+      if (result && typeof result.then === 'function') result.then(finish, finish);
+      else finish();
+    } catch (e) {
+      this._isPlayingRef.value = false;
+      finish();
+    }
+  };
 
   BallPathEditor.prototype.set = function (bp) {
     this.ballPath = Array.isArray(bp) ? JSON.parse(JSON.stringify(bp)) : [];
@@ -102,11 +140,42 @@
     this.onChange();
   };
 
+  // On the Build screen, renderPlay is the coordinator's renderDiagram(),
+  // which installs this.ballPath onto the play and calls renderCardDiagram
+  // once for the WHOLE shared diagram -- renderCardDiagram already draws the
+  // gold overlay itself when a ballPath is installed (same DATA.ballPath it
+  // reads for the live animation), so drawing it again here would double it.
+  // The coordinator also re-runs BOTH _makeBadgesDraggable() and
+  // AssignmentEditor's _drawHandles() itself after every shared render,
+  // whichever editor triggered it -- it has to, since the svg gets wiped and
+  // rebuilt each time and only the coordinator can keep both overlays alive.
+  // Calling _makeBadgesDraggable() again here would just repeat that work.
   BallPathEditor.prototype.render = function () {
-    if (this.renderPlay) this.renderPlay();
+    if (this.renderPlay) {
+      this.renderPlay();
+      return;
+    }
     window.BallPath.clearOverlay(this.svg);
     window.BallPath.drawOverlay(this.svg, this.ballPath, this.align);
     this._makeBadgesDraggable();
+  };
+
+  // Nathan: routes get edited on this same screen now, which can leave an
+  // exchange point authored against a stance-position midpoint sitting off
+  // the receiver's actual, currently-drawn route (see _defaultPointFor's own
+  // comment -- that midpoint was always just a starting guess). The Build
+  // screen's coordinator flags a leg as stale by distance and offers this as
+  // the fix: project the leg's point onto the receiver's CURRENT resolved
+  // path (post formation-shift, post any hand-edit) rather than recomputing
+  // the same stale stance-position default _defaultPointFor would give.
+  BallPathEditor.prototype.resnapToPath = function (index, points) {
+    var leg = this.ballPath[index];
+    if (!leg || index === 0) return;
+    var hit = window.BallPath.nearestPointOnPath(points, leg.at);
+    if (!hit) return;
+    leg.at = hit.point;
+    this.render();
+    this.onChange();
   };
 
   BallPathEditor.prototype._makeBadgesDraggable = function () {

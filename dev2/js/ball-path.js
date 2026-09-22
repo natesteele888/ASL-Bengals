@@ -200,6 +200,36 @@
     return best;
   }
 
+  // Same per-segment projection as fractionAlongPath, but for the Build
+  // screen's staleness check rather than animation timing: how far off the
+  // receiver's CURRENT route (post formation-shift, post any hand-edit) does
+  // an authored exchange point now sit, and where would it land if snapped
+  // back on. A separate function rather than a second return value off
+  // fractionAlongPath -- that one is read-hot inside schedule() for every
+  // animation frame's setup and stays untouched; this one only runs when a
+  // coach is actively looking at the Ball Path panel.
+  function nearestPointOnPath(points, target) {
+    if (!points || points.length < 2 || !target) return null;
+    var best = null, bestDist = Infinity, bestFrac = 0, total = 0;
+    var segs = [];
+    for (var i = 1; i < points.length; i++) {
+      var a = points[i - 1], b = points[i];
+      var len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      segs.push({ a: a, b: b, len: len, before: total });
+      total += len;
+    }
+    if (!total) return null;
+    segs.forEach(function (sg) {
+      var dx = sg.b[0] - sg.a[0], dy = sg.b[1] - sg.a[1];
+      var t = sg.len ? (((target[0] - sg.a[0]) * dx + (target[1] - sg.a[1]) * dy) / (sg.len * sg.len)) : 0;
+      t = Math.max(0, Math.min(1, t));
+      var px = sg.a[0] + dx * t, py = sg.a[1] + dy * t;
+      var d = Math.hypot(target[0] - px, target[1] - py);
+      if (d < bestDist) { bestDist = d; best = [px, py]; bestFrac = (sg.before + sg.len * t) / total; }
+    });
+    return { point: best, distance: bestDist, fraction: bestFrac };
+  }
+
   // Turn an authored ball path into a carrier schedule the animation can run:
   // [{ player, circleEl, atMs }], in order.
   //
@@ -246,6 +276,7 @@
     legStart: legStart,
     drawOverlay: drawOverlay,
     fractionAlongPath: fractionAlongPath,
+    nearestPointOnPath: nearestPointOnPath,
     schedule: schedule,
     clearOverlay: clearOverlay,
   };

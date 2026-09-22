@@ -1988,16 +1988,21 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 // (#5's circle snapping from 1263 back to 462, mid-play), throwing away
 // exactly the shift a coach turned Overload on to see. Confirmed by running
 // the real animation and reading the DOM mid-play before this fix existed.
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, overloadOn) {
+//
+// formationId is the same class of bug, fixed the same way. buildCard's own
+// call below still omits it (undefined, defaults to 'wing' inside
+// renderCardDiagram) since Play Calls has no formation-picker wired into its
+// real UI yet -- harmless there. But js/assignment-editor.js's Assignment
+// Editor DOES have a real formationId (a coach can be checking Split, or a
+// custom formation), and its Play button reuses this same function -- so
+// without threading it through, hitting Play showed the edit's overrides
+// computed for the WRONG alignment key (always Wing's), i.e. it looked like
+// the original, unedited play. Nathan: "the play button played back the
+// original animation of the play."
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  // formationId left undefined (defaults to 'wing' inside renderCardDiagram)
-  // -- Play Calls has no formation-picker wired into its real UI yet, only
-  // Overload. C and the backfield never move under Overload (only the
-  // tight end and flanker do -- see js/formations.js's applyOverload), so
-  // the ball's own center/QB anchors below stay correct without also
-  // needing overloadOn threaded into them.
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, undefined, overloadOn);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn);
   // QB Sneak: "walks out to talk to receivers... as he walks back... he
   // gets under center, taps the center and its a quick snap." He carries no
   // ball at all during that walk -- the football only exists from the snap
@@ -2397,7 +2402,8 @@ function defaultHighlightForSignedInPlayer() {
 }
 
 // ---- Build a single flip-card ----
-function buildCard(combo) {
+function buildCard(combo, opts) {
+  opts = opts || {};
   const outer = document.createElement('div');
   outer.className = 'card-outer';
   const inner = document.createElement('div');
@@ -2424,7 +2430,7 @@ function buildCard(combo) {
   // Seattle/Florida calls, and Play button animation, are the next
   // increment -- for now the front of the card shows the real Split Right/
   // Split Left lineup at rest, matching Nathan's reference diagrams.
-  let formation = 'shotgun';
+  let formation = opts.lockFormation || 'shotgun';
   let splitSide = 'Left';
   // Pass is a plain on/off switch -- off means run, on means whichever of
   // the three named calls (Houston/Seattle/Florida, i.e. Pass 1/2/3 in the
@@ -2519,10 +2525,11 @@ function buildCard(combo) {
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
-  if (isQbSneak) {
+  if (isQbSneak || opts.lockFormation) {
     // Not just "no Split option" (below) -- Shotgun isn't right either, so
     // hide the whole Shotgun/Split toggle rather than leave a single
-    // Shotgun pill implying that's the formation.
+    // Shotgun pill implying that's the formation. Same treatment when the
+    // formation is locked in from outside (see opts.lockFormation above).
     formationToggle.style.display = 'none';
   } else if (combo.noSplit) {
     // Pop Pass has no Split formation data at all (same reason edit-plays.js
@@ -2772,7 +2779,7 @@ function buildCard(combo) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, overloadOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, undefined, overloadOn);
   });
 
   const speedToggle = document.createElement('div');
@@ -3016,6 +3023,71 @@ function pcBackButton(label, onClick) {
   return btn;
 }
 
+// One box shared by every formation card, not a per-formation crop --
+// Nathan: "they need to match the placement and scale to one another with
+// the line being the common denominator." The line is drawn at the same
+// real coordinates in every formation (only the backfield/skill spread
+// actually changes one to the next), so a SHARED size is what makes it
+// read as the fixed anchor it actually is: same width/height on every
+// card, with only the skill dots moving to show what's different. Kept as
+// {minX, minY, width, height} rather than a viewBox string so each card
+// can re-pan (not re-scale) around its own Center -- see
+// buildFormationThumbnail.
+function computeSharedFormationViewBox(formationIds) {
+  const R = 30, PAD = 24;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  formationIds.forEach(id => {
+    const pos = window.Formations.positions(id, 'Right', {});
+    const slotList = window.Formations.slots(id);
+    if (!pos) return;
+    slotList.forEach(slot => {
+      const p = pos[slot];
+      if (!p) return;
+      minX = Math.min(minX, p[0] - R); maxX = Math.max(maxX, p[0] + R);
+      minY = Math.min(minY, p[1] - R); maxY = Math.max(maxY, p[1] + R);
+    });
+  });
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, width: 200, height: 40 };
+  minX -= PAD; maxX += PAD; minY -= PAD; maxY += PAD;
+  return { minX, minY, width: maxX - minX, height: maxY - minY };
+}
+
+// Just the 11 offensive dots at their real coordinates -- no defense, no
+// routes, no blocking labels. Nathan: seeing "Wing" and "Split" as plain
+// name buttons didn't answer the actual question (what does each one look
+// like); this does, deliberately simpler than a play card since a
+// formation itself has no assignments to show yet.
+//
+// sharedBox is {minX, minY, width, height} (see computeSharedFormationViewBox)
+// -- every card uses the same width/height so the scale matches across
+// formations, but Nathan: "center the center on the card for all except
+// split." So the horizontal pan re-centers on that formation's own Center
+// slot instead of reusing the shared box's own minX -- except for Split,
+// whose receivers (3/6) spread far enough right of Center that centering
+// on C would push slot 6 outside the shared width; Split keeps the plain
+// shared box so nothing gets clipped.
+function buildFormationThumbnail(formationId, sharedBox) {
+  const R = 30;
+  const pos = window.Formations ? window.Formations.positions(formationId, 'Right', {}) : null;
+  const slotList = window.Formations ? window.Formations.slots(formationId) : [];
+  let originX = sharedBox.minX;
+  if (formationId !== 'split' && pos && pos['C']) {
+    originX = pos['C'][0] - sharedBox.width / 2;
+  }
+  const viewBox = `${originX} ${sharedBox.minY} ${sharedBox.width} ${sharedBox.height}`;
+  const svg = svgEl('svg', { viewBox: viewBox });
+  if (!pos) return svg;
+  slotList.forEach(slot => {
+    const p = pos[slot];
+    if (!p) return;
+    svg.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: R, fill: '#fff', stroke: '#111', 'stroke-width': 4 }));
+    const t = svgEl('text', { x: p[0], y: p[1] + 7, 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 800, fill: '#111' });
+    t.textContent = slot;
+    svg.appendChild(t);
+  });
+  return svg;
+}
+
 function renderFormationPicker(container) {
   container.innerHTML = '';
   const formations = (window.Formations ? window.Formations.list() : []).filter(f => f.side === 'offense');
@@ -3026,12 +3098,17 @@ function renderFormationPicker(container) {
     container.appendChild(note);
     return;
   }
+  const sharedBox = computeSharedFormationViewBox(formations.map(f => f.id));
   const wrap = document.createElement('div');
   wrap.className = 'formation-picker';
   formations.forEach(f => {
-    const card = document.createElement('button');
+    const card = document.createElement('div');
     card.className = 'formation-card';
-    card.textContent = f.name;
+    card.appendChild(buildFormationThumbnail(f.id, sharedBox));
+    const cap = document.createElement('div');
+    cap.className = 'formation-card-cap';
+    cap.textContent = f.name;
+    card.appendChild(cap);
     card.addEventListener('click', () => renderFormationPlays(container, f.id, f.name));
     wrap.appendChild(card);
   });
@@ -3120,7 +3197,14 @@ function renderPlayDetail(container, combo, formationId, formationName) {
   item.className = 'accordion-item open';
   const body = document.createElement('div');
   body.className = 'accordion-body';
-  body.appendChild(buildCard(combo));
+  // The card's own Shotgun/Split toggle exists because Play Calls used to
+  // have no other way to pick a formation. Opened from the formation-first
+  // picker the formation is already chosen -- Nathan: "each of the plays do
+  // not need the shotgun/split toggle as it only shows the play for the
+  // formation chosen" -- so lock it instead of leaving a second, independent
+  // formation control on screen. 'wing' is this pipeline's registry id for
+  // what the toggle itself still calls 'shotgun' (see buildCard).
+  body.appendChild(buildCard(combo, { lockFormation: formationId === 'split' ? 'split' : 'shotgun' }));
   item.appendChild(body);
   container.appendChild(item);
 }

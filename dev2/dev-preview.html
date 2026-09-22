@@ -109,7 +109,29 @@
   .bar .count{font-size:13px;color:var(--muted);font-weight:700}
   .bar button{width:auto;margin:0;padding:10px 18px}
   #stubs{display:none}
+
+  /* Build screen: two always-visible panels, color-coded by what they save --
+     orange for "this lineup only" (routes/blocks), gold for "this play,
+     everywhere" (ball path) -- same colors the field diagram itself already
+     uses for route-handles vs. the ball-path overlay, so the coding isn't
+     arbitrary. */
+  .build-panel{border-radius:10px;padding:10px 12px 4px;margin:16px 0 0;border:1px solid var(--line)}
+  .build-panel-lineup{border-left:4px solid var(--bengal-orange)}
+  .build-panel-play{border-left:4px solid #d99000}
+  .build-panel-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+  .build-panel-lineup .build-panel-label{color:var(--bengal-orange-dark)}
+  .build-panel-play .build-panel-label{color:#a8720a}
+  .stale-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+    color:#a8720a;background:rgba(217,144,0,.14);border-radius:6px;padding:3px 7px;margin:2px 0}
 </style>
+<!-- Loaded after this page's own inline styles specifically for "Browse
+     Plays" below (.formation-picker/.formation-play-grid/.play-tile, plus
+     the accordion/flip-card the detail view opens into) -- so that screen
+     renders with the REAL app's own CSS, not a re-implementation of it that
+     could quietly drift out of sync. Its :root token values are already
+     near-identical to this page's own (same Bengal palette), so this page's
+     other three screens are unaffected. -->
+<link rel="stylesheet" href="css/styles.css?v=20260919q">
 </head>
 <body>
 <div class="devbar">DEV PREVIEW — branch <code style="background:#552a00;color:#ffd9b8">formation-engine</code> — not live, saves only to this browser</div>
@@ -120,8 +142,7 @@
   <div class="steps" id="stepsBar" style="display:none">
     <button id="tab1">1&nbsp; Formation</button>
     <button id="tab2">2&nbsp; Plays</button>
-    <button id="tab3">3&nbsp; Assignments</button>
-    <button id="tab4">4&nbsp; Ball</button>
+    <button id="tab3">3&nbsp; Build the play</button>
   </div>
   <div class="spacer"></div>
   <button class="btn" style="width:auto;margin:0;padding:8px 14px" id="themeBtn">Dark</button>
@@ -157,6 +178,10 @@
       <div style="font-size:15px;font-weight:800;margin-bottom:6px">🖨️ Weekly Quick Reference</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.5">Pick this week's plays out of everything the team can call, then print a sideline sheet -- one formation per page, no electronics needed.</div>
     </button>
+    <button class="fieldcard" id="goBrowsePlaysBtn" style="cursor:pointer;text-align:left;border:2px solid var(--line);padding:20px;font:inherit;color:inherit;background:var(--card)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:6px">📖 Browse Plays</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">The real Coach/Kids Plays tab, exactly as it will render: pick a formation, see its plays in a 2-column grid, RUN above PASS, tap one to open the full card.</div>
+    </button>
   </div>
 </div>
 
@@ -188,6 +213,20 @@
 </div>
 
 <!--
+  Browse Plays -- the real Coach/Kids Plays tab's own markup and JS
+  (js/play-calls.js buildGrid/initPlayCalls), unmodified, pointed at a
+  container on this page instead of index.html's. Formation-first: pick a
+  formation, its plays render as a 2-column grid (RUN above PASS), tap one
+  to open the exact same rich detail card Play Calls has always had.
+-->
+<div id="stepBrowsePlays" style="display:none;padding:18px">
+  <div class="gridhead"><h2>Plays</h2></div>
+  <div class="gridsub">Exactly what index.html's own Plays tab renders -- same code, same styles.css.</div>
+  <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:var(--muted);margin-bottom:8px;"></div>
+  <div class="play-grid" id="playCallsGrid"></div>
+</div>
+
+<!--
   Create a Play, step 1: pick a formation that ALREADY EXISTS -- built-in
   (Wing, Split) or one saved from the builder above. This is deliberately
   not the drag-and-drop builder; a coach configuring a play is not laying
@@ -199,12 +238,6 @@
   <div class="panel" style="max-width:360px">
     <label class="lbl">Formation</label>
     <select id="cpFormationSel"></select>
-
-    <label class="lbl">Side</label>
-    <div class="seg" id="cpSideSeg">
-      <button data-side="Left">Left</button>
-      <button data-side="Right" class="on">Right</button>
-    </div>
 
     <button class="btn primary" id="cpNextBtn">Next: choose a play &rarr;</button>
   </div>
@@ -274,21 +307,25 @@
   </div>
 </div>
 
-<div id="step3" style="display:none">
+<div id="stepBuild" style="display:none">
   <div class="gridhead">
-    <h2>Check who moved</h2><span class="who" id="whoFor3"></span>
+    <h2>Build this play</h2><span class="who" id="whoFor3"></span>
   </div>
-  <div class="gridsub" id="movedNote"></div>
+  <div class="gridsub">
+    Fix any route or block that needs it, and set who ends up with the ball
+    &mdash; both happen right here, together, and Play always shows the two
+    combined.
+  </div>
   <div class="wrap" style="padding:0">
     <div class="fieldcard">
-      <svg id="assignField"></svg>
+      <svg id="buildField"></svg>
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)">
-        <button class="btn primary" id="assignPlayBtn" style="width:auto;margin:0;padding:9px 18px">&#9654; Play</button>
-        <input type="range" id="assignScrub" min="0" max="1000" value="1000" style="flex:1">
-        <span id="assignScrubLabel" style="font-size:12px;font-weight:800;color:var(--muted);min-width:32px;text-align:right">100%</span>
+        <button class="btn primary" id="buildPlayBtn" style="width:auto;margin:0;padding:9px 18px">&#9654; Play</button>
+        <input type="range" id="buildScrub" min="0" max="1000" value="1000" style="flex:1">
+        <span id="buildScrubLabel" style="font-size:12px;font-weight:800;color:var(--muted);min-width:32px;text-align:right">100%</span>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" style="flex:0 0 320px">
       <label class="lbl">Play</label>
       <select id="playSel"></select>
 
@@ -304,60 +341,65 @@
         <button data-ov="on">On</button>
       </div>
 
-      <div id="movedList"></div>
+      <div class="build-panel build-panel-lineup">
+        <div class="build-panel-label">Routes &amp; blocks &mdash; this lineup only</div>
+        <div id="movedNote" class="gridsub" style="margin:2px 0 8px;font-size:12px"></div>
+        <div id="movedList"></div>
+        <button class="btn primary" id="saveAssignBtn">Save routes &amp; blocks</button>
+        <button class="btn" id="mirrorAssignBtn">Mirror to &hellip;</button>
+        <button class="btn" id="resetAssignBtn">Reset to auto</button>
+        <div class="status" id="assignStatus"></div>
+        <div class="hint">
+          <b>Drag the orange handle</b> to where this player's block or route
+          should actually finish. Only the players this lineup <i>moved</i>
+          get one &mdash; everyone else still has the assignment the play was
+          drawn with.
+          <br><br>
+          <b>Mirror</b> saves a starting point for the other side (Left/Right)
+          from what's here now, then switches you to it so you can check it
+          with Play and adjust anything that doesn't look right &mdash; it
+          isn't kept in sync afterward, the two sides are independent from
+          that point on.
+        </div>
+      </div>
 
-      <button class="btn primary" id="saveAssignBtn">Save assignments</button>
-      <button class="btn" id="resetAssignBtn">Reset to auto</button>
-      <div class="status" id="assignStatus"></div>
-
-      <div class="hint">
-        <b>Drag the orange handle</b> to where this player's block or route
-        should actually finish. Only the players this formation <i>moved</i>
-        get one &mdash; everyone else still has the assignment the play was
-        drawn with.
+      <div class="build-panel build-panel-play">
+        <div class="build-panel-label">Ball path &mdash; this play, every formation and side</div>
+        <label class="lbl" style="margin-top:2px">Sequence</label>
+        <div id="ballSeq"></div>
+        <div id="ballPlain" style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px"></div>
+        <button class="btn primary" id="saveBallBtn">Save ball path</button>
+        <button class="btn" id="clearBallBtn">Clear</button>
+        <div class="status" id="ballStatus"></div>
+        <div class="hint">
+          Tapping just <b>one</b> player says he carries it the whole play --
+          that's enough to fix "this play hands off to the wrong back," no
+          second tap needed. The exchange point places itself between the two
+          players when you tap a second &mdash; <b>drag a numbered badge</b>
+          only if it's in the wrong spot. Set the word on each leg: a
+          <b>pitch</b> and a <b>pass</b> are taught differently, and on a pop
+          pass the pass leg is where it gets released.
+          <br><br>
+          A flagged leg means a route or formation change moved that
+          receiver away from where this exchange was set &mdash; tap
+          <b>Snap to route</b> on it to put the exchange back on him.
+          <br><br>
+          This sequence belongs to the <b>play</b>, not this lineup &mdash;
+          Left and Right, and every formation this play can be called from,
+          all use it. There's no way yet to give one formation its own
+          different ball carrier for the same play.
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<div id="step4" style="display:none">
-  <div class="gridhead">
-    <h2>Where the ball goes</h2><span class="who" id="whoFor4"></span>
-  </div>
-  <div class="gridsub">Tap the players in the order they touch it. Tap the last one again to undo.</div>
-  <div class="wrap" style="padding:0">
-    <div class="fieldcard"><svg id="ballField"></svg></div>
-    <div class="panel">
-      <label class="lbl">Play</label>
-      <select id="ballPlaySel"></select>
-
-      <label class="lbl">Side</label>
-      <div class="seg" id="ballSideSeg">
-        <button data-side="Left">Left</button>
-        <button data-side="Right" class="on">Right</button>
-      </div>
-
-      <label class="lbl">Sequence</label>
-      <div id="ballSeq"></div>
-      <div id="ballPlain" style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px"></div>
-
-      <button class="btn primary" id="saveBallBtn">Save ball path</button>
-      <button class="btn" id="clearBallBtn">Clear</button>
-      <div class="status" id="ballStatus"></div>
-
-      <div class="hint">
-        The exchange point places itself between the two players &mdash;
-        <b>drag a numbered badge</b> only if it&rsquo;s in the wrong spot.
-        Set the word on each leg: a <b>pitch</b> and a <b>pass</b> are taught
-        differently, and on a pop pass the pass leg is where it gets released.
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- DOM play-calls.js touches while loading. Not used by this page. -->
+<!-- DOM play-calls.js touches while loading. Not used by this page.
+     playCallsGrid/playCallsCloudStatus are real, visible elements now
+     (Browse Plays, above) -- NOT stubbed here too, a duplicate id would
+     shadow the real one since getElementById returns whichever comes
+     first in the document. -->
 <div id="stubs">
-  <div id="playCallsGrid"></div><div id="playCallsCloudStatus"></div>
   <div id="playCallsInfoOverlay"></div><div id="playCallsGate"></div>
   <input id="pcGateInput"><div id="pcGateError"></div>
   <button id="pcGateSubmitBtn"></button><div id="pcTutorialSteps"></div>
@@ -365,24 +407,38 @@
   <button id="pcTutorialNextBtn"></button><button id="pcInfoBtn"></button>
 </div>
 
-<script src="js/shipped-defaults.js"></script>
+<!-- ?v= matches index.html's own BUILD_V discipline (see its header comment) --
+     this page has no build step to force a fresh fetch otherwise, and a
+     browser that already cached an old js/play-calls.js from a previous
+     visit to this exact page will otherwise keep silently running it, no
+     error, just old behavior (hit this directly adding Browse Plays below).
+     Bump alongside index.html's BUILD_V whenever any of these files change. -->
+<script src="js/shipped-defaults.js?v=20260919q"></script>
 <script>
   // Must be set BEFORE play-calls.js, which reads both at load time. Stands in
   // for the live Firebase boot: the same shipped play data the real site
   // starts from, so the diagrams on this page are the real ones.
   window.DATA = window.SHIPPED_PLAYS_JSON;
   window.ALL_CARDS = [];
+  // Browse Plays (below) calls the real initPlayCalls(), which -- on the
+  // live site -- tries to pull a coach's saved route edits from Firebase
+  // before rendering. This page has no login/cloud by design (see the file
+  // header), so stand in with a rejecting stub: initPlayCalls's own
+  // .catch() already handles "cloud unreachable" by falling back to the
+  // shipped defaults above, which is exactly what this preview should show.
+  window.FIREBASE_DB_URL = 'https://example.invalid';
+  window.firebaseAuthed = function () { return Promise.reject(new Error('no cloud in dev preview')); };
 </script>
-<script src="js/formations.js"></script>
-<script src="js/formation-builder.js"></script>
-<script src="js/play-calls.js"></script>
-<script src="js/assignment-store.js"></script>
-<script src="js/assignment-editor.js"></script>
-<script src="js/ball-path.js"></script>
-<script src="js/ball-path-editor.js"></script>
-<script src="js/play-modifiers.js"></script>
+<script src="js/formations.js?v=20260919q"></script>
+<script src="js/formation-builder.js?v=20260919q"></script>
+<script src="js/play-calls.js?v=20260919q"></script>
+<script src="js/assignment-store.js?v=20260919q"></script>
+<script src="js/assignment-editor.js?v=20260919q"></script>
+<script src="js/ball-path.js?v=20260919q"></script>
+<script src="js/ball-path-editor.js?v=20260919q"></script>
+<script src="js/play-modifiers.js?v=20260919q"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="js/formation-quickref-pdf.js"></script>
+<script src="js/formation-quickref-pdf.js?v=20260919q"></script>
 <script>
 (function(){
   'use strict';
@@ -594,7 +650,18 @@
   // has the assignment the play was authored with, and it is still right, so
   // asking a coach to re-check all eleven would just train him to skip the
   // screen.
-  var assignEditor = null;
+  // ---- Build the play: routes/blocks AND the ball's path, on one shared
+  // diagram. Nathan: "Setting the paths of the runners and setting the ball
+  // path at the same time are important - it can't be on separate screens."
+  //
+  // assignEditor owns the moved-players' route/block overrides (per LINEUP:
+  // formation+side+overload). ballEditor owns the ball's sequence (per PLAY,
+  // every lineup it's called from). Both are built with the SAME renderPlay
+  // hook (renderDiagram, below), which is what makes them draw onto one
+  // svg together instead of each owning its own -- see renderDiagram's own
+  // comment for why that's a correctness fix, not just a layout choice.
+  var assignEditor = null, ballEditor = null;
+  var isPlayingRef = { value: false };
 
   // Persistence goes through js/assignment-store.js, which writes Firebase in
   // the real app and this browser's storage in the preview. Same code path
@@ -612,9 +679,9 @@
     var moved = assignEditor.movedSlots();
     var host = document.getElementById('movedList');
     document.getElementById('movedNote').textContent = moved.length
-      ? 'This formation moves ' + moved.length + ' player' + (moved.length===1?'':'s')
+      ? 'This lineup moves ' + moved.length + ' player' + (moved.length===1?'':'s')
         + '. Their assignments were shifted automatically -- drag to correct anything that doesn\'t look right.'
-      : 'Nobody moves in this alignment, so every assignment is still the one the play was drawn with.';
+      : 'Nobody moves in this lineup, so every assignment is still the one the play was drawn with.';
     var editable = assignEditor.editableSlots();
     host.innerHTML = moved.length
       ? '<label class="lbl">Moved players</label>' + moved.map(function(k){
@@ -650,112 +717,21 @@
     return sel.value;
   }
 
-  function initAssignStep(){
-    if (!assignEditor) {
-      assignEditor = new window.AssignmentEditor({
-        svg: document.getElementById('assignField'),
-        formationId: currentFormationId,
-        side: chosenSide,
-        onChange: function(){
-          document.getElementById('assignStatus').textContent = 'Unsaved changes.';
-          refreshMovedList();
-          resetScrubUI(); // any drag/insert/delete leaves the diagram fully drawn again
-        },
-      });
-
-      // ---- Play / Scrub -- Nathan: "Need to be able to play it or scrub
-      // through to time things up." ----
-      var scrubEl = document.getElementById('assignScrub');
-      var scrubLabelEl = document.getElementById('assignScrubLabel');
-      var playBtnEl = document.getElementById('assignPlayBtn');
-
-      function resetScrubUI(){
-        scrubEl.value = 1000;
-        scrubLabelEl.textContent = '100%';
-      }
-
-      scrubEl.addEventListener('input', function(){
-        var frac = Number(this.value) / 1000;
-        scrubLabelEl.textContent = Math.round(frac * 100) + '%';
-        assignEditor.seek(frac);
-      });
-
-      playBtnEl.addEventListener('click', function(){
-        if (assignEditor.isPlaying()) return;
-        playBtnEl.disabled = true;
-        scrubEl.disabled = true;
-        assignEditor.play(function(){
-          playBtnEl.disabled = false;
-          scrubEl.disabled = false;
-          resetScrubUI();
-        });
-      });
-
-      document.getElementById('playSel').addEventListener('change', function(){
-        loadEditorFor(this.value);
-      });
-      document.getElementById('sideSeg3').addEventListener('click', function(ev){
-        var b = ev.target.closest('button[data-side]'); if(!b) return;
-        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
-        b.classList.add('on');
-        assignEditor.side = b.getAttribute('data-side');
-        loadEditorFor(assignEditor.playKey);
-      });
-      document.getElementById('ovSeg').addEventListener('click', function(ev){
-        var b = ev.target.closest('button[data-ov]'); if(!b) return;
-        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
-        b.classList.add('on');
-        assignEditor.overload = b.getAttribute('data-ov') === 'on';
-        loadEditorFor(assignEditor.playKey);
-      });
-      document.getElementById('saveAssignBtn').addEventListener('click', function(){
-        var st = document.getElementById('assignStatus');
-        st.textContent = 'Saving\u2026';
-        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), assignEditor.toJSON())
-          .then(function(res){
-            // Say which store actually took it. A preview that saved to this
-            // browser must not imply the team has the change.
-            st.textContent = res.backend === 'cloud'
-              ? 'Saved to the team playbook \u2014 ' + assignEditor.alignKey() + '.'
-              : 'Saved on this device only (no login here) \u2014 ' + assignEditor.alignKey() + '.';
-            return refreshAssignAll();
-          })
-          .then(refreshMovedList)
-          .catch(function(e){ st.textContent = 'Save failed: ' + e.message; });
-      });
-      document.getElementById('resetAssignBtn').addEventListener('click', function(){
-        assignEditor.clearAll();
-        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), {})
-          .then(refreshAssignAll)
-          .then(function(){
-            document.getElementById('assignStatus').textContent = 'Back to the automatic shift.';
-            refreshMovedList();
-          });
-      });
-    }
-    setSegUI('sideSeg3', assignEditor.side);
-    assignEditor.formationId = currentFormationId;
-    var first = refreshPlaySel();
-    refreshAssignAll().then(function(){ loadEditorFor(first); });
-  }
-
-  function loadEditorFor(playKey){
-    assignEditor.playKey = playKey;
-    assignEditor.setOverrides(currentOverrides());
-    document.getElementById('assignStatus').textContent =
-      window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
-    refreshMovedList();
-    var scrubEl = document.getElementById('assignScrub');
-    scrubEl.value = 1000;
-    document.getElementById('assignScrubLabel').textContent = '100%';
-  }
-
-  // ---- Step 4: the ball's journey ----
-  var ballEditor = null, ballAll = {}, ballSide = chosenSide;
-
+  // ---- Ball path sequence list, and the coupling check -----------------
+  var ballAll = {};
   function refreshBallAll(){
     return window.AssignmentStore.loadBallPaths().then(function(all){ ballAll = all || {}; return ballAll; });
   }
+  // legIndex -> true for a leg whose exchange point has drifted too far from
+  // its receiver's CURRENT route (after a formation/side/overload change, or
+  // a hand-edited route in the panel above). Recomputed on every shared
+  // render by refreshCoupling(), read here when the list itself redraws.
+  var staleLegs = {};
+  // How far a leg's exchange point can sit from the receiver's current route
+  // before it's flagged -- a starting guess (roughly 3x the route handle's
+  // own 18px grab radius), not yet tuned against real authored plays. Worth
+  // checking live against actual plays rather than trusting blind.
+  var STALE_DISTANCE = 60;
 
   function renderBallSeq(){
     var bp = ballEditor.get();
@@ -779,7 +755,12 @@
           + '</select>';
       var rm = '<button data-rm="'+i+'" style="margin-left:auto;border:0;background:none;color:var(--muted);'
         + 'cursor:pointer;font-size:15px;font-weight:800;padding:0 4px">&times;</button>';
-      return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'+badge+who+how+rm+'</div>';
+      var row = '<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'+badge+who+how+rm+'</div>';
+      if (staleLegs[i]) {
+        row += '<div class="stale-chip">may be off the route now'
+          + '<button class="btn" data-snap="'+i+'" style="width:auto;margin:0;padding:2px 9px;font-size:11px">Snap to route</button></div>';
+      }
+      return row;
     }).join('');
     document.getElementById('ballPlain').textContent = window.BallPath.describe(bp);
 
@@ -793,52 +774,273 @@
         ballEditor.removeAt(Number(this.getAttribute('data-rm')));
       });
     });
+    [].forEach.call(host.querySelectorAll('button[data-snap]'), function(b){
+      b.addEventListener('click', function(){
+        var i = Number(this.getAttribute('data-snap'));
+        var leg = ballEditor.get()[i];
+        var resolved = document.getElementById('buildField')._resolvedPaths || [];
+        var entry = leg && resolved.find(function(p){ return String(p.player) === String(leg.player) && p.points; });
+        if (entry) ballEditor.resnapToPath(i, entry.points);
+      });
+    });
   }
 
-  function ballPlayKey(){ return document.getElementById('ballPlaySel').value; }
-
-  function drawBallPlay(){
-    var svg = document.getElementById('ballField');
-    var key = ballPlayKey();
-    var pt = playsFor().find(function(p){ return p.key === key; });
-    if (!pt) return;
-    window.renderCardDiagram(svg, key, ballSide, ballSide, null, '4x4',
-      pt.hasInsideOutside ? 'Outside' : null, false, false, 'A', false, false,
-      currentFormationId, false);
-    svg.setAttribute('viewBox', '0 250 1600 760');
+  // For each ball-path leg (after the snap), how far its authored exchange
+  // point now sits from the receiver's CURRENTLY drawn route -- reads the
+  // same svg._resolvedPaths renderCardDiagram just set (play-calls.js),
+  // i.e. what's actually on screen right now, post formation-shift and post
+  // any hand-edited override, same source AssignmentEditor's own handles
+  // read from.
+  function refreshCoupling(){
+    staleLegs = {};
+    if (!ballEditor) return;
+    var bp = ballEditor.get();
+    var resolved = document.getElementById('buildField')._resolvedPaths || [];
+    for (var i = 1; i < bp.length; i++) {
+      var leg = bp[i];
+      if (!leg.at) continue;
+      var entry = resolved.find(function(p){ return String(p.player) === String(leg.player) && p.points; });
+      if (!entry) continue;
+      var hit = window.BallPath.nearestPointOnPath(entry.points, leg.at);
+      if (hit && hit.distance > STALE_DISTANCE) staleLegs[i] = true;
+    }
   }
 
-  function loadBallFor(key){
-    ballEditor.setAlign(window.Formations.positions(currentFormationId, ballSide));
-    ballEditor.set(ballAll[key] || []);
+  // ---- The shared diagram --------------------------------------------
+  // Installs BOTH the in-progress route/block overrides AND the in-progress
+  // ball path onto the play, draws ONCE, then reverts both. Before this,
+  // NEITHER editor's own render ever did both together: AssignmentEditor
+  // only ever installed assignments, BallPathEditor only ever installed
+  // ballPath -- so a coach editing one could never actually see the other
+  // reflected on screen. This is the real fix, not just where the two
+  // screens now happen to sit.
+  function renderDiagram(){
+    if (!assignEditor || !assignEditor.playKey) return;
+    var playType = window.DATA.playTypes.find(function(p){ return p.key === assignEditor.playKey; });
+    if (!playType) return;
+    var alignKey = assignEditor.alignKey();
+    var hadAssignments = playType.assignments;
+    var hadBallPath = playType.ballPath;
+    playType.assignments = Object.assign({}, hadAssignments || {});
+    playType.assignments[alignKey] = assignEditor.overrides;
+    playType.ballPath = ballEditor ? ballEditor.ballPath : hadBallPath;
+    try {
+      window.renderCardDiagram(
+        document.getElementById('buildField'), assignEditor.playKey, assignEditor.side, assignEditor.side,
+        null, '4x4', playType.hasInsideOutside ? 'Outside' : null,
+        false, false, 'A', false, false,
+        assignEditor.formationId, assignEditor.overload);
+    } finally {
+      if (hadAssignments) playType.assignments = hadAssignments; else delete playType.assignments;
+      if (hadBallPath !== undefined) playType.ballPath = hadBallPath; else delete playType.ballPath;
+    }
+    // Crop to the offensive half: the handles need to be big enough to grab
+    // with a finger, and the defensive band eats half the height.
+    document.getElementById('buildField').setAttribute('viewBox', '0 250 1600 760');
+
+    // renderCardDiagram just wiped and rebuilt the whole svg from scratch --
+    // it draws players/routes/the ball overlay, but knows nothing about
+    // either editor's own OVERLAY of draggable handles/badges on top of
+    // that. Each editor's own render() re-adds its OWN overlay after
+    // calling this function, but a render triggered by tapping a ball-path
+    // player (ballEditor.render()) never touches assignEditor's route
+    // handles, and vice versa -- so without this, whichever editor didn't
+    // trigger this particular render loses its handles/badges every time
+    // the OTHER one redraws. Calling both here, unconditionally, is what
+    // actually keeps them both alive together on one shared diagram.
+    if (assignEditor) assignEditor._drawHandles();
+    if (ballEditor) ballEditor._makeBadgesDraggable();
+    refreshCoupling();
+  }
+
+  // Same install/revert as renderDiagram, but runs the real animation once
+  // instead of a static draw -- the combined-preview half of the "neither
+  // Play button ever showed the true picture" fix.
+  function playBoth(onDone){
+    if (isPlayingRef.value || !assignEditor || !assignEditor.playKey) return;
+    var playType = window.DATA.playTypes.find(function(p){ return p.key === assignEditor.playKey; });
+    if (!playType) return;
+    // Not set here -- playCardAnimation does its own "if already playing,
+    // no-op; else set true" guard internally (same ref), so setting it here
+    // first would make THAT guard see it already true and silently no-op
+    // the whole animation before it ever starts.
+    var alignKey = assignEditor.alignKey();
+    var hadAssignments = playType.assignments;
+    var hadBallPath = playType.ballPath;
+    playType.assignments = Object.assign({}, hadAssignments || {});
+    playType.assignments[alignKey] = assignEditor.overrides;
+    playType.ballPath = ballEditor ? ballEditor.ballPath : hadBallPath;
+
+    function finish(){
+      if (hadAssignments) playType.assignments = hadAssignments; else delete playType.assignments;
+      if (hadBallPath !== undefined) playType.ballPath = hadBallPath; else delete playType.ballPath;
+      isPlayingRef.value = false;
+      assignEditor.render(); // redraws the static picture + handles via renderDiagram
+      if (onDone) onDone();
+    }
+    try {
+      var result = window.playCardAnimation(
+        document.getElementById('buildField'), assignEditor.playKey, assignEditor.side, assignEditor.side,
+        1, isPlayingRef, null, '4x4', playType.hasInsideOutside ? 'Outside' : null,
+        false, false, 'A', false, false,
+        assignEditor.formationId, assignEditor.overload);
+      if (result && typeof result.then === 'function') result.then(finish, finish);
+      else finish();
+    } catch (e) {
+      isPlayingRef.value = false;
+      finish();
+    }
+  }
+
+  function seekBoth(frac){
+    if (!window.seekCardAnimation) return;
+    window.seekCardAnimation(document.getElementById('buildField'), frac * 1400, 1);
+  }
+
+  // Order matters here only to keep the LAST (visible) render correct --
+  // playKey is set first so even the transient render mid-function targets
+  // the right play; the visible, final render is setOverrides's own, last.
+  function loadBuildFor(playKey){
+    assignEditor.playKey = playKey;
+    ballEditor.setAlign(window.Formations.positions(assignEditor.formationId, assignEditor.side));
+    ballEditor.set(ballAll[playKey] || []);
+    // set() draws the diagram but -- unlike a tap/drag -- doesn't fire
+    // onChange, so the sequence LIST needs its own explicit refresh here.
+    renderBallSeq();
     document.getElementById('ballStatus').textContent =
       window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
-    renderBallSeq();
+    assignEditor.setOverrides(currentOverrides()); // renders last -- this is what actually paints
+    document.getElementById('assignStatus').textContent =
+      window.AssignmentStore.backend() === 'cloud' ? '' : 'Preview: saves to this device only.';
+    refreshMovedList();
   }
 
-  function initBallStep(){
-    if (!ballEditor) {
-      ballSide = chosenSide;
+  function initBuildStep(){
+    if (!assignEditor) {
+      assignEditor = new window.AssignmentEditor({
+        svg: document.getElementById('buildField'),
+        formationId: currentFormationId,
+        side: chosenSide,
+        renderPlay: renderDiagram,
+        onChange: function(){
+          document.getElementById('assignStatus').textContent = 'Unsaved changes.';
+          refreshMovedList();
+          resetScrubUI(); // any drag/insert/delete leaves the diagram fully drawn again
+        },
+      });
       ballEditor = new window.BallPathEditor({
-        svg: document.getElementById('ballField'),
-        renderPlay: drawBallPlay,
+        svg: document.getElementById('buildField'),
+        renderPlay: renderDiagram,
         onChange: function(){
           renderBallSeq();
           document.getElementById('ballStatus').textContent = 'Unsaved changes.';
+          resetScrubUI(); // any tap/drag leaves the diagram fully drawn again
         },
       });
-      document.getElementById('ballPlaySel').addEventListener('change', function(){ loadBallFor(this.value); });
-      document.getElementById('ballSideSeg').addEventListener('click', function(ev){
+
+      // ---- Play / Scrub -- ONE pair for the combined diagram (Nathan:
+      // "it doesn't show me an animation of it happening" -- now it always
+      // shows the route edits AND the ball path together). ----
+      var scrubEl = document.getElementById('buildScrub');
+      var scrubLabelEl = document.getElementById('buildScrubLabel');
+      var playBtnEl = document.getElementById('buildPlayBtn');
+
+      function resetScrubUI(){
+        scrubEl.value = 1000;
+        scrubLabelEl.textContent = '100%';
+      }
+
+      scrubEl.addEventListener('input', function(){
+        var frac = Number(this.value) / 1000;
+        scrubLabelEl.textContent = Math.round(frac * 100) + '%';
+        seekBoth(frac);
+      });
+
+      playBtnEl.addEventListener('click', function(){
+        if (isPlayingRef.value) return;
+        playBtnEl.disabled = true;
+        scrubEl.disabled = true;
+        playBoth(function(){
+          playBtnEl.disabled = false;
+          scrubEl.disabled = false;
+          resetScrubUI();
+        });
+      });
+
+      document.getElementById('playSel').addEventListener('change', function(){
+        loadBuildFor(this.value);
+      });
+      document.getElementById('sideSeg3').addEventListener('click', function(ev){
         var b = ev.target.closest('button[data-side]'); if(!b) return;
         [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
         b.classList.add('on');
-        ballSide = b.getAttribute('data-side');
-        loadBallFor(ballPlayKey());
+        assignEditor.side = b.getAttribute('data-side');
+        refreshMirrorBtnLabel();
+        loadBuildFor(assignEditor.playKey);
+      });
+      document.getElementById('ovSeg').addEventListener('click', function(ev){
+        var b = ev.target.closest('button[data-ov]'); if(!b) return;
+        [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+        b.classList.add('on');
+        assignEditor.overload = b.getAttribute('data-ov') === 'on';
+        loadBuildFor(assignEditor.playKey);
+      });
+      document.getElementById('saveAssignBtn').addEventListener('click', function(){
+        var st = document.getElementById('assignStatus');
+        st.textContent = 'Saving…';
+        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), assignEditor.toJSON())
+          .then(function(res){
+            // Say which store actually took it. A preview that saved to this
+            // browser must not imply the team has the change.
+            st.textContent = res.backend === 'cloud'
+              ? 'Saved to the team playbook — ' + assignEditor.alignKey() + '.'
+              : 'Saved on this device only (no login here) — ' + assignEditor.alignKey() + '.';
+            return refreshAssignAll();
+          })
+          .then(refreshMovedList)
+          .catch(function(e){ st.textContent = 'Save failed: ' + e.message; });
+      });
+      document.getElementById('resetAssignBtn').addEventListener('click', function(){
+        assignEditor.clearAll();
+        window.AssignmentStore.save(assignEditor.playKey, assignEditor.alignKey(), {})
+          .then(refreshAssignAll)
+          .then(function(){
+            document.getElementById('assignStatus').textContent = 'Back to the automatic shift.';
+            refreshMovedList();
+          });
+      });
+      // Nathan: "you should have the option to mirror it to the left side.
+      // Once mirrored you can adjust it independently if you wanted to." --
+      // saves a starting point for the OTHER side right away (so it really
+      // is independently there to adjust, not just a live preview), then
+      // switches the whole editor over to it. Ball path is untouched --
+      // it already applies to both sides, mirroring makes no sense for it.
+      document.getElementById('mirrorAssignBtn').addEventListener('click', function(){
+        var st = document.getElementById('assignStatus');
+        var result = assignEditor.mirrorToOtherSide();
+        var targetSide = result.side;
+        var targetKey = window.Formations.alignmentKey(
+          assignEditor.formationId, targetSide, { overload: assignEditor.overload });
+        st.textContent = 'Mirroring to ' + targetSide + '…';
+        window.AssignmentStore.save(assignEditor.playKey, targetKey, result.overrides)
+          .then(function(res){ return refreshAssignAll().then(function(){ return res; }); })
+          .then(function(res){
+            assignEditor.side = targetSide;
+            setSegUI('sideSeg3', targetSide);
+            refreshMirrorBtnLabel();
+            loadBuildFor(assignEditor.playKey);
+            st.textContent = (res.backend === 'cloud'
+              ? 'Saved to the team playbook'
+              : 'Saved on this device only (no login here)')
+              + ' — mirrored to ' + targetKey + '. Check it with Play, then adjust'
+              + ' anything that needs it -- the two sides are independent from here.';
+          })
+          .catch(function(e){ st.textContent = 'Mirror failed: ' + e.message; });
       });
       document.getElementById('saveBallBtn').addEventListener('click', function(){
         var st = document.getElementById('ballStatus');
-        st.textContent = 'Saving\u2026';
-        window.AssignmentStore.saveBallPath(ballPlayKey(), ballEditor.get())
+        st.textContent = 'Saving…';
+        window.AssignmentStore.saveBallPath(assignEditor.playKey, ballEditor.get())
           .then(function(res){
             st.textContent = res.backend === 'cloud'
               ? 'Saved to the team playbook.'
@@ -849,22 +1051,19 @@
       });
       document.getElementById('clearBallBtn').addEventListener('click', function(){
         ballEditor.clear();
-        window.AssignmentStore.saveBallPath(ballPlayKey(), []).then(refreshBallAll);
+        window.AssignmentStore.saveBallPath(assignEditor.playKey, []).then(refreshBallAll);
         document.getElementById('ballStatus').textContent = 'Cleared.';
       });
     }
-    setSegUI('ballSideSeg', ballSide);
-    var sel = document.getElementById('ballPlaySel');
-    var picks = pickMap()[currentFormationId] || [];
-    var list = picks.length ? picks : playsFor().map(function(p){ return p.key; });
-    sel.innerHTML = '';
-    list.forEach(function(k){
-      var pt = playsFor().find(function(p){ return p.key === k; });
-      if (!pt) return;
-      var o = document.createElement('option'); o.value = k; o.textContent = pt.label || k;
-      sel.appendChild(o);
-    });
-    refreshBallAll().then(function(){ loadBallFor(sel.value); });
+    function refreshMirrorBtnLabel(){
+      var other = assignEditor.side === 'Left' ? 'Right' : 'Left';
+      document.getElementById('mirrorAssignBtn').textContent = 'Mirror to ' + other;
+    }
+    setSegUI('sideSeg3', assignEditor.side);
+    refreshMirrorBtnLabel();
+    assignEditor.formationId = currentFormationId;
+    var first = refreshPlaySel();
+    Promise.all([refreshAssignAll(), refreshBallAll()]).then(function(){ loadBuildFor(first); });
   }
 
   // ---- Weekly Quick Reference -- narrow the full matrix to one week, print it ----
@@ -1015,7 +1214,7 @@
   // ---- Top-level navigation: Home, the standalone Formation Builder, and
   // the Create-a-Play flow (its own 4 sub-steps). Three separate screens
   // groups, never shown at once. ----
-  var ALL_SCREENS = ['home', 'stepChooseFormation', 'step1', 'step2', 'step3', 'step4', 'stepQuickRef'];
+  var ALL_SCREENS = ['home', 'stepChooseFormation', 'step1', 'step2', 'stepBuild', 'stepQuickRef', 'stepBrowsePlays'];
   function hideAllScreens(){
     ALL_SCREENS.forEach(function(id){ document.getElementById(id).style.display = 'none'; });
   }
@@ -1070,7 +1269,6 @@
     document.getElementById('tab1').classList.toggle('on', n === 1);
     document.getElementById('tab2').classList.toggle('on', n === 2);
     document.getElementById('tab3').classList.toggle('on', n === 3);
-    document.getElementById('tab4').classList.toggle('on', n === 4);
 
     if (n === 1) {
       document.getElementById('stepChooseFormation').style.display = '';
@@ -1080,21 +1278,13 @@
       }
       return;
     }
-    if (n === 4) {
-      document.getElementById('step4').style.display = '';
-      currentFormationId = formationId || currentFormationId || seedId;
-      var f4 = window.Formations.get(currentFormationId);
-      document.getElementById('whoFor4').textContent = 'in ' + (f4 ? f4.name : currentFormationId);
-      initBallStep();
-      return;
-    }
     if (n === 3) {
-      document.getElementById('step3').style.display = '';
+      document.getElementById('stepBuild').style.display = '';
       currentFormationId = formationId || currentFormationId || seedId;
       var f3 = window.Formations.get(currentFormationId);
       document.getElementById('whoFor3').textContent =
         'in ' + (f3 ? f3.name : currentFormationId);
-      initAssignStep();
+      initBuildStep();
       return;
     }
     if (n === 2) {
@@ -1125,24 +1315,36 @@
     document.getElementById('stepsBar').style.display = 'none';
     initQuickRefStep();
   });
+  document.getElementById('goBrowsePlaysBtn').addEventListener('click', function(){
+    hideAllScreens();
+    document.getElementById('stepBrowsePlays').style.display = '';
+    document.getElementById('homeBtn').style.display = '';
+    document.getElementById('stepsBar').style.display = 'none';
+    // Force a rebuild every visit -- a formation/play saved since the last
+    // time this screen was open (e.g. from Build a Formation or Create a
+    // Play, both reachable from Home) should show up without a page reload.
+    window._playCallsShouldRebuild = true;
+    window.initPlayCalls();
+  });
   document.getElementById('homeBtn').addEventListener('click', goHome);
 
   // ---- Create a Play, step 1: choose an existing formation ----
-  document.getElementById('cpSideSeg').addEventListener('click', function(ev){
-    var b = ev.target.closest('button[data-side]'); if (!b) return;
-    [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
-    b.classList.add('on');
-  });
+  // Nathan: "I shouldn't be choosing Left or Right on the initial call -- it
+  // always defaults to Right so the play would be whatever formation, then
+  // you choose the plays." Right is the authored/canonical side for every
+  // shipped play; Left is now something you mirror to later, in step 3, once
+  // you're editing an actual play (see mirrorAssignBtn) -- not a choice made
+  // blind before you've even seen the play list.
   document.getElementById('cpNextBtn').addEventListener('click', function(){
     var fid = document.getElementById('cpFormationSel').value;
-    chosenSide = document.querySelector('#cpSideSeg button.on').getAttribute('data-side');
+    chosenSide = 'Right';
     currentFormationId = fid;
-    // Steps 3/4 read chosenSide when THEY first construct their editors (see
-    // initAssignStep/initBallStep) -- setting it here, before either exists
-    // yet on a first pass through the flow, is what makes "I picked Left"
-    // actually stick instead of silently reverting to Right.
+    // The Build step reads chosenSide when it first constructs its editors
+    // (see initBuildStep) -- setting it here, before either exists yet on a
+    // first pass through the flow, is what makes it stick instead of
+    // silently reverting once they're built. assignEditor.side is the one
+    // shared side value now -- ballEditor doesn't track its own.
     if (assignEditor) { assignEditor.side = chosenSide; setSegUI('sideSeg3', chosenSide); }
-    if (ballEditor) { ballSide = chosenSide; setSegUI('ballSideSeg', chosenSide); }
     goStep(2, fid);
   });
 
@@ -1152,7 +1354,6 @@
   document.getElementById('tab1').addEventListener('click', function(){ goStep(1); });
   document.getElementById('tab2').addEventListener('click', function(){ goStep(2, currentFormationId || seedId); });
   document.getElementById('tab3').addEventListener('click', function(){ goStep(3, currentFormationId || seedId); });
-  document.getElementById('tab4').addEventListener('click', function(){ goStep(4, currentFormationId || seedId); });
   document.getElementById('backBtn').addEventListener('click', function(){ goStep(1); });
   document.getElementById('savePicksBtn').addEventListener('click', function(){
     var list = pickMap()[currentFormationId] || [];

@@ -967,13 +967,22 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   }
   .formation-card {
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 13px;
     background: var(--card);
-    padding: 22px 10px;
-    font-weight: 800;
-    font-size: 15px;
-    text-align: center;
+    overflow: hidden;
     cursor: pointer;
+  }
+  .formation-card svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .formation-card-cap {
+    padding: 9px 11px;
+    border-top: 1px solid var(--line);
+    font-weight: 800;
+    font-size: 14px;
+    text-align: center;
   }
   .formation-play-title {
     text-align: center;

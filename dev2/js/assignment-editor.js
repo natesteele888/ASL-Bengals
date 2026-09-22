@@ -59,6 +59,12 @@
     this.side = opts.side || 'Right';
     this.overload = !!opts.overload;
     this.playKey = opts.playKey || null;
+    // Set only by the Build screen's coordinator (dev-preview.html), which
+    // shares one svg between this class and BallPathEditor so a coach sees
+    // routes/blocks AND the ball's path on the same diagram, not two. When
+    // set, render() hands the whole draw to it instead of drawing solo --
+    // see render()'s own comment for why.
+    this.renderPlay = opts.renderPlay || null;
     // { ownerKey: { pathIndex, points, points4x4 } } for THIS alignment only
     this.overrides = {};
     // The one handle currently picked -- shows its add/delete badges. Cleared
@@ -96,9 +102,28 @@
   // Hand the play its overrides for the duration of one render, then take them
   // back -- the editor must not leave edits on shared DATA that other screens
   // would then pick up as if they had been saved.
+  //
+  // On the Build screen, renderPlay is the coordinator's own renderDiagram(),
+  // which installs BOTH this.overrides AND the ball path onto the play before
+  // drawing once -- installing overrides again here and drawing a SECOND time
+  // would race it (and, worse, draw a picture with the route edit but not the
+  // ball path, which is the exact "neither Play button ever showed the true
+  // combined picture" bug this screen exists to fix). So render() only ever
+  // does its own solo install/draw/revert when nobody else owns the diagram.
   AssignmentEditor.prototype.render = function () {
     var self = this;
     if (!this.playKey) return;
+
+    if (this.renderPlay) {
+      // The coordinator's renderDiagram() redraws BOTH this editor's handles
+      // and BallPathEditor's badges itself after it draws -- it has to: the
+      // shared svg gets wiped and rebuilt on every render, whichever editor
+      // triggered it, so only the coordinator can keep both overlays alive.
+      // Calling _drawHandles() again here would just repeat that work.
+      this.renderPlay();
+      return;
+    }
+
     var playType = window.DATA.playTypes.find(function (p) { return p.key === self.playKey; });
     if (!playType) return;
 
@@ -388,7 +413,7 @@
       var result = window.playCardAnimation(
         this.svg, this.playKey, this.side, this.side, 1, this._isPlayingRef, null, '4x4',
         playType.hasInsideOutside ? 'Outside' : null,
-        false, false, 'A', false, false, this.overload);
+        false, false, 'A', false, false, this.formationId, this.overload);
       if (result && typeof result.then === 'function') result.then(finish, finish);
       else finish();
     } catch (e) {
@@ -403,6 +428,72 @@
 
   AssignmentEditor.prototype.toJSON = function () {
     return JSON.parse(JSON.stringify(this.overrides));
+  };
+
+  // Nathan: "you should have the option to mirror it to the left side. Once
+  // mirrored you can adjust it independently if you wanted to." A starting
+  // point for the OTHER side's overrides, not a live/authoritative link --
+  // same spirit as the Formation Builder's own "Mirror this side -> other
+  // side" (mirrorToOtherSide on FormationBuilder), just for route/block
+  // points instead of stance positions. The caller decides whether to save
+  // it and switch to editing it.
+  //
+  // Reflects every point's x around the O-line's own center (never moves
+  // between sides). Confirmed against actually-authored plays before
+  // building this: a route's SHAPE mirrors even for a player whose own
+  // lineup spot does not (the QB stands in the same spot on Left and Right,
+  // but his authored route is a genuine mirror image, not a copy) -- so
+  // there is no "anchored, don't flip" exception here despite one existing
+  // for raw stance positions.
+  //
+  // Owner keys can still need to trade places, though: Split's two tight
+  // ends (5/6) swap identities from Right to Left rather than each crossing
+  // the formation (window.Formations.positions already encodes this per
+  // formation). Rather than hardcode which formations do this, the mapping
+  // is derived by matching each slot's mirrored Right stance against every
+  // slot's actual Left stance -- identical for a straight mirror, a
+  // different slot's stance for a swap, itself if nothing matches.
+  AssignmentEditor.prototype.mirrorToOtherSide = function () {
+    var otherSide = this.side === 'Left' ? 'Right' : 'Left';
+    var opts = { overload: this.overload };
+    var fromPos = window.Formations.positions(this.formationId, this.side, opts);
+    var toPos = window.Formations.positions(this.formationId, otherSide, opts);
+    var axis = (fromPos && fromPos.C) ? fromPos.C[0] : 806;
+    // Nearest match, not a fixed tolerance -- the authored data itself isn't
+    // perfectly symmetric (Split's Right/Left tight-end spots are ~5 units
+    // off from an exact mirror of one another), and real slots sit well over
+    // 100 units apart, so "closest of the eleven, within a generous sanity
+    // bound" finds the right owner without a fragile epsilon to tune.
+    var SANITY = 30;
+
+    function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+    function mirrorPt(pt) { return [Math.round(2 * axis - pt[0]), pt[1]]; }
+    function mirrorPts(pts) { return pts ? pts.map(mirrorPt) : pts; }
+
+    var owners = fromPos ? Object.keys(fromPos) : [];
+    var slotForOwner = {};
+    owners.forEach(function (k) {
+      var target = mirrorPt(fromPos[k]);
+      var best = null, bestD = Infinity;
+      owners.forEach(function (m) {
+        if (!toPos[m]) return;
+        var d = dist(target, toPos[m]);
+        if (d < bestD) { bestD = d; best = m; }
+      });
+      slotForOwner[k] = (best !== null && bestD <= SANITY) ? best : k;
+    });
+
+    var out = {};
+    var overrides = this.overrides;
+    Object.keys(overrides).forEach(function (owner) {
+      var ov = overrides[owner];
+      var targetOwner = slotForOwner[owner] || owner;
+      out[targetOwner] = Object.assign({}, ov, {
+        points: mirrorPts(ov.points),
+        points4x4: mirrorPts(ov.points4x4),
+      });
+    });
+    return { side: otherSide, overrides: out };
   };
 
   window.AssignmentEditor = AssignmentEditor;

@@ -94,7 +94,11 @@
       .then(function (url) { return fetch(url); })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (raw) { return raw || {}; })
-      .catch(function () { return {}; });
+      // Mirrors save()'s own fallback: a save that couldn't reach the cloud
+      // still wrote to THIS device, so a read that also can't reach the
+      // cloud must check there too, not just hand back {} and make a
+      // perfectly-saved local edit look like it was never saved at all.
+      .catch(readLocal);
   }
 
   // Merge into the live play data so renderCardDiagram picks them up. Plays
@@ -127,15 +131,17 @@
   function save(playKey, alignKey, ownerMap) {
     var body = (ownerMap && Object.keys(ownerMap).length) ? ownerMap : null;
 
-    if (!hasCloud()) {
+    function saveLocally() {
       var all = readLocal();
       all[playKey] = all[playKey] || {};
       if (body) all[playKey][alignKey] = body;
       else delete all[playKey][alignKey];
       if (!Object.keys(all[playKey]).length) delete all[playKey];
       writeLocal(all);
-      return Promise.resolve({ ok: true, backend: 'local' });
+      return { ok: true, backend: 'local' };
     }
+
+    if (!hasCloud()) return Promise.resolve(saveLocally());
 
     var leaf = DB + '/' + PATH + '/' + encodeURIComponent(playKey)
       + '/' + encodeURIComponent(alignKey) + '.json';
@@ -150,7 +156,16 @@
       .then(function (r) {
         if (!r.ok) throw new Error('save failed (' + r.status + ')');
         return { ok: true, backend: 'cloud' };
-      });
+      })
+      // A coach on bad sideline wifi must still get to keep the edit -- same
+      // "cloud when it works, this device when it doesn't" contract every
+      // load* function here already has (see loadAll's own .catch); this
+      // write side was missing it, so hasCloud() being true but the actual
+      // request failing (an expired session, a dead connection, or this dev
+      // preview's own deliberately-rejecting firebaseAuthed stub) surfaced
+      // as a hard, uncaught "Save failed" instead. Confirmed live: Nathan --
+      // "there didn't appear to be a way to save the edits I completed."
+      .catch(saveLocally);
   }
 
   // --- Ball paths -------------------------------------------------------
@@ -183,16 +198,16 @@
     return out.length ? out : null;
   }
 
+  function readLocalBallPaths() {
+    try { return JSON.parse(localStorage.getItem(LS_BALL) || '{}'); } catch (e) { return {}; }
+  }
   function loadBallPaths() {
-    if (!hasCloud()) {
-      try { return Promise.resolve(JSON.parse(localStorage.getItem(LS_BALL) || '{}')); }
-      catch (e) { return Promise.resolve({}); }
-    }
+    if (!hasCloud()) return Promise.resolve(readLocalBallPaths());
     return window.firebaseAuthed(DB + '/' + BALL_PATH + '.json')
       .then(function (url) { return fetch(url); })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (raw) { return raw || {}; })
-      .catch(function () { return {}; });
+      .catch(readLocalBallPaths); // see loadAll()'s own comment on this fallback
   }
 
   function applyBallPaths(playTypes, all) {
@@ -207,13 +222,16 @@
 
   function saveBallPath(playKey, legs) {
     var body = (legs && legs.length) ? legs : null;
-    if (!hasCloud()) {
+
+    function saveLocally() {
       var all = {};
       try { all = JSON.parse(localStorage.getItem(LS_BALL) || '{}'); } catch (e) {}
       if (body) all[playKey] = body; else delete all[playKey];
       try { localStorage.setItem(LS_BALL, JSON.stringify(all)); } catch (e) {}
-      return Promise.resolve({ ok: true, backend: 'local' });
+      return { ok: true, backend: 'local' };
     }
+
+    if (!hasCloud()) return Promise.resolve(saveLocally());
     var leaf = DB + '/' + BALL_PATH + '/' + encodeURIComponent(playKey) + '.json';
     return window.firebaseAuthed(leaf)
       .then(function (url) {
@@ -226,7 +244,8 @@
       .then(function (r) {
         if (!r.ok) throw new Error('save failed (' + r.status + ')');
         return { ok: true, backend: 'cloud' };
-      });
+      })
+      .catch(saveLocally); // see save()'s own comment on this same fallback
   }
 
   window.AssignmentStore = {
@@ -270,11 +289,11 @@
     return v.filter(function (k) { return typeof k === 'string'; });
   }
 
+  function readLocalFormationPlays() {
+    try { return JSON.parse(localStorage.getItem(LS_FORMATION_PLAYS) || '{}'); } catch (e) { return {}; }
+  }
   function loadFormationPlays() {
-    if (!hasCloud()) {
-      try { return Promise.resolve(JSON.parse(localStorage.getItem(LS_FORMATION_PLAYS) || '{}')); }
-      catch (e) { return Promise.resolve({}); }
-    }
+    if (!hasCloud()) return Promise.resolve(readLocalFormationPlays());
     return window.firebaseAuthed(DB + '/' + FORMATION_PLAYS + '.json')
       .then(function (url) { return fetch(url); })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -283,7 +302,7 @@
         Object.keys(raw || {}).forEach(function (fid) { out[fid] = toKeyList(raw[fid]); });
         return out;
       })
-      .catch(function () { return {}; });
+      .catch(readLocalFormationPlays); // see loadAll()'s own comment on this fallback
   }
 
   // Writes ONE formation's whole play list -- a coach toggling tiles on a
@@ -291,13 +310,16 @@
   // so unlike the override/ball-path saves above this is not a merge.
   function saveFormationPlays(formationId, playKeys) {
     var body = (playKeys && playKeys.length) ? playKeys : null;
-    if (!hasCloud()) {
+
+    function saveLocally() {
       var all = {};
       try { all = JSON.parse(localStorage.getItem(LS_FORMATION_PLAYS) || '{}'); } catch (e) {}
       if (body) all[formationId] = body; else delete all[formationId];
       try { localStorage.setItem(LS_FORMATION_PLAYS, JSON.stringify(all)); } catch (e) {}
-      return Promise.resolve({ ok: true, backend: 'local' });
+      return { ok: true, backend: 'local' };
     }
+
+    if (!hasCloud()) return Promise.resolve(saveLocally());
     var leaf = DB + '/' + FORMATION_PLAYS + '/' + encodeURIComponent(formationId) + '.json';
     return window.firebaseAuthed(leaf)
       .then(function (url) {
@@ -310,7 +332,8 @@
       .then(function (r) {
         if (!r.ok) throw new Error('save failed (' + r.status + ')');
         return { ok: true, backend: 'cloud' };
-      });
+      })
+      .catch(saveLocally); // see save()'s own comment on this same fallback
   }
 
   // --- Weekly call sheet ---------------------------------------------------
@@ -335,14 +358,15 @@
   var WEEKLY = 'weeklyCallSheets';
   var LS_WEEKLY = 'bengalsWeeklyCallSheets';
 
+  function readLocalWeeklyCallSheet(weekLabel) {
+    try {
+      var all = JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}');
+      return all[weekLabel] || null;
+    } catch (e) { return null; }
+  }
   function loadWeeklyCallSheet(weekLabel) {
     if (!weekLabel) return Promise.resolve(null);
-    if (!hasCloud()) {
-      try {
-        var all = JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}');
-        return Promise.resolve(all[weekLabel] || null);
-      } catch (e) { return Promise.resolve(null); }
-    }
+    if (!hasCloud()) return Promise.resolve(readLocalWeeklyCallSheet(weekLabel));
     return window.firebaseAuthed(DB + '/' + WEEKLY + '/' + encodeURIComponent(weekLabel) + '.json')
       .then(function (url) { return fetch(url); })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -352,18 +376,22 @@
         Object.keys(raw).forEach(function (fid) { out[fid] = toKeyList(raw[fid]); });
         return out;
       })
-      .catch(function () { return null; });
+      // see loadAll()'s own comment on this fallback
+      .catch(function () { return readLocalWeeklyCallSheet(weekLabel); });
   }
 
   function saveWeeklyCallSheet(weekLabel, selection) {
     if (!weekLabel) return Promise.reject(new Error('a week/opponent label is required'));
-    if (!hasCloud()) {
+
+    function saveLocally() {
       var all = {};
       try { all = JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}'); } catch (e) {}
       all[weekLabel] = selection || {};
       try { localStorage.setItem(LS_WEEKLY, JSON.stringify(all)); } catch (e) {}
-      return Promise.resolve({ ok: true, backend: 'local' });
+      return { ok: true, backend: 'local' };
     }
+
+    if (!hasCloud()) return Promise.resolve(saveLocally());
     var leaf = DB + '/' + WEEKLY + '/' + encodeURIComponent(weekLabel) + '.json';
     return window.firebaseAuthed(leaf)
       .then(function (url) {
@@ -376,21 +404,22 @@
       .then(function (r) {
         if (!r.ok) throw new Error('save failed (' + r.status + ')');
         return { ok: true, backend: 'cloud' };
-      });
+      })
+      .catch(saveLocally); // see save()'s own comment on this same fallback
   }
 
   // Every saved week/opponent label, for a picker -- newest first is not
   // knowable from Realtime Database key order, so this returns them
   // alphabetically and lets the caller sort however it likes.
+  function readLocalWeeklyList() {
+    try { return Object.keys(JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}')); } catch (e) { return []; }
+  }
   function listWeeklyCallSheets() {
-    if (!hasCloud()) {
-      try { return Promise.resolve(Object.keys(JSON.parse(localStorage.getItem(LS_WEEKLY) || '{}'))); }
-      catch (e) { return Promise.resolve([]); }
-    }
+    if (!hasCloud()) return Promise.resolve(readLocalWeeklyList());
     return window.firebaseAuthed(DB + '/' + WEEKLY + '.json?shallow=true')
       .then(function (url) { return fetch(url); })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (raw) { return raw ? Object.keys(raw) : []; })
-      .catch(function () { return []; });
+      .catch(readLocalWeeklyList); // see loadAll()'s own comment on this fallback
   }
 })();
