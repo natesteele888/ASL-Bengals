@@ -1485,7 +1485,11 @@
       }
     });
     playTypes.forEach(pt => {
-      if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
+      // Mirrors the same signalCardIdManual guard in play-calls.js's own
+      // normalizePlayData -- a coach's deliberate Signal-picker choice
+      // (js/edit-plays.js) needs to survive here too, not just in Play
+      // Calls.
+      if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined && !pt.signalCardIdManual) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
       const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
       if (shippedFlags && shippedFlags.directionFixed && !pt.directionFixed) {
         repairStaleDirectionOrientation(pt);
@@ -1510,19 +1514,24 @@
         });
       }
       if (pt.key === 'option' || pt.key === 'outside_zone') {
-        const REPAIRED_COUNTER_P4_POINTS = {
-          'option|Left': [[360, 269], [480, 360], [520, 322], [650, 230]],
-          'option|Right': [[1251, 269], [1131, 360], [1091, 322], [961, 230]],
-          'outside_zone|Left': [[360, 269], [520, 340], [700, 309], [900, 220]],
-          'outside_zone|Right': [[1251, 269], [1091, 340], [911, 309], [711, 220]],
+        // Mirrors the fix in play-calls.js's own normalizePlayData -- see
+        // that file for the full root-cause explanation. Authored ONCE, in
+        // the Wing-Left canonical shape; a separately-hardcoded "Right"
+        // copy here double-mirrored at render time (this file's own
+        // p4Side === 'Right' branch, same as play-calls.js's), since
+        // Direction Right's Counter always renders with p4Side === 'Right'
+        // whenever Counter is actually eligible/on.
+        const REPAIRED_COUNTER_P4_POINTS_LEFT = {
+          option: [[360, 269], [480, 360], [520, 322], [650, 230]],
+          outside_zone: [[360, 269], [520, 340], [700, 309], [900, 220]],
         };
+        const basePoints = REPAIRED_COUNTER_P4_POINTS_LEFT[pt.key];
         ['Left', 'Right'].forEach(dirKey => {
           const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
           if (!counterVariant || !counterVariant.paths) return;
           const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
           if (idx === -1) return;
-          const points = REPAIRED_COUNTER_P4_POINTS[`${pt.key}|${dirKey}`];
-          if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
+          counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(basePoints)) };
         });
       }
       // Same "stale auto-grafted clone" repair as #4 above, one level
@@ -1634,11 +1643,17 @@
   }
 
   async function loadData() {
-    // No fetch, no network, nothing that can 404 or hang -- SHIPPED_PLAY_DATA
-    // is baked directly into this file (see the comment where it's defined,
-    // above). Deep-cloned so nothing downstream (normalizePlayData's
-    // repairs, etc.) ever mutates the shipped constant itself.
-    DATA = JSON.parse(JSON.stringify(SHIPPED_PLAY_DATA));
+    // No fetch, no network, nothing that can 404 or hang -- base shipped
+    // data comes from a global already sitting in memory, never a request.
+    // Prefer window.SHIPPED_PLAYS_JSON (js/shipped-defaults.js, loaded
+    // before this file in index.html's real-app script list) since it's
+    // regenerated whenever data/plays.json changes and this file's own
+    // embedded SHIPPED_PLAY_DATA blob is not -- confirmed drifted (e.g.
+    // Split's player 2 anchor) before this fix. Falls back to the embedded
+    // blob for two-minute-drill-test.html, which doesn't load shipped-
+    // defaults.js at all. Deep-cloned either way so nothing downstream
+    // (normalizePlayData's repairs, etc.) ever mutates the shared source.
+    DATA = JSON.parse(JSON.stringify(window.SHIPPED_PLAYS_JSON || SHIPPED_PLAY_DATA));
 
     // Snapshot shipped flags/full play objects/dualSideBlock capability from
     // the shipped data we JUST loaded, before any cloud playEdits.json data
@@ -1652,6 +1667,9 @@
         directionFixed: !!pt.directionFixed,
         hasCounter: !!pt.hasCounter,
         counterAwayFromWing: !!pt.counterAwayFromWing,
+        // Mirrors the same fix in play-calls.js's own SHIPPED_PLAY_FLAGS --
+        // see that file for why.
+        isPass: !!pt.isPass,
       };
       SHIPPED_PLAY_TYPES_BY_KEY[pt.key] = pt;
       Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {

@@ -95,11 +95,23 @@
     return out;
   }
 
-  // Where the ball is when a leg BEGINS. The first leg starts at the snap,
-  // which is the center; every later one starts where the exchange was
-  // authored.
+  // Where the ball is when a leg BEGINS. The first leg starts at the
+  // snap-taker's own spot -- Nathan: "the ball should go to the 1 to
+  // start and stay with the 1 player until the point is set for
+  // handoff," found live in I's tightly-stacked, under-center backfield,
+  // where the old "starts at the center" behavior drew the snap badge
+  // sitting up on the O-line, visibly detached from #1's own anchor a
+  // few dozen px back. Falls back to the center only when the snap-
+  // taker's own anchor isn't in `align` (a caller that only ever
+  // resolved `C`, e.g. a slimmer align object) -- every later leg still
+  // starts where its own exchange was authored, unchanged.
   function legStart(bp, i, align) {
-    if (i === 0) return (align && align.C) ? align.C.slice() : null;
+    if (i === 0) {
+      if (!align) return null;
+      var player = bp[0] && bp[0].player;
+      if (player != null && align[String(player)]) return align[String(player)].slice();
+      return align.C ? align.C.slice() : null;
+    }
     return bp[i].at ? bp[i].at.slice() : null;
   }
 
@@ -140,18 +152,39 @@
         cx: q.at[0], cy: q.at[1], r: 21,
         fill: ex.colour, stroke: '#fff', 'stroke-width': 4,
       }));
+      // Nathan, on I's Dive: "the ball gets snapped to the 2" -- this
+      // badge used to show its STEP number (1st touch, 2nd touch...),
+      // which for a 2-leg path (snap -> handoff to #3) put a plain "2"
+      // right in the middle of a tightly-stacked backfield, next to
+      // player #2's own circle -- reading exactly like "ball goes to
+      // #2" even though it means "2nd exchange." Showing the actual
+      // player number who's receiving the ball at each step is both
+      // more accurate and impossible to misread this way -- the snap
+      // badge already showed #1 either way here, only the handoff
+      // badge's digit was ever wrong-looking.
       var t = el('text', {
         x: q.at[0], y: q.at[1], 'text-anchor': 'middle', 'dominant-baseline': 'central',
         'font-size': 24, 'font-weight': 800, fill: '#fff',
         style: 'pointer-events:none;user-select:none',
       });
-      t.textContent = String(q.index + 1);
+      t.textContent = String(q.leg.player);
       badge.appendChild(t);
 
-      // The word, above the badge, so the diagram reads without a legend.
+      // The word, to the side of the badge -- was directly above it, which
+      // read fine when exchange points were spread well apart (every real
+      // Wing/Split ball path so far), but a compressed backfield (I-
+      // Formation's QB/FB/TB stacked close behind each other) can have
+      // consecutive points closer together than a label's own height, so
+      // "above" started landing on top of the very next player's circle
+      // or badge. To the side, alternating left/right by step so two
+      // close, consecutive labels don't collide with EACH OTHER either,
+      // works regardless of how close together the points are -- no
+      // guessing a "too close" distance threshold.
       if (opts.labels !== false) {
+        var toRight = q.index % 2 === 0;
         var lt = el('text', {
-          x: q.at[0], y: q.at[1] - 32, 'text-anchor': 'middle',
+          x: q.at[0] + (toRight ? 50 : -50), y: q.at[1],
+          'text-anchor': toRight ? 'start' : 'end', 'dominant-baseline': 'central',
           'font-size': 22, 'font-weight': 800, fill: ex.colour,
           style: 'pointer-events:none;user-select:none',
         });
@@ -250,7 +283,7 @@
         // than dropping it.
         at = (frac == null ? (i / bp.length) : frac) * animMs;
       }
-      out.push({ player: bp[i].player, circleEl: found.circleEl, atMs: at });
+      out.push({ player: bp[i].player, circleEl: found.circleEl, atMs: at, how: i === 0 ? 'snap' : (bp[i].how || 'handoff') });
     }
     // An exchange cannot happen before the one before it, whatever the
     // geometry says -- a receiver whose route crosses the mesh point early

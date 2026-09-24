@@ -523,17 +523,16 @@
     }
   }
 
+  // js/gameplan.js (new, loads earlier in index.html's scripts array) now
+  // owns this numbering -- was a private copy here, byte-identical to the
+  // one that file needs anyway for describe()'s own v1 label/color lookup;
+  // delegating avoids maintaining two copies of the same logic that only
+  // this same change would ever have introduced (this codebase's existing,
+  // separately-owned copies in js/drivebuilder.js/js/call-sheet-pdf.js stay
+  // untouched -- a real, pre-existing convention, not something to chase
+  // down and consolidate under time pressure).
   function numberedRows() {
-    if (!window.playbookLiveFamilies || !window.DATA || !window.DATA.playTypes) return [];
-    const families = window.playbookLiveFamilies();
-    let n = 1;
-    const rows = [];
-    families.forEach(fam => {
-      ['Left', 'Right'].forEach(direction => {
-        rows.push({ number: n++, key: fam.key, label: fam.label, color: fam.color, direction });
-      });
-    });
-    return rows;
+    return window.GamePlan ? window.GamePlan.numberedRows() : [];
   }
 
   function isSelected(row) {
@@ -650,21 +649,50 @@
   }
 
   // ---- Read-only view: everyone sees this ----
-  function makeStaticCard(row) {
+  // Takes a SAVED entry (v1 `{key,direction}` or v2, the real, dialed-in
+  // call shape js/gameplan.js's "+ Add to Game Plan" button produces on the
+  // real play card) -- window.GamePlan.describe() resolves either shape to
+  // a label/color, and (for v1 only) the same generic `row` this function
+  // already rendered from before v2 existed. A v2 entry is rendered with
+  // its OWN full toggle state (wingSide independent of direction, Motion/
+  // Boot/Counter/PopVariant/alignmentToggles) instead of always the play's
+  // bare default -- this is the actual fix for "with the directions and
+  // toggles I want." A v1 entry's own rendering is byte-identical to
+  // before -- same def.io/def.rp lookup, same authoredFormationId check.
+  function makeStaticCard(entry) {
+    const info = window.GamePlan ? window.GamePlan.describe(entry) : { label: '', color: '#999', v2: null, row: null };
     const wrap = document.createElement('div');
     wrap.className = 'gameplanCard';
     const label = document.createElement('div');
     label.className = 'gameplanCardLabel';
-    label.style.color = row.color;
-    label.textContent = `#${row.number} · ${row.label} • ${row.direction}`;
+    label.style.color = info.color;
+    label.textContent = info.label;
     wrap.appendChild(label);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'gameplanCardSvg');
     wrap.appendChild(svg);
     if (window.renderCardDiagram && window.DATA) {
-      const playType = window.DATA.playTypes.find(p => p.key === row.key);
-      const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
-      window.renderCardDiagram(svg, row.key, row.direction, row.direction, null, '4x4', def.io, false, false, def.rp);
+      if (info.v2) {
+        const e = info.v2;
+        const formationId = e.formation === 'shotgun' ? undefined : e.formation;
+        if (e.formation === 'split' && window.renderSplitDiagram) {
+          window.renderSplitDiagram(svg, e.key, e.splitSide, e.insideOutside, e.readPosition, e.leftCall, e.rightCall, e.passOn, null, e.protection);
+        } else {
+          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn);
+        }
+      } else if (info.row) {
+        const row = info.row;
+        const playType = window.DATA.playTypes.find(p => p.key === row.key);
+        const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
+        // A custom-formation play (authoredFormationId set by js/playbuilder/
+        // legacy-adapter.js, e.g. "i") is already resolved against its OWN
+        // real anchors, not Wing's -- renderCardDiagram defaults formationId
+        // to 'wing' when not passed, which would shift its points onto
+        // Wing's shotgun geometry and render nonsense. Every classic Wing
+        // play has no authoredFormationId, so this stays undefined ->
+        // 'wing' for them, unchanged.
+        window.renderCardDiagram(svg, row.key, row.direction, row.direction, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
+      }
     }
     return wrap;
   }
@@ -722,10 +750,13 @@
     });
 
     gridEl.innerHTML = '';
-    const rows = numberedRows();
+    // Pass each saved entry straight through -- makeStaticCard's own
+    // describe() call resolves v1 vs v2 now, so a v2 entry's real toggle
+    // state actually reaches the renderer (the old rows.find()-first lookup
+    // here only ever matched on key+direction, silently discarding
+    // everything a v2 entry adds).
     (saved.plays || []).forEach(sel => {
-      const row = rows.find(r => r.key === sel.key && r.direction === sel.direction);
-      if (row) gridEl.appendChild(makeStaticCard(row));
+      gridEl.appendChild(makeStaticCard(sel));
     });
   }
 
@@ -783,6 +814,50 @@
     });
   }
 
+  // The Game Plan's own review list -- every play a coach has actually
+  // added (via the picker chips above, OR via "+ Add to Game Plan" on the
+  // real play card, js/play-calls.js's buildCard -- the only path that
+  // captures a specific direction/wingSide/toggle combo, not just a play's
+  // bare default). One row per entry, in the order added, with a readable
+  // summary (window.GamePlan.describe()) and a Remove button. Kept
+  // separate from the chip grid above rather than replacing it -- the chip
+  // grid is still the fast "just add this play's default look" path, and
+  // an open-ended set of specific calls isn't flatly enumerable as chips
+  // the way ~16-32 default plays are.
+  function renderGamePlanList() {
+    const listEl = document.getElementById('thisweekGamePlanList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!pendingSelection.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbSub';
+      empty.style.textAlign = 'center';
+      empty.textContent = 'Nothing added yet -- tap a play above, or browse to any play and tap "+ Add to Game Plan" for a specific direction/side/toggle combo.';
+      listEl.appendChild(empty);
+      return;
+    }
+    pendingSelection.forEach((sel, idx) => {
+      const info = window.GamePlan ? window.GamePlan.describe(sel) : { label: `${sel.key} • ${sel.direction}`, color: '#999' };
+      const row = document.createElement('div');
+      row.className = 'gameplanListRow';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'gameplanListLabel';
+      labelEl.style.color = info.color;
+      labelEl.textContent = info.label;
+      row.appendChild(labelEl);
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'gameplanListRemoveBtn';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => {
+        pendingSelection.splice(idx, 1);
+        renderEditor();
+      });
+      row.appendChild(removeBtn);
+      listEl.appendChild(row);
+    });
+  }
+
   function renderEditor() {
     const section = document.getElementById('thisweekEditSection');
     if (!section) return;
@@ -824,7 +899,7 @@
           pendingSelection.splice(idx, 1);
         } else {
           if (pendingSelection.length >= MAX_PLAYS) {
-            alert(`Featured plays are capped at ${MAX_PLAYS} -- remove one first.`);
+            alert(`Game Plan is capped at ${MAX_PLAYS} -- remove one first.`);
             return;
           }
           pendingSelection.push({ key: row.key, direction: row.direction });
@@ -833,9 +908,10 @@
       });
       pickerGrid.appendChild(chip);
     });
+    renderGamePlanList();
     if (countEl) {
       const n = pendingSelection.length;
-      countEl.textContent = `Featured plays — ${n} selected (aim for ${MIN_RECOMMENDED}-${MAX_PLAYS})`;
+      countEl.textContent = `Game Plan — ${n} selected (aim for ${MIN_RECOMMENDED}-${MAX_PLAYS})`;
       countEl.style.color = (n > MAX_PLAYS) ? '#e0201a' : '';
     }
   }
@@ -846,11 +922,25 @@
   window.renderFeaturedPlayCards = function (wrapEl, plays) {
     if (!wrapEl) return;
     wrapEl.innerHTML = '';
-    const rows = numberedRows();
     (plays || []).forEach(sel => {
-      const row = rows.find(r => r.key === sel.key && r.direction === sel.direction);
-      if (row) wrapEl.appendChild(makeStaticCard(row));
+      wrapEl.appendChild(makeStaticCard(sel));
     });
+  };
+
+  // Two-way hook, same pattern Play Builder V2's own editor/formation-editor
+  // already established this session -- js/gameplan.js's addEntry() already
+  // saved the new play for real (see its own comment for why: an in-memory-
+  // only push here would be lost the next time This Week reloads) before
+  // calling this, so this is purely "reflect it on screen if this screen
+  // happens to already be open" -- guarded on `loaded` since neither
+  // saved/pendingSelection nor the DOM this renders into exist until
+  // initThisWeek() has actually run once.
+  window.ThisWeekGamePlan = {
+    onExternalAdd(entry) {
+      saved = Object.assign({}, saved, { plays: (saved.plays || []).concat([entry]) });
+      pendingSelection.push(entry);
+      if (loaded) { renderReadOnly(); renderEditor(); }
+    },
   };
 
   let controlsWired = false;
@@ -864,6 +954,33 @@
       pendingCoachKeys.push({ name: '', keys: ['', '', ''] });
       renderCoachEditorList(true);
     });
+    // Nathan: "generate a call sheet for the week... a printable 1 page PDF
+    // with all the details." Prints pendingSelection (what's actually on
+    // screen right now) rather than only the last-saved list -- "print what
+    // I'm looking at" is the less surprising choice than a coach who just
+    // added a play wondering why it's missing from the sheet. Same
+    // disabled/originalLabel/try-catch-finally pattern js/coachtools-
+    // print.js's own PDF buttons already use.
+    const printBtn = document.getElementById('thisweekPrintCallSheetBtn');
+    if (printBtn) {
+      const originalLabel = printBtn.textContent;
+      printBtn.addEventListener('click', async () => {
+        if (printBtn.disabled || !window.generateGamePlanPDF) return;
+        if (!pendingSelection.length) { alert('Add at least one play to the Game Plan first.'); return; }
+        printBtn.disabled = true;
+        printBtn.textContent = '📋 Generating…';
+        try {
+          const doc = await window.generateGamePlanPDF(pendingSelection);
+          doc.save('ASL_Bengals_Game_Plan_Call_Sheet.pdf');
+          printBtn.textContent = '✅ Saved!';
+        } catch (err) {
+          console.error('Game Plan PDF generation failed:', err);
+          printBtn.textContent = '⚠️ Failed — tap to retry';
+        } finally {
+          setTimeout(() => { printBtn.textContent = originalLabel; printBtn.disabled = false; }, 2200);
+        }
+      });
+    }
   }
 
   window.initThisWeek = function () {

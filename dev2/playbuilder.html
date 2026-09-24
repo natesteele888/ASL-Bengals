@@ -5,78 +5,204 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Play Builder v2 (standalone preview)</title>
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; height: 100vh; color: #111; background: #ffffff; }
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #toolbar { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #ddd; flex-wrap: wrap; background: #ffffff; }
-  #toolbar label { font-size: 12px; font-weight: 700; color: #555; margin-right: 4px; }
-  #fieldWrap { flex: 1; overflow: auto; background: #f5f5f5; }
-  #field { width: 100%; height: 100%; display: block; touch-action: none; }
-  #sidebar { width: 260px; border-left: 1px solid #ddd; padding: 14px; overflow-y: auto; flex-shrink: 0; background: #ffffff; }
+  :root {
+    --fb-turf:#eceae4; --fb-yardline:#b9b4a8; --fb-los:#e0570a;
+    --fb-line-fill:#1b1b1b; --fb-line-stroke:#1b1b1b; --fb-line-text:#ffffff;
+    --fb-skill-fill:#ffffff; --fb-skill-stroke:#1b1b1b; --fb-skill-text:#1b1b1b;
+    --fb-accent:#ff6a13;
+  }
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; color: #111; background: #ffffff; }
+  #modeToggle { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #ddd; }
+  #modeToggle .toggleGroup button { padding: 7px 16px; }
+  .screen { display: flex; height: calc(100vh - 49px); }
+  #main, #fbMain { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #toolbar, #fbToolbar { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #ddd; flex-wrap: wrap; background: #ffffff; }
+  #toolbar label, #fbToolbar label { font-size: 12px; font-weight: 700; color: #555; margin-right: 4px; }
+  #fieldWrap, #fbFieldWrap { flex: 1; overflow: auto; background: #f5f5f5; }
+  #pbField, #fbField { width: 100%; height: 100%; display: block; touch-action: none; }
+  #sidebar, #fbSidebar { width: 260px; border-left: 1px solid #ddd; padding: 14px; overflow-y: auto; flex-shrink: 0; background: #ffffff; }
   .toggleGroup { display: inline-flex; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
   .toggleGroup button { border: none; background: #fff; padding: 6px 12px; cursor: pointer; font-size: 13px; }
   .toggleGroup button.active { background: #111; color: #fff; }
-  #playerPanel h3 { margin-top: 0; }
-  #playerPanel .field { margin: 10px 0; }
-  #playerPanel label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 3px; }
-  #previewLockNote { font-size: 12px; color: #b45309; background: #fff7e6; border: 1px solid #f0d090; border-radius: 6px; padding: 8px; margin-bottom: 10px; }
-  select, input[type=number] { width: 100%; padding: 6px; font-size: 13px; }
+  #pbPlayerPanel h3, #fbPlayerPanel h3 { margin-top: 0; }
+  #pbPlayerPanel .field, #fbPlayerPanel .field { margin: 10px 0; }
+  #pbPlayerPanel label, #fbPlayerPanel label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 3px; }
+  #pbPreviewLockNote { font-size: 12px; color: #b45309; background: #fff7e6; border: 1px solid #f0d090; border-radius: 6px; padding: 8px; margin-bottom: 10px; }
+  select, input[type=number], input[type=text] { width: 100%; padding: 6px; font-size: 13px; }
   button.primary { padding: 8px 14px; font-size: 13px; cursor: pointer; }
-  #status { font-size: 12px; color: #777; padding: 0 14px; }
+  #pbStatus, #fbStatus { font-size: 12px; color: #777; padding: 0 14px; }
   .instructions { font-size: 12px; color: #666; line-height: 1.5; border-top: 1px solid #eee; margin-top: 16px; padding-top: 12px; }
 </style>
 </head>
 <body>
-<div id="main">
-  <div id="toolbar">
-    <div><label>Play</label><select id="playSelect"></select></div>
-    <button id="newPlayBtn" class="primary">+ New Play</button>
-    <div><label>Formation</label><select id="formationSelect"></select></div>
-    <div><label>Wing (preview)</label><div class="toggleGroup" id="wingSideToggle">
-      <button data-value="left">L</button><button data-value="right" class="active">R</button>
-    </div></div>
-    <div><label>Direction (preview)</label><div class="toggleGroup" id="directionToggle">
-      <button data-value="left">L</button><button data-value="right" class="active">R</button>
-    </div></div>
-    <button id="saveBtn" class="primary" style="margin-left:auto">Save Play</button>
+<div id="modeToggle">
+  <div class="toggleGroup" id="pbTopModeToggle">
+    <button data-mode="plays" class="active">Plays</button>
+    <button data-mode="formations">Formations</button>
   </div>
-  <div id="status"></div>
-  <div id="fieldWrap"><svg id="field"></svg></div>
 </div>
-<div id="sidebar">
-  <div id="playerPanel" style="display:none">
-    <h3 id="playerLabel">#4</h3>
-    <div id="previewLockNote">Switch Wing/Direction back to R/R to edit -- editing always happens on the canonical (right-side) data; the toggles above are preview-only.</div>
-    <div class="field" id="wingRouteToggle" style="display:none">
-      <label>Editing which shape?</label>
-      <div class="toggleGroup">
-        <button data-value="sameSide" class="active">Same Side</button>
-        <button data-value="crossSide">Cross Side</button>
+
+<div id="pbPlaysView" class="screen">
+  <div id="main">
+    <div id="toolbar">
+      <div><label>Play</label><select id="pbPlaySelect"></select></div>
+      <button id="pbNewPlayBtn" class="primary">+ New Play</button>
+      <!-- Switches which formation's plays this screen shows (see editor.js's own comment) -- never reassigns the CURRENT play. Use Formations -> "Copy a play from another formation" to move a play instead. -->
+      <div><label>Formation</label><select id="pbFormationSelect"></select></div>
+      <div><label>Variant</label><select id="pbVariantSelect"></select></div>
+      <button id="pbNewVariantBtn" class="primary">+ New Variant</button>
+      <div><label>Wing (preview)</label><div class="toggleGroup" id="pbWingSideToggle">
+        <button data-value="left">L</button><button data-value="right" class="active">R</button>
+      </div></div>
+      <div><label>Direction (preview)</label><div class="toggleGroup" id="pbDirectionToggle">
+        <button data-value="left">L</button><button data-value="right" class="active">R</button>
+      </div></div>
+      <!-- Built and populated entirely by editor.js's own renderAlignmentPreviewToggles() -- empty for a formation with no alignmentToggles. -->
+      <span id="pbAlignmentPreviewToggles" style="display:flex;align-items:center;gap:14px"></span>
+      <button id="pbPlayBtn">▶ Play</button>
+      <button id="pbSaveBtn" class="primary" style="margin-left:auto">Save Play</button>
+      <button id="pbDeletePlayBtn">Remove Play</button>
+    </div>
+    <div id="pbStatus"></div>
+    <!-- Synced by editor.js's own renderSidebar(). -->
+    <div id="pbFieldTitle" style="padding:8px 0;font-weight:800;font-size:14px"></div>
+    <div id="fieldWrap"><svg id="pbField"></svg></div>
+  </div>
+  <div id="sidebar">
+    <div class="field">
+      <label>Toggles</label>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-bottom:6px"><input type="checkbox" id="pbAllowBootCheckbox" checked style="width:auto"> Allow Boot</label>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="pbAllowMotionCheckbox" checked style="width:auto"> Allow Motion</label>
+      <div class="instructions">Counter / Read A-B / Inside-Outside / Pop Variant: pick one when you hit "+ New Variant" above.</div>
+    </div>
+    <div class="field">
+      <label>Signal card</label>
+      <select id="pbSignalSelect"></select>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <img id="pbSignalPreviewImg" style="width:48px;height:59px;object-fit:cover;border-radius:5px;border:1px solid #ccc;background:#fff;display:none">
+        <button id="pbSignalResetBtn" class="toggleGroup" style="padding:6px 12px;cursor:pointer;font-size:12px">Reset</button>
+      </div>
+      <!-- Built and populated entirely by editor.js's own renderSignalSequencePreview(). -->
+      <div style="font-size:11px;color:#888;margin:10px 0 4px">Full sequence (preview)</div>
+      <div id="pbSignalSequence"></div>
+    </div>
+    <div class="field" id="ballPathPanel" style="border-top:1px solid #eee;margin-top:14px;padding-top:12px">
+      <label><input type="checkbox" id="pbBallPathModeToggle"> Editing ball path -- tap players in order</label>
+      <div id="pbBallPathSeq" style="font-size:12px;margin-top:8px"></div>
+      <button id="pbBallPathClearBtn" class="toggleGroup" style="padding:6px 12px;cursor:pointer;font-size:12px;margin-top:6px">Clear</button>
+    </div>
+    <div id="pbPlayerPanel" style="display:none;border-top:1px solid #eee;margin-top:14px;padding-top:12px">
+      <h3 id="pbPlayerLabel">#4</h3>
+      <div id="pbPreviewLockNote">Switch Wing/Direction back to R/R to edit -- editing always happens on the canonical (right-side) data; the toggles above are preview-only.</div>
+      <div class="field" id="pbWingRouteToggle" style="display:none">
+        <label>Editing which shape?</label>
+        <div class="toggleGroup">
+          <button data-value="sameSide" class="active">Same Side</button>
+          <button data-value="crossSide">Cross Side</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Editing which alignment?</label>
+        <!-- Built and populated entirely by editor.js's own buildAlignmentToggleGroup() -- hidden for a player whose position has no alignment toggle. -->
+        <div class="toggleGroup" id="pbAlignmentEditToggle" style="display:none"></div>
+      </div>
+      <div class="field">
+        <!-- Regular (non-wing) positions only -- editor.js hides this for a wing player (their own Same/Cross-side toggle above covers it). Plain status text, not a control -- the field-wide Wing/Direction toggles above the field ARE the editing-target selector now; this just confirms what that currently means for this player. -->
+        <div class="hint" id="pbDirectionEditToggle" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px"></div>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="pbHasBallCheckbox"> Has the ball</label>
+      </div>
+      <div class="field">
+        <label>Start delay (ms)</label>
+        <input type="number" id="pbDelayInput" value="0" step="50">
+      </div>
+      <div class="field">
+        <label>Ends with</label>
+        <select id="pbEndTypeSelect"><option value="run">Run (arrow)</option><option value="block">Block (bar)</option></select>
+      </div>
+      <div class="instructions">
+        Click the field to add a point to this player's route.<br>
+        Click a point to select it, drag to move it.<br>
+        Click a selected point's ✕ badge to remove it (min. 2 points).
       </div>
     </div>
+    <div class="instructions" id="noSelectionNote">Click a player to start building or editing their route.</div>
+  </div>
+</div>
+
+<div id="pbFormationsView" class="screen" style="display:none">
+  <div id="fbMain">
+    <div id="fbToolbar">
+      <div><label>Formation</label><select id="fbFormationSelect"></select></div>
+      <button id="fbNewBtn" class="primary">+ New Formation</button>
+      <div class="toggleGroup" id="fbPreviewSideToggle">
+        <button data-value="right" class="active">Preview: Right</button>
+        <button data-value="left">Preview: Left</button>
+      </div>
+      <button id="fbSaveBtn" class="primary" style="margin-left:auto">Save Formation</button>
+      <button id="fbDeleteBtn">Remove Formation</button>
+    </div>
+    <div id="fbStatus"></div>
+    <div id="fbFieldWrap"><svg id="fbField"></svg></div>
+  </div>
+  <div id="fbSidebar">
     <div class="field">
-      <label><input type="checkbox" id="hasBallCheckbox"> Has the ball</label>
+      <label>Formation name</label>
+      <input type="text" id="fbNameInput" placeholder="e.g. I-Formation">
     </div>
     <div class="field">
-      <label>Start delay (ms)</label>
-      <input type="number" id="delayInput" value="0" step="50">
+      <label>Touch card</label>
+      <!-- Built and populated entirely by formation-editor.js's own fbPopulateTouchCardSelect()/fbSyncTouchCard() -- any card, any group. -->
+      <select id="fbTouchCardSelect"></select>
+      <img id="fbTouchCardPreviewImg" style="width:48px;height:59px;object-fit:cover;border-radius:5px;border:1px solid #ccc;background:#fff;display:none;margin-top:6px">
     </div>
-    <div class="field">
-      <label>Ends with</label>
-      <select id="endTypeSelect"><option value="run">Run (arrow)</option><option value="block">Block (bar)</option></select>
+    <div id="fbPlayerPanel" style="display:none">
+      <h3 id="fbPlayerLabel">#4</h3>
+      <div class="field">
+        <label>When the play runs the other way…</label>
+        <select id="fbKindSelect">
+          <option value="regular">Stays put (default)</option>
+          <option value="wing">Independent Wing L/R toggle</option>
+          <option value="swap">Swaps with another player</option>
+          <option value="center">Relocates alone (mirrors across the field)</option>
+        </select>
+      </div>
+      <div class="field" id="fbPartnerField" style="display:none">
+        <label>Swap partner</label>
+        <select id="fbPartnerSelect"></select>
+      </div>
     </div>
+    <div class="instructions" id="fbNoSelectionNote">Click a player to reposition them and set how they behave when the play runs the other way.</div>
     <div class="instructions">
-      Click the field to add a point to this player's route.<br>
-      Click a point to select it, drag to move it.<br>
-      Click a selected point's ✕ badge to remove it (min. 2 points).
+      Drag any of the 11 to set where they line up. Everyone defaults to
+      "stays put" -- correct for the O-line and most backs, since only their
+      route flips, not their standing spot. Use Wing/Swap/Relocate only for a
+      player whose actual spot on the field changes with direction (a flexed
+      receiver, a swap-personnel pair).
+    </div>
+    <div class="field" style="border-top:1px solid #eee;margin-top:16px;padding-top:12px">
+      <label>Plays on this formation</label>
+      <div id="fbOwnPlaysList" style="font-size:13px"></div>
+    </div>
+    <div class="field">
+      <label>Copy a play from another formation</label>
+      <div id="fbCopyPlaysList" style="font-size:13px"></div>
     </div>
   </div>
-  <div class="instructions" id="noSelectionNote">Click a player to start building or editing their route.</div>
 </div>
+
 <script src="js/playbuilder/schema.js"></script>
 <script src="js/playbuilder/mirror.js"></script>
 <script src="js/playbuilder/seed-formations.js"></script>
 <script src="js/cloud-auth.js"></script>
 <script src="js/playbuilder/store.js"></script>
+<script src="js/formation-builder.js"></script>
+<script src="js/ball-path.js"></script>
+<script src="js/ball-path-editor.js"></script>
+<script src="js/signals.js"></script>
+<script src="js/playbuilder/copy-across-formations.js"></script>
 <script src="js/playbuilder/editor.js"></script>
+<script src="js/playbuilder/formation-editor.js"></script>
 </body>
 </html>

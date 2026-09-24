@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260919q">
+<link rel="stylesheet" href="css/styles.css?v=20260925o">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -604,9 +604,12 @@
          DEFAULT_COACHES on first-ever save. -->
     <div id="thisweekCoachEditorList"></div>
     <button type="button" class="lbLinkBtn" id="thisweekAddCoachBtn" style="display:block;margin:4px auto 16px;">+ Add Coach</button>
-    <div id="thisweekPickerCount" class="lbSub" style="margin:14px 0 6px;text-align:center;">Featured plays</div>
+    <div id="thisweekPickerCount" class="lbSub" style="margin:14px 0 6px;text-align:center;">Game Plan</div>
     <div class="gameplanPickerGrid" id="thisweekPickerGrid"></div>
+    <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Your Game Plan this week</div>
+    <div class="gameplanList" id="thisweekGamePlanList"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
+    <button class="navBtn secondary" id="thisweekPrintCallSheetBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📋 Print Call Sheet</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
@@ -817,6 +820,58 @@
     <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Step-by-step walkthroughs for common device/account questions -- tap a question to expand it.</div>
     <div id="coachHowToList" style="max-width:600px;margin:0 auto;"></div>
   </div>
+
+  <!-- Formation Builder -- drag-and-drop tool to lay out a new formation
+       from an existing one and save it, real Firebase persistence (see
+       js/assignment-store.js's saveFormation/loadFormations). Ported from
+       dev-preview.html's own #step1 (js/coachtools-formationbuilder.js);
+       slim shell like every panel here -- everything else is built by
+       that script at init time, same as coachtools-stats.js does. -->
+  <div id="coachFormationBuilderPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🧩 Formation Builder</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Start from an existing formation, drag players into a new alignment, save it. Once saved, it shows up everywhere a formation can be picked -- Plays, Create a Play, everywhere.</div>
+    <div id="coachFormationBuilderBody"></div>
+  </div>
+
+  <!-- Create a Play -- pick a formation, choose which plays it can call,
+       then edit routes/blocks and the ball path for one play at a time.
+       Ported from dev-preview.html's #stepChooseFormation/#step2/#stepBuild
+       (js/coachtools-createplay.js). The 3 steps are built ONCE as
+       permanent sibling divs and shown/hidden, never rebuilt via
+       innerHTML -- step 3's editors hold a live reference to their own
+       svg node, so wiping it would orphan them. -->
+  <div id="coachCreatePlayPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">✏️ Create a Play</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Pick a formation, choose which plays it can call, then fix any route or block and set the ball's path -- both together, one screen.</div>
+    <div id="coachCreatePlaySubNav" class="coachToolsModuleTabs"></div>
+    <div id="coachCreatePlayBody"></div>
+  </div>
+
+  <!-- Play Builder -- formation creation, formation edits, play creation,
+       and play edits, all in one place. Nathan: "we can't have two places
+       - work to combine the i form and all formation creation, formation
+       edits, play creation and play edits all in one. This needs to be
+       correct." Replaces the two panels just above (Formation Builder,
+       Create a Play -- left in the DOM, just unlinked from
+       coachtools-nav.js's TABS, for instant rollback) and, via retiring
+       the Play tab's own Edit entry point below, js/edit-plays.js too.
+       js/coachtools-playbuilder.js builds this panel's ENTIRE body at
+       init time (same pattern as coachFormationBuilderPanel above) --
+       reuses js/playbuilder/editor.js + formation-editor.js's interaction
+       logic completely unchanged, see the plan file for the full Phase
+       0-5 verification history behind it. -->
+  <div id="coachPlayBuilderPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🧩 Play Builder</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a formation (including a brand-new one, like I-Formation), pick which plays it runs, and edit every route, block, ball path, and signal -- all from one screen.</div>
+    <div id="coachPlayBuilderBody"></div>
+  </div>
+  <!-- js/coachtools-signals-admin.js builds this panel's entire body at
+       init time, same pattern as coachPlayBuilderPanel just above. -->
+  <div id="coachSignalsAdminPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📇 Signal Cards</div>
+    <div class="hint" style="max-width:480px;margin:6px auto 14px;text-align:center;">Add a new signal -- pick or create a category, type what it means, choose a photo. Live immediately for every coach, no deploy needed.</div>
+    <div id="coachSignalsAdminBody"></div>
+  </div>
 </div>
 
 <!-- Nathan: "there was a schedule button that shows an interactive schedule
@@ -946,236 +1001,277 @@
 
 <div id="editPlaysMode" class="modePanel">
 <div class="editBuildVersion" id="editPlaysBuildVersion"></div>
-<div class="controls">
-  <div class="inline-control">
-    <label>Formation</label>
-    <div class="toggle-group toggle-green" id="editFormationToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Shotgun</button>
-      <button class="toggle-btn" data-value="split" aria-pressed="false">Split</button>
-    </div>
-  </div>
-  <div class="inline-control" id="splitSideWrap" style="display:none;">
-    <label>Split Side</label>
-    <div class="toggle-group toggle-orange" id="editSplitSideToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
-      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
-    </div>
-  </div>
-  <div class="inline-control" id="splitCallWrap" style="display:none;">
-    <label>Route Call</label>
-    <div class="toggle-group toggle-brown" id="editSplitCallToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="seattle" aria-pressed="true">Seattle</button>
-      <button class="toggle-btn" data-value="houston" aria-pressed="false">Houston</button>
-      <button class="toggle-btn" data-value="florida" aria-pressed="false">Florida</button>
-      <button class="toggle-btn" data-value="boston" aria-pressed="false">Boston</button>
-    </div>
-  </div>
-  <div class="inline-control">
-    <label>Wing</label>
-    <div class="toggle-group toggle-orange" id="wingToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
-      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
-    </div>
-  </div>
-  <div class="inline-control" id="playWrap">
-    <label>Play</label>
-    <select id="playSelect"></select>
-  </div>
-  <div class="inline-control">
-    <label>Dir</label>
-    <div class="toggle-group toggle-black" id="dirToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
-      <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
-    </div>
-  </div>
-  <div class="inline-control">
-    <label>Motion</label>
-    <div class="toggle-group toggle-green" id="motionToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
-      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
-    </div>
-  </div>
-  <div class="inline-control">
-    <label>Boot</label>
-    <div class="toggle-group toggle-red" id="bootToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
-      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
-    </div>
-  </div>
-  <div class="inline-control">
-    <label>Blocking</label>
-    <div class="toggle-group toggle-black" id="blockingToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="off" aria-pressed="false">Off</button>
-      <button class="toggle-btn" data-value="on" aria-pressed="true">On</button>
-    </div>
-  </div>
-  <div class="inline-control">
-    <label>Speed</label>
-    <div class="toggle-group toggle-black" id="speedToggle">
+
+<!-- Nathan: "many of the toggles overlap on the screen and it's messy, the
+     toolbar needs to be revamped visually" -- then, after seeing Create a
+     Play's Build step: "that framework could be the same framework for the
+     edit play rebuild." Rebuilt on the same components: .diagramCard holds
+     only the diagram and the immediate Play/Speed preview controls, exactly
+     like Create a Play's own diagramCard footer; everything else lives in
+     one .coachToolsSubPanel below it, in labeled .build-panel sections
+     instead of several independently-styled/positioned boxes. This is a
+     visual and structural rebuild ONLY -- every id below is unchanged, so
+     js/edit-plays.js (the actual route/block/split editing logic) is not
+     touched at all. Nathan: "showing all the toggles on the bottom instead
+     of on the right of a two column with 70 weight on the left with the
+     play" -- .editPlaysLayout below is the two-column wrap, scoped to
+     just this screen (not a change to the shared .diagramCard/
+     .coachToolsSubPanel rules everything else uses), matching Formation
+     Builder's own side-by-side-on-wide/stacked-on-phone pattern. -->
+<div class="editPlaysLayout">
+<div class="diagramCard">
+  <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)">
+    <button class="navBtn" id="playBtn" style="width:auto;display:inline-block;margin:0;padding:9px 18px">&#9654; Play</button>
+    <div class="toggle-group toggle-black" id="speedToggle" style="margin-left:auto">
       <span class="toggle-thumb"></span>
       <button class="toggle-btn" data-value="normal" aria-pressed="true">1x</button>
       <button class="toggle-btn" data-value="half" aria-pressed="false">&#189;x</button>
     </div>
   </div>
-  <div class="inline-control">
-    <label>Edit</label>
-    <div class="toggle-group toggle-black" id="editToggle">
-      <span class="toggle-thumb"></span>
-      <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
-      <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+</div>
+
+<div class="coachToolsSubPanel">
+  <div class="build-panel">
+    <div class="build-panel-label">Formation &amp; Play</div>
+    <div class="inline-control">
+      <label>Formation</label>
+      <div class="toggle-group toggle-green" id="editFormationToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Shotgun</button>
+        <button class="toggle-btn" data-value="split" aria-pressed="false">Split</button>
+      </div>
+    </div>
+    <div class="inline-control" id="splitSideWrap" style="display:none;">
+      <label>Split Side</label>
+      <div class="toggle-group toggle-orange" id="editSplitSideToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control" id="splitCallWrap" style="display:none;">
+      <label>Route Call</label>
+      <div class="toggle-group toggle-brown" id="editSplitCallToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="seattle" aria-pressed="true">Seattle</button>
+        <button class="toggle-btn" data-value="houston" aria-pressed="false">Houston</button>
+        <button class="toggle-btn" data-value="florida" aria-pressed="false">Florida</button>
+        <button class="toggle-btn" data-value="boston" aria-pressed="false">Boston</button>
+      </div>
+    </div>
+    <div class="inline-control" id="playWrap">
+      <label>Play</label>
+      <select id="playSelect"></select>
     </div>
   </div>
-  <div class="inline-control" id="ballCarrierWrap" style="display:none;">
-    <button class="standalone-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
-    <!-- Ball Starts With: sets p.ballStart (who the floating ball ICON
-         visually starts riding with) as a separate thing from Ball Carrier
-         (p.ball, who's credited as the actual carrier). These can be two
-         different players -- Shuffle Pass is the existing example: ball
-         starts with #1 (QB), Ball Carrier stays #4 (TE) throughout. Same
-         tap-a-player flow as Ball Carrier. See js/edit-plays.js. -->
-    <button class="standalone-btn" id="ballStartsWithBtn" type="button" title="Who the ball icon visually starts with, if different from who's credited as the carrier (Ball Carrier). Leave unset if the ball should just start with the Ball Carrier directly.">Ball Starts With</button>
+
+  <!-- Nathan: "on play edits you should also be able to see and edit the
+       play signals." Calling a play flashes a SEQUENCE of hand-signal
+       cards, not one (js/signals.js's RECIPES) -- editSignalSelect picks
+       which card represents THIS play's identity within that sequence
+       (playType.signalCardId, the one part of the sequence a play
+       actually owns; the rest -- Wing/Direction/Motion/etc -- come from
+       whichever of this screen's own toggles are already set), and
+       editSignalPreview shows the resulting sequence live, built with
+       js/play-calls.js's own buildSignalSequence -- the exact function
+       Play Calls itself calls, so this is always what a coach would
+       really see, not a separate approximation. See js/edit-plays.js's
+       syncSignalUI/renderSignalPreview. -->
+  <div class="build-panel">
+    <div class="build-panel-label">Signal</div>
+    <div class="inline-control">
+      <label>Card</label>
+      <select id="editSignalSelect" style="flex:1 1 auto"></select>
+    </div>
+    <button class="standalone-btn tiny" id="editSignalResetBtn" type="button" style="margin-top:6px" title="Go back to this play's shipped default signal">Reset to default</button>
+    <div id="editSignalPreview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
   </div>
-  <div class="action-row">
-    <button class="action-btn primary" id="playBtn">&#9654; Play</button>
-    <button class="action-btn" id="exportBtn" style="display:none;">Export Points</button>
-    <button class="action-btn" id="saveCloudBtn" style="display:none;">Save to Cloud</button>
+
+  <div class="build-panel">
+    <div class="build-panel-label">Look</div>
+    <div class="inline-control">
+      <label>Wing</label>
+      <div class="toggle-group toggle-orange" id="wingToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Dir</label>
+      <div class="toggle-group toggle-black" id="dirToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Motion</label>
+      <div class="toggle-group toggle-green" id="motionToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Boot</label>
+      <div class="toggle-group toggle-red" id="bootToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Blocking</label>
+      <div class="toggle-group toggle-black" id="blockingToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="false">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="true">On</button>
+      </div>
+    </div>
   </div>
-  <!-- "Save to Cloud" above only ever writes to playEdits.json -- a coach's
-       own edit overlay. It never touches dev2PlayData/plays.json, the
-       separate "shipped defaults" node index.html itself boots from (see
+
+  <!-- Nathan: "Both Option and Outside Zone need a new toggle for
+       Counter... added to the end of the play call like boot." Unlike
+       Boot (a live ball-carrier swap, no new geometry), Counter needs a
+       real different route for #4's sweep, so it's authored here as its
+       own stored sub-variant (Normal/Counter) per direction. Pop Pass 2
+       is the same shape (Pop/Pop2), gated on hasPopVariant. These four
+       (Read/In-Out/Counter/Pop Pass 2) pick which STORED variant of the
+       current play you're looking at -- js/edit-plays.js's
+       updateReadPosVisibility shows only the ones this play actually has. -->
+  <div class="build-panel" id="variantPanel">
+    <div class="build-panel-label">Play variant</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="corner-control" id="readPosGroup" style="display:none;">
+        <label>Read</label>
+        <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
+          <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
+        </div>
+      </div>
+      <div class="corner-control" id="insideOutsideGroup" style="display:none;">
+        <label>In/Out</label>
+        <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
+          <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
+        </div>
+        <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
+      </div>
+      <div class="corner-control" id="counterGroup" style="display:none;">
+        <label>Counter</label>
+        <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
+          <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
+        </div>
+      </div>
+      <div class="corner-control" id="popVariantGroup" style="display:none;">
+        <label>Pop Pass 2</label>
+        <div class="toggle-group toggle-red toggle-tiny" id="popVariantToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Pop" aria-pressed="true">Pop</button>
+          <button class="toggle-btn" data-value="Pop2" aria-pressed="false">Pop 2</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="build-panel">
+    <div class="build-panel-label">Edit mode</div>
+    <div class="inline-control">
+      <label>Edit</label>
+      <div class="toggle-group toggle-black" id="editToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control" id="ballCarrierWrap" style="display:none;">
+      <button class="standalone-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+      <!-- Ball Starts With: sets p.ballStart (who the floating ball ICON
+           visually starts riding with) as a separate thing from Ball Carrier
+           (p.ball, who's credited as the actual carrier). These can be two
+           different players -- Shuffle Pass is the existing example: ball
+           starts with #1 (QB), Ball Carrier stays #4 (TE) throughout. Same
+           tap-a-player flow as Ball Carrier. See js/edit-plays.js. -->
+      <button class="standalone-btn" id="ballStartsWithBtn" type="button" title="Who the ball icon visually starts with, if different from who's credited as the carrier (Ball Carrier). Leave unset if the ball should just start with the Ball Carrier directly.">Ball Starts With</button>
+    </div>
+  </div>
+
+  <!-- Everything a coach reaches for once a point/path is actually selected
+       during editing. editToolbar/endTypePanel/delayPanel/assignPanel each
+       still toggle their own display:none/flex exactly as before (they can
+       show in any combination -- editToolbar and assignPanel really are
+       both visible together for a block assignment, see js/edit-plays.js's
+       setEditTargetEndType) -- this is just one flex-wrap row to hold
+       whichever of them are active, instead of each independently pinned
+       to a corner of the diagram. -->
+  <div class="build-panel" id="editingPointPanel">
+    <div class="build-panel-label">Editing this point</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="edit-toolbar" id="editToolbar" style="display:none;">
+        <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
+        <button id="addPointBtn">+ Add Point to End</button>
+        <!-- Nathan: "when the 4 goes by the red line, he needs to switch to
+             having the ball and his line changes to red." Pick a handle on
+             a route (tap one of the yellow dots, same as before adding/
+             removing points), then tap this to mark that spot as where the
+             carry switches -- the route draws blue up to there and red
+             after, and Play Calls' ▶ animation hands the moving ball off to
+             this player at that same point. Only shown for a real route
+             (not a block assignment), and only once a handle is actually
+             selected -- see edit-plays.js's updateEditUI/handoffIndex. -->
+        <button id="ballStartsHereBtn" style="display:none;">&#127944; Ball Starts Here</button>
+      </div>
+      <!-- Run/Block, for players 4/5/6, IS the single choice between a
+           real, freely-editable route and a fixed block assignment -- see
+           js/edit-plays.js's setEditTargetEndType for the full mechanism.
+           Nathan: "We already say whether the path is a run or block
+           path... so we should be able to click 'run' on player 5 or 6 and
+           make his path whatever we want" -- these two buttons do both. -->
+      <div class="end-type-panel" id="endTypePanel" style="display:none;">
+        <span class="assign-label">Ends with:</span>
+        <button id="endTypeRunBtn" class="end-type-btn" title="Player keeps running past this point">&#10148; Run</button>
+        <button id="endTypeBlockBtn" class="end-type-btn" title="Player plants and blocks right here">&#9473; Block</button>
+      </div>
+      <!-- Start Delay: sets p.delayMs on whichever path is currently
+           selected -- how long this player waits after the snap before he
+           starts moving. Shown for the same paths End Type shows for. -->
+      <div class="end-type-panel" id="delayPanel" style="display:none;">
+        <span class="assign-label">Start delay:</span>
+        <input type="number" id="delayInput" min="0" step="50" style="width:70px;padding:6px;border-radius:6px;border:2px solid #ccc;font-size:14px;">
+        <span class="assign-label">ms</span>
+      </div>
+      <div class="assign-panel" id="assignPanel" style="display:none;">
+        <span class="assign-label" id="assignLabel">Block assignment:</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+    <button class="navBtn secondary" id="exportBtn" style="width:auto;display:none;margin:0" type="button">Export Points</button>
+    <button class="navBtn" id="saveCloudBtn" style="width:auto;display:none;margin:0" type="button">Save to Cloud</button>
+  </div>
+  <!-- "Save to Cloud" only ever writes to playEdits.json -- a coach's own
+       edit overlay. It never touches dev2PlayData/plays.json, the separate
+       "shipped defaults" node index.html itself boots from (see
        index.html's boot() and SHIPPED_PLAY_FLAGS in play-calls.js). That
        node only changes when someone pushes the deployed data/plays.json
        into it by hand -- there's no automatic sync from a code deploy.
        Nathan: needed this after adding the Counter toggle (a real data
        model change -- new hasCounter flag, new Normal/Counter structure)
        since the toggle can't show at all until dev2PlayData/plays.json
-       itself has that shape. Small/separate from the main action row on
-       purpose -- this is a rare, deliberate "push a data model change
-       live" action, not a routine save. -->
+       itself has that shape. Small/separate from Save to Cloud on purpose
+       -- this is a rare, deliberate "push a data model change live"
+       action, not a routine save. -->
   <div style="text-align:center; margin-top:10px;">
     <button class="standalone-btn tiny" id="syncDefaultsBtn" title="Overwrites dev2PlayData/plays.json in the cloud with whatever data/plays.json is in the currently-deployed build. Use this after a code deploy changes the play data model (like adding a new toggle) -- never touches your Save to Cloud edits.">Admin: Sync Shipped Defaults to Cloud</button>
   </div>
 </div>
-
-<div class="diagram-card">
-  <!-- Nathan: "the blast Counter toggle and it's in/out toggle are
-       overlapping so I can't edit the in/out variants." Each of these
-       three .corner-control groups used to be the ONLY one visible at a
-       time for any given play (Read A/B, In/Out, and Counter never
-       overlapped before), so they were all independently pinned to the
-       same fixed top-right spot via CSS (position:absolute; top; right)
-       and just quietly stacked on top of each other whenever more than
-       one happened to show. Blast is the first play with BOTH
-       hasInsideOutside and hasCounter, so In/Out and Counter now show at
-       the same time and sat directly on top of each other, unclickable.
-       This wrapper is the one absolutely-positioned corner box now; the
-       three groups inside it are laid out in normal (non-absolute) flow
-       via css/styles.css's #editPlaysMode .corner-controls-stack, so
-       whichever ones are actually visible (display:none/flex is still
-       toggled exactly as before, in updateReadPosVisibility()) stack
-       vertically instead of overlapping -- works the same whether one,
-       two, or all three show at once. -->
-  <div class="corner-controls-stack">
-    <div class="corner-control" id="readPosGroup" style="display:none;">
-      <label>Read</label>
-      <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
-        <span class="toggle-thumb"></span>
-        <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
-        <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
-      </div>
-    </div>
-    <div class="corner-control" id="insideOutsideGroup" style="display:none;">
-      <label>In/Out</label>
-      <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
-        <span class="toggle-thumb"></span>
-        <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
-        <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
-      </div>
-      <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
-    </div>
-    <!-- Nathan: "Both Option and Outside Zone need a new toggle for
-         Counter... added to the end of the play call like boot." Unlike
-         Boot (a live ball-carrier swap, no new geometry), Counter needs a
-         real different route for #4's sweep, so it's authored here as its
-         own stored sub-variant (Normal/Counter) per direction -- same
-         pattern as Read A/B and In/Out above, gated on hasCounter in
-         data/plays.json (Option, Outside Zone only). See
-         js/edit-plays.js's counterVariant/getPlayVariant. -->
-    <div class="corner-control" id="counterGroup" style="display:none;">
-      <label>Counter</label>
-      <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
-        <span class="toggle-thumb"></span>
-        <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
-        <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
-      </div>
-    </div>
-    <!-- Pop Pass 2: same shape as Counter just above -- a real stored
-         sub-variant (Pop/Pop2), not a live playback swap like Boot,
-         gated on hasPopVariant (Pop Pass only). Nathan: "we will need the
-         toggle for Pop Pass 2. On the toggle it will just change the
-         path of the running backs." See js/edit-plays.js's popVariant/
-         getPlayVariant. -->
-    <div class="corner-control" id="popVariantGroup" style="display:none;">
-      <label>Pop Pass 2</label>
-      <div class="toggle-group toggle-red toggle-tiny" id="popVariantToggle">
-        <span class="toggle-thumb"></span>
-        <button class="toggle-btn" data-value="Pop" aria-pressed="true">Pop</button>
-        <button class="toggle-btn" data-value="Pop2" aria-pressed="false">Pop 2</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="edit-toolbar" id="editToolbar" style="display:none;">
-    <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
-    <button id="addPointBtn">+ Add Point to End</button>
-    <!-- Nathan: "when the 4 goes by the red line, he needs to switch to
-         having the ball and his line changes to red." Pick a handle on a
-         route (tap one of the yellow dots, same as before adding/removing
-         points), then tap this to mark that spot as where the carry
-         switches -- the route draws blue up to there and red after, and
-         Play Calls' ▶ animation hands the moving ball off to this player
-         at that same point. Only shown for a real route (not a block
-         assignment), and only once a handle is actually selected -- see
-         edit-plays.js's updateEditUI/handoffIndex. -->
-    <button id="ballStartsHereBtn" style="display:none;">&#127944; Ball Starts Here</button>
-  </div>
-  <div class="assign-panel" id="assignPanel" style="display:none;">
-    <span class="assign-label" id="assignLabel">Block assignment:</span>
-  </div>
-  <!-- Run/Block, for players 4/5/6, IS the single choice between a real,
-       freely-editable route and a fixed block assignment -- see
-       js/edit-plays.js's setEditTargetEndType for the full mechanism.
-       Previously this needed a second, separate toggle (a "Convert to
-       Route/Block" panel) a coach had to also know about; Nathan: "We
-       already say whether the path is a run or block path... so we
-       should be able to click 'run' on player 5 or 6 and make his path
-       whatever we want" -- these two buttons now do both. -->
-  <div class="end-type-panel" id="endTypePanel" style="display:none;">
-    <span class="assign-label">Ends with:</span>
-    <button id="endTypeRunBtn" class="end-type-btn" title="Player keeps running past this point">&#10148; Run</button>
-    <button id="endTypeBlockBtn" class="end-type-btn" title="Player plants and blocks right here">&#9473; Block</button>
-  </div>
-  <!-- Start Delay: sets p.delayMs on whichever path is currently selected
-       -- how long this player waits after the snap before he starts
-       moving. Same field the animation engine already reads for existing
-       plays like Double Blast and Shuffle Pass; this is the first place
-       a coach can set it directly instead of it only being hand-authored
-       in the data. Shown for the same paths End Type shows for (any real
-       drawn path, not a block assignment or option fake). -->
-  <div class="end-type-panel" id="delayPanel" style="display:none;">
-    <span class="assign-label">Start delay:</span>
-    <input type="number" id="delayInput" min="0" step="50" style="width:70px;padding:6px;border-radius:6px;border:2px solid #ccc;font-size:14px;">
-    <span class="assign-label">ms</span>
-  </div>
-  <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 </div>
 
 <div id="exportModal" style="display:none;">
@@ -1183,11 +1279,11 @@
   <div class="export-panel">
     <div class="export-header">
       <span>Edited Points (JSON)</span>
-      <button id="exportCloseBtn" class="action-btn">Close</button>
+      <button id="exportCloseBtn" class="navBtn secondary" style="width:auto;margin:0">Close</button>
     </div>
     <textarea id="exportText" readonly></textarea>
     <div class="export-footer">
-      <button id="exportCopyBtn" class="action-btn primary">Copy to Clipboard</button>
+      <button id="exportCopyBtn" class="navBtn" style="width:auto;margin:0">Copy to Clipboard</button>
     </div>
   </div>
 </div>
@@ -2126,7 +2222,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260919q';
+  const BUILD_V = '20260925o';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2161,7 +2257,7 @@ if (window.ResizeObserver) {
   // sitting in cache. Execution order is completely unchanged (still one
   // at a time, awaited, further down) -- this only makes the network part
   // faster, it doesn't touch correctness at all.
-  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/coachtools-formationbuilder.js', 'js/coachtools-createplay.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   scripts.forEach(src => {
     const link = document.createElement('link');
     link.rel = 'preload'; link.as = 'script'; link.href = withV(src);
@@ -2284,6 +2380,34 @@ if (window.ResizeObserver) {
     }
     loadedCount++;
     if (appLoadingBar) appLoadingBar.style.width = Math.round((loadedCount / scripts.length) * 100) + '%';
+  }
+  // A coach-built formation (Formation Builder, under Coach Tools) has to be
+  // registered before ANYTHING renders a play, not just before that one
+  // panel opens -- Play Calls' own formation picker and every other reader
+  // of window.Formations treat custom formations exactly like Wing/Split
+  // once they're in the registry (see js/formations.js's list()/get()), so
+  // this has to run here, app-wide, not lazily inside the panel. Same
+  // "one bad fetch degrades that one feature, not the whole boot" shape as
+  // the per-script loop just above.
+  try {
+    const customFormations = await window.AssignmentStore.loadFormations();
+    window.Formations.loadCustom(customFormations);
+  } catch (err) {
+    console.error('[boot] failed to load custom formations (continuing anyway):', err);
+  }
+  // Same "register before anything renders a play, app-wide, not lazily"
+  // reasoning as the block just above, for formations built the NEW way
+  // (Play Builder V2) instead of the old Formation Builder -- registers
+  // each into window.Formations and merges its plays into
+  // window.DATA.playTypes so every existing reader (renderCardDiagram,
+  // the quiz, PDFs, This Week) picks them up with zero changes of their
+  // own. Wing/Split's own cutover is separate, later work -- this only
+  // ever touches OTHER formations. See js/playbuilder/sync-custom-
+  // formations.js's own header for the full reasoning.
+  try {
+    await window.PlayBuilderSyncCustomFormations.syncCustomFormationsIntoData();
+  } catch (err) {
+    console.error('[boot] failed to sync Play Builder V2 formations (continuing anyway):', err);
   }
   // Nathan: "some features not popping up on load. Or loading as straight
   // text." This is the actual fix for that -- the overlay (still up for a

@@ -66,12 +66,35 @@
     // device, save the app as an app on your phone home screen." See
     // js/coachtools-howto.js.
     { key: 'howto', label: '❓ How To', category: 'admin', panel: 'coachHowToPanel', init: () => window.initCoachToolsHowTo && window.initCoachToolsHowTo() },
+    // Nathan: "we can't have two places - work to combine the i form and
+    // all formation creation, formation edits, play creation and play
+    // edits all in one. This needs to be correct." Replaces the two
+    // separate entries this category used to hold (Formation Builder,
+    // Create a Play) -- js/coachtools-playbuilder.js's own panel now
+    // covers both jobs on one screen (a Plays/Formations switch inside
+    // it), plus play VARIANTS, a ball path editor, and a signal picker
+    // none of the old tools had. Doesn't get minAccess:'coach' -- this
+    // rewrites the team's actual plays and formations, so it stays
+    // approvedCoach-only like Roster/Depth Chart/Settings, not broadened
+    // like Stats. js/coachtools-formationbuilder.js and
+    // js/coachtools-createplay.js are left in place, just unlinked here
+    // (no TABS entry routes to them anymore) -- instant rollback if
+    // anything's wrong with the new panel, not a deletion.
+    { key: 'playbuilder', label: '🧩 Play Builder', category: 'plays', panel: 'coachPlayBuilderPanel', init: () => window.initCoachPlayBuilder && window.initCoachPlayBuilder() },
+    // Self-serve "add a signal card" tool -- Nathan: "in the future, if I
+    // need to add more signals, is there a path to do that?" Stores the
+    // photo directly in the card's own Firebase record (a data: URI, not
+    // a separate static file), so adding one here is live immediately,
+    // everywhere, with no git commit/deploy step, unlike the manual path
+    // used earlier this session for card #33.
+    { key: 'signalsadmin', label: '📇 Signal Cards', category: 'plays', panel: 'coachSignalsAdminPanel', init: () => window.initCoachSignalsAdmin && window.initCoachSignalsAdmin() },
   ];
 
   const CATEGORIES = [
     { key: 'gameday', label: '🏈 Game Day' },
     { key: 'team', label: '👥 Team' },
     { key: 'data', label: '📈 Data & Stats' },
+    { key: 'plays', label: '🧩 Play Design' },
     { key: 'library', label: '📚 Library' },
     { key: 'admin', label: '⚙️ Admin' },
   ];

@@ -77,29 +77,25 @@
   let scripts = [];   // [{id, name, plays:[{key,direction}], updatedAt}]
   let current = null; // the script currently open in the editor, or null (list view)
   let loaded = false;
+  // Read-only copy of This Week's own Game Plan (thisWeek.json's `plays`),
+  // for the picker below -- Nathan: "The script piece comes after where you
+  // can choose plays from your week's game plan." Used to be sourced from
+  // the WHOLE playbook (numberedRows(), the same family+direction list This
+  // Week/Call Sheet used before Game Plan existed) -- refetched every time
+  // the editor opens rather than cached at boot, so it can't go stale
+  // across a session where a coach edits This Week in one tab and Drive
+  // Scripts in another.
+  let gamePlanEntries = [];
 
   function genId() {
     return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
-  // Same family+direction numbering the Call Sheet PDF and This Week picker
-  // use -- reimplemented locally (small, pure) rather than reaching into
-  // another file's IIFE-private function, matching how thisweek.js and
-  // call-sheet-pdf.js already each keep their own tiny copy of this.
-  function numberedRows() {
-    if (!window.playbookLiveFamilies || !window.DATA || !window.DATA.playTypes) return [];
-    const families = window.playbookLiveFamilies();
-    let n = 1;
-    const rows = [];
-    families.forEach(fam => {
-      ['Left', 'Right'].forEach(direction => {
-        rows.push({ number: n++, key: fam.key, label: fam.label, color: fam.color, direction });
-      });
-    });
-    return rows;
-  }
-  function rowFor(sel) {
-    return numberedRows().find(r => r.key === sel.key && r.direction === sel.direction);
+  function loadGamePlanForPicker() {
+    const url = `${FIREBASE_DB_URL}/thisWeek.json`;
+    return window.firebaseAuthed(url).then(u => fetch(u)).then(r => (r.ok ? r.json() : null))
+      .then(data => { gamePlanEntries = (data && Array.isArray(data.plays)) ? data.plays : []; })
+      .catch(err => { console.error('Could not load Game Plan for Drive Scripts picker:', err); gamePlanEntries = []; });
   }
 
   // ---- Cloud load/save ----
@@ -193,7 +189,8 @@
     document.getElementById('driveScriptNameInput').value = current.name || '';
     document.getElementById('driveScriptDeleteBtn').style.display = scripts.some(s => s.id === current.id) ? '' : 'none';
     renderPlayList();
-    renderPicker();
+    renderPicker(); // once immediately with whatever's cached, so the picker isn't blank while the fetch below is in flight
+    loadGamePlanForPicker().then(renderPicker);
   }
 
   function closeEditor() {
@@ -215,13 +212,19 @@
       return;
     }
     current.plays.forEach((sel, i) => {
-      const row = rowFor(sel);
+      // window.GamePlan.describe() handles BOTH shapes a script's own
+      // plays[] can hold: a v2 entry (added since Game Plan's picker
+      // replaced the old full-playbook one below) with its own real
+      // wingSide/toggles, and a plain v1 {key,direction} (every script
+      // built before today, including the real starter scripts) --
+      // no branching needed here, describe() already resolves either.
+      const info = window.GamePlan ? window.GamePlan.describe(sel) : { label: `${sel.key} • ${sel.direction}`, color: '' };
       const li = document.createElement('li');
       li.className = 'driveScriptPlayRow';
       const label = document.createElement('span');
       label.className = 'driveScriptPlayLabel';
-      label.style.color = row ? row.color : '';
-      label.textContent = row ? `#${row.number} ${row.label} • ${row.direction}` : `${sel.key} • ${sel.direction}`;
+      label.style.color = info.color || '';
+      label.textContent = info.label;
       li.appendChild(label);
 
       const controls = document.createElement('span');
@@ -241,22 +244,51 @@
     });
   }
 
+  // Nathan: "The script piece comes after where you can choose plays from
+  // your week's game plan and create 3-5 play scripts that are specific
+  // plays to memorize and run at high speeds in the game with no delay."
+  // Used to list the WHOLE playbook (every family x direction) -- now
+  // lists only what's actually in This Week's own Game Plan, each already
+  // a specific, dialed-in call (real wingSide/toggles for anything added
+  // via "+ Add to Game Plan" on the real card, not just a play's default).
   function renderPicker() {
     const gridEl = document.getElementById('driveScriptPickerGrid');
     if (!gridEl) return;
     gridEl.innerHTML = '';
+    if (!gamePlanEntries.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbEmpty';
+      empty.textContent = "Your Game Plan is empty -- add plays on This Week first, then come back here to build a script from them.";
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'lbLinkBtn';
+      link.style.display = 'block';
+      link.style.margin = '6px auto 0';
+      link.textContent = 'Go to This Week →';
+      link.addEventListener('click', () => { if (window.setSection) window.setSection('thisweek'); });
+      gridEl.appendChild(empty);
+      gridEl.appendChild(link);
+      return;
+    }
     // A picker tap here ADDS another instance to the end of the ordered
     // list (not a toggle like This Week's picker) -- a drive script is a
     // sequence, and calling the same play more than once in a drive (e.g.
     // Inside Zone twice in a row) is completely normal.
-    numberedRows().forEach(row => {
+    gamePlanEntries.forEach(entry => {
+      const info = window.GamePlan ? window.GamePlan.describe(entry) : { label: `${entry.key} • ${entry.direction}`, color: '' };
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'gameplanChip';
-      chip.style.setProperty('--chip-color', row.color);
-      chip.textContent = `#${row.number} ${row.label} • ${row.direction}`;
+      chip.style.setProperty('--chip-color', info.color);
+      chip.textContent = info.label;
       chip.addEventListener('click', () => {
-        current.plays.push({ key: row.key, direction: row.direction });
+        // Deep-copy, not a reference to the Game Plan's own entry -- a
+        // script is a frozen, memorized sequence; it should not silently
+        // change later if the Game Plan gets edited (a play swapped out,
+        // a toggle changed) after this script was built.
+        const copy = Object.assign({}, entry);
+        if (copy.alignmentValues) copy.alignmentValues = Object.assign({}, copy.alignmentValues);
+        current.plays.push(copy);
         renderPlayList();
       });
       gridEl.appendChild(chip);

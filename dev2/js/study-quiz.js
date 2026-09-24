@@ -182,12 +182,20 @@ window.refreshCoachToolsVisibility = function(){
   // now it's just "can this person open the tab at all."
   if (coachToolsBtn) coachToolsBtn.style.display = isCoach ? '' : 'none';
 
-  // Nathan: "make sure kids can't edit the plays or rename them." Same
-  // approvedCoach check as everything else here -- see the comment in
-  // auth.js's applyRole() and openEditPlaysGated() above for why this
-  // moved off the broader isCoachSession check.
-  const editPlaysBtn = document.getElementById('editPlaysTabBtn');
-  if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
+  // Retired (Phase 6 of the Play Builder V2 rebuild): Nathan: "we can't
+  // have two places - work to combine... formation creation, formation
+  // edits, play creation and play edits all in one." That's now Coach
+  // Tools' own Play Builder tab (js/coachtools-playbuilder.js), reachable
+  // through the SAME approvedCoach-gated Coach Tools surface this button
+  // used to need its own separate password-fallback gate to defend
+  // (openEditPlaysGated() below) -- that gate has nothing left to defend
+  // once this is the only way in, so it's left dead rather than deleted.
+  // editPlaysTabBtn itself, js/edit-plays.js, and editPlaysMode all stay
+  // exactly as they were -- unlinked, not removed, for instant rollback
+  // (just restore the line below) if Play Builder ever needs to be
+  // pulled back out.
+  // const editPlaysBtn = document.getElementById('editPlaysTabBtn');
+  // if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
 
   // Nathan: "Parents should also see the play signals and play diagrams
   // but don't need the quizzes." Play used to be all-or-nothing for a

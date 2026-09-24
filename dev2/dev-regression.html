@@ -115,6 +115,29 @@ document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/scri
     return s;
   }
 
+  // Every combination of a custom formation's own alignment toggles
+  // (Heavy is the first -- pt.alignmentToggles, js/playbuilder/legacy-
+  // adapter.js), as a list of {toggleId: valueId, ...} maps -- [{}] for
+  // any PlayType with none (every existing one), so this multiplies the
+  // case count by exactly 1 for them.
+  function alignmentCombosFor(pt){
+    var toggles = pt.alignmentToggles || [];
+    var combos = [{}];
+    toggles.forEach(function(toggle){
+      var next = [];
+      combos.forEach(function(base){
+        toggle.values.forEach(function(v){
+          var c = {};
+          for (var k in base) c[k] = base[k];
+          c[toggle.id] = v.id;
+          next.push(c);
+        });
+      });
+      combos = next;
+    });
+    return combos;
+  }
+
   // Every toggle combination that play-calls.js would let a coach reach for a
   // given play, derived from the same flags buildPlayList() projects.
   function shotgunCases(pt){
@@ -123,6 +146,7 @@ document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/scri
     var boot = pt.noBoot           ? [false]              : [false,true];
     var ctr  = pt.hasCounter       ? [false,true]         : [false];
     var pop  = pt.hasPopVariant    ? [false,true]         : [false];
+    var aligns = alignmentCombosFor(pt);
     var cases = [];
     ['Left','Right'].forEach(function(wing){
     ['Left','Right'].forEach(function(dir){
@@ -134,7 +158,9 @@ document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/scri
       // flanker pushed out by Overload then motioning away has to land on the
       // far side's ORDINARY wing spot, not an overloaded one).
       [false,true].forEach(function(ov){
-        cases.push({wing:wing, dir:dir, io:i, read:r, motion:motion, boot:b, counter:c, pop:p, overload:ov});
+      aligns.forEach(function(align){
+        cases.push({wing:wing, dir:dir, io:i, read:r, motion:motion, boot:b, counter:c, pop:p, overload:ov, align:align});
+      });
       });
       });});});});});});
     });});
@@ -172,14 +198,15 @@ document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/scri
 
       shotgunCases(pt).forEach(function(c){
         var stage = freshStage();
+        var alignKey = JSON.stringify(c.align);
         try {
           window.renderCardDiagram(stage, pt.key, c.dir, c.wing, null, '4x4',
-            c.io, c.motion, c.boot, c.read, c.counter, c.pop, undefined, c.overload);
-          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload].join(',')
+            c.io, c.motion, c.boot, c.read, c.counter, c.pop, undefined, c.overload, c.align);
+          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload,alignKey].join(',')
             +'|'+hash(stage.innerHTML));
         } catch(e){
           errors++;
-          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload].join(',')
+          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload,alignKey].join(',')
             +'|THREW:'+e.message);
         }
         total++;

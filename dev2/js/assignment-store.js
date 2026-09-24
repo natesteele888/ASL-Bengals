@@ -263,6 +263,9 @@
     loadWeeklyCallSheet: loadWeeklyCallSheet,
     saveWeeklyCallSheet: saveWeeklyCallSheet,
     listWeeklyCallSheets: listWeeklyCallSheets,
+    loadFormations: loadFormations,
+    saveFormation: saveFormation,
+    deleteFormation: deleteFormation,
   };
 
   // --- Formation -> plays matrix ------------------------------------------
@@ -294,8 +297,15 @@
   }
   function loadFormationPlays() {
     if (!hasCloud()) return Promise.resolve(readLocalFormationPlays());
+    // no-store -- confirmed live as a real bug: this exact URL (same auth
+    // token, reused for a while -- see js/cloud-auth.js's
+    // getFirebaseIdToken) can repeat within a short window, and the
+    // default cache mode is free to serve an earlier response instead of
+    // the real, current data -- so a coach who just saved a play via Play
+    // Builder and immediately checked the real Play tab could see it as
+    // still missing. This node changes live and is never safe to cache.
     return window.firebaseAuthed(DB + '/' + FORMATION_PLAYS + '.json')
-      .then(function (url) { return fetch(url); })
+      .then(function (url) { return fetch(url, { cache: 'no-store' }); })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (raw) {
         var out = {};
@@ -421,5 +431,101 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (raw) { return raw ? Object.keys(raw) : []; })
       .catch(readLocalWeeklyList); // see loadAll()'s own comment on this fallback
+  }
+
+  // --- Custom formations --------------------------------------------------
+  // A coach-built formation (Formation Builder), same shape
+  // FormationBuilder.prototype.toFormation() produces and Formations.
+  // registerCustom() expects back: { id, name, side, lineSlots, anchored,
+  // positions:{Left,Right}, createdBy, createdAt }. Was localStorage-only
+  // (devPreviewFormations, dev-preview.html) until now -- real for trying
+  // the builder, but not a fact any other coach or device could ever see.
+  // Keyed per-formation, one leaf per save, same reasoning as
+  // saveFormationPlays() above: two coaches building different formations
+  // shouldn't be able to clobber each other.
+  var CUSTOM_FORMATIONS = 'customFormations';
+  var LS_CUSTOM_FORMATIONS = 'bengalsCustomFormations';
+
+  function readLocalCustomFormations() {
+    try { return JSON.parse(localStorage.getItem(LS_CUSTOM_FORMATIONS) || '{}'); } catch (e) { return {}; }
+  }
+
+  // lineSlots/anchored are plain string arrays -- Firebase can hand a small
+  // one back as a sparse object keyed "0","1",... same as every other array
+  // field in this file. positions.Left/Right are already slot-keyed objects
+  // (mixing alpha keys like "LT" with numeric-looking ones like "1"-"6"),
+  // which Firebase never treats as an array, so Formations.registerCustom's
+  // own clone() is enough there -- and it already skips anything missing
+  // positions entirely (see loadCustom's try/catch).
+  function normalizeFormation(f) {
+    if (!f) return f;
+    var out = Object.assign({}, f);
+    if (f.lineSlots) out.lineSlots = toKeyList(f.lineSlots);
+    if (f.anchored) out.anchored = toKeyList(f.anchored);
+    return out;
+  }
+
+  function loadFormations() {
+    if (!hasCloud()) return Promise.resolve(readLocalCustomFormations());
+    return window.firebaseAuthed(DB + '/' + CUSTOM_FORMATIONS + '.json')
+      .then(function (url) { return fetch(url); })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) {
+        var out = {};
+        Object.keys(raw || {}).forEach(function (id) { out[id] = normalizeFormation(raw[id]); });
+        return out;
+      })
+      .catch(readLocalCustomFormations); // see loadAll()'s own comment on this fallback
+  }
+
+  function saveFormation(formationId, formationJSON) {
+    function saveLocally() {
+      var all = readLocalCustomFormations();
+      all[formationId] = formationJSON;
+      try { localStorage.setItem(LS_CUSTOM_FORMATIONS, JSON.stringify(all)); } catch (e) {}
+      return { ok: true, backend: 'local' };
+    }
+
+    if (!hasCloud()) return Promise.resolve(saveLocally());
+    var leaf = DB + '/' + CUSTOM_FORMATIONS + '/' + encodeURIComponent(formationId) + '.json';
+    return window.firebaseAuthed(leaf)
+      .then(function (url) {
+        return fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formationJSON),
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('save failed (' + r.status + ')');
+        return { ok: true, backend: 'cloud' };
+      })
+      .catch(saveLocally); // see save()'s own comment on this same fallback
+  }
+
+  // Removes the formation record itself. Deliberately NOT cascading to
+  // formationPlays/assignmentOverrides here -- the caller (Play Builder
+  // V2's "Remove Formation" action) already knows exactly which play keys
+  // this formation touches and cleans those up itself via the EXISTING
+  // saveFormationPlays(id, null) and save(playKey, alignKey, null) calls
+  // (both already delete-on-null, no new functions needed for those) --
+  // one place deciding what "remove a formation" means, not two.
+  function deleteFormation(formationId) {
+    function deleteLocally() {
+      var all = readLocalCustomFormations();
+      delete all[formationId];
+      try { localStorage.setItem(LS_CUSTOM_FORMATIONS, JSON.stringify(all)); } catch (e) {}
+      return { ok: true, backend: 'local' };
+    }
+
+    if (!hasCloud()) return Promise.resolve(deleteLocally());
+    var leaf = DB + '/' + CUSTOM_FORMATIONS + '/' + encodeURIComponent(formationId) + '.json';
+    return window.firebaseAuthed(leaf)
+      .then(function (url) { return fetch(url, { method: 'DELETE' }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('delete failed (' + r.status + ')');
+        return { ok: true, backend: 'cloud' };
+      })
+      .catch(deleteLocally); // see save()'s own comment on this same fallback
   }
 })();
