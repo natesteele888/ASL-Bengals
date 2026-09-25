@@ -3986,7 +3986,13 @@ function renderFormationPlays(container, formationId, formationName, modifyMode)
     // only -- Wing/Split have no curation concept to modify (see the
     // fallback-to-everything comment above); their plays are the real,
     // shipped library, not something this quick affordance should touch.
-    if (formationMeta && !formationMeta.builtIn) {
+    // Coach-only, same gate as "+ Add to Game Plan" above -- found missing
+    // entirely while checking the real player-preview view: this button
+    // (and the "Done" path behind it) writes straight to production
+    // formationPlays curation with no other permission check anywhere in
+    // this chain, so without this gate any player could remove plays from
+    // the team's real curated list just by tapping around the Plays tab.
+    if (formationMeta && !formationMeta.builtIn && window.isApprovedCoachProfile && window.isApprovedCoachProfile()) {
       const actionBtn = document.createElement('button');
       actionBtn.className = 'pc-modify-btn';
       actionBtn.textContent = modifyMode ? 'Done' : 'Modify';

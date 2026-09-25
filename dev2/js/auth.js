@@ -239,12 +239,26 @@ window.exitPlayerPreview = function(){
   var roleErrorEl = document.getElementById('roleError');
 
   // Applies a chosen/restored role everywhere the rest of the app expects
-  // to find it, and persists it so a reload remembers it (same
-  // localStorage-flag spirit as STORAGE_KEY/bengalsCoachSession above).
-  function applyRole(role){
+  // to find it, and (unless persist===false) persists it so a reload
+  // remembers it (same localStorage-flag spirit as
+  // STORAGE_KEY/bengalsCoachSession above). persist:false is for Player
+  // Preview only (see the previewOn branch below) -- found live while
+  // checking this exact feature: this function always wrote ROLE_KEY to
+  // localStorage regardless of caller, so applyRole('player') during
+  // preview was silently overwriting the coach's real, persisted role
+  // with 'player' -- exactly what the comment on PREVIEW_KEY below says
+  // this feature must never do, and worse, nothing ever restored it:
+  // exitPlayerPreview() only clears the sessionStorage flag, so a coach
+  // who used Preview would find themselves permanently downgraded to a
+  // player on that device afterward. window.__previewRealRole was already
+  // being stashed for exactly this restoration and never read anywhere --
+  // the intent was always to keep this in-memory-only for preview.
+  function applyRole(role, persist){
+    if (persist === undefined) persist = true;
     window.userRole = role;
     window.isCoachSession = role === 'coach';
     window.isParentSession = role === 'parent';
+    if (!persist) return;
     try { localStorage.setItem(ROLE_KEY, role); } catch(e) {}
     if(role === 'coach'){
       try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
@@ -302,7 +316,7 @@ window.exitPlayerPreview = function(){
       try { previewOn = sessionStorage.getItem(PREVIEW_KEY) === '1' && storedRole === 'coach'; } catch(e) {}
       if (previewOn){
         window.__previewRealRole = storedRole;
-        applyRole('player');
+        applyRole('player', false);
         // Nathan: "Need a way on Coach Nate account to see the kids
         // account view." Same DOM-is-already-parsed assumption the
         // screenEl/contentEl lookups above already rely on (this script
