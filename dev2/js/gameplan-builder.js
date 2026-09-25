@@ -24,7 +24,10 @@
 // built here -- see the plan file's own "Phase 2" note.
 // ---------------------------------------------------------------------------
 (function () {
-  const state = { step: 1, gameId: '', draftPlays: [], games: [], dirty: false, status: '', editingIndex: -1 };
+  const state = {
+    currentStep: 'opponent', mode: null, gameId: '', draftPlays: [], games: [],
+    dirty: false, status: '', editingIndex: -1, taggingIndex: -1,
+  };
 
   function gpbGameLabel(g) {
     return `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'} — ${g.date || ''}`;
@@ -38,24 +41,68 @@
   function renderSubtitle() {
     const el = document.getElementById('gpbSubtitle');
     if (!el) return;
-    if (!state.gameId) { el.textContent = 'No specific opponent'; return; }
-    const g = state.games.find((x) => x.id === state.gameId);
-    el.textContent = g ? gpbGameLabel(g) : '';
+    const opponentText = state.gameId
+      ? (() => { const g = state.games.find((x) => x.id === state.gameId); return g ? gpbGameLabel(g) : ''; })()
+      : 'No specific opponent';
+    el.textContent = state.mode ? `${opponentText} — ${state.mode === 'offense' ? 'Offense' : 'Defense'}` : opponentText;
   }
 
-  function goStep(n) {
-    state.step = n;
-    document.querySelectorAll('#gpbStepTabs .coachToolsModuleTab').forEach((btn) => {
-      btn.classList.toggle('active', Number(btn.dataset.step) === n);
+  // Nathan: "it just says create your game plan. You choose offense or
+  // defense. For offense, you go through the playbook... For defense, you
+  // can set your defensive alignments." Which steps exist depends on that
+  // choice -- Offense keeps the original Base Plays/Playlist pair,
+  // Defense is a single screen pointing at the real Defense Builder (see
+  // gpbDefenseScreen's own comment in index.html for why that's a link,
+  // not a second embedded copy). Step numbers are computed here, not
+  // hardcoded in the markup, so they always match whichever branch is
+  // actually showing.
+  function activeSteps() {
+    const steps = [
+      { id: 'opponent', label: '1. Opponent' },
+      { id: 'mode', label: '2. Offense/Defense' },
+    ];
+    if (state.mode === 'offense') {
+      steps.push({ id: 'plays', label: '3. Base Plays' });
+      steps.push({ id: 'playlist', label: '4. Playlist' });
+    } else if (state.mode === 'defense') {
+      steps.push({ id: 'defense', label: '3. Defense' });
+    }
+    return steps;
+  }
+  const SCREEN_EL_ID = {
+    opponent: 'gpbOpponentScreen', mode: 'gpbModeScreen', plays: 'gpbPlaysScreen',
+    playlist: 'gpbPlaylistScreen', defense: 'gpbDefenseScreen',
+  };
+
+  function renderStepTabs() {
+    const tabsEl = document.getElementById('gpbStepTabs');
+    if (!tabsEl) return;
+    tabsEl.innerHTML = '';
+    activeSteps().forEach((s) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'coachToolsModuleTab' + (state.currentStep === s.id ? ' active' : '');
+      btn.textContent = s.label;
+      btn.addEventListener('click', () => goStep(s.id));
+      tabsEl.appendChild(btn);
     });
-    const screens = { 1: 'gpbOpponentScreen', 2: 'gpbPlaysScreen', 3: 'gpbPlaylistScreen' };
-    Object.keys(screens).forEach((k) => {
-      const el = document.getElementById(screens[k]);
-      if (el) el.style.display = Number(k) === n ? '' : 'none';
+  }
+
+  function goStep(stepId) {
+    // A step that isn't valid under the CURRENT mode (e.g. still 'plays'
+    // from a previous Offense visit, after switching to Defense) falls
+    // back to the mode-choice screen instead of showing a stale one.
+    state.currentStep = activeSteps().some((s) => s.id === stepId) ? stepId : 'mode';
+    renderStepTabs();
+    Object.keys(SCREEN_EL_ID).forEach((id) => {
+      const el = document.getElementById(SCREEN_EL_ID[id]);
+      if (el) el.style.display = id === state.currentStep ? '' : 'none';
     });
-    if (n === 1) renderOpponentScreen();
-    if (n === 2) renderPlaysScreen();
-    if (n === 3) renderPlaylistScreen();
+    if (state.currentStep === 'opponent') renderOpponentScreen();
+    if (state.currentStep === 'mode') renderModeScreen();
+    if (state.currentStep === 'plays') renderPlaysScreen();
+    if (state.currentStep === 'playlist') renderPlaylistScreen();
+    if (state.currentStep === 'defense') renderDefenseScreen();
     renderSubtitle();
   }
 
@@ -68,16 +115,52 @@
     noneBtn.type = 'button';
     noneBtn.className = 'gpbOpponentBtn' + (!state.gameId ? ' selected' : '');
     noneBtn.textContent = 'No specific opponent (general)';
-    noneBtn.addEventListener('click', () => { state.gameId = ''; state.dirty = true; goStep(2); });
+    noneBtn.addEventListener('click', () => { state.gameId = ''; state.dirty = true; goStep('mode'); });
     list.appendChild(noneBtn);
     state.games.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')).forEach((g) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'gpbOpponentBtn' + (g.id === state.gameId ? ' selected' : '');
       btn.textContent = gpbGameLabel(g);
-      btn.addEventListener('click', () => { state.gameId = g.id; state.dirty = true; goStep(2); });
+      btn.addEventListener('click', () => { state.gameId = g.id; state.dirty = true; goStep('mode'); });
       list.appendChild(btn);
     });
+  }
+
+  // ---- Screen 2: Offense or Defense ----
+  function renderModeScreen() {
+    const wrap = document.getElementById('gpbModeChoice');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const offenseBtn = document.createElement('button');
+    offenseBtn.type = 'button';
+    offenseBtn.className = 'gpbModeBtn' + (state.mode === 'offense' ? ' selected' : '');
+    offenseBtn.innerHTML = '<span class="gpbModeBtnIcon">🏈</span><span class="gpbModeBtnLabel">Offense</span><span class="gpbModeBtnHint">Pick plays from the playbook, fine-tune them, build your call sheet</span>';
+    offenseBtn.addEventListener('click', () => { state.mode = 'offense'; goStep('plays'); });
+    const defenseBtn = document.createElement('button');
+    defenseBtn.type = 'button';
+    defenseBtn.className = 'gpbModeBtn' + (state.mode === 'defense' ? ' selected' : '');
+    defenseBtn.innerHTML = '<span class="gpbModeBtnIcon">🛡️</span><span class="gpbModeBtnLabel">Defense</span><span class="gpbModeBtnHint">Set this week’s defensive alignment</span>';
+    defenseBtn.addEventListener('click', () => { state.mode = 'defense'; goStep('defense'); });
+    wrap.appendChild(offenseBtn);
+    wrap.appendChild(defenseBtn);
+  }
+
+  // ---- Defense branch: points at the real Defense Builder rather than a
+  // second, parallel copy of it (see index.html's own comment on
+  // #gpbDefenseScreen for why). ----
+  function renderDefenseScreen() {
+    const el = document.getElementById('gpbDefenseSummary');
+    if (!el) return;
+    el.textContent = 'Loading…';
+    const loader = window.PlayBuilderStore ? window.PlayBuilderStore.loadAll() : Promise.resolve(null);
+    loader.then((all) => {
+      if (!all) { el.textContent = 'Defense Builder isn’t available right now.'; return; }
+      const look = all.activeDefenseLookId ? (all.defenseLooks || []).find((l) => l.id === all.activeDefenseLookId) : null;
+      el.textContent = look
+        ? `This week's defense is set to "${look.label}" -- every play studies against it.`
+        : 'No specific defense set for this week yet -- every play shows its own default look.';
+    }).catch(() => { el.textContent = 'Could not load the current defense.'; });
   }
 
   // ---- Screen 2: Pick base plays ----
@@ -172,7 +255,7 @@
       const empty = document.createElement('div');
       empty.className = 'lbSub';
       empty.style.textAlign = 'center';
-      empty.textContent = 'Nothing chosen yet -- go to "2. Base Plays" and tap a few.';
+      empty.textContent = 'Nothing chosen yet -- go to "3. Base Plays" and tap a few.';
       list.appendChild(empty);
       return;
     }
@@ -185,6 +268,13 @@
       label.className = 'gpbPlaylistLabel';
       label.style.color = info.color;
       label.textContent = info.label;
+      if (entry.spotlightPlayers && entry.spotlightPlayers.length) {
+        const tag = document.createElement('span');
+        tag.className = 'gpbSpotlightTag';
+        tag.textContent = spotlightSummary(entry.spotlightPlayers);
+        label.appendChild(document.createElement('br'));
+        label.appendChild(tag);
+      }
       row.appendChild(label);
 
       const controls = document.createElement('div');
@@ -212,6 +302,7 @@
       removeBtn.addEventListener('click', () => {
         state.draftPlays.splice(idx, 1);
         if (state.editingIndex === idx) state.editingIndex = -1;
+        if (state.taggingIndex === idx) state.taggingIndex = -1;
         state.dirty = true;
         renderPlaylistScreen();
       });
@@ -219,9 +310,20 @@
       editBtn.type = 'button'; editBtn.textContent = '✎'; editBtn.title = 'Fine-tune direction, motion, overload…';
       editBtn.addEventListener('click', () => {
         state.editingIndex = state.editingIndex === idx ? -1 : idx;
+        state.taggingIndex = -1;
+        renderPlaylistScreen();
+      });
+      // Nathan: "assigning plays to study for a particular player or
+      // players. If a certain player is going to get 3 handoffs..."
+      const tagBtn = document.createElement('button');
+      tagBtn.type = 'button'; tagBtn.textContent = '🎯'; tagBtn.title = 'Tag which player(s) this play is for';
+      tagBtn.addEventListener('click', () => {
+        state.taggingIndex = state.taggingIndex === idx ? -1 : idx;
+        state.editingIndex = -1;
         renderPlaylistScreen();
       });
       controls.appendChild(editBtn);
+      controls.appendChild(tagBtn);
       controls.appendChild(upBtn);
       controls.appendChild(downBtn);
       controls.appendChild(removeBtn);
@@ -231,7 +333,97 @@
       if (state.editingIndex === idx) {
         list.appendChild(renderEditPanel(entry, idx));
       }
+      if (state.taggingIndex === idx) {
+        list.appendChild(renderTagPanel(entry, idx));
+      }
     });
+  }
+
+  // A short "#23, #44" summary for the Playlist row's own small badge --
+  // spotlightSummaryFull (below) is the fuller "#23 Marcus" version used
+  // inside the tag panel itself, where there's more room.
+  function spotlightSummary(ids) {
+    const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    const byId = {};
+    roster.forEach((p) => { byId[String(p.id)] = p; });
+    return '🎯 ' + ids.map((id) => {
+      const p = byId[String(id)];
+      return p ? `#${p.num || '?'}` : '#?';
+    }).join(', ');
+  }
+
+  // ---- Player tagging ("packages") -- Nathan: "create packages for
+  // certain players... assigning plays to study for a particular player
+  // or players." Tags this exact Game Plan entry with real roster
+  // player(s) -- additive to whichever shape (v1 or v2) the entry already
+  // is, no upgrade needed (window.GamePlan.describe()/thisweek.js's own
+  // makeStaticCard already only ever branch on entry.v === 2, so an extra
+  // field on a v1 entry doesn't change which path it renders through).
+  // Surfaces on This Week's own read-only cards (js/thisweek.js) as a
+  // small badge, and drives a "My Plays" filter there for whichever real
+  // kid is logged in -- see js/roster.js's new myRosterEntry().
+  function ensureRosterLoadedForTagging() {
+    if (window.isTeamRosterLoaded && window.isTeamRosterLoaded()) return Promise.resolve();
+    return window.loadTeamRoster ? window.loadTeamRoster() : Promise.resolve();
+  }
+  function rosterSortedByNumber() {
+    const roster = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
+    const rank = (p) => (p.num === '' || p.num == null || isNaN(Number(p.num))) ? Infinity : Number(p.num);
+    return roster.slice().sort((a, b) => rank(a) - rank(b));
+  }
+  function renderTagPanel(entry, idx) {
+    const panel = document.createElement('div');
+    panel.className = 'gpbTagPanel';
+    const title = document.createElement('div');
+    title.className = 'lbSub';
+    title.style.textAlign = 'center';
+    title.textContent = 'Tag which player(s) this play is for:';
+    panel.appendChild(title);
+    const list = document.createElement('div');
+    list.className = 'gpbTagList';
+    panel.appendChild(list);
+
+    function renderChips() {
+      list.innerHTML = '';
+      const current = state.draftPlays[idx];
+      const tagged = new Set((current.spotlightPlayers || []).map(String));
+      const roster = rosterSortedByNumber();
+      if (!roster.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lbSub';
+        empty.textContent = 'Loading roster…';
+        list.appendChild(empty);
+        return;
+      }
+      roster.forEach((p) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'gameplanChip' + (tagged.has(String(p.id)) ? ' active' : '');
+        chip.textContent = `#${p.num || '?'} ${p.name || ''}`;
+        chip.addEventListener('click', () => {
+          const set = new Set((state.draftPlays[idx].spotlightPlayers || []).map(String));
+          if (set.has(String(p.id))) set.delete(String(p.id)); else set.add(String(p.id));
+          state.draftPlays[idx] = Object.assign({}, state.draftPlays[idx], { spotlightPlayers: Array.from(set) });
+          state.dirty = true;
+          renderChips();
+        });
+        list.appendChild(chip);
+      });
+    }
+    renderChips();
+    ensureRosterLoadedForTagging().then(renderChips);
+
+    const closeRow = document.createElement('div');
+    closeRow.style.textAlign = 'right';
+    closeRow.style.marginTop = '10px';
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'navBtn secondary';
+    doneBtn.textContent = 'Done';
+    doneBtn.addEventListener('click', () => { state.taggingIndex = -1; renderPlaylistScreen(); });
+    closeRow.appendChild(doneBtn);
+    panel.appendChild(closeRow);
+    return panel;
   }
 
   // The fine-tune panel -- mounts the REAL, unmodified interactive play
@@ -250,16 +442,16 @@
   function renderEditPanel(entry, idx) {
     const panel = document.createElement('div');
     panel.className = 'gpbEditPanel';
-    const closeRow = document.createElement('div');
-    closeRow.style.textAlign = 'right';
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'navBtn secondary';
-    closeBtn.textContent = '✕ Close';
-    closeBtn.addEventListener('click', () => { state.editingIndex = -1; renderPlaylistScreen(); });
-    closeRow.appendChild(closeBtn);
-    panel.appendChild(closeRow);
     if (!window.buildGamePlanEditCard) {
+      const closeRow = document.createElement('div');
+      closeRow.style.textAlign = 'right';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'navBtn secondary';
+      closeBtn.textContent = '✕ Close';
+      closeBtn.addEventListener('click', () => { state.editingIndex = -1; renderPlaylistScreen(); });
+      closeRow.appendChild(closeBtn);
+      panel.appendChild(closeRow);
       const note = document.createElement('div');
       note.className = 'lbSub';
       note.textContent = 'Fine-tuning isn’t available right now -- try again after the page finishes loading.';
@@ -272,6 +464,11 @@
           v: 2,
           id: (entry && entry.id) || ('gp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
           addedAt: (entry && entry.addedAt) || new Date().toISOString(),
+          // Fine-tuning a play is a different edit than tagging it for a
+          // player -- carry an existing tag forward rather than silently
+          // dropping it, same "don't lose what's already there" reasoning
+          // as id/addedAt just above.
+          spotlightPlayers: (entry && entry.spotlightPlayers) || undefined,
         });
         state.draftPlays[idx] = next;
         state.editingIndex = -1;
@@ -279,6 +476,35 @@
         renderPlaylistScreen();
       },
     });
+    // Nathan, testing on his own phone: "I see I can reorder them in but I
+    // don't see a way to save the edits, just close." Real gap, not a
+    // missing feature -- the real card's OWN save button (relabeled "Use
+    // This" above) is the only thing that can actually read its own live
+    // toggle state, so it can't be duplicated, but on a tall mobile card
+    // it's scrolled well below the diagram/toggles with only "Close"
+    // visible up top. Fixed by pinning a real, always-visible action row
+    // (sticky within the overlay's own scroll) that finds and clicks the
+    // real button rather than reimplementing its capture logic a second
+    // time -- same "one real place this logic lives" discipline as
+    // everything else in this panel.
+    const topRow = document.createElement('div');
+    topRow.className = 'gpbEditPanelTopRow';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'navBtn';
+    saveBtn.textContent = '💾 Save This Play';
+    saveBtn.addEventListener('click', () => {
+      const realBtn = card && card.querySelector('.card-gameplan-btn');
+      if (realBtn) realBtn.click();
+    });
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'navBtn secondary';
+    closeBtn.textContent = '✕ Close';
+    closeBtn.addEventListener('click', () => { state.editingIndex = -1; renderPlaylistScreen(); });
+    topRow.appendChild(saveBtn);
+    topRow.appendChild(closeBtn);
+    panel.appendChild(topRow);
     if (card) panel.appendChild(card);
     return panel;
   }
@@ -305,10 +531,15 @@
     });
   }
 
+  // Returns whether it actually closed (false if the coach backed out of
+  // the "discard unsaved changes" confirm) -- the "Open Defense Builder"
+  // button (below) needs to know before it navigates away, same
+  // unsaved-work protection as the X button already has.
   function closeBuilder() {
-    if (state.dirty && !confirm('Discard unsaved changes to this Game Plan?')) return;
+    if (state.dirty && !confirm('Discard unsaved changes to this Game Plan?')) return false;
     const overlay = document.getElementById('gamePlanBuilderOverlay');
     if (overlay) { overlay.classList.remove('show'); overlay.style.display = 'none'; }
+    return true;
   }
 
   let wired = false;
@@ -317,11 +548,34 @@
     wired = true;
     const closeBtn = document.getElementById('gpbCloseBtn');
     if (closeBtn) closeBtn.addEventListener('click', closeBuilder);
-    document.querySelectorAll('#gpbStepTabs .coachToolsModuleTab').forEach((btn) => {
-      btn.addEventListener('click', () => goStep(Number(btn.dataset.step)));
-    });
     const saveBtn = document.getElementById('gpbSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', saveBuilderDraft);
+    // Nathan: "For defense, you can set your defensive alignments." Points
+    // at the real, single Defense Builder instance (Coach Tools -> Play
+    // Design -> Play Builder -> Defense) -- see index.html's own comment
+    // on #gpbDefenseScreen for why this is a link, not a second embedded
+    // copy. Auto-selects the Defense sub-tab there via the same button
+    // formation-editor.js's own tab row already exposes, one frame after
+    // the panel's had a chance to build.
+    const openDefenseBtn = document.getElementById('gpbOpenDefenseBtn');
+    if (openDefenseBtn) openDefenseBtn.addEventListener('click', () => {
+      if (!closeBuilder()) return;
+      if (window.openCoachToolsTab) window.openCoachToolsTab('playbuilder');
+      requestAnimationFrame(() => {
+        const defBtn = document.querySelector('#pbTopModeToggle [data-mode="defense"]');
+        if (defBtn) defBtn.click();
+      });
+    });
+    // "Set your defensive starters" -- Depth Chart already owns this (real
+    // players assigned to position groups, js/depth-chart.js), just never
+    // had a doorway from here. Same closeBuilder()-first pattern as the
+    // Defense Builder link above -- protects an in-progress Offense draft
+    // the same way.
+    const openDepthChartBtn = document.getElementById('gpbOpenDepthChartBtn');
+    if (openDepthChartBtn) openDepthChartBtn.addEventListener('click', () => {
+      if (!closeBuilder()) return;
+      if (window.openCoachToolsTab) window.openCoachToolsTab('depthchart');
+    });
   }
 
   // Entry point -- js/thisweek.js's new "🏗 Build Game Plan" button calls
@@ -355,8 +609,9 @@
       state.dirty = false;
       state.status = '';
       state.editingIndex = -1;
+      state.mode = null;
       renderStatus();
-      goStep(1);
+      goStep('opponent');
     }).catch((err) => {
       console.error('Game Plan Builder: failed to load', err);
       state.status = 'Could not load -- try closing and reopening.';

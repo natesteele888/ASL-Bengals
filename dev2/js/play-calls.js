@@ -712,7 +712,10 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
 }
 
 const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
-const DEFENSE_COLOR = '#1a3fae';
+// Nathan, screenshot: "the defensive players are too bright, I want them to
+// be reduced by about 10% just so there is some visual difference between
+// the offense and defense." Was #1a3fae (26,63,174) -- each channel x0.9.
+const DEFENSE_COLOR = '#17399d';
 const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
@@ -956,7 +959,21 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     ];
   }
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  return window.Signals.sequenceFor(recipeNameFor(playType, 'wing'), {
+  // Real, live bug found testing the Overload signal-order fix just above:
+  // this fallback was hardcoded to 'wing' no matter what `formation`
+  // actually was -- a custom-formation play only ever got its OWN recipe
+  // (RECIPES.i / RECIPES['i-wing'] / etc.) if it happened to have
+  // signalRecipe set explicitly. i_dive/i_wing_dive etc. do (set by hand,
+  // same session this was all built), but js/play-calls.js's own "copy an
+  // existing play to remake" flow never has -- confirmed live: Nathan's
+  // real "double_blast_i-wing" (created through that exact flow) was
+  // silently getting Wing's touch/location cards instead of I Wing's own.
+  // Falls back to the formation's own recipe when one exists (RECIPES is
+  // already exposed on window.Signals for exactly this), 'wing' only when
+  // it doesn't -- Wing/Split/every existing play keeps its own already-
+  // correct behavior unchanged.
+  const formationRecipeFallback = (formation && window.Signals.RECIPES && window.Signals.RECIPES[formation]) ? formation : 'wing';
+  return window.Signals.sequenceFor(recipeNameFor(playType, formationRecipeFallback), {
     playKey, wingSide, direction, insideOutside,
     motionOn, bootOn, counterOn, popVariantOn,
     overloadOn: !!overloadOn,
@@ -1490,12 +1507,22 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     if (bestId && defenseCircles[bestId]) defenseCircles[bestId].classList.add('te-read-flash');
   }
 
+  // Nathan: show the real kid's jersey number on a defender's circle once
+  // the Depth Chart (js/depth-chart.js's own "defense" section -- our own
+  // team, never an opponent) has an unambiguous starter on file for that
+  // exact spot; falls back to the plain position label otherwise. See
+  // getDefenseStarterNumbers's own comment for the matching rule --
+  // entirely automatic/silent, no separate toggle.
+  const defenderNumbers = window.getDefenseStarterNumbers
+    ? window.getDefenseStarterNumbers(activeDefense.map(d => ({ id: d.id, label: d.label, x: d.pos[0], y: d.pos[1] })))
+    : {};
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
     const r = CIRCLE_R;
     const fs = 26;
-    const dc = drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, false, r);
+    const label = defenderNumbers[d.id] || d.label;
+    const dc = drawCircle(d.pos[0], d.pos[1], label, stroke, fs, false, r);
     circlesLayer.appendChild(dc);
     defenseCircles[d.id] = dc;
   });
@@ -2246,8 +2273,17 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     return wrap;
   }
 
-  getSplitDefense().forEach(d => {
-    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR, false));
+  // Same real-jersey-number substitution as renderCardDiagram's own
+  // defense loop above (see getDefenseStarterNumbers's comment) -- Split
+  // is a second, separate place real defender circles get drawn, so it
+  // needs the same treatment to stay consistent with Shotgun/Wing.
+  const splitDefense = getSplitDefense();
+  const splitDefenderNumbers = window.getDefenseStarterNumbers
+    ? window.getDefenseStarterNumbers(splitDefense.map(d => ({ id: d.id, label: d.label, x: d.pos[0], y: d.pos[1] })))
+    : {};
+  splitDefense.forEach(d => {
+    const label = splitDefenderNumbers[d.id] || d.label;
+    circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], label, 26, CIRCLE_R, DEFENSE_COLOR, false));
   });
 
   const playerCircles = {};
@@ -4081,9 +4117,25 @@ function renderAddPlayChooser(addTile, formationId, formationName) {
       const all = await window.PlayBuilderStore.loadAll();
       const targetFormation = all.formations.find((f) => f.id === formationId);
       if (!targetFormation) throw new Error('"' + formationId + '" hasn\'t been built in Play Builder yet.');
-      const variantKey = playType.hasReadToggle ? 'A' : undefined;
-      const imported = window.PlayBuilderLegacyImport.importLegacyPlayToFormation(playType, targetFormation, newId, newLabel, variantKey);
+      // Nathan: "I tried to add a play to an existing formation and got
+      // this message: Could not copy that play: 'Double Blast' has no
+      // Right-direction data to import." Real bug -- js/playbuilder/
+      // legacy-import.js's own resolver now auto-walks whatever nesting a
+      // play's real direction data actually has (read-toggle, inside/
+      // outside, counter, pop-variant, even two levels at once), so this
+      // no longer needs to pre-compute a variant-key hint here at all --
+      // see that file's own comment for the full story, including why a
+      // hint computed from window.playbookDefaultSubvariant() (tried
+      // first, briefly, before its Sweep-specific quirk surfaced) wasn't
+      // the right fix either.
+      const imported = window.PlayBuilderLegacyImport.importLegacyPlayToFormation(playType, targetFormation, newId, newLabel);
       await window.PlayBuilderStore.savePlay(imported.play);
+      // Nathan: "That is what I originally wanted for the What's New
+      // section which would show any new plays you create." A copy always
+      // produces a brand-new play id (prompted above), so this always
+      // qualifies -- no "is this new" check needed here, unlike editor.js's
+      // own Save Play button.
+      if (window.logNewPlayToWhatsNew) window.logNewPlayToWhatsNew(imported.play.id, imported.play.label);
       const curated = await window.AssignmentStore.loadFormationPlays();
       const list = (curated[formationId] || []).slice();
       if (!list.includes(newId)) list.push(newId);
@@ -4108,6 +4160,21 @@ function renderAddPlayChooser(addTile, formationId, formationName) {
 function buildPlayTile(combo, formationId, onOpen) {
   const tile = document.createElement('div');
   tile.className = 'play-tile';
+
+  // Nathan: "If we add a new play, it should have a NEW badge in the play
+  // calls section." window.getNewPlayKeysCache() (js/whats-new.js) is a
+  // synchronous read of whatever it last fetched -- already populated by
+  // the time a coach/kid reaches this screen in the ordinary case (it's
+  // refreshed once a session is known, well before Play Calls), so this
+  // never has to await anything per-tile while building a whole grid at
+  // once. Clears itself the same moment the profile-menu badge does
+  // (opening What's New marks everything as seen), no separate tracking.
+  if (window.getNewPlayKeysCache && window.getNewPlayKeysCache().has(combo.playKey)) {
+    const newBadge = document.createElement('div');
+    newBadge.className = 'play-tile-new-badge';
+    newBadge.textContent = 'NEW';
+    tile.appendChild(newBadge);
+  }
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   try {

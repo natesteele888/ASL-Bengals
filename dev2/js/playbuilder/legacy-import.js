@@ -39,15 +39,55 @@ function fbImportAnchor(formation, positionId) {
   return pos ? { x: pos.x, y: pos.y } : null;
 }
 
-// hasReadToggle plays (Inside Zone, Outside Zone, ...) nest a second key
-// (their read-variant, e.g. "A"/"B") under directions.Left/.Right; a flat
-// play (Sweep, ...) doesn't. variantKey is which to use for the former --
-// omit it for the latter.
+// A play's real Left/Right direction data can be nested by ZERO, ONE, or
+// (Blast) TWO independent variant dimensions before reaching real
+// {paths, ...} data -- confirmed live across all 9 real Wing plays, not
+// assumed: hasReadToggle ('A'/'B', Inside Zone), hasInsideOutside
+// ('Outside'/'Inside', Double Blast), hasCounter ('Normal'/'Counter',
+// Outside Zone/Option), hasPopVariant ('Pop'/'Pop2', Pop Pass), a flat
+// play with `.paths` directly (Sweep, Option Pass, Shuffle Pass), and
+// Blast, which nests Inside/Outside THEN Normal/Counter -- two levels at
+// once. Real bug, found live: Nathan, copying "Double Blast" into a new
+// formation, got "has no Right-direction data to import" -- the ORIGINAL
+// version of this resolver only ever considered flat vs. hasReadToggle-
+// nested, so nothing ever supplied the right key for an
+// hasInsideOutside-only play at all, let alone a two-level one.
+//
+// Rather than have the caller pre-compute which of these apply (fragile --
+// js/playbook-pdf.js's own defaultSubvariant(), the obvious place to ask,
+// carries a play-specific label-only override for Sweep that doesn't
+// match Sweep's real, flat data shape, and would send this looking for a
+// key that was never there), this walks down through whichever nesting is
+// ACTUALLY present, always picking that level's own base/default value
+// (never the toggled-on variant, matching every other consumer's "default
+// subvariant" convention) until it reaches real path data or runs out of
+// known keys to try -- self-correcting to the real shape at every level,
+// not guessing once at the top.
+const DEFAULT_VARIANT_KEYS = ['A', 'Outside', 'Normal', 'Pop'];
+function fbImportResolveLeaf(node, explicitKey) {
+  if (!node) return null;
+  if (node.paths) return node;
+  if (explicitKey && node[explicitKey]) {
+    const viaExplicit = fbImportResolveLeaf(node[explicitKey]);
+    if (viaExplicit) return viaExplicit;
+  }
+  for (let i = 0; i < DEFAULT_VARIANT_KEYS.length; i++) {
+    const key = DEFAULT_VARIANT_KEYS[i];
+    if (node[key]) {
+      const resolved = fbImportResolveLeaf(node[key]);
+      if (resolved) return resolved;
+    }
+  }
+  return null; // nested by something none of the known default keys match
+  // -- surfaced to the caller as "no Right-direction data" (an honest
+  // "not supported yet"), not a silently wrong import.
+}
 function fbImportLegacyLeaf(playType, variantKey) {
   const dirs = playType.directions || {};
-  const left = variantKey ? (dirs.Left && dirs.Left[variantKey]) : dirs.Left;
-  const right = variantKey ? (dirs.Right && dirs.Right[variantKey]) : dirs.Right;
-  return { left, right };
+  return {
+    left: fbImportResolveLeaf(dirs.Left, variantKey),
+    right: fbImportResolveLeaf(dirs.Right, variantKey),
+  };
 }
 
 /**
@@ -56,8 +96,12 @@ function fbImportLegacyLeaf(playType, variantKey) {
  * @param {import('./schema.js').Formation} targetFormation
  * @param {string} newId
  * @param {string} newLabel
- * @param {string} [variantKey] - e.g. 'A' for a hasReadToggle play; omit
- *   for a flat one.
+ * @param {string} [variantKey] - optional explicit override for the
+ *   TOP-level variant to prefer (e.g. 'Counter' to import that variant
+ *   instead of the default 'Normal'); omit to always get each level's own
+ *   default -- fbImportLegacyLeaf's own resolver auto-detects and walks
+ *   whatever nesting the play's real data actually has, so this is never
+ *   required just to make a play importable.
  * @returns {{ play: import('./schema.js').Play, needsRemake: (number|string)[] }}
  *   needsRemake lists every position this import could NOT populate for
  *   real (always the backfield) -- surface this to whoever's authoring,

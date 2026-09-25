@@ -69,6 +69,7 @@
   let upcomingGames = []; // light read-only copy of schedule.json for the game picker
   let upcomingPractices = []; // light read-only copy of practices.json for the Week Ahead write-up
   let loaded = false;
+  let myPlaysOnly = false; // "My Plays" filter toggle -- resets on reload, not persisted
 
   function loadUpcomingGames() {
     return window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -587,7 +588,16 @@
         pendingGameId = saved.gameId || '';
         pendingCoachKeys = saved.coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
         if (statusEl) statusEl.textContent = '';
-        return Promise.all([loadUpcomingGames(), loadUpcomingPractices(), loadOpponentLogosForWeekAhead()]);
+        // Nathan: "assigning plays to study for a particular player." Real
+        // roster data (names/numbers for a spotlight badge, and for
+        // resolving "is this MY play" below) needs to be loaded BEFORE the
+        // first render, not lazily after -- unlike js/depth-chart.js's own
+        // getDefenseStarterNumbers (silent, shows up on whatever render
+        // happens next), a coach/kid's very first look at This Week should
+        // already be correct.
+        const rosterReady = (window.isTeamRosterLoaded && window.isTeamRosterLoaded())
+          ? Promise.resolve() : (window.loadTeamRoster ? window.loadTeamRoster() : Promise.resolve());
+        return Promise.all([loadUpcomingGames(), loadUpcomingPractices(), loadOpponentLogosForWeekAhead(), rosterReady]);
       })
       .then(() => {
         renderReadOnly();
@@ -668,6 +678,25 @@
     label.style.color = info.color;
     label.textContent = info.label;
     wrap.appendChild(label);
+    // Nathan: "create packages for certain players... assigning plays to
+    // study for a particular player." spotlightPlayers is additive to
+    // EITHER shape (v1 or v2), read off the raw entry, not info.v2 --
+    // js/gameplan-builder.js's own tag panel is the only place this ever
+    // gets set.
+    if (entry.spotlightPlayers && entry.spotlightPlayers.length && window.getTeamRosterCached) {
+      const byId = {};
+      window.getTeamRosterCached().forEach(p => { byId[String(p.id)] = p; });
+      const names = entry.spotlightPlayers.map(id => {
+        const p = byId[String(id)];
+        return p ? `#${p.num || '?'} ${p.name || ''}`.trim() : null;
+      }).filter(Boolean);
+      if (names.length) {
+        const tag = document.createElement('div');
+        tag.className = 'gameplanCardSpotlight';
+        tag.textContent = '🎯 ' + names.join(', ');
+        wrap.appendChild(tag);
+      }
+    }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'gameplanCardSvg');
     wrap.appendChild(svg);
@@ -749,13 +778,35 @@
       keysList.appendChild(ol);
     });
 
+    // Nathan: "assigning plays to study for a particular player." Only
+    // shown when the current session actually resolves to a real roster
+    // row (js/roster.js's new myRosterEntry()) -- no point offering a
+    // filter that can never match anyone (a coach profile, an unlinked
+    // guest, etc.).
+    const myPlaysBtn = document.getElementById('thisweekMyPlaysBtn');
+    const myEntry = window.myRosterEntry ? window.myRosterEntry() : null;
+    const myTaggedCount = myEntry ? (saved.plays || []).filter(p => p.spotlightPlayers && p.spotlightPlayers.map(String).includes(String(myEntry.id))).length : 0;
+    if (myPlaysBtn) {
+      if (myEntry && myTaggedCount) {
+        myPlaysBtn.style.display = '';
+        myPlaysBtn.textContent = myPlaysOnly ? '← Show everyone’s plays' : `🎯 Show just #${myEntry.num || '?'} ${myEntry.name}’s plays (${myTaggedCount})`;
+        myPlaysBtn.onclick = () => { myPlaysOnly = !myPlaysOnly; renderReadOnly(); };
+      } else {
+        myPlaysBtn.style.display = 'none';
+        myPlaysOnly = false;
+      }
+    }
+
     gridEl.innerHTML = '';
     // Pass each saved entry straight through -- makeStaticCard's own
     // describe() call resolves v1 vs v2 now, so a v2 entry's real toggle
     // state actually reaches the renderer (the old rows.find()-first lookup
     // here only ever matched on key+direction, silently discarding
     // everything a v2 entry adds).
-    (saved.plays || []).forEach(sel => {
+    const visiblePlays = (myPlaysOnly && myEntry)
+      ? (saved.plays || []).filter(p => p.spotlightPlayers && p.spotlightPlayers.map(String).includes(String(myEntry.id)))
+      : (saved.plays || []);
+    visiblePlays.forEach(sel => {
       gridEl.appendChild(makeStaticCard(sel));
     });
   }
@@ -862,6 +913,12 @@
     const section = document.getElementById('thisweekEditSection');
     if (!section) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    // Nathan: "It should be right below the top box." Now lives outside
+    // #thisweekEditSection (see index.html) so it needs its own gate here,
+    // set before the early return below so a non-coach session (which
+    // returns early) still correctly hides it.
+    const buildBtnEl = document.getElementById('thisweekBuildGamePlanBtn');
+    if (buildBtnEl) buildBtnEl.style.display = approved ? '' : 'none';
     section.style.display = approved ? '' : 'none';
     if (!approved) return;
 

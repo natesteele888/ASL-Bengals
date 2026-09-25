@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260925q">
+<link rel="stylesheet" href="css/styles.css?v=20260925ae">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -260,20 +260,22 @@
       </div>
 
       <div class="pcTutorialStep" data-step="1">
-        <div class="pcTutorialHeader">📋 Play Calls — Shotgun</div>
+        <div class="pcTutorialHeader">📋 Play Calls — pick a formation</div>
         <div class="pcTutorialIllustration">
-          <div class="mockAccordionHeader">Inside Zone <span class="mockChevron">▾</span></div>
+          <div class="mockPillRow">
+            <span class="mockPill active">Wing</span><span class="mockPill">Split</span><span class="mockPill">5 Guys</span><span class="mockPill">I</span><span class="mockPill">I Wing</span>
+          </div>
           <div class="mockPillRow">
             <span class="mockPill active">Wing L</span><span class="mockPill">Wing R</span>
             <span class="mockPill active">Dir L</span><span class="mockPill">Dir R</span>
           </div>
-          <div class="mockTapHint">👆 Tap a play, flip a toggle, tap your number</div>
+          <div class="mockTapHint">👆 Tap a formation, then a play, flip a toggle, tap your number</div>
         </div>
-        <p class="pcTutorialText">Open the <strong>Play Calls</strong> tab and tap any play to see its diagram. Flip <strong>Wing</strong> or <strong>Direction</strong> to see it run the other way. <strong>Tap your number</strong> on the diagram to glow it orange, then tap ▶ to watch it run. Tap the flip icon to see the hand signal.</p>
+        <p class="pcTutorialText">Open the <strong>Play Calls</strong> tab and pick a <strong>formation</strong> first — <strong>Wing</strong>, <strong>Split</strong>, <strong>5 Guys</strong>, <strong>I</strong>, or <strong>I Wing</strong> — then tap any play to see its diagram. Flip <strong>Wing</strong> or <strong>Direction</strong> to see it run the other way. <strong>Tap your number</strong> on the diagram to glow it orange, then tap ▶ to watch it run. Tap the flip icon to see the hand signal.</p>
       </div>
 
       <div class="pcTutorialStep" data-step="2">
-        <div class="pcTutorialHeader">🔀 Play Calls — Split</div>
+        <div class="pcTutorialHeader">🎛️ Every formation, its own calls</div>
         <div class="pcTutorialIllustration">
           <div class="mockPillRow">
             <span class="mockPill">Shotgun</span><span class="mockPill active">Split</span>
@@ -282,9 +284,9 @@
             <span class="mockPill active">Split L</span><span class="mockPill">Split R</span>
             <span class="mockPill active">Pass On</span>
           </div>
-          <div class="mockTapHint">👆 Flip Formation to Split, then Pass on</div>
+          <div class="mockTapHint">👆 Look for that formation's own toggles</div>
         </div>
-        <p class="pcTutorialText">Some plays also line up in <strong>Split</strong>. Pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on, and each side calls its own route: <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or the new <strong>Boston</strong>. Tap-to-glow works here too.</p>
+        <p class="pcTutorialText"><strong>Split</strong>: pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on, and each side calls its own route — <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or <strong>Boston</strong>. <strong>I</strong> has its own <strong>Heavy</strong> toggle, and some plays add <strong>Overload</strong> — tap-to-glow works everywhere.</p>
       </div>
 
       <div class="pcTutorialStep" data-step="3">
@@ -579,6 +581,14 @@
     <div id="thisweekAheadText"></div>
     <div class="lbSub" style="margin-top:8px;text-align:center;">Auto-generated from this week's Schedule -- tap a card to open it</div>
   </div>
+  <!-- Nathan: "I don't like that the Build Game Plan full screen is at the
+       bottom. It should be right below the top box." Moved out of
+       #thisweekEditSection (further down) so it's the first coach action
+       on the page, right after Week Ahead -- own visibility toggle in
+       js/thisweek.js's renderEditor() (that section's own approved-coach
+       gate doesn't apply to this element anymore since it's no longer
+       inside it). -->
+  <button type="button" class="navBtn" id="thisweekBuildGamePlanBtn" style="display:none;width:100%;max-width:560px;margin:0 auto 16px;text-align:center;">🏈 Create Your Game Plan</button>
   <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
        the upcoming games so players can check them out and be prepared."
        This Week stays one shared page, but can point at a specific
@@ -592,6 +602,11 @@
     <div class="thisweekKeysTitle">🔑 Coaches' Keys This Week</div>
     <div id="thisweekKeysList"></div>
   </div>
+  <!-- Nathan: "assigning plays to study for a particular player." Only
+       shown when the logged-in session resolves to a real roster player
+       (js/roster.js's myRosterEntry()) -- js/thisweek.js's renderReadOnly()
+       toggles this. -->
+  <button type="button" id="thisweekMyPlaysBtn" class="lbLinkBtn" style="display:none;margin:0 auto 10px;text-align:center;width:100%;font-size:13px;"></button>
   <div class="gameplanCardsGrid" id="thisweekCardsGrid"></div>
 
   <div id="thisweekEditSection" style="display:none;max-width:900px;margin:22px auto 0;">
@@ -610,7 +625,6 @@
     <div class="gameplanList" id="thisweekGamePlanList"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
     <button class="navBtn secondary" id="thisweekPrintCallSheetBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📋 Print Call Sheet</button>
-    <button class="navBtn secondary" id="thisweekBuildGamePlanBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">🏗 Build Game Plan (full screen)</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
@@ -1322,10 +1336,16 @@
       <div class="pcTutorialStep active" data-step="0">
         <div class="pcTutorialHeader">📋 Welcome to Play Calls!</div>
         <div class="pcTutorialIllustration">
-          <div class="mockAccordionHeader">Inside Zone <span class="mockChevron">▾</span></div>
-          <div class="mockTapHint">👆 Tap a play to open it</div>
+          <div class="mockFormationRow">
+            <div class="mockFormationChip active">Wing</div>
+            <div class="mockFormationChip">Split</div>
+            <div class="mockFormationChip">5 Guys</div>
+            <div class="mockFormationChip">I</div>
+            <div class="mockFormationChip">I Wing</div>
+          </div>
+          <div class="mockTapHint">👆 Tap a formation, then tap a play</div>
         </div>
-        <p class="pcTutorialText">This is every play in our playbook. <strong>Tap a play's name</strong> to open it up and see the diagram.</p>
+        <p class="pcTutorialText">Pick a <strong>formation</strong> first — <strong>Wing</strong>, <strong>Split</strong>, <strong>5 Guys</strong>, <strong>I</strong>, or <strong>I Wing</strong> — then <strong>tap a play</strong> in that formation to open it up and see the diagram.</p>
       </div>
       <div class="pcTutorialStep" data-step="1">
         <div class="pcTutorialHeader">🔀 Try different looks</div>
@@ -1347,13 +1367,13 @@
         <p class="pcTutorialText">Every play can change. Flip <strong>Wing</strong> to move #4, flip <strong>Direction</strong> to run it the other way. Some plays also have <strong>Motion</strong> or <strong>Boot</strong> — try those too!</p>
       </div>
       <div class="pcTutorialStep" data-step="2">
-        <div class="pcTutorialHeader">🏈 New: Split formation</div>
+        <div class="pcTutorialHeader">🎛️ Every formation calls it different</div>
         <div class="pcTutorialIllustration">
           <div class="mockToggleRow">
             <div class="toggle-group toggle-green mockToggle">
               <span class="toggle-thumb"></span>
-              <button class="toggle-btn" aria-pressed="false">Shotgun</button>
-              <button class="toggle-btn" aria-pressed="true">Split</button>
+              <button class="toggle-btn" aria-pressed="true">Heavy On</button>
+              <button class="toggle-btn" aria-pressed="false">Heavy Off</button>
             </div>
           </div>
           <div class="mockToggleRow">
@@ -1364,9 +1384,9 @@
               </button>
             </div>
           </div>
-          <div class="mockTapHint">👆 Flip Formation to Split</div>
+          <div class="mockTapHint">👆 Look for that formation's own toggles</div>
         </div>
-        <p class="pcTutorialText">Some plays can also line up in <strong>Split</strong>. Pick <strong>Split L</strong> or <strong>Split R</strong>, then flip <strong>Pass</strong> on to fake the run and throw instead. With Pass on, each side calls its own route — <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or <strong>Boston</strong>.</p>
+        <p class="pcTutorialText"><strong>Split</strong>: pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on to fake the run and throw instead — each side calls <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or <strong>Boston</strong>. <strong>I</strong> has its own <strong>Heavy</strong> toggle, and some plays add <strong>Overload</strong> — whatever's on the card is what that formation actually uses.</p>
       </div>
       <div class="pcTutorialStep" data-step="3">
         <div class="pcTutorialHeader">✅ Know your job</div>
@@ -2164,19 +2184,22 @@
 <div class="gpbWrap">
   <button class="lbXClose" id="gpbCloseBtn" aria-label="Close">&times;</button>
   <div class="gpbHeader">
-    <h1>🏗 Build Game Plan</h1>
+    <h1>Create Your Game Plan</h1>
     <div class="gpbSubtitle" id="gpbSubtitle"></div>
   </div>
 
-  <div class="coachToolsModuleTabs" id="gpbStepTabs">
-    <button type="button" class="coachToolsModuleTab" data-step="1">1. Opponent</button>
-    <button type="button" class="coachToolsModuleTab" data-step="2">2. Base Plays</button>
-    <button type="button" class="coachToolsModuleTab" data-step="3">3. Playlist</button>
-  </div>
+  <div class="coachToolsModuleTabs" id="gpbStepTabs"></div>
 
   <div class="gpbScreen" id="gpbOpponentScreen">
     <div class="lbSub" style="text-align:center;margin-bottom:10px;">Who are we building this game plan for?</div>
     <div class="gpbOpponentList" id="gpbOpponentList"></div>
+  </div>
+
+  <!-- Nathan: "it just says create your game plan. You choose offense or
+       defense." -->
+  <div class="gpbScreen" id="gpbModeScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">What are you setting up?</div>
+    <div class="gpbModeChoice" id="gpbModeChoice"></div>
   </div>
 
   <div class="gpbScreen" id="gpbPlaysScreen" style="display:none;">
@@ -2190,6 +2213,29 @@
     <div class="gpbPlaylist" id="gpbPlaylist"></div>
     <button class="navBtn" id="gpbSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save Game Plan</button>
     <div id="gpbStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+
+  <!-- Nathan: "For defense, you can set your defensive alignments and set
+       your defensive starters." Alignment reuses the real, already-built
+       Defense Builder (js/playbuilder/defense-editor.js, Coach Tools ->
+       Play Design -> Play Builder -> Defense) rather than a second,
+       parallel instance in here -- that tool keys its own field/controls
+       off fixed element ids (db*), so a second live copy inside this
+       overlay would collide with Coach Tools' own if a coach had visited
+       both in the same session. Same reasoning for Depth Chart (Coach
+       Tools -> Team -> Depth Chart) -- "defensive starters" already lives
+       there (real players assigned to position groups like "Left CB",
+       real jersey numbers), it's just never been discoverable from here.
+       js/depth-chart.js's own getDefenseStarterNumbers() already shows a
+       starter's real number on a defender's circle automatically, on any
+       play card, once both are set -- no separate "assign to this play"
+       step needed. -->
+  <div class="gpbScreen" id="gpbDefenseScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">This week's defense</div>
+    <div id="gpbDefenseSummary" class="lbSub" style="text-align:center;margin-bottom:16px;"></div>
+    <button class="navBtn" id="gpbOpenDefenseBtn" style="display:block;width:100%;max-width:420px;margin:0 auto 8px;text-align:center;">🛡️ Open Defense Builder →</button>
+    <button class="navBtn secondary" id="gpbOpenDepthChartBtn" style="display:block;width:100%;max-width:420px;margin:0 auto;text-align:center;">🧑‍🤝‍🧑 Set Defensive Starters →</button>
+    <div class="lbSub" style="text-align:center;margin-top:10px;font-size:11px;">Alignment sets where everyone lines up. Starters (Depth Chart) are who's actually playing each spot -- once both are set, real jersey numbers show up on every play's defense automatically.</div>
   </div>
 </div>
 </div>
@@ -2265,7 +2311,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260925r';
+  const BUILD_V = '20260925ae';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

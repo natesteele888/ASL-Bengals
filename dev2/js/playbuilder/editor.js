@@ -403,6 +403,31 @@ function wingLeftAnchorFor(formation, positionId, anchor) {
   return (alt && state.wingSide === 'left') ? { x: alt.x, y: alt.y } : anchor;
 }
 
+// Nathan, testing a newly-imported "Double Blast" live on "I Wing": the
+// flanker (#4) and the Overloaded tight end drew right on top of each
+// other. js/play-calls.js's real, coach-facing card already has this fix
+// (p4OverloadCollisionAnchor, built earlier this session) -- confirmed by
+// direct render-and-inspect that the real card does NOT show this overlap
+// in any Wing/Overload combination -- but it was only ever built into
+// that file, never mirrored into this standalone authoring canvas, which
+// resolves every position's anchor through plain resolveAnchor() with no
+// awareness of Formation.overload.flankerAnchors at all. Same logic,
+// adapted to this file's own lowercase wingSide convention and
+// state.alignmentPreview (play-calls.js's own alignmentValues).
+function overloadCollisionAnchorFor(formation, positionId, wingSide) {
+  if (!formation.overload || formation.overload.flanker !== positionId) return null;
+  const heavyToggle = (formation.alignmentToggles || []).find((t) => t.positionIds.includes(positionId));
+  if (heavyToggle) {
+    const heavyValue = state.alignmentPreview[heavyToggle.id] || heavyToggle.values[0].id;
+    if (heavyValue === heavyToggle.values[0].id) return null; // Heavy at its default (tucked) -- nothing to collide with
+  }
+  const overloadToggle = (formation.alignmentToggles || []).find((t) => t.id === 'overload');
+  const overloadValue = overloadToggle ? (state.alignmentPreview[overloadToggle.id] || overloadToggle.values[0].id) : null;
+  if (!overloadValue || overloadValue === 'off' || overloadValue !== wingSide) return null;
+  const anchor = formation.overload.flankerAnchors && formation.overload.flankerAnchors[wingSide];
+  return anchor ? { x: anchor.x, y: anchor.y } : null;
+}
+
 function wingLeftRouteFor(formation, players, positionId) {
   if (!formation.wingLeftAnchors || !formation.wingLeftAnchors[positionId] || state.wingSide !== 'left') return null;
   const assignment = players.find((p) => p.player === positionId);
@@ -518,9 +543,17 @@ function render() {
   const variant = currentVariant();
   const { resolveAnchor, resolveRoute } = window.PlayBuilderMirror;
 
-  // Defense
-  (defenseLook?.positions || []).forEach((d) => {
-    defenseLayer.appendChild(drawCircle(d.x, d.y, d.label, '#e8720c', 26));
+  // Defense. Same real-jersey-number substitution as js/play-calls.js's
+  // own renderCardDiagram/renderSplitDiagram (js/depth-chart.js's
+  // getDefenseStarterNumbers, our own team's Depth Chart -- see its
+  // comment for the matching rule) -- kept consistent here too, since a
+  // coach previews plays against this exact defense right before they go
+  // into the real card.
+  const defensePositions = defenseLook?.positions || [];
+  const editorDefenderNumbers = window.getDefenseStarterNumbers ? window.getDefenseStarterNumbers(defensePositions) : {};
+  defensePositions.forEach((d) => {
+    const label = editorDefenderNumbers[d.id] || d.label;
+    defenseLayer.appendChild(drawCircle(d.x, d.y, label, '#e8720c', 26));
   });
 
   // Routes (behind circles, so a player's number stays readable). Iterates
@@ -556,7 +589,8 @@ function render() {
 
   // Player circles
   formation.positions.forEach((pos) => {
-    const anchor = wingLeftAnchorFor(formation, pos.id, resolveAnchor(formation, pos.id, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, pos.id) }));
+    const anchor = overloadCollisionAnchorFor(formation, pos.id, state.wingSide)
+      || wingLeftAnchorFor(formation, pos.id, resolveAnchor(formation, pos.id, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, pos.id) }));
     const isSelected = state.selectedPlayer === pos.id;
     const c = drawCircle(anchor.x, anchor.y, String(pos.label ?? pos.id), '#111111', PLAYER_R, isSelected);
     c.style.cursor = 'pointer';
@@ -1284,9 +1318,25 @@ function bindSidebar() {
 
   els.pbSaveBtn.addEventListener('click', async () => {
     els.pbSaveBtn.textContent = 'Saving…';
+    // Nathan: "That is what I originally wanted for the What's New section
+    // which would show any new plays you create." Checked BEFORE saving --
+    // state.plays is this screen's own already-loaded list, so "not in it
+    // yet" means this is this play's first-ever save, the same "brand-new
+    // plays always announce themselves" rule edit-plays.js's own Duplicate
+    // flow already established (js/whats-new.js's logNewPlayToWhatsNew).
+    const isNewPlay = !state.plays.some((p) => p.id === state.currentPlay.id);
     try {
       await window.PlayBuilderStore.savePlay(state.currentPlay);
       await ensureCuratedForFormation(state.currentPlay);
+      // Real, separate gap found alongside this: this local list never
+      // added a play this screen's OWN Save button just created (only
+      // onPlaySaved(), called by OTHER screens, ever did) -- so a second
+      // save of the same brand-new play, later in the same session, would
+      // have logged to What's New again. Fixed the same way onPlaySaved()
+      // already dedups.
+      const i = state.plays.findIndex((p) => p.id === state.currentPlay.id);
+      if (i === -1) state.plays.push(state.currentPlay); else state.plays[i] = state.currentPlay;
+      if (isNewPlay && window.logNewPlayToWhatsNew) window.logNewPlayToWhatsNew(state.currentPlay.id, state.currentPlay.label);
       els.pbSaveBtn.textContent = 'Saved!';
     } catch (err) {
       els.pbSaveBtn.textContent = 'Save failed';

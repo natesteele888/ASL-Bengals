@@ -106,6 +106,25 @@
   window.isTeamRosterLoaded = function () { return loaded; };
   window.loadTeamRoster = loadRoster;
 
+  // The REVERSE of loginPlayerId's own established direction (roster row ->
+  // login account, already used by js/coachtools-dashboard.js/js/study-quiz.js) --
+  // "which real roster row is the CURRENTLY logged-in player," for anything
+  // that wants to personalize by roster identity (js/gameplan-builder.js's
+  // player-tagging, js/thisweek.js's "My Plays" filter). Prefers the real,
+  // coach-set loginPlayerId link; falls back to a case-insensitive name
+  // match (same fallback js/player-identity.js's own applyNum already
+  // uses for badge display) for a player a coach hasn't explicitly linked
+  // yet -- a guess, not a fact, same caveat that fallback already carries.
+  window.myRosterEntry = function () {
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+    if (!session) return null;
+    const byId = roster.find((r) => r.loginPlayerId === session.playerId);
+    if (byId) return byId;
+    const name = (session.name || '').trim().toLowerCase();
+    if (!name) return null;
+    return roster.find((r) => (r.name || '').trim().toLowerCase() === name) || null;
+  };
+
   // Nathan: "Each parent who claims their player, should be able to add a
   // picture or update their #." A parent edits from the player card
   // (player-profile.js), not the coach-only Roster manager above -- this

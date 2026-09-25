@@ -294,7 +294,18 @@
         label: function (c) { return 'I: ' + c.wingSide; } },
       { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'; },
         card: OVERLOAD, label: 'Overload' },
-      { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'; },
+      // Nathan: "if we add overload to a play, be sure to have the
+      // signals be Overload then direction. The overload side is always
+      // to the wing side unless it is the Left Overload or Right Overload
+      // toggle selected." Overload's own side is only independently
+      // callable when it DIFFERS from wingSide (the natural default --
+      // the extra tight end goes to the side already heavier from the
+      // wing) -- when it matches, a separate side card would just repeat
+      // the wing/final-direction call already carrying that same side, so
+      // it's skipped: "Overload" then straight to the play/direction, no
+      // redundant "Overload: right" card in between.
+      { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'
+          && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
@@ -326,7 +337,11 @@
         label: function (c) { return 'I: ' + c.wingSide; } },
       { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'; },
         card: OVERLOAD, label: 'Overload' },
-      { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'; },
+      // Same "wing side is the implicit default, only an explicit
+      // opposite-side call needs its own card" rule as RECIPES.i -- see
+      // that recipe's own comment for Nathan's full spec.
+      { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'
+          && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
