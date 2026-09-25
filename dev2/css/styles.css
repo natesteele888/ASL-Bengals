@@ -2556,6 +2556,32 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .twoMinWrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
 .twoMinHeader { text-align: center; margin-bottom: 6px; padding-right: 30px; }
 .twoMinHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+
+/* ===== Game Plan Builder -- same full-screen overlay convention as
+   .twoMinDrillOverlay directly above (see that block's own comment). A
+   distinct z-index (not 1900) since the two are never open at once but
+   shouldn't silently rely on that. See js/gameplan-builder.js. ===== */
+.gamePlanBuilderOverlay { position: fixed; inset: 0; z-index: 1910; display: none; overflow-y: auto; background: var(--paper); }
+.gamePlanBuilderOverlay.show { display: block; }
+.gamePlanBuilderOverlay .lbXClose { background: rgba(0,0,0,.08); color: #1a1a1a; }
+.gamePlanBuilderOverlay .lbXClose:active { background: rgba(0,0,0,.16); }
+.gpbWrap { max-width: 760px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
+.gpbHeader { text-align: center; margin-bottom: 10px; padding-right: 30px; }
+.gpbHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+.gpbSubtitle { font-size: 13px; color: var(--muted); font-weight: 600; }
+.gpbScreen { max-width: 680px; margin: 0 auto; }
+.gpbOpponentList { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin: 0 auto; }
+.gpbOpponentBtn { border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 12px 14px; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.gpbOpponentBtn.selected { border-color: var(--bengal-orange); background: rgba(224,32,26,.08); }
+.gpbPlayGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.gpbPlayGrid .gameplanChip { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+.gpbPlaylist { display: flex; flex-direction: column; gap: 8px; max-width: 640px; margin: 0 auto; }
+.gpbPlaylistRow { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); }
+.gpbPlaylistThumb { display: block; width: 84px; height: 63px; flex: none; background: #fff; border-radius: 6px; }
+.gpbPlaylistLabel { flex: 1; font-size: 13px; font-weight: 600; min-width: 0; }
+.gpbEditPanel { border: 2px solid var(--bengal-orange); border-radius: 10px; padding: 10px; margin: -4px 0 4px; background: var(--paper); }
+[data-theme="dark"] .gpbOpponentBtn { background: var(--card); border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .gpbPlaylistRow { background: var(--card); border-color: var(--line); }
 .twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
 
 /* ---- start / end screens ---- */

@@ -189,9 +189,74 @@
       });
   }
 
+  // ---------------------------------------------------------------------
+  // Game Plan Builder support (js/gameplan-builder.js) -- Nathan: "you add
+  // those plays to a playlist and edit them from there to fine tune the
+  // directions and all. Then you save to that game plan." The Builder is
+  // a full-screen, self-contained authoring flow (same "own fetch, own
+  // state" precedent as two-minute-drill.js) rather than one that depends
+  // on This Week's own editor happening to already be open/loaded this
+  // session -- so it does its OWN read/write of thisWeek.json here, the
+  // one module that already owns that URL, rather than reaching into
+  // js/thisweek.js's private module state.
+  // ---------------------------------------------------------------------
+
+  // Loads whatever's ALREADY in the Game Plan right now, independent of
+  // whether This Week's own editor has been opened this session -- the
+  // Builder pre-populates its draft from this (never starts blank), so
+  // opening it and saving can never silently wipe out plays a coach
+  // already curated some other way (the picker chips, or "+ Add to Game
+  // Plan" on the real card).
+  function loadCurrentGamePlan() {
+    return window.firebaseAuthed(thisWeekUrl())
+      .then((url) => fetch(url))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => ({
+        gameId: (data && data.gameId) || '',
+        plays: (data && Array.isArray(data.plays)) ? data.plays.slice() : [],
+      }));
+  }
+
+  // Saves the Builder's current draft as THE Game Plan -- a whole-list
+  // replace (matching "then you have your game plan," a complete,
+  // coherent result, not an incremental append), but safe by construction
+  // since the draft always started from loadCurrentGamePlan() above, not
+  // empty. Fetches current data first (same pattern addEntry() already
+  // uses) so coachKeys/anything else in thisWeek.json this file never
+  // touches is preserved, not clobbered by a payload that only ever knew
+  // about plays/gameId. Notifies This Week's own editor if it happens to
+  // be open (mirrors onExternalAdd's own two-way-sync reasoning).
+  function saveDraftAsGamePlan(gameId, plays) {
+    return window.firebaseAuthed(thisWeekUrl())
+      .then((url) => fetch(url))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const payload = Object.assign({}, data, {
+          plays: plays.slice(),
+          gameId: gameId || '',
+          updatedAt: new Date().toISOString(),
+        });
+        return window.firebaseAuthed(thisWeekUrl()).then((url) => fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }));
+      })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Save failed (HTTP ${r.status})`);
+        if (window.ThisWeekGamePlan && window.ThisWeekGamePlan.onReplace) {
+          window.ThisWeekGamePlan.onReplace(gameId, plays);
+        }
+        return { gameId, plays };
+      });
+  }
+
   // Exposed standalone (not just used inside v2Label) so js/gameplan-pdf.js
   // can build its own, more compact per-card label (formation-grouped under
   // a section header, so repeating the formation name on every card would
   // be redundant) without a second copy of this same toggle-walking logic.
-  window.GamePlan = { describe, resolveForRender, alignmentSummary, addEntry, numberedRows, MAX_PLAYS };
+  window.GamePlan = {
+    describe, resolveForRender, alignmentSummary, addEntry, numberedRows, MAX_PLAYS,
+    loadCurrentGamePlan, saveDraftAsGamePlan,
+  };
 })();

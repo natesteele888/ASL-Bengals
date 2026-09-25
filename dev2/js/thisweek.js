@@ -941,6 +941,17 @@
       pendingSelection.push(entry);
       if (loaded) { renderReadOnly(); renderEditor(); }
     },
+    // Same two-way-sync idea as onExternalAdd, for the Game Plan Builder's
+    // own whole-list Save (js/gameplan-builder.js/js/gameplan.js's
+    // saveDraftAsGamePlan) -- already saved for real by the time this
+    // fires, so this is purely "reflect it on screen if This Week's own
+    // editor happens to already be open."
+    onReplace(gameId, plays) {
+      saved = Object.assign({}, saved, { plays: (plays || []).slice(), gameId: gameId || '' });
+      pendingSelection = (plays || []).slice();
+      pendingGameId = gameId || '';
+      if (loaded) { renderReadOnly(); renderEditor(); }
+    },
   };
 
   let controlsWired = false;
@@ -981,6 +992,15 @@
         }
       });
     }
+    // Nathan: "Lets have it so it opens full screen like the 2-min drill
+    // and you choose your opponent on the schedule to game plan
+    // against." js/gameplan-builder.js owns the overlay itself; this is
+    // just the entry point, same "check the global exists" guard the
+    // other buttons in this function use.
+    const buildBtn = document.getElementById('thisweekBuildGamePlanBtn');
+    if (buildBtn) buildBtn.addEventListener('click', () => {
+      if (window.openGamePlanBuilder) window.openGamePlanBuilder();
+    });
   }
 
   window.initThisWeek = function () {

@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260925o">
+<link rel="stylesheet" href="css/styles.css?v=20260925q">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -610,6 +610,7 @@
     <div class="gameplanList" id="thisweekGamePlanList"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
     <button class="navBtn secondary" id="thisweekPrintCallSheetBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📋 Print Call Sheet</button>
+    <button class="navBtn secondary" id="thisweekBuildGamePlanBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">🏗 Build Game Plan (full screen)</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
@@ -2151,6 +2152,48 @@
 <audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
 </div>
 
+<!-- Game Plan Builder -- full-screen, opponent-scoped authoring flow.
+     Nathan: "Lets have it so it opens full screen like the 2-min drill
+     and you choose your opponent on the schedule to game plan
+     against." Copies .twoMinDrillOverlay's own convention exactly
+     (see that block's own comments above) -- a fixed, inset:0 overlay
+     stacked above the normal tab-panel system, with layout-critical
+     properties duplicated inline here as the same defense against
+     stale cached CSS. See js/gameplan-builder.js. -->
+<div class="gamePlanBuilderOverlay" id="gamePlanBuilderOverlay" style="display:none; position:fixed; inset:0; z-index:1910; overflow-y:auto; background:#f4f2ee;">
+<div class="gpbWrap">
+  <button class="lbXClose" id="gpbCloseBtn" aria-label="Close">&times;</button>
+  <div class="gpbHeader">
+    <h1>🏗 Build Game Plan</h1>
+    <div class="gpbSubtitle" id="gpbSubtitle"></div>
+  </div>
+
+  <div class="coachToolsModuleTabs" id="gpbStepTabs">
+    <button type="button" class="coachToolsModuleTab" data-step="1">1. Opponent</button>
+    <button type="button" class="coachToolsModuleTab" data-step="2">2. Base Plays</button>
+    <button type="button" class="coachToolsModuleTab" data-step="3">3. Playlist</button>
+  </div>
+
+  <div class="gpbScreen" id="gpbOpponentScreen">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">Who are we building this game plan for?</div>
+    <div class="gpbOpponentList" id="gpbOpponentList"></div>
+  </div>
+
+  <div class="gpbScreen" id="gpbPlaysScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;" id="gpbPlaysCount"></div>
+    <div class="gpbPlayGrid" id="gpbPlayGrid"></div>
+  </div>
+
+  <div class="gpbScreen" id="gpbPlaylistScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:4px;">Your Game Plan -- reorder or remove</div>
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;font-size:11px;">For a specific direction, motion, or overload call: browse to that play and tap "+ Add to Game Plan" on the real card -- it'll show up here too.</div>
+    <div class="gpbPlaylist" id="gpbPlaylist"></div>
+    <button class="navBtn" id="gpbSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save Game Plan</button>
+    <div id="gpbStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+</div>
+</div>
+
 <audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
 <audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
 <audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
@@ -2222,7 +2265,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260925o';
+  const BUILD_V = '20260925r';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2257,7 +2300,7 @@ if (window.ResizeObserver) {
   // sitting in cache. Execution order is completely unchanged (still one
   // at a time, awaited, further down) -- this only makes the network part
   // faster, it doesn't touch correctness at all.
-  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/coachtools-formationbuilder.js', 'js/coachtools-createplay.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-builder.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/coachtools-formationbuilder.js', 'js/coachtools-createplay.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   scripts.forEach(src => {
     const link = document.createElement('link');
     link.rel = 'preload'; link.as = 'script'; link.href = withV(src);

@@ -3493,23 +3493,35 @@ function buildCard(combo, opts) {
   // separate, second toggle-picking UI -- js/gameplan.js's addEntry() saves
   // it straight to thisWeek.json. Coach-only, same gate This Week's own
   // editor already uses.
-  if (window.isApprovedCoachProfile && window.isApprovedCoachProfile() && window.GamePlan) {
+  // opts.onGamePlanCapture (new) -- js/gameplan-builder.js's Playlist "Edit"
+  // panel mounts this SAME real card, inline, so fine-tuning a play never
+  // needs a second, separately-maintained toggle UI (the exact "two
+  // places" problem this whole rebuild exists to avoid). A draft playlist
+  // entry isn't saved to Firebase until the Builder's own "Save Game Plan"
+  // button -- so that context needs this button to just hand its captured
+  // state back to the caller instead of writing to thisWeek.json directly
+  // via GamePlan.addEntry(). The real Play tab (renderPlayDetail, the only
+  // OTHER caller) never passes this, so its own behavior is byte-identical
+  // to before.
+  if (window.isApprovedCoachProfile && window.isApprovedCoachProfile() && (opts.onGamePlanCapture || window.GamePlan)) {
     const gamePlanBtn = document.createElement('button');
     gamePlanBtn.type = 'button';
     gamePlanBtn.className = 'navBtn card-gameplan-btn';
-    gamePlanBtn.textContent = '+ Add to Game Plan';
+    gamePlanBtn.textContent = opts.onGamePlanCapture ? 'Use This' : '+ Add to Game Plan';
     gamePlanBtn.addEventListener('click', () => {
-      const prevText = gamePlanBtn.textContent;
-      gamePlanBtn.disabled = true;
-      gamePlanBtn.textContent = 'Adding…';
-      window.GamePlan.addEntry({
+      const capturedState = {
         key: combo.playKey, label: combo.label, formation,
         wingSide, direction, splitSide, insideOutside, readPosition,
         motionOn, bootOn, qbSneakOn, counterOn, popVariantOn,
         passOn, protection, overloadOn, leftCall, rightCall,
         alignmentValues: Object.assign({}, alignmentValues),
         callLabel: titleBar.textContent,
-      }).then(() => {
+      };
+      if (opts.onGamePlanCapture) { opts.onGamePlanCapture(capturedState); return; }
+      const prevText = gamePlanBtn.textContent;
+      gamePlanBtn.disabled = true;
+      gamePlanBtn.textContent = 'Adding…';
+      window.GamePlan.addEntry(capturedState).then(() => {
         gamePlanBtn.textContent = 'Added to Game Plan ✓';
       }).catch((err) => {
         gamePlanBtn.textContent = (err && err.message) || 'Failed to add';
@@ -3738,6 +3750,27 @@ function buildCard(combo, opts) {
   outer.appendChild(inner);
   return outer;
 }
+window.buildCard = buildCard;
+// js/gameplan-builder.js's Playlist "Edit" panel's one real entry point --
+// buildCard doesn't take a raw DATA.playTypes entry, it takes the richer
+// "combo" shape buildPlayList() derives from one (playKey, noBoot,
+// noMotion, hasCounter, alignmentToggles, directionOpposesWing, etc. --
+// every field buildCard's own body reads) -- so this reuses that SAME
+// real transformation rather than partially re-deriving it a second time
+// (exactly the kind of drift this whole rebuild exists to avoid). Locks
+// the card to the SAME formation a saved entry (v1 or v2) actually
+// belongs to, using renderPlayDetail's own wing/split/custom-id
+// translation (line ~4162) so a custom-formation play (e.g. "I: Dive")
+// opens showing its own real geometry, not Wing's.
+window.buildGamePlanEditCard = function (entry, opts) {
+  if (!window.DATA || !window.DATA.playTypes) return null;
+  const combo = buildPlayList().find((c) => c.playKey === entry.key);
+  if (!combo) return null;
+  const lockFormation = (entry.v === 2 && entry.formation)
+    ? entry.formation
+    : (combo.authoredFormationId || 'shotgun');
+  return buildCard(combo, Object.assign({ lockFormation }, opts));
+};
 
 // ---- Formation-first browsing: pick a formation, see its plays as a
 // 2-column grid (run plays above pass, a RUN/PASS pill per tile), tap one
