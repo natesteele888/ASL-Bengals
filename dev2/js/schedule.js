@@ -2542,6 +2542,24 @@
       .catch(err => console.error('Could not load linked This Week game plan:', err));
   }
 
+  // Narrow write path for js/drone-footage.js's Film Vault, which needs to
+  // tag a game's own footage clips with categoryIds without going through
+  // the full "Save Game" form (that button re-sends the whole game record
+  // -- writeup, scouting notes, injury report, everything -- for a change
+  // that's only ever a couple of clips' categoryIds). Same shape as
+  // practices.js's window.saveDroneClips: find the game by id in this
+  // module's own `games` array, set just its gameFootage, keep `current`
+  // in sync if it's the game currently open so a re-render doesn't show
+  // stale clips, and persist through the same whole-array PUT every other
+  // schedule save already uses.
+  window.saveGameFootage = function (gameId, gameFootage, afterOk, afterFail) {
+    const g = games.find(x => x.id === gameId);
+    if (!g) { if (afterFail) afterFail('Game not found'); return; }
+    g.gameFootage = gameFootage;
+    if (current && current.id === gameId) current.gameFootage = gameFootage;
+    persistGames(afterOk);
+  };
+
   // Lets other modules (This Week's "This week's game" link) jump straight
   // to a specific game's detail page from outside this file.
   window.openScheduleGame = function (gameId) {

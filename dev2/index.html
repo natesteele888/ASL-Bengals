@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260925ag">
+<link rel="stylesheet" href="css/styles.css?v=20260925ah">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -811,8 +811,16 @@
        once. See js/drone-footage.js's Film Vault section. ---- -->
   <div id="coachFilmVaultPanel" class="coachToolsPanel" style="display:none;">
     <div class="lbSectionHeader" style="text-align:center;">🎬 Film Vault</div>
-    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every drone clip from every practice, alphabetized by play name -- search to narrow it down.</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every drone clip from every practice, alphabetized by play name -- search to narrow it down, or group them into your own categories.</div>
     <div style="max-width:600px;margin:0 auto;">
+      <!-- Coach-only category management (add/rename/delete) -- built fresh
+           by renderVaultCategoriesPanel() (js/drone-footage.js), same
+           create-element convention as the rest of this file rather than
+           static markup, since its contents are entirely data-driven. -->
+      <div id="filmVaultCategoriesPanel"></div>
+      <!-- "All" + one chip per category, narrows which group(s) show below.
+           Hidden entirely when no categories exist yet. -->
+      <div id="filmVaultCategoryFilterRow" style="display:none;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;"></div>
       <input type="text" id="filmVaultSearch" placeholder="🔍 Search by play name…" autocomplete="off" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:6px;">
       <div class="lbSub" id="filmVaultCount" style="text-align:center;margin-bottom:10px;"></div>
       <div id="filmVaultList"><div class="lbEmpty">Loading…</div></div>
@@ -2311,7 +2319,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260925ag';
+  const BUILD_V = '20260925ah';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
