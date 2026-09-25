@@ -106,6 +106,21 @@ function fbShiftCopyAssignment(assignment, sourceFormation, targetFormation) {
       out.alignmentOverrides[value] = shifted;
     });
   }
+  // Found live (codebase audit, 2026-09-26): three more real, documented
+  // (schema.js) PlayerAssignment fields added after the directionIndependent/
+  // alignmentOverrides fix above, never added here -- same silent-data-loss
+  // bug, just for fields that didn't exist yet when that fix was written.
+  // overrides/wingLeftRoute are REGULAR-position coordinate data (schema.js's
+  // own doc on each), shifted by this same player's dx/dy like every other
+  // route on this assignment; wingLeftHasBall is a plain flag, unshifted.
+  if (assignment.wingLeftHasBall !== undefined) out.wingLeftHasBall = assignment.wingLeftHasBall;
+  if (assignment.wingLeftRoute) out.wingLeftRoute = fbShiftCopyPoints(assignment.wingLeftRoute, dx, dy);
+  if (assignment.overrides) {
+    out.overrides = {};
+    Object.keys(assignment.overrides).forEach((direction) => {
+      out.overrides[direction] = fbShiftCopyPoints(assignment.overrides[direction], dx, dy);
+    });
+  }
   return out;
 }
 
@@ -135,6 +150,35 @@ function fbShiftCopyBallPath(ballPath, sourceFormation, targetFormation) {
   });
 }
 
+// Found live (codebase audit, 2026-09-26): copyPlayToFormation used to
+// build each variant as a plain object literal covering only
+// id/label/players/ballPath -- every PlayVariant field added since (all
+// real, documented in schema.js) was silently dropped by a copy. Factored
+// out to its own function so it can carry those forward too, shifting
+// whichever ones are ball-path coordinate data through the same
+// fbShiftCopyBallPath every other ball path on this play already uses.
+function fbShiftCopyVariant(variant, sourceFormation, targetFormation) {
+  const out = {
+    id: variant.id,
+    label: variant.label,
+    players: variant.players.map((a) => fbShiftCopyAssignment(a, sourceFormation, targetFormation)),
+    ballPath: fbShiftCopyBallPath(variant.ballPath, sourceFormation, targetFormation),
+  };
+  if (variant.legacyKey) out.legacyKey = variant.legacyKey;
+  if (variant.wingLeftBallPath) out.wingLeftBallPath = fbShiftCopyBallPath(variant.wingLeftBallPath, sourceFormation, targetFormation);
+  if (variant.directionLeftBallPath) out.directionLeftBallPath = fbShiftCopyBallPath(variant.directionLeftBallPath, sourceFormation, targetFormation);
+  if (variant.alignmentBallPath) {
+    out.alignmentBallPath = {};
+    Object.keys(variant.alignmentBallPath).forEach((toggleId) => {
+      out.alignmentBallPath[toggleId] = {};
+      Object.keys(variant.alignmentBallPath[toggleId]).forEach((valueId) => {
+        out.alignmentBallPath[toggleId][valueId] = fbShiftCopyBallPath(variant.alignmentBallPath[toggleId][valueId], sourceFormation, targetFormation);
+      });
+    });
+  }
+  return out;
+}
+
 function copyPlayToFormation(sourcePlay, sourceFormation, targetFormation, newId, newLabel) {
   const out = {
     id: newId,
@@ -145,12 +189,7 @@ function copyPlayToFormation(sourcePlay, sourceFormation, targetFormation, newId
     topPad: sourcePlay.topPad,
     signalCardId: sourcePlay.signalCardId,
     signalLabel: sourcePlay.signalLabel,
-    variants: sourcePlay.variants.map((variant) => ({
-      id: variant.id,
-      label: variant.label,
-      players: variant.players.map((a) => fbShiftCopyAssignment(a, sourceFormation, targetFormation)),
-      ballPath: fbShiftCopyBallPath(variant.ballPath, sourceFormation, targetFormation),
-    })),
+    variants: sourcePlay.variants.map((variant) => fbShiftCopyVariant(variant, sourceFormation, targetFormation)),
   };
   // Both play-level (not per-variant, not per-formation) fields, carried
   // forward verbatim -- neither is coordinate data that needs shifting.
@@ -160,6 +199,27 @@ function copyPlayToFormation(sourcePlay, sourceFormation, targetFormation, newId
   // indicate either went missing.
   if (sourcePlay.directionSwapPairs) out.directionSwapPairs = sourcePlay.directionSwapPairs.map((pair) => pair.slice());
   if (sourcePlay.readKeyId) out.readKeyId = Object.assign({}, sourcePlay.readKeyId);
+  // Found live (codebase audit, 2026-09-26): every one of these real,
+  // documented (schema.js) Play-level fields was added after the two
+  // fixes just above and never copied either -- same silent-data-loss
+  // bug. All plain flags/strings/id-lists, no coordinate data, so no
+  // shifting needed, just carrying them forward at all.
+  if (sourcePlay.signalRecipe) out.signalRecipe = sourcePlay.signalRecipe;
+  if (sourcePlay.wingMirrorPlayers) out.wingMirrorPlayers = sourcePlay.wingMirrorPlayers.slice();
+  if (sourcePlay.legacyDimension) out.legacyDimension = sourcePlay.legacyDimension;
+  if (sourcePlay.noBoot) out.noBoot = true;
+  if (sourcePlay.noMotion) out.noMotion = true;
+  if (sourcePlay.isPass) out.isPass = true;
+  if (sourcePlay.hasQbSneak) out.hasQbSneak = true;
+  if (sourcePlay.noDirection) out.noDirection = true;
+  if (sourcePlay.directionOpposesWing) out.directionOpposesWing = true;
+  if (sourcePlay.directionDefaultsAwayFromWing) out.directionDefaultsAwayFromWing = true;
+  // qbSneakRoute IS coordinate data (player 1's own drawn path) -- shift it
+  // by #1's own delta, same as any other route on this play.
+  if (sourcePlay.qbSneakRoute) {
+    const { dx, dy } = fbShiftCopyDelta(sourceFormation, targetFormation, 1);
+    out.qbSneakRoute = fbShiftCopyPoints(sourcePlay.qbSneakRoute, dx, dy);
+  }
   return out;
 }
 

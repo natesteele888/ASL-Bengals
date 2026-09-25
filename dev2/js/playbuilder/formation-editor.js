@@ -412,6 +412,16 @@ function bind() {
     // collided with the newly-squeezed-in 2nd tight end again until this
     // was found and fixed.
     if (existing && existing.overload) formation.overload = existing.overload;
+    // Found live (codebase audit, 2026-09-26), same exact class of bug as
+    // alignmentToggles/overload just above -- Formation.wingLeftAnchors
+    // (the "5 Guys" 3/5/2/6 redistribute-around-the-wing mechanism,
+    // schema.js) has no UI on this screen either and buildDraftFormation()
+    // never produces it, so every Save here was silently dropping it too.
+    // Re-saving "5 Guys" for any reason (nudging a player, changing its
+    // touch card) would have reproduced the exact bug already found and
+    // fixed once this session: "I change the toggle to Wing Left and it
+    // moves him over without adjusting the other 3, 5, 2, or 6."
+    if (existing && existing.wingLeftAnchors) formation.wingLeftAnchors = existing.wingLeftAnchors;
     const touchCardValue = q('fbTouchCardSelect') ? q('fbTouchCardSelect').value : '';
     if (touchCardValue !== '') formation.touchCardId = Number(touchCardValue);
     q('fbSaveBtn').textContent = 'Saving…';
@@ -461,6 +471,15 @@ function bind() {
     const parts = [];
     if (ownPlays.length) parts.push(`${ownPlays.length} Play Builder play(s) (${ownPlays.map((p) => p.label).join(', ')})`);
     if (legacyKeys.length) parts.push(`${legacyKeys.length} older, still-linked play(s) (${legacyKeys.join(', ')})`);
+    // Found live (codebase audit, 2026-09-26): the deletion below removes
+    // this formation's real position data from window.Formations/
+    // AssignmentStore whenever formation.legacyImport is true -- not only
+    // when legacyKeys.length is also non-zero. An import stub with no
+    // legacy plays curated yet still had real, live position data, and
+    // the warning said nothing about losing it -- just "Remove 'X
+    // (import)'? This can't be undone." with no hint it wasn't only an
+    // import preview being discarded.
+    if (formation.legacyImport) parts.push('its real position data (this is a live formation, not just an import preview)');
     const warning = (parts.length
       ? `Removing "${formation.label}" also removes: ${parts.join('; ')}. `
       : `Remove "${formation.label}"? `) + 'This can\'t be undone. Continue?';

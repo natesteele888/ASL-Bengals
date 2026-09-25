@@ -1038,16 +1038,12 @@
   // entered, not just the ones with a full statSheet -- a coach might log
   // the final score on Schedule the same night without ever opening Enter
   // Stats. Same result logic as schedule.js's own resultFor() (not exposed
-  // on window there, so duplicated here rather than reaching across
-  // modules for one three-line comparison).
-  function resultForGame(g) {
-    if (g.ourScore === null || g.ourScore === undefined || g.oppScore === null || g.oppScore === undefined || g.ourScore === '' || g.oppScore === '') return null;
-    const us = Number(g.ourScore), them = Number(g.oppScore);
-    if (isNaN(us) || isNaN(them)) return null;
-    if (us > them) return 'W';
-    if (us < them) return 'L';
-    return 'T';
-  }
+  // on window there). Was its own second copy of resultFor() (defined
+  // above, ~line 101) sitting in this exact same file/closure -- no
+  // scoping reason for a second copy the way there is a reason to
+  // duplicate it out to schedule.js -- found live (codebase audit,
+  // 2026-09-26) and consolidated onto the one already-existing local
+  // resultFor() instead.
 
   const TEAM_STAT_ROWS = [
     { key: 'offPlays', label: 'Offensive Plays' },
@@ -1072,7 +1068,7 @@
 
     let w = 0, l = 0, tcount = 0, pf = 0, pa = 0, scoredGames = 0;
     games.forEach(g => {
-      const r = resultForGame(g);
+      const r = resultFor(g);
       if (!r) return;
       scoredGames++;
       if (r === 'W') w++; else if (r === 'L') l++; else tcount++;
@@ -1117,7 +1113,7 @@
     const tbody = document.createElement('tbody');
     playedGames.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(g => {
       const t = gameTeamStats(g.statSheet);
-      const r = resultForGame(g);
+      const r = resultFor(g);
       const label = `${g.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(g.opponent || 'TBD')}${g.date ? ' — ' + escapeHtml(g.date) : ''}`;
       const resultLabel = r ? `${r} ${escapeHtml(String(g.ourScore))}-${escapeHtml(String(g.oppScore))}` : '—';
       const tr = document.createElement('tr');

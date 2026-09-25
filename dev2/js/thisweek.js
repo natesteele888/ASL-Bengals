@@ -157,9 +157,11 @@
   // locally rather than reaching into that file's closure.
   // Same record math as js/schedule.js's bengalsRecord() -- including the
   // Scrimmage/Jamboree exclusion (Nathan: those are preseason and shouldn't
-  // count toward the regular season record).
+  // count toward the regular season record) and the Bye exclusion added to
+  // schedule.js's own copy afterward (found live, codebase audit,
+  // 2026-09-26 -- this copy had drifted, missing that third exclusion).
   function countsTowardRecord(g) {
-    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree';
+    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree' && g.gameType !== 'Bye';
   }
   function bengalsRecord(list) {
     let w = 0, l = 0, t = 0;
@@ -628,13 +630,27 @@
     const coachKeys = pendingCoachKeys
       .map(c => ({ name: (c.name || '').trim(), keys: (c.keys || ['', '', '']).slice(0, NUM_KEYS).map(k => (k || '').trim()) }))
       .filter(c => c.name || c.keys.some(k => k));
-    const payload = { coachKeys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() };
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-    window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })).then(r => {
+    // Found live (codebase audit, 2026-09-26): this used to PUT straight
+    // from whatever pendingCoachKeys/pendingSelection/pendingGameId held
+    // from whenever loadThisWeek() last ran, with no re-fetch first --
+    // unlike js/gameplan.js's addEntry()/saveDraftAsGamePlan(), which both
+    // fetch current thisWeek.json right before writing specifically so a
+    // stale local copy can't silently clobber a save that landed from
+    // elsewhere (a different coach's device, or a "+ Add to Game Plan"
+    // tap on a real card) in the meantime. Same fetch-then-merge here now,
+    // for the same reason -- Object.assign over the fresh fetch keeps
+    // this editor narrowly responsible for coachKeys/plays/gameId/
+    // updatedAt without silently reverting some other field this file
+    // doesn't know about.
+    window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null).then(current => {
+      const payload = Object.assign({}, current, { coachKeys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() });
+      return window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })).then(r => ({ r, payload }));
+    }).then(({ r, payload }) => {
       if (r.ok) {
         saved = payload;
         pendingCoachKeys = coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
