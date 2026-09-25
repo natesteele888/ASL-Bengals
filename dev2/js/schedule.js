@@ -1700,6 +1700,15 @@
     if (!opts.sharedSlotId) html += `<div id="${slotId}" style="display:none;margin-top:8px;"></div>`;
     return html;
   }
+  // Exposed so js/thisweek.js's own Watch Footage button (Week Ahead box)
+  // can open film inline too, the same as every other film button in the
+  // app -- it used to be a bare <a target="_blank">, the one film link
+  // left that still jumped away to a new tab instead of using Nathan's
+  // own established "walk it to open in a local player" fix. The
+  // document-level click listener right below already handles any
+  // [data-embed-target] button on the page regardless of which file
+  // rendered it, so exposing this one function is enough.
+  window.filmButtonHtml = filmButtonHtml;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;

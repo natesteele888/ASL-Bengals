@@ -424,8 +424,12 @@
     // the stat cards above and the Games/Practices columns below) --
     // renderWeekAhead() finds them by these same ids right after setting
     // textEl.innerHTML to this return value and fills in href/text/visibility.
+    // thisweekWatchFootageWrap is a plain container, not the button itself
+    // -- renderWeekAhead() fills it with window.filmButtonHtml()'s own
+    // markup (js/schedule.js), same as every other Watch Game Film button
+    // in the app, so this one opens inline instead of jumping to a new tab.
     const footageHtml = `
-      <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:0 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
+      <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
     `;
 
@@ -490,23 +494,28 @@
     // and fills in href/text/visibility from whichever game This Week is
     // currently linked to.
     const linkedGame = getLinkedWeekGame();
-    const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
+    const watchFootageWrap = document.getElementById('thisweekWatchFootageWrap');
     const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
     const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
-    if (watchFootageBtn) {
-      if (linkedGame && linkedGame.opponentFilmUrl) {
-        watchFootageBtn.style.display = 'block';
-        watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
-        watchFootageBtn.href = linkedGame.opponentFilmUrl;
-        // Nathan: "let me know who is watching film" -- js/film-views.js's
-        // document-level click listener reads this attribute off whatever
-        // was actually clicked, so it works here and on Schedule's own
-        // Watch Footage button (schedule.js) without either file needing to
-        // know about the other.
-        watchFootageBtn.dataset.filmGameId = linkedGame.id;
+    if (watchFootageWrap) {
+      if (linkedGame && linkedGame.opponentFilmUrl && window.filmButtonHtml) {
+        // Nathan: "I still hate that the google videos open in another
+        // screen - walk it to open in a local player." This used to be a
+        // bare <a target="_blank"> -- the one Watch Film button left in
+        // the app that still jumped to a new tab instead of using that
+        // fix. window.filmButtonHtml (js/schedule.js) is the exact same
+        // function every other Watch Game Film button already goes
+        // through, so this one now opens inline the same way. filmGameId
+        // still carries the same data-film-game-id attribute
+        // js/film-views.js's "let me know who is watching film" listener
+        // reads, unchanged.
+        watchFootageWrap.innerHTML = window.filmButtonHtml(linkedGame.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', {
+          filmGameId: linkedGame.id,
+          btnClass: 'navBtn',
+          btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${hasFootageNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}`,
+        });
       } else {
-        watchFootageBtn.style.display = 'none';
-        watchFootageBtn.removeAttribute('href');
+        watchFootageWrap.innerHTML = '';
       }
     }
     // Nathan: "include a write-in spot for the footage to say something
