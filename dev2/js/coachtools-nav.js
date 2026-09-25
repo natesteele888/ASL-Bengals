@@ -18,7 +18,20 @@
 (function () {
 
   const TABS = [
-    { key: 'resources', label: '🖨️ Resources', category: 'library', panel: 'coachResourcesPanel', init: () => window.initCoachToolsPrint && window.initCoachToolsPrint() },
+    // Nathan (2026-09-25): "Admin is never touched. Resources isn't used,
+    // we never print stat sheets or print the playbook. Updates in Library
+    // section doesn't get updated... let's revamp it a bit so it's easier
+    // to navigate." Resources/Updates/How To all get `hidden: true` below
+    // (filtered out of visibleTabs(), same instant-rollback spirit as the
+    // old Formation Builder/Create-a-Play panels when Play Builder V2
+    // replaced them -- unlinked from the nav, not deleted, so restoring any
+    // one of them is a one-line flip back if that call turns out wrong).
+    // Settings survives -- it holds the real, still-used "See the app as a
+    // player sees it" preview toggle and drone-visibility switch -- just
+    // moves out of the now-empty Admin category into Library, which is why
+    // Admin itself is gone from CATEGORIES below (a whole category bar
+    // button for zero visible tabs would be its own kind of clutter).
+    { key: 'resources', label: '🖨️ Resources', category: 'library', panel: 'coachResourcesPanel', init: () => window.initCoachToolsPrint && window.initCoachToolsPrint(), hidden: true },
     // Nathan: "a place where I can copy standing from the coaches app and
     // drop it directly into a field under Coaching Tools to paste in to
     // update the standings." See js/standings.js -- also feeds the
@@ -55,17 +68,23 @@
     // Nathan: "make sure that the notes that were added to the What's New
     // can be added at any time by a coach in the Coach Tools block" -- the
     // Houston route note was a one-off migration script; this tab is the
-    // real, repeatable version of that.
-    { key: 'updates', label: '📣 Updates', category: 'library', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates() },
+    // real, repeatable version of that. Unlinked 2026-09-25 (see the
+    // Resources comment above) -- "Updates... doesn't get updated."
+    { key: 'updates', label: '📣 Updates', category: 'library', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates(), hidden: true },
     // Nathan: "Drone footage visible toggle should come out of Dashboard
     // and have a new pill called settings with that and other toggles to
-    // turn on and off visibility to groups."
-    { key: 'settings', label: '⚙️ Settings', category: 'admin', panel: 'coachSettingsPanel', init: () => window.initCoachToolsSettings && window.initCoachToolsSettings() },
+    // turn on and off visibility to groups." Moved from its own Admin
+    // category into Library 2026-09-25 -- still real, still used (this is
+    // where window.enterPlayerPreview's "See the app as a player sees it"
+    // button lives), just no longer worth a whole top-level category for
+    // one tab once How To/Resources/Updates are gone.
+    { key: 'settings', label: '⚙️ Settings', category: 'library', panel: 'coachSettingsPanel', init: () => window.initCoachToolsSettings && window.initCoachToolsSettings() },
     // Nathan: "Develop a how to section in the coaching tools... walkthrough
     // explanations of how to do things such as add another login to your
     // device, save the app as an app on your phone home screen." See
-    // js/coachtools-howto.js.
-    { key: 'howto', label: '❓ How To', category: 'admin', panel: 'coachHowToPanel', init: () => window.initCoachToolsHowTo && window.initCoachToolsHowTo() },
+    // js/coachtools-howto.js. Unlinked 2026-09-25 -- "Admin is never
+    // touched."
+    { key: 'howto', label: '❓ How To', category: 'library', panel: 'coachHowToPanel', init: () => window.initCoachToolsHowTo && window.initCoachToolsHowTo(), hidden: true },
     // Nathan: "we can't have two places - work to combine the i form and
     // all formation creation, formation edits, play creation and play
     // edits all in one. This needs to be correct." Replaces the two
@@ -96,7 +115,6 @@
     { key: 'data', label: '📈 Data & Stats' },
     { key: 'plays', label: '🧩 Play Design' },
     { key: 'library', label: '📚 Library' },
-    { key: 'admin', label: '⚙️ Admin' },
   ];
 
   // Nathan: "I want this to be tied into Coach Nate profile... for now."
@@ -142,8 +160,13 @@
   // browsing.
   function visibleTabs() {
     const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
-    if (approvedCoach) return TABS;
-    return TABS.filter(t => t.minAccess === 'coach');
+    const base = approvedCoach ? TABS : TABS.filter(t => t.minAccess === 'coach');
+    // hidden:true tabs (Resources/Updates/How To, 2026-09-25 -- see their
+    // own comments above) stay in TABS itself -- their panels/init still
+    // exist and openCoachToolsTab(key) would still find them -- just
+    // filtered out of every real UI surface (category browsing AND the
+    // search box) here in this one shared place.
+    return base.filter(t => !t.hidden);
   }
 
   function tabsForCategory(catKey) { return visibleTabs().filter(t => t.category === catKey); }
@@ -212,7 +235,22 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'coachToolsCategoryBtn' + (activeCategory === c.key ? ' active' : '');
-      btn.textContent = c.label;
+      // Nathan: "very congested tool bar... hitting the icon on top of the
+      // word" -- same icon-over-label stack index.html's own .modeBtn/
+      // .modeIcon/.modeLabel already uses for the Play tab's row (built for
+      // the exact same "six things, narrow phone" problem), reused here
+      // instead of a new pattern. Every CATEGORIES label is authored as
+      // "EMOJI Rest Of Label" already, so splitting on the first space is
+      // enough -- no separate icon field needed on the data itself.
+      const spaceIdx = c.label.indexOf(' ');
+      const icon = document.createElement('span');
+      icon.className = 'modeIcon';
+      icon.textContent = spaceIdx === -1 ? c.label : c.label.slice(0, spaceIdx);
+      const text = document.createElement('span');
+      text.className = 'modeLabel';
+      text.textContent = spaceIdx === -1 ? '' : c.label.slice(spaceIdx + 1);
+      btn.appendChild(icon);
+      btn.appendChild(text);
       // Nathan: "The Resources CTAs still show on every tab." Real bug --
       // this only ever changed activeCategory and re-rendered the NAV
       // (which tab buttons are listed), it never actually switched the

@@ -203,24 +203,37 @@ window.refreshCoachToolsVisibility = function(){
   // quiz-flavored sub-tabs (Quiz, Timed, Play Quiz) stay hidden for a
   // parent while Study (signals) and Play Calls (diagrams) stay open --
   // same split a coach/player already sees, just missing the quiz tabs.
+  //
+  // Nathan (2026-09-25): "The original plan was to have the coach app only
+  // include the Signals and Plays in the Play section and it wouldn't have
+  // Quiz, Timed, Play Quiz or 2 Min Drill." Same idea, a second role: a
+  // coach also gets Study/Play Calls only, PLUS 2 Min Drill hidden too --
+  // parents still see 2 Min Drill (never asked to change that, only the
+  // coach view). isCoach reflects the LIVE role, so entering Player
+  // Preview (js/auth.js's window.enterPlayerPreview, which flips
+  // isCoachSession to false for the preview's duration) correctly
+  // un-hides these again, showing exactly what a real player sees.
   const playBtn = document.getElementById('playSectionBtn');
   if (playBtn) playBtn.style.display = '';
   if (modeTabsEl) {
     modeTabsEl.querySelectorAll('.modeBtn').forEach(b => {
       const m = b.dataset.mode;
       if (m === 'quiz' || m === 'timed' || m === 'playcallsquiz') {
-        b.style.display = isParent ? 'none' : '';
+        b.style.display = (isParent || isCoach) ? 'none' : '';
+      } else if (m === 'twominute') {
+        b.style.display = isCoach ? 'none' : '';
       }
     });
   }
-  // If a coach/player switched into a parent profile (Switch Profile) while
-  // sitting on one of the now-hidden quiz tabs, lastPlaySubMode would still
-  // point at it -- clicking into Play would then land a parent on a panel
-  // whose own tab button is hidden. Fall back to Study for a parent in
-  // that case.
-  if (isParent && (lastPlaySubMode === 'quiz' || lastPlaySubMode === 'timed' || lastPlaySubMode === 'playcallsquiz')) {
-    lastPlaySubMode = 'study';
-  }
+  // If someone switched profiles (Switch Profile, or entering/exiting
+  // Player Preview) while sitting on a tab that's now hidden for their new
+  // role, lastPlaySubMode would still point at it -- clicking into Play
+  // would land on a panel whose own tab button is hidden. Fall back to
+  // Study in that case.
+  const hiddenPlayModes = new Set();
+  if (isParent || isCoach) { hiddenPlayModes.add('quiz'); hiddenPlayModes.add('timed'); hiddenPlayModes.add('playcallsquiz'); }
+  if (isCoach) hiddenPlayModes.add('twominute');
+  if (hiddenPlayModes.has(lastPlaySubMode)) lastPlaySubMode = 'study';
 
   // Study/Quiz/Play Calls have nothing to do with a parent account -- swap
   // the leaderboard and My Stats/My Position for a My Child shortcut

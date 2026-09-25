@@ -2145,7 +2145,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    similar-looking buttons stacked on top of each other. */
 .coachToolsCategoryBar { display: flex; background: #1a1a1a; border-radius: 12px; padding: 4px; gap: 2px; margin-bottom: 10px; overflow-x: auto; }
 [data-theme="dark"] .coachToolsCategoryBar { background: #000; }
-.coachToolsCategoryBtn { flex: 1; min-width: 68px; border: none; background: transparent; color: #aaa; border-radius: 9px; padding: 10px 6px; font-size: 11px; font-weight: 800; cursor: pointer; text-align: center; white-space: nowrap; }
+/* Nathan: "very congested tool bar... hitting the icon on top of the word"
+   -- icon-over-label stack (same .modeIcon/.modeLabel spans the Play tab's
+   own row already uses) instead of one wide inline "EMOJI Label" string,
+   so five categories fit a phone width comfortably instead of crowding/
+   truncating each other. overflow-x:auto above stays as a safety net for
+   an unusually long label or a future sixth category, not the primary fix. */
+.coachToolsCategoryBtn { flex: 1; min-width: 58px; border: none; background: transparent; color: #aaa; border-radius: 9px; padding: 8px 4px 7px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .coachToolsCategoryBtn.active { background: var(--bengal-orange, #e0201a); color: #fff; }
 .coachToolsModuleTabs { display: flex; gap: 4px; border-bottom: 2px solid var(--line); margin-bottom: 12px; overflow-x: auto; }
 .coachToolsModuleTab { border: none; background: transparent; color: var(--muted); padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; margin-bottom: -2px; }
