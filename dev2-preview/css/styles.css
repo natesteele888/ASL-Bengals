@@ -2926,13 +2926,25 @@ html.gameHudPreview header {
   background: #0c0d0f;
   border-bottom: none;
 }
+/* Nathan: "this straight up looks awful" (a flat, muddy 2-stop wedge with
+   a shallow, lazy-looking cut, sitting flush against the logo with no
+   separation). Redesigned, not just recolored: a steeper, more confident
+   angle with real breathing room from the wordmark; a bright leading
+   highlight fading into a deeper orange (reads as a lit, faceted panel
+   catching light along its edge, not a flat paint fill); and a subtle
+   repeating diagonal hairline texture riding the SAME angle, echoing the
+   yard-line/turf motif this app's own gameday splash background already
+   uses elsewhere -- ties this HUD accent to the gridiron brand instead of
+   being an arbitrary shape. */
 html.gameHudPreview header::before {
   content: '';
   position: absolute;
   top: 0; right: 0;
-  width: 46%; height: 100%;
-  background: linear-gradient(100deg, #ff6a13 0%, #e0570a 100%);
-  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0% 100%);
+  width: 44%; height: 100%;
+  background:
+    repeating-linear-gradient(100deg, rgba(255,255,255,.08) 0 1px, transparent 1px 14px),
+    linear-gradient(100deg, #fff 0%, #ff9142 6%, #ff6a13 42%, #c1440a 100%);
+  clip-path: polygon(38% 0, 100% 0, 100% 100%, 14% 100%);
   pointer-events: none;
 }
 html.gameHudPreview .headerRow { position: relative; z-index: 1; }
@@ -2949,9 +2961,14 @@ html.gameHudPreview .topSections {
   background: #0c0d0f;
   border-bottom: 4px solid #ff6a13;
 }
+/* Was a full solid-orange fill -- a second large orange block sitting
+   directly under the header's own new orange accent, the two competing
+   instead of reading as one HUD. Matched to .modeTabs .modeBtn.active's
+   own, already-correct treatment just below (a translucent wash + a
+   crisp underline), so both nav rows read as one consistent language. */
 html.gameHudPreview .topSections .modeBtn.active {
-  color: #17181a;
-  background: #ff6a13;
+  color: #fff;
+  background: rgba(255,106,19,.16);
   border-bottom-color: #ff6a13;
 }
 
