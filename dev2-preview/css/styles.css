@@ -2926,25 +2926,24 @@ html.gameHudPreview header {
   background: #0c0d0f;
   border-bottom: none;
 }
-/* Nathan: "this straight up looks awful" (a flat, muddy 2-stop wedge with
-   a shallow, lazy-looking cut, sitting flush against the logo with no
-   separation). Redesigned, not just recolored: a steeper, more confident
-   angle with real breathing room from the wordmark; a bright leading
-   highlight fading into a deeper orange (reads as a lit, faceted panel
-   catching light along its edge, not a flat paint fill); and a subtle
-   repeating diagonal hairline texture riding the SAME angle, echoing the
-   yard-line/turf motif this app's own gameday splash background already
-   uses elsewhere -- ties this HUD accent to the gridiron brand instead of
-   being an arbitrary shape. */
+/* Round 2 -- the first redesign (a wedge with a leading highlight and a
+   repeating hairline texture) ALSO missed: Nathan, on mobile, still
+   "hate[s] the look... the slanted b[ar] with grid background and weird
+   gradient." Simplified hard instead of tuning the same idea again --
+   dropped the multi-stop custom gradient and the hairline texture
+   entirely (the "grid"), and switched from a wide wedge (two diagonal-
+   ish edges, reading as its own busy shape) to a single clean corner
+   triangle -- one diagonal edge, flat fill, the same --bengal-orange ->
+   --bengal-orange-dark two colors every button/badge elsewhere in the
+   app already uses, not a bespoke gradient invented just for this
+   header. Confident because it's simple, not because it's elaborate. */
 html.gameHudPreview header::before {
   content: '';
   position: absolute;
   top: 0; right: 0;
-  width: 44%; height: 100%;
-  background:
-    repeating-linear-gradient(100deg, rgba(255,255,255,.08) 0 1px, transparent 1px 14px),
-    linear-gradient(100deg, #fff 0%, #ff9142 6%, #ff6a13 42%, #c1440a 100%);
-  clip-path: polygon(38% 0, 100% 0, 100% 100%, 14% 100%);
+  width: 55%; height: 100%;
+  background: linear-gradient(135deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 100%);
+  clip-path: polygon(58% 0, 100% 0, 100% 100%);
   pointer-events: none;
 }
 html.gameHudPreview .headerRow { position: relative; z-index: 1; }
@@ -3039,8 +3038,18 @@ html.gameHudPreview #editPlaysMode .hint {
 }
 /* The shared toggle pill (Wing/Dir/Motion/etc, also reused by Play Calls'
    per-card toggles) keeps its white sliding thumb in every theme -- that's
-   what the pressed color (--toggle-color) contrasts against, and it
-   already reads fine sitting on a dark track. Only the resting track tint
+   what the pressed color (--toggle-color) is SUPPOSED to contrast
+   against. Real bug, found live (Nathan, on mobile: "When a Wing L or
+   Wing R toggle is set to Wing L, the pill is completely white with no
+   visible text on the selected side") -- this rule's own claim that the
+   pressed state "already reads fine" was wrong: `html.gameHudPreview
+   .toggle-group .toggle-btn` (1 element + 3 classes) is MORE specific
+   than the base stylesheet's own `.toggle-group .toggle-btn[aria-
+   pressed="true"]` (2 classes + 1 attribute, no element) despite that
+   base rule being the one written to target the pressed state
+   specifically -- so this translucent-white color silently overrode it
+   for EVERY button, selected or not, putting near-white text on the
+   thumb's own solid white background. Only the resting track tint
    needed a bump: the light-mode tint values (e.g. rgba(0,0,0,.06)) are
    nearly invisible against a dark card. */
 html.gameHudPreview .toggle-group {
@@ -3048,5 +3057,8 @@ html.gameHudPreview .toggle-group {
 }
 html.gameHudPreview .toggle-group .toggle-btn {
   color: rgba(255,255,255,.4);
+}
+html.gameHudPreview .toggle-group .toggle-btn[aria-pressed="true"] {
+  color: var(--toggle-color, #17181a);
 }
 
