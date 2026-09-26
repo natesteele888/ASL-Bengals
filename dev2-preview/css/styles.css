@@ -2920,40 +2920,45 @@ html.gameHudPreview .headerRow,
 html.gameHudPreview .headerRow h1,
 html.gameHudPreview .headerRow p { font-family: 'Barlow', -apple-system, sans-serif; }
 
+/* Round 3 -- two straight rejections of a diagonal orange accent shape in
+   this header (a wide textured wedge, then a simplified corner triangle):
+   "looks worse - It shouldnt be a weird orange wedge there." Not a third
+   variant of the same idea -- removed the shape entirely. Plain dark
+   chrome (matching the header's own real, live default -- header{} is
+   already black in both light/dark mode) let the typography (Anton/
+   Barlow) and the dark nav below actually carry the HUD feel, instead of
+   a shape competing for attention that's been wrong twice running. */
 html.gameHudPreview header {
   position: relative;
-  overflow: hidden;
   background: #0c0d0f;
   border-bottom: none;
 }
-/* Round 2 -- the first redesign (a wedge with a leading highlight and a
-   repeating hairline texture) ALSO missed: Nathan, on mobile, still
-   "hate[s] the look... the slanted b[ar] with grid background and weird
-   gradient." Simplified hard instead of tuning the same idea again --
-   dropped the multi-stop custom gradient and the hairline texture
-   entirely (the "grid"), and switched from a wide wedge (two diagonal-
-   ish edges, reading as its own busy shape) to a single clean corner
-   triangle -- one diagonal edge, flat fill, the same --bengal-orange ->
-   --bengal-orange-dark two colors every button/badge elsewhere in the
-   app already uses, not a bespoke gradient invented just for this
-   header. Confident because it's simple, not because it's elaborate. */
-html.gameHudPreview header::before {
-  content: '';
-  position: absolute;
-  top: 0; right: 0;
-  width: 55%; height: 100%;
-  background: linear-gradient(135deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 100%);
-  clip-path: polygon(58% 0, 100% 0, 100% 100%);
-  pointer-events: none;
-}
 html.gameHudPreview .headerRow { position: relative; z-index: 1; }
+/* Jersey-style wordmark, round 2 -- Nathan sent a real "BENGALS" decal photo
+   (block letters, cut corners, black fill, thick orange outline) and asked
+   for that lettering in place of the plain Anton title. Big Shoulders Text is
+   Google's small-size-tuned cut of a bold condensed American signage family --
+   the closest free font to that decal weight/bluntness. No CSS property can
+   literally bevel a glyph's corners, so the "cut" feel comes from the shape
+   itself plus a hard outline, not true 45-degree chamfers. Colors are
+   inverted from the photo (orange fill / thin black stroke, not black fill /
+   thick orange outline) on purpose -- a literal black fill would vanish into
+   this header's own near-black background (#0c0d0f); the fill has to carry
+   the contrast, so orange leads and black is just the edge. */
 html.gameHudPreview .headerRow h1 {
-  font-family: 'Anton', sans-serif; text-transform: uppercase;
-  font-weight: 400; letter-spacing: .01em;
+  font-family: 'Big Shoulders Text', 'Anton', sans-serif;
+  font-weight: 800; text-transform: uppercase; letter-spacing: -.01em;
+  color: var(--bengal-orange);
+  -webkit-text-stroke: 1px var(--bengal-black);
+  paint-order: stroke fill;
+  text-shadow:
+    1px 0 0 var(--bengal-black), -1px 0 0 var(--bengal-black),
+    0 1px 0 var(--bengal-black), 0 -1px 0 var(--bengal-black),
+    0 2px 3px rgba(0,0,0,.5);
 }
 html.gameHudPreview .headerRow p {
-  font-family: 'Anton', sans-serif; text-transform: uppercase;
-  color: #ffb37a; letter-spacing: .12em;
+  font-family: 'Barlow', sans-serif; font-weight: 700;
+  text-transform: uppercase; color: #ffb37a; letter-spacing: .14em;
 }
 
 html.gameHudPreview .topSections {
