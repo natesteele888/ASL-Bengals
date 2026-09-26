@@ -4429,7 +4429,25 @@ function buildPlayTile(combo, formationId, onOpen) {
   cap.appendChild(pill);
   tile.appendChild(cap);
 
-  tile.addEventListener('click', onOpen);
+  // Real bug, found live: Nathan -- "if I click on the image of the play,
+  // it doesn't do anything, I have to tap the name of the play." Root
+  // cause: renderCardDiagram (shared with the real, interactive card)
+  // unconditionally wires each player circle's own click handler to
+  // stopPropagation() and dispatch a "playerclick" event, for the
+  // interactive card's own "tap a player to highlight them" feature --
+  // this tile-sized preview never listens for that event, so a tap
+  // landing on one of the (fairly large, densely packed) circles just
+  // silently died there instead of ever reaching this tile's own click
+  // listener, while a tap on the empty diagram background or the name/
+  // caption (neither of which has a circle in the way) worked fine.
+  // Listening on the CAPTURE phase fires this handler on the way DOWN,
+  // before the event ever reaches a circle's own bubble-phase listener --
+  // so it always runs regardless of whether something deeper later calls
+  // stopPropagation(), without needing to touch renderCardDiagram itself
+  // (and risk the real card's own, actually-wanted player-select
+  // behavior) or thread a new "is this interactive" flag through every
+  // one of its many call sites.
+  tile.addEventListener('click', onOpen, true);
   return tile;
 }
 
