@@ -1,0 +1,351 @@
+// ---------------------------------------------------------------------------
+// Coach Tools top CTAs -- Nathan: "I don't like how it's all in one list, it
+// should be tabs at the top or CTAs at the top that shows the different
+// sections like Resources... Then theres at stats section..." Switches
+// between the Coach Tools panels and lazy-inits each panel's own module the
+// first time it's shown.
+//
+// Nathan (follow-up): "there needs to be more organization there. I often
+// find myself searching for things and callouts that I know exist but don't
+// know where to find them sometimes." Twelve tabs in one flat row was
+// exactly the "all in one list" problem he originally flagged, just moved
+// down a level -- this groups them into five categories a coach would
+// actually think in (Game Day / Team / Data / Library / Admin) and adds a
+// search box that jumps straight to a tab by name regardless of which
+// category it's filed under, for exactly the "I know it exists, I just
+// can't find it" moment.
+// ---------------------------------------------------------------------------
+(function () {
+
+  const TABS = [
+    // Nathan (2026-09-25): "Admin is never touched. Resources isn't used,
+    // we never print stat sheets or print the playbook. Updates in Library
+    // section doesn't get updated... let's revamp it a bit so it's easier
+    // to navigate." Resources/Updates/How To all get `hidden: true` below
+    // (filtered out of visibleTabs(), same instant-rollback spirit as the
+    // old Formation Builder/Create-a-Play panels when Play Builder V2
+    // replaced them -- unlinked from the nav, not deleted, so restoring any
+    // one of them is a one-line flip back if that call turns out wrong).
+    // Settings survives -- it holds the real, still-used "See the app as a
+    // player sees it" preview toggle and drone-visibility switch -- just
+    // moves out of the now-empty Admin category into Library, which is why
+    // Admin itself is gone from CATEGORIES below (a whole category bar
+    // button for zero visible tabs would be its own kind of clutter).
+    { key: 'resources', label: '🖨️ Resources', category: 'library', panel: 'coachResourcesPanel', init: () => window.initCoachToolsPrint && window.initCoachToolsPrint(), hidden: true },
+    // Nathan: "a place where I can copy standing from the coaches app and
+    // drop it directly into a field under Coaching Tools to paste in to
+    // update the standings." See js/standings.js -- also feeds the
+    // read-only Standings top-level tab everyone sees.
+    { key: 'standings', label: '🏆 Standings', category: 'data', panel: 'coachStandingsPanel', init: () => window.initCoachToolsStandings && window.initCoachToolsStandings() },
+    // Nathan: "I need to be able to copy all the information from the
+    // coaches site and extract the game schedule with field, kickoff time,
+    // arrival time and other details needed... Would be great for this to
+    // just go into the site without manually extracting out the info." See
+    // js/schedule-import.js -- same paste-box pattern as Standings above,
+    // feeds straight into the Schedule tab everyone sees.
+    { key: 'scheduleimport', label: '📅 Schedule Import', category: 'data', panel: 'coachScheduleImportPanel', init: () => window.initCoachToolsScheduleImport && window.initCoachToolsScheduleImport() },
+    { key: 'stats', label: '📊 Stats', category: 'data', panel: 'coachStatsPanel', init: () => window.initCoachToolsStats && window.initCoachToolsStats(), minAccess: 'coach' },
+    { key: 'dashboard', label: '📈 Dashboard', category: 'data', panel: 'coachDashboardPanel', init: () => window.initCoachToolsDashboard && window.initCoachToolsDashboard() },
+    // Nathan: "add a coaching staff section to go with the roster so we can
+    // link log ins to coaches" -- js/coaching-staff.js, rendered right below
+    // Team Roster in the same panel (see coachingStaffWrap in index.html).
+    { key: 'roster', label: '👥 Roster', category: 'team', panel: 'coachRosterPanel', init: () => {
+      window.initTeamRoster && window.initTeamRoster(document.getElementById('coachRosterWrap'));
+      window.initCoachingStaff && window.initCoachingStaff(document.getElementById('coachingStaffWrap'));
+    } },
+    // Nathan: "create another tab under coaching tools for Depth Chart...
+    // name and number with + or - to add or remove guys" (from a Madden
+    // Lineup screenshot) -- js/depth-chart.js. +/- reorders each position's
+    // depth list only; it doesn't touch the master roster above.
+    { key: 'depthchart', label: '📋 Depth Chart', category: 'team', panel: 'coachDepthChartPanel', init: () => window.initDepthChart && window.initDepthChart() },
+    { key: 'drivescripts', label: '🧢 Drive Scripts', category: 'gameday', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
+    // Nathan: "make it so any drone videos added are in a Film Vault tab in
+    // Coaches Tools - they should be categorized by alphabetical order since
+    // they are written by play" + "have that be searchable to narrow the
+    // list." See js/drone-footage.js's Film Vault section for the render/
+    // search/sort logic -- this just gives it a tab like everything else here.
+    { key: 'filmvault', label: '🎬 Film Vault', category: 'library', panel: 'coachFilmVaultPanel', init: () => window.initFilmVault && window.initFilmVault() },
+    // Nathan: "make sure that the notes that were added to the What's New
+    // can be added at any time by a coach in the Coach Tools block" -- the
+    // Houston route note was a one-off migration script; this tab is the
+    // real, repeatable version of that. Unlinked 2026-09-25 (see the
+    // Resources comment above) -- "Updates... doesn't get updated."
+    { key: 'updates', label: '📣 Updates', category: 'library', panel: 'coachUpdatesPanel', init: () => window.initCoachToolsUpdates && window.initCoachToolsUpdates(), hidden: true },
+    // Nathan: "Drone footage visible toggle should come out of Dashboard
+    // and have a new pill called settings with that and other toggles to
+    // turn on and off visibility to groups." Moved from its own Admin
+    // category into Library 2026-09-25 -- still real, still used (this is
+    // where window.enterPlayerPreview's "See the app as a player sees it"
+    // button lives), just no longer worth a whole top-level category for
+    // one tab once How To/Resources/Updates are gone.
+    { key: 'settings', label: '⚙️ Settings', category: 'library', panel: 'coachSettingsPanel', init: () => window.initCoachToolsSettings && window.initCoachToolsSettings() },
+    // Nathan: "Develop a how to section in the coaching tools... walkthrough
+    // explanations of how to do things such as add another login to your
+    // device, save the app as an app on your phone home screen." See
+    // js/coachtools-howto.js. Unlinked 2026-09-25 -- "Admin is never
+    // touched."
+    { key: 'howto', label: '❓ How To', category: 'library', panel: 'coachHowToPanel', init: () => window.initCoachToolsHowTo && window.initCoachToolsHowTo(), hidden: true },
+    // Nathan: "we can't have two places - work to combine the i form and
+    // all formation creation, formation edits, play creation and play
+    // edits all in one. This needs to be correct." Replaces the two
+    // separate entries this category used to hold (Formation Builder,
+    // Create a Play) -- js/coachtools-playbuilder.js's own panel now
+    // covers both jobs on one screen (a Plays/Formations switch inside
+    // it), plus play VARIANTS, a ball path editor, and a signal picker
+    // none of the old tools had. Doesn't get minAccess:'coach' -- this
+    // rewrites the team's actual plays and formations, so it stays
+    // approvedCoach-only like Roster/Depth Chart/Settings, not broadened
+    // like Stats. The two old tools this replaced (formerly
+    // js/coachtools-formationbuilder.js, js/coachtools-createplay.js) were
+    // kept unlinked-but-loaded for a while as an instant-rollback safety
+    // net, then actually deleted once Play Builder V2 had proven itself
+    // through this whole session -- gone from the scripts array too, not
+    // just unrouted.
+    { key: 'playbuilder', label: '🧩 Play Builder', category: 'plays', panel: 'coachPlayBuilderPanel', init: () => window.initCoachPlayBuilder && window.initCoachPlayBuilder() },
+    // Self-serve "add a signal card" tool -- Nathan: "in the future, if I
+    // need to add more signals, is there a path to do that?" Stores the
+    // photo directly in the card's own Firebase record (a data: URI, not
+    // a separate static file), so adding one here is live immediately,
+    // everywhere, with no git commit/deploy step, unlike the manual path
+    // used earlier this session for card #33.
+    { key: 'signalsadmin', label: '📇 Signal Cards', category: 'plays', panel: 'coachSignalsAdminPanel', init: () => window.initCoachSignalsAdmin && window.initCoachSignalsAdmin() },
+  ];
+
+  const CATEGORIES = [
+    { key: 'gameday', label: '🏈 Game Day' },
+    { key: 'team', label: '👥 Team' },
+    { key: 'data', label: '📈 Data & Stats' },
+    { key: 'plays', label: '🧩 Play Design' },
+    { key: 'library', label: '📚 Library' },
+  ];
+
+  // Nathan: "I want this to be tied into Coach Nate profile... for now."
+  // Same per-person check as the Games tab's Keep Stats CTA (js/
+  // schedule.js) -- these are new, still-being-worked-out tools, scoped to
+  // just Nate's own session rather than every coach who shares the team
+  // coach code.
+  function isCoachNateSession() {
+    if (!window.isCoachSession) return false;
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+    const name = session && session.name ? session.name.trim().toLowerCase() : '';
+    return name === 'coach nate';
+  }
+  // Nathan: "this whole project is really a series of mini apps that work
+  // together." These are separate standalone pages (not Coach Tools panels
+  // like everything else here), so they're real links, not tab switches --
+  // kept visually distinct from the TABS chips below rather than mixed in
+  // as if they were one of them.
+  const GAME_DAY_LINKS = [
+    { label: '🧙 Game Wizard', href: 'game-wizard.html' },
+    { label: '📋 Stat Keeper', href: 'stat-keeper.html' },
+    { label: '🎬 Game Playback', href: 'game-playback.html' },
+  ];
+
+  let activeCategory = 'gameday';
+  let activeTab = 'resources';
+  let searchQuery = '';
+
+  // Reaching this whole Coach Tools tab already requires approvedCoach
+  // (see study-quiz.js's refreshCoachToolsVisibility) -- everyone who gets
+  // this far is one of the 5 named coaches by default. minAccess:'coach'
+  // is the one, explicit exception: a tab a coach can reach just by
+  // having the team's shared coach code, not by being one of the 5 named
+  // profiles. Nathan: "Be sure Stats and Tendencies are visible to the
+  // other coaches logged in" -- scoped to Stats specifically for now
+  // (Tendencies lives inside it, in coachtools-stats.js's own sub-nav, so
+  // it comes along automatically); every other tab here still defaults to
+  // approvedCoach-only, unchanged, since most of them (Schedule Import,
+  // Roster, Depth Chart, Settings, etc.) are editing/data-entry tools
+  // Nathan didn't ask to open more broadly. One centralized filter here
+  // (rather than checking per render-site) so a restricted tab can't be
+  // found through the search box even if it's hidden from category
+  // browsing.
+  function visibleTabs() {
+    const approvedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    const base = approvedCoach ? TABS : TABS.filter(t => t.minAccess === 'coach');
+    // hidden:true tabs (Resources/Updates/How To, 2026-09-25 -- see their
+    // own comments above) stay in TABS itself -- their panels/init still
+    // exist and openCoachToolsTab(key) would still find them -- just
+    // filtered out of every real UI surface (category browsing AND the
+    // search box) here in this one shared place.
+    return base.filter(t => !t.hidden);
+  }
+
+  function tabsForCategory(catKey) { return visibleTabs().filter(t => t.category === catKey); }
+
+  function renderNav() {
+    const nav = document.getElementById('coachToolsSubNav');
+    if (!nav) return;
+    nav.innerHTML = '';
+
+    // ---- Search box -- typing jumps straight to a matching tab by name,
+    // regardless of which category it's filed under. ----
+    const searchWrap = document.createElement('div');
+    searchWrap.style.cssText = 'margin-bottom:10px;';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.value = searchQuery;
+    searchInput.placeholder = '🔍 Search Coach Tools…';
+    searchInput.style.cssText = 'width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;';
+    searchInput.addEventListener('input', () => { searchQuery = searchInput.value; renderNav(); });
+    searchWrap.appendChild(searchInput);
+    nav.appendChild(searchWrap);
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      // Search mode: flat list of every matching tab, category label shown
+      // as a small tag so it's still obvious where each result normally
+      // lives -- helps build the mental map for next time, not just this
+      // one lookup.
+      const matches = visibleTabs().filter(t => t.label.toLowerCase().indexOf(q) !== -1);
+      const resultsWrap = document.createElement('div');
+      resultsWrap.className = 'gameplanPickerGrid';
+      if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'color:#999;font-size:13px;padding:6px 2px;';
+        empty.textContent = 'No matches.';
+        resultsWrap.appendChild(empty);
+      } else {
+        matches.forEach(t => {
+          const catLabel = (CATEGORIES.find(c => c.key === t.category) || {}).label || '';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'gameplanChip' + (activeTab === t.key ? ' active' : '');
+          btn.textContent = t.label + (catLabel ? ' · ' + catLabel.replace(/^\S+\s/, '') : '');
+          btn.addEventListener('click', () => { searchQuery = ''; activeCategory = t.category; setActiveTab(t.key); });
+          resultsWrap.appendChild(btn);
+        });
+      }
+      nav.appendChild(resultsWrap);
+      return;
+    }
+
+    // ---- Normal mode: category BAR (level 1, visually distinct dark
+    // bar), then that category's own tabs (level 2, existing muted
+    // sub-panel). See the styles.css comment on .coachToolsCategoryBar
+    // for why these two tiers now look deliberately different instead of
+    // both being plain pills. ----
+    const catRow = document.createElement('div');
+    catRow.className = 'coachToolsCategoryBar';
+    // Only show a category button if it actually has at least one visible
+    // tab -- for a non-approved coach (currently just sees 'stats' under
+    // 'data'), every other category would otherwise render as a real,
+    // clickable button that throws when clicked (tabsForCategory(...)[0]
+    // on an empty array), since visibleTabs() can now legitimately return
+    // nothing for a whole category.
+    CATEGORIES.filter(c => tabsForCategory(c.key).length > 0).forEach(c => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'coachToolsCategoryBtn' + (activeCategory === c.key ? ' active' : '');
+      // Nathan: "very congested tool bar... hitting the icon on top of the
+      // word" -- same icon-over-label stack index.html's own .modeBtn/
+      // .modeIcon/.modeLabel already uses for the Play tab's row (built for
+      // the exact same "six things, narrow phone" problem), reused here
+      // instead of a new pattern. Every CATEGORIES label is authored as
+      // "EMOJI Rest Of Label" already, so splitting on the first space is
+      // enough -- no separate icon field needed on the data itself.
+      const spaceIdx = c.label.indexOf(' ');
+      const icon = document.createElement('span');
+      icon.className = 'modeIcon';
+      icon.textContent = spaceIdx === -1 ? c.label : c.label.slice(0, spaceIdx);
+      const text = document.createElement('span');
+      text.className = 'modeLabel';
+      text.textContent = spaceIdx === -1 ? '' : c.label.slice(spaceIdx + 1);
+      btn.appendChild(icon);
+      btn.appendChild(text);
+      // Nathan: "The Resources CTAs still show on every tab." Real bug --
+      // this only ever changed activeCategory and re-rendered the NAV
+      // (which tab buttons are listed), it never actually switched the
+      // active PANEL. So whatever was last open (Resources, by default,
+      // since that's this whole app's starting tab) just kept showing
+      // underneath the newly-selected category's own buttons, mixed
+      // together -- which is exactly the "jumbled, weird hierarchy" this
+      // produces regardless of which category gets clicked. Jumping to
+      // that category's first real tab actually swaps the visible panel.
+      btn.addEventListener('click', () => { setActiveTab(tabsForCategory(c.key)[0].key); });
+      catRow.appendChild(btn);
+    });
+    nav.appendChild(catRow);
+
+    const activeCategoryLabel = (CATEGORIES.find(c => c.key === activeCategory) || {}).label || '';
+    const subPanel = document.createElement('div');
+    subPanel.className = 'coachToolsSubPanel';
+    const subLabel = document.createElement('div');
+    subLabel.className = 'coachToolsSubPanelLabel';
+    subLabel.textContent = 'In ' + activeCategoryLabel.replace(/^\S+\s/, '') + ':';
+    subPanel.appendChild(subLabel);
+    const tabRow = document.createElement('div');
+    tabRow.className = 'gameplanPickerGrid';
+    tabsForCategory(activeCategory).forEach(t => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gameplanChip coachToolsSubChip' + (activeTab === t.key ? ' active' : '');
+      btn.textContent = t.label;
+      btn.addEventListener('click', () => setActiveTab(t.key));
+      tabRow.appendChild(btn);
+    });
+    subPanel.appendChild(tabRow);
+    nav.appendChild(subPanel);
+
+    if (activeCategory === 'gameday' && isCoachNateSession()) {
+      const linkRow = document.createElement('div');
+      linkRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed #444;';
+      const note = document.createElement('div');
+      note.style.cssText = 'width:100%;font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;';
+      note.textContent = 'Live Game Tools (separate apps)';
+      linkRow.appendChild(note);
+      GAME_DAY_LINKS.forEach(l => {
+        const a = document.createElement('a');
+        a.href = l.href;
+        a.className = 'gameplanChip';
+        a.style.textDecoration = 'none';
+        a.textContent = l.label;
+        linkRow.appendChild(a);
+      });
+      nav.appendChild(linkRow);
+    }
+  }
+
+  function setActiveTab(key) {
+    activeTab = key;
+    const tab = TABS.find(t => t.key === key);
+    if (tab) activeCategory = tab.category;
+    TABS.forEach(t => {
+      const panel = document.getElementById(t.panel);
+      if (panel) panel.style.display = t.key === key ? '' : 'none';
+    });
+    renderNav();
+    if (tab) tab.init();
+  }
+
+  window.initCoachToolsNav = function () {
+    renderNav();
+    // Team roster is used by both the Roster tab and stat entry's
+    // auto-seed -- load it once up front regardless of which tab opens
+    // first, so it's ready by the time Stats needs it.
+    if (window.loadTeamRoster && !window.isTeamRosterLoaded()) window.loadTeamRoster();
+    // The hardcoded 'resources' default isn't in visibleTabs() for a
+    // non-approved coach (only 'stats' is, for now) -- landing there
+    // anyway wouldn't crash (setActiveTab still finds it in the raw TABS
+    // list), but it'd show a panel with no matching nav highlight, since
+    // renderNav() only ever lists what's actually visible. Falling back
+    // to the first genuinely visible tab keeps first open coherent.
+    const startTab = TABS.find(t => t.key === activeTab && visibleTabs().includes(t))
+      ? activeTab : (visibleTabs()[0] && visibleTabs()[0].key);
+    if (startTab) setActiveTab(startTab);
+  };
+
+  // Deep-link straight into a specific Coach Tools tab -- used by the
+  // header logo's 5-tap shortcut (see study-quiz.js) to jump right to
+  // Dashboard instead of just landing on the Coach Tools section's default
+  // tab. Switching the top-level section (window.setSection, defined in
+  // study-quiz.js) re-runs initCoachToolsNav(), which reads activeTab back
+  // out -- setting it here first is what makes that land on the right tab.
+  window.openCoachToolsTab = function (key) {
+    activeTab = key;
+    const tab = TABS.find(t => t.key === key);
+    if (tab) activeCategory = tab.category;
+    if (window.setSection) window.setSection('coachtools');
+    else setActiveTab(key);
+  };
+})();

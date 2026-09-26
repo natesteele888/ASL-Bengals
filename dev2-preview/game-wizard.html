@@ -1,0 +1,2488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASL Bengals — Keep Stats</title>
+<!--
+  Nathan: "I want to see about reconfiguring the STATKEEPER so it is more
+  like the GameChanger game logging where its more of a wizard choosing
+  the play... So again, it's like a wizard leading you through the
+  selections. The STATKEEPER site will eventually become the back end
+  tool to fine tune game details if they were entered wrong. Will add
+  more to the plan as we go."
+
+  This is PHASE 1 of that plan, not the whole thing: Confirm Starters →
+  Coin Toss → Opening Kickoff, then a handoff into stat-keeper.html for
+  the rest of the game (the snap-by-snap wizard -- formation/play/
+  direction/motion-counter-boot tags, auto down & distance, timeouts,
+  quarter-end events, a live searchable box score -- is the planned next
+  phase, deliberately not attempted here untested in one shot).
+
+  Everything this DOES write goes into the exact same statKeeperLogs/
+  {gameId} shape stat-keeper.html and game-playback.html already read --
+  a kickoff logged here is a real Stat Keeper play, editable there and
+  visible in a replay, not a separate parallel data format.
+
+  Duplicates rather than imports helpers from stat-keeper.html/
+  game-playback.html, same reason those duplicate from each other: no
+  build step or shared module system in this project.
+-->
+<style>
+  :root{ --console:#1b1f26; --line-bright:#2c333d; --dim:#9aa4ae; --dim2:#6b7480; --cyan:#3ddcff; --orange:#ff8a3d; --bengal-orange:#ff6a13; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0e13;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding-bottom:60px}
+  .topBar{padding:14px 16px 10px;border-bottom:1px solid var(--line-bright);position:sticky;top:0;background:#0b0e13;z-index:5}
+  .topBar h1{margin:0 0 10px;font-size:15px;font-weight:800;letter-spacing:.02em}
+  select#gameSelect{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line-bright);background:var(--console);color:#fff;font-size:14px}
+  #loadStatus{font-size:11px;color:var(--dim2);margin-top:6px;text-align:center;min-height:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:0 14px}
+  .stepDots{display:flex;justify-content:center;gap:8px;margin:16px 0}
+  .stepDot{width:8px;height:8px;border-radius:50%;background:var(--line-bright)}
+  .stepDot.active{background:var(--cyan);width:20px;border-radius:4px}
+  .stepDot.done{background:var(--dim2)}
+  .card{background:var(--console);border:1px solid var(--line-bright);border-radius:14px;padding:18px;margin-bottom:14px}
+  .card h2{margin:0 0 4px;font-size:15px;font-weight:800}
+  .card .sub{font-size:12px;color:var(--dim2);margin-bottom:14px}
+  .groupSection{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 6px}
+  .starterRow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line-bright)}
+  .starterRow:last-child{border-bottom:none}
+  .starterRow .posLabel{font-size:11px;color:var(--dim2);width:70px;flex:0 0 auto}
+  .starterRow .starterName{font-size:14px;font-weight:700;flex:1}
+  .starterRow .starterName.empty{color:var(--dim2);font-weight:400;font-style:italic}
+  .swapBtn{padding:6px 12px;border-radius:8px;border:1px solid var(--line-bright);background:#12161c;color:var(--cyan);font-size:11px;font-weight:700;cursor:pointer}
+  .altList{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line-bright)}
+  .altChip{padding:6px 10px;border-radius:16px;border:1px solid var(--line-bright);font-size:12px;color:var(--dim);cursor:pointer}
+  .altChip:hover{color:#fff;border-color:var(--cyan)}
+  .chipRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  /* Nathan: "we are on the sideline, so show a field display so I can
+     choose left or right side." A real (if simple) field strip instead of
+     "Near end/Far end" text buttons -- standing on the actual sideline,
+     left/right relative to how you're already facing the field is
+     immediate; "near/far" makes you translate first. */
+  .sideFieldStrip{display:flex;height:64px;border-radius:10px;overflow:hidden;border:1px solid var(--line-bright);margin-top:4px}
+  .sideFieldHalf{flex:1;background:#1e5c2e;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;border:2px solid transparent;position:relative}
+  .sideFieldHalf:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px;background:repeating-linear-gradient(90deg,#1e5c2e 0,#1e5c2e 14px,#24692f 14px,#24692f 28px)}
+  .sideFieldHalf:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px;background:repeating-linear-gradient(90deg,#24692f 0,#24692f 14px,#1e5c2e 14px,#1e5c2e 28px)}
+  .sideFieldHalf.active{border-color:var(--cyan)}
+  .sideFieldHalf .sideLabel{font-family:inherit;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .sideFieldHalf .sideShield{font-size:20px;opacity:0;transition:opacity .15s}
+  .sideFieldHalf.active .sideShield{opacity:1}
+  .sideFieldMid{width:2px;background:rgba(255,255,255,.5)}
+  .optChip{padding:10px 16px;border-radius:10px;border:1px solid var(--line-bright);background:#12161c;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer;flex:1;text-align:center;min-width:100px}
+  .optChip.active{background:var(--cyan);color:#04222b;border-color:var(--cyan)}
+  .fieldLabel{font-size:11px;color:var(--dim2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+  .yardRow{display:flex;align-items:center;gap:8px}
+  .stepBtn{width:34px;height:34px;border-radius:8px;background:#12161c;border:1px solid var(--line-bright);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;user-select:none}
+  .yardRow input{width:60px;text-align:center;padding:8px;border-radius:8px;border:1px solid var(--line-bright);background:#12161c;color:#fff;font-size:14px}
+  .primaryBtn{width:100%;padding:14px;border-radius:10px;border:none;background:linear-gradient(135deg,#ff8a3d,#e0570a);color:#fff;font-size:14px;font-weight:800;cursor:pointer;margin-top:8px}
+  .primaryBtn[disabled]{opacity:.4;pointer-events:none}
+  .ghostBtn{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line-bright);background:transparent;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer;margin-top:8px}
+  .writeIn{width:100%;padding:10px;border-radius:8px;border:1px dashed var(--line-bright);background:#12161c;color:#fff;font-size:13px;margin-top:8px}
+  .summaryLine{font-size:13px;color:var(--dim);margin:6px 0}
+  .summaryLine b{color:#fff}
+  .emptyState{text-align:center;color:var(--dim2);padding:40px 20px;font-size:13px}
+  .handoffIcon{font-size:40px;text-align:center;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="topBar">
+  <div class="wrap">
+    <h1>🧙 Keep Stats — Game Setup</h1>
+    <select id="gameSelect"><option value="">— Sign in to load games —</option></select>
+    <div id="loadStatus"></div>
+  </div>
+</div>
+
+<div class="wrap" id="wizardWrap" style="display:none;">
+  <!-- Nathan: "Video is always visible in the top and should not start
+       over or reload when a play is saved." Lives OUTSIDE #stepArea on
+       purpose -- #stepArea gets wiped and rebuilt on every single
+       renderWizard() call (i.e. after every play logged), and the film
+       panel used to be built fresh inside it each time, tearing down and
+       recreating the <iframe> -- which is exactly what was restarting the
+       video on every save. This host is built once and just shown/hidden
+       from then on; the same iframe, mid-playback, stays alive underneath. -->
+  <div id="filmPanelHost" style="display:none;"></div>
+  <div class="stepDots" id="stepDots"></div>
+  <div id="stepArea"></div>
+</div>
+
+<div class="wrap" id="emptyWrap"><div class="emptyState">Pick a game above to start setting it up.</div></div>
+
+<script>
+(function(){
+  // ---------------------------------------------------------------------
+  // Ported verbatim from dev2/stat-keeper.html -- see that file's own
+  // comment for why this project duplicates rather than shares modules.
+  // ---------------------------------------------------------------------
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const FIREBASE_API_KEY = 'AIzaSyCBvobt9qfyLoJOGUz6fIiGrFKMEQFsA3E';
+  const COACH_CODE_HASH = 'fde7fd37696f9bc49c1e13a1dae70923a5ef1dec148e1ce16d5136519dac162d';
+  const SIGNUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
+  const SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+  const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const GATE_SESSION_KEY = 'bengalsGateSession';
+  const SAFETY_MARGIN_MS = 60000;
+  let authCache = null;
+  async function sha256Hex(text){
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function loadGateSession(){ try { return JSON.parse(localStorage.getItem(GATE_SESSION_KEY) || 'null'); } catch(e){ return null; } }
+  function saveGateSession(refreshToken){ try { localStorage.setItem(GATE_SESSION_KEY, JSON.stringify({refreshToken, kind:'coach'})); } catch(e){} }
+  function hasGateSession(){ const s = loadGateSession(); return !!(s && s.refreshToken); }
+  async function refreshIdToken(refreshToken){
+    const res = await fetch(REFRESH_URL, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}` });
+    if (!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
+    const data = await res.json();
+    return { idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: Date.now() + Number(data.expires_in)*1000 };
+  }
+  async function signInWithCoachGate(passwordHash){
+    const email = 'coach-gate@aslbengals.internal';
+    let res = await fetch(SIGNUP_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+    if (!res.ok){
+      const errBody = await res.json().catch(() => ({}));
+      const code = errBody.error && errBody.error.message;
+      if (code === 'EMAIL_EXISTS'){
+        res = await fetch(SIGNIN_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }) });
+        if (!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+      } else { throw new Error('Gate account setup failed: ' + (code || res.status)); }
+    }
+    const data = await res.json();
+    authCache = { idToken: data.idToken, refreshToken: data.refreshToken, expiresAt: Date.now() + Number(data.expiresIn)*1000 };
+    saveGateSession(authCache.refreshToken);
+    return authCache;
+  }
+  async function getFirebaseIdToken(){
+    if (authCache && authCache.expiresAt - SAFETY_MARGIN_MS > Date.now()) return authCache.idToken;
+    if (authCache && authCache.refreshToken){ authCache = await refreshIdToken(authCache.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    const saved = loadGateSession();
+    if (saved && saved.refreshToken){ authCache = await refreshIdToken(saved.refreshToken); saveGateSession(authCache.refreshToken); return authCache.idToken; }
+    throw new Error('Not signed in');
+  }
+  async function firebaseAuthedUrl(url){
+    const token = await getFirebaseIdToken();
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    return `${url}${sep}auth=${encodeURIComponent(token)}`;
+  }
+  async function ensureCoachAuth(){
+    if (hasGateSession()){ try { await getFirebaseIdToken(); return true; } catch(e){} }
+    let code = null;
+    try { code = prompt('Enter the coach code to set up this game:'); } catch(e){ return false; }
+    if (!code) return false;
+    const hash = await sha256Hex(code);
+    if (hash !== COACH_CODE_HASH){ alert('Incorrect code.'); return false; }
+    try { await signInWithCoachGate(hash); return true; } catch(e){ alert("Couldn't sign in: " + e.message); return false; }
+  }
+
+  function absoluteSpot(side, yard){
+    if (!side || yard === '' || yard == null) return null;
+    const y = Number(yard);
+    if (isNaN(y)) return null;
+    return side === 'OWN' ? y : (100 - y);
+  }
+  function spotLabelAbs(spot){
+    const y = Math.round(spot <= 50 ? spot : (100 - spot));
+    if (Math.round(spot) === 50) return 'Midfield (the 50)';
+    return (spot <= 50 ? 'OWN ' : 'OPP ') + y;
+  }
+  function clampSpot(v){ return Math.max(0, Math.min(100, v)); }
+  function spotLabel(side, yard){ if (!side || yard === '' || yard == null) return ''; return side + ' ' + yard; }
+  function asList(v){ if (Array.isArray(v)) return v.filter(Boolean); return v ? [v] : []; }
+  // Nathan (follow-up): "recent play history doesn't show anything -
+  // should show the same way it does in the Stat Keeper." Ported directly
+  // from stat-keeper.html/game-playback.html (both already had this)
+  // rather than the much thinner one-line summary the Recent Plays panel
+  // was using -- same descriptions, same spot/down-distance badges,
+  // everywhere a play gets shown in this file now.
+  function playRunTxt(p){
+    if (!p.playCall) return '';
+    const name = p.playCall === 'Other / Not Sure' ? (p.playCallOther || 'unknown call') : p.playCall;
+    return ' [Ran: ' + name + (p.playCallDir ? ' ' + p.playCallDir : '') + ']';
+  }
+  function formationTxt(p){ return p.formation ? ' ['+p.formation + (p.formationDir ? ' '+p.formationDir : '') +']' : ''; }
+  function coachCallTxt(p){
+    if (!p.coachCall) return '';
+    const name = p.coachCall === 'Other / Not Sure' ? (p.coachCallOther || 'unknown call') : p.coachCall;
+    return ' [Called: ' + name + (p.coachCallDir ? ' ' + p.coachCallDir : '') + ']';
+  }
+  function coachFormationTxt(p){ return p.coachFormation ? ' [Called formation: '+p.coachFormation + (p.coachFormationDir ? ' '+p.coachFormationDir : '') +']' : ''; }
+  function tackleTxt(p){
+    if (!p.tackler && !asList(p.assist).length) return '';
+    const assists = asList(p.assist);
+    if (!p.tackler) return ' · tackled by ' + assists.join(' + ') + ' (assist)';
+    return ' · tackled by ' + p.tackler + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : '');
+  }
+  function spotBadgeText(p){
+    if (p.startSide != null && p.endSide != null){
+      const a = spotLabel(p.startSide, p.startYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    if (p.catchSide != null && p.endSide != null){
+      const a = spotLabel(p.catchSide, p.catchYard), b = spotLabel(p.endSide, p.endYard);
+      if (!a || !b) return '';
+      return a === b ? a : (a + ' → ' + b);
+    }
+    if (p.spotSide != null) return spotLabel(p.spotSide, p.spotYard);
+    if (p.spot != null && !isNaN(p.spot)) return spotLabelAbs(p.spot);
+    return '';
+  }
+  function downDistBadgeText(p){
+    if (p.down == null || p.distance == null) return '';
+    return ['1st','2nd','3rd','4th'][p.down-1] + ' & ' + p.distance;
+  }
+  function describePlay(p){
+    if (p.type==='run'){
+      const isUsRun = p.runTeam !== 'Opponent';
+      const carrierTxt = isUsRun ? (p.carrier||'?') : ('Opponent' + (p.oppCarrier ? ' ('+p.oppCarrier+')' : ''));
+      const prefix = isUsRun ? '' : '🛡️ ';
+      const label = p.fumbledExchange ? 'Fumbled Exchange (not a rush attempt)' : 'Run';
+      return prefix + (p.td?'🏆 ':'') + label + ' — ' + carrierTxt + ', ' + p.yards + ' yds' +
+        (p.dir?' ('+p.dir+')':'') + (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') +
+        (isUsRun ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
+    }
+    if (p.type==='pass'){
+      const isUsPass = p.passTeam !== 'Opponent';
+      const passerTxt = isUsPass ? (p.passer||'?') : ('Opponent' + (p.oppPasser ? ' ('+p.oppPasser+')' : ''));
+      const targetTxt = isUsPass ? (p.target||'?') : (p.oppTarget || 'opponent');
+      const prefix = isUsPass ? '' : '🛡️ ';
+      if (p.result==='Incomplete'){
+        let reasonTxt = p.incReason ? ' (' + p.incReason + (p.incReason==='Broken Up' && p.pbuBy ? ' by '+p.pbuBy : '') + ')' : '';
+        return prefix + 'Pass — ' + passerTxt + ' incomplete to ' + targetTxt + reasonTxt + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+      }
+      if (p.result==='Sacked'){
+        return prefix + 'Pass — ' + passerTxt + ' sacked for ' + p.yards + ' yds' + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : '');
+      }
+      return prefix + (p.td?'🏆 ':'') + 'Pass — ' + passerTxt + ' to ' + targetTxt + ', ' + p.yards + ' yds' +
+        (p.firstDown?' · 1st down':'') + (p.td?' · TD':'') + (p.oob?' · out of bounds':'') + (isUsPass ? formationTxt(p) + playRunTxt(p) + coachFormationTxt(p) + coachCallTxt(p) : tackleTxt(p));
+    }
+    if (p.type==='kick'){
+      const isUsKick = p.kickTeam !== 'Opponent';
+      if (p.onside){
+        let base = (isUsKick ? '' : '🛡️ ') + '⚡ Onside Kick (' + (isUsKick?'Us':'Opponent') + ') — recovered by ' + (p.recoveredByTeam||'?') + (p.recoverPlayer ? ' ('+p.recoverPlayer+')' : '');
+        if (p.recoveredByTeam==='Us' && p.returner) base += ', ' + p.returner + ' brought it ' + (p.yards||0) + ' yds';
+        return base;
+      }
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const returnerTxt = isUsKick ? ('Opponent' + (p.oppReturner ? ' ('+p.oppReturner+')' : '')) : (p.returner||'?');
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      const kickDist = (startAbs != null && catchAbs != null) ? (isUsKick ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUsKick ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      let base = (isUsKick ? '' : '🛡️ ') + 'Kickoff (' + (isUsKick?'Us':'Opponent') + ')' + ', returned by ' + returnerTxt;
+      if (catchTxt) base += ', caught at '+catchTxt;
+      if (p.td) base += ' · 🏆 TD';
+      if (kickDist != null) base += ' · '+kickDist+' yd kick';
+      if (retYds != null) base += ' · '+retYds+' return yds';
+      return base;
+    }
+    if (p.type==='punt'){
+      const isUs = p.puntTeam !== 'Opponent';
+      const catchTxt = spotLabel(p.catchSide, p.catchYard);
+      const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+      const net = (startAbs != null && endAbs != null) ? (isUs ? (endAbs - startAbs) : (startAbs - endAbs)) : null;
+      const puntDist = (startAbs != null && catchAbs != null) ? (isUs ? (catchAbs - startAbs) : (startAbs - catchAbs)) : null;
+      const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
+      const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
+      let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss;
+      if (p.puntResult === 'Returned'){
+        if (isUs){
+          const puntAssists = asList(p.assist);
+          const tackleT = p.tackler ? ' · tackled by '+p.tackler+(puntAssists.length?' + '+puntAssists.join(' + ')+' (assist)':'') : '';
+          base += ', returned by ' + (p.oppReturner || 'opponent');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += tackleT;
+        } else {
+          base += ', returned by ' + (p.returner||'?');
+          if (catchTxt) base += ', caught at '+catchTxt;
+          base += (p.oppTackler ? ' · tackled by '+p.oppTackler : '');
+        }
+        if (p.td) base += ' · 🏆 TD';
+        if (puntDist != null) base += ' · '+puntDist+' yd punt';
+        if (retYds != null) base += ' · '+retYds+' return yds';
+      } else { base += ' (' + (p.puntResult||'?') + ')'; }
+      if (net != null) base += ' · net ' + net + ' yds';
+      return base;
+    }
+    if (p.type==='kneel'){
+      const isUsKneel = p.kneelTeam !== 'Opponent';
+      const qbTxt = isUsKneel ? (p.qb ? ' — '+p.qb : '') : (' — Opponent' + (p.oppQb ? ' ('+p.oppQb+')' : ''));
+      const lossTxt = (p.kneelType !== 'Spike' && p.kneelYards) ? ', -' + p.kneelYards + ' yds' : '';
+      return (isUsKneel ? '' : '🛡️ ') + '🕐 ' + (p.kneelType||'Kneel') + qbTxt + lossTxt;
+    }
+    if (p.type==='tackle'){
+      const assists = asList(p.assist);
+      const base = (!p.tackler && assists.length)
+        ? 'Tackle assist (rebuilt, no solo tackler known) — ' + assists.join(' + ')
+        : 'Tackle — ' + (p.tackler||'?') + (assists.length ? ' + '+assists.join(' + ')+' (assist)' : ' (solo)');
+      if (p.startSide != null && p.endSide != null){
+        const startAbs = absoluteSpot(p.startSide, p.startYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, false);
+        return base + ', ' + yards + ' yds' + (p.firstDown ? ' · Opponent 1st down' : '');
+      }
+      return base;
+    }
+    if (p.type==='defextra') return (p.td?'🏆 ':'') + (p.extraType||'?') + ' — ' + (p.player||'?') + (p.td?' · TD':'');
+    if (p.type==='turnover') return (p.td?'🏆 ':'') + 'Turnover (' + (p.toType||'?') + ') — lost by ' + (p.lostBy||'?') +
+      (p.recoveredBy ? ', recovered by '+p.recoveredBy : '') + (p.td?' · TD return':'') + (p.note ? ' — "'+p.note+'"' : '');
+    if (p.type==='score') return '🏆 ' + (p.scoreKind||'Score') + ' — ' + (p.scoreTeam||'Us') + (p.scorePlayer ? ' ('+p.scorePlayer+')' : '');
+    if (p.type==='penalty'){
+      const penName = (p.penType==='Other' && p.penOther) ? p.penOther : (p.penType||'Penalty');
+      const ydsTxt = p.declined ? 'declined' : (p.penYards||0)+' yds';
+      return '🚩 ' + penName + ' on ' + (p.penTeam||'?') + (p.penPlayer ? ' ('+p.penPlayer+')' : '') +
+        ', ' + ydsTxt + (p.firstDown ? ' · automatic 1st down' : '');
+    }
+    return 'Play';
+  }
+  function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+  function genId(){ return 'play_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+  // ---- Game/roster/depth chart loading ----
+  const gameSelect = document.getElementById('gameSelect');
+  const loadStatus = document.getElementById('loadStatus');
+  const wizardWrap = document.getElementById('wizardWrap');
+  const emptyWrap = document.getElementById('emptyWrap');
+  let liveGamesCache = [];
+  let liveRoster = [];
+  let depthGroups = [];
+  let selectedGame = null;
+
+  function populateGameSelect(){
+    gameSelect.innerHTML = '';
+    const topOpt = document.createElement('option'); topOpt.value=''; topOpt.textContent='— Select a game —';
+    gameSelect.appendChild(topOpt);
+    liveGamesCache.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(function(g){
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = (g.homeAway === 'Away' ? '@ ' : 'vs ') + (g.opponent || 'TBD') + (g.date ? ' — ' + g.date : '');
+      gameSelect.appendChild(opt);
+    });
+  }
+  function rosterByNum(){
+    const m = {};
+    liveRoster.forEach(function(p){ if (p && p.num != null) m[String(p.num)] = p; });
+    return m;
+  }
+  function playerLabel(p){ return p ? ('#' + p.num + ' ' + p.name) : null; }
+
+  gameSelect.addEventListener('change', function(){ loadGame(gameSelect.value); });
+
+  async function loadGame(gameId){
+    if (!gameId){ wizardWrap.style.display='none'; emptyWrap.style.display=''; return; }
+    selectedGame = liveGamesCache.find(function(g){ return g.id === gameId; }) || null;
+    if (!selectedGame){ loadStatus.textContent = 'Could not find this game.'; return; }
+    loadStatus.textContent = 'Checking for an existing log…';
+    let existingGameState = null;
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + gameId + '.json');
+      const res = await fetch(url);
+      existingGameState = res.ok ? await res.json() : null;
+    } catch(e){ /* fine to proceed without knowing -- worst case this just looks like a fresh game */ }
+    loadStatus.textContent = 'Loading roster & depth chart…';
+    try {
+      const rosterUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
+      const rosterRes = await fetch(rosterUrl);
+      liveRoster = rosterRes.ok ? (await rosterRes.json() || []) : [];
+      liveRoster = Array.isArray(liveRoster) ? liveRoster.filter(function(p){ return p && p.id; }) : [];
+      const depthUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/depthChart.json');
+      const depthRes = await fetch(depthUrl);
+      const depthData = depthRes.ok ? await depthRes.json() : null;
+      depthGroups = (depthData && Array.isArray(depthData.groups)) ? depthData.groups : [];
+    } catch(e){ loadStatus.textContent = '⚠️ Could not load roster/depth chart: ' + e.message; return; }
+    loadStatus.textContent = '';
+    wizardWrap.style.display = ''; emptyWrap.style.display = 'none';
+    wiz.state = { starters: {}, tossWinner: null, tossChoice: null, receivingTeam: null, endNote: null };
+    // Nathan: "If I use the wizard, will that redo the entire game over
+    // again? What is the best approach to amend the first game." Used to
+    // just ask "run through setup again?" and, either way, still made you
+    // walk Starters -> Coin Toss -> Kickoff before you could log a single
+    // play -- there was never an actual way to just pick up where an
+    // existing log left off. Now: any game with plays already on it stops
+    // at a resume screen instead of forcing the full setup again.
+    if (existingGameState && Array.isArray(existingGameState.plays) && existingGameState.plays.length){
+      wiz.resumeGameState = existingGameState;
+      wiz.step = 'resume';
+    } else {
+      wiz.step = 0;
+    }
+    renderWizard();
+  }
+
+  // ---- Wizard shell ----
+  const STEPS = ['Starters', 'Coin Toss', 'Kickoff', 'Playing'];
+  const wiz = { step: 0, state: {} };
+  function renderDots(){
+    if (wiz.step === 'resume' || wiz.step === 'audit' || wiz.step === 'quickEdit'){ document.getElementById('stepDots').innerHTML = ''; return; }
+    document.getElementById('stepDots').innerHTML = STEPS.map(function(_, i){
+      const cls = i === wiz.step ? 'active' : (i < wiz.step ? 'done' : '');
+      return '<div class="stepDot ' + cls + '"></div>';
+    }).join('');
+  }
+  function renderWizard(){
+    renderDots();
+    const area = document.getElementById('stepArea');
+    area.innerHTML = '';
+    // Nathan: "Video is always visible in the top." Shown for both the
+    // live play loop AND Audit Mode (the two screens actually about
+    // logging/reviewing plays against the film) -- hidden during one-time
+    // setup (Starters/Coin Toss/Kickoff/Resume), which isn't watching film
+    // yet. Showing/hiding never touches the iframe itself (see
+    // ensureFilmPanelBuilt above), so it's never mid-play when this runs.
+    const filmHost = document.getElementById('filmPanelHost');
+    const wantsFilm = (wiz.step === 'audit' || wiz.step === 'quickEdit' || (typeof wiz.step === 'number' && wiz.step === 3));
+    if (wantsFilm && selectedGame) ensureFilmPanelBuilt();
+    filmHost.style.display = wantsFilm ? '' : 'none';
+    if (wiz.step === 'resume') renderResumeStep(area);
+    else if (wiz.step === 'audit') renderAuditStep(area);
+    else if (wiz.step === 'quickEdit') renderQuickEditStep(area);
+    else if (wiz.step === 0) renderStartersStep(area);
+    else if (wiz.step === 1) renderCoinTossStep(area);
+    else if (wiz.step === 2) renderKickoffStep(area);
+    else renderPlayLoopStep(area);
+  }
+
+  // Nathan: "the coach on the sideline doing the play calls won't be
+  // visible" when logging from film after the fact -- best-effort guess at
+  // who currently has the ball from the most recent real play, using the
+  // same `side`/team fields every play already carries (a run/pass/kneel's
+  // own `side`, or the actual team that just kicked/punted/turned it over
+  // for a possession-change play). Shown to the coach to confirm/flip
+  // rather than trusted blindly, same "always correctable" rule as
+  // everything else spot-related in this app -- inferring this wrong and
+  // never asking would quietly corrupt every down/distance call after it.
+  function inferPossession(plays){
+    const last = (plays || []).find(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; });
+    if (!last) return 'Us';
+    if (last.type === 'kick') return last.kickTeam === 'Opponent' ? 'Us' : 'Opponent'; // receiving team, not kicking team, has it now
+    if (last.type === 'punt') return last.puntTeam === 'Opponent' ? 'Us' : 'Opponent';
+    if (last.type === 'turnover') return last.side === 'offense' ? 'Opponent' : 'Us';
+    if (last.type === 'defextra') return 'Us'; // this app's defextra (INT/PBU/Sack) always credits one of our own players
+    return last.side === 'offense' ? 'Us' : 'Opponent';
+  }
+  // Nathan: "It also doesn't appear to be a way of getting back to the
+  // game caller portion entering the plays without exiting." Audit Mode's
+  // exit used to just call loadGame(), which reloads everything AND lands
+  // back on the "Continue This Game" resume screen -- an extra tap and a
+  // full reload just to keep logging live plays. This jumps straight into
+  // the play loop instead, pulling the freshest spot/down/distance/quarter
+  // (in case anything was corrected during the review) and keeping
+  // whatever possession was already set rather than re-guessing it.
+  async function resumeLivePlayLoop(){
+    loadStatus.textContent = 'Loading current game state…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const gs = res.ok ? await res.json() : null;
+      if (!gs){ loadStatus.textContent = ''; wiz.step = 0; renderWizard(); return; }
+      const possession = (wiz.game && wiz.game.possession) ? wiz.game.possession : inferPossession(gs.plays);
+      wiz.game = {
+        spot: typeof gs.spot === 'number' ? gs.spot : 50,
+        down: gs.down || 1, distance: gs.distance || 10, quarter: gs.quarter || 1,
+        scoreUs: Number(gs.finalUs) || 0, scoreOpp: Number(gs.finalOpp) || 0,
+        possession: possession,
+        defendingEnd: (wiz.game && wiz.game.defendingEnd) || 'Left',
+      };
+      wiz.play = { phase: wiz.game.possession === 'Us' ? 'callCheck' : 'playType' };
+      wiz.step = 3;
+      loadStatus.textContent = '';
+      renderWizard();
+    } catch(e){ loadStatus.textContent = '⚠️ Could not resume: ' + e.message; }
+  }
+  function renderResumeStep(area){
+    const gs = wiz.resumeGameState;
+    const card = document.createElement('div'); card.className = 'card';
+    if (wiz.resumePossessionOverride == null) wiz.resumePossessionOverride = inferPossession(gs.plays);
+    // Nathan (follow-up): "I went back in to keep logging plays and it
+    // still shows Q2." Expected -- the quarter-ordering fix only corrects
+    // FUTURE "End Quarter" presses; it can't retroactively fix a number
+    // that was already saved wrong by the old buggy code before the fix
+    // existed. Pressing End Quarter again isn't a good workaround either
+    // -- it'd log a second "END OF Q2" marker that shows up chronologically
+    // AFTER whatever's already been logged since the real halftime,
+    // which is confusing to read back later. This corrects the resume
+    // value directly instead, with no marker and no play-log side effects
+    // at all -- it only affects what this session starts counting from.
+    if (wiz.resumeQuarterOverride == null) wiz.resumeQuarterOverride = gs.quarter || 1;
+    card.innerHTML = '<h2>▶️ Continue This Game</h2><div class="sub">' + gs.plays.length + ' play(s) already logged. Pick up right where it left off, no need to redo Starters/Coin Toss/Kickoff.</div>' +
+      '<div class="summaryLine">📍 <b>' + spotLabelAbs(typeof gs.spot === 'number' ? gs.spot : 50) + '</b> · ' + ['1st','2nd','3rd','4th'][(gs.down||1)-1] + ' &amp; ' + (gs.distance||10) + ' · ' + quarterLbl(gs.quarter||1) + '</div>';
+    chipGroupFieldFake(card, 'Who has the ball right now?', ['Us','Opponent'], wiz.resumePossessionOverride, function(v){ wiz.resumePossessionOverride = v; renderWizard(); });
+    chipGroupFieldFake(card, 'Actually still ' + quarterLbl(gs.quarter||1) + '? Fix it if not:', [[1,'Q1'],[2,'Q2'],[3,'Q3'],[4,'Q4']], wiz.resumeQuarterOverride, function(v){ wiz.resumeQuarterOverride = v; renderWizard(); });
+    const cont = document.createElement('button'); cont.className = 'primaryBtn'; cont.textContent = '▶️ Continue Logging Plays';
+    cont.addEventListener('click', function(){
+      wiz.game = {
+        spot: typeof gs.spot === 'number' ? gs.spot : 50,
+        down: gs.down || 1, distance: gs.distance || 10, quarter: wiz.resumeQuarterOverride,
+        scoreUs: Number(gs.finalUs) || 0, scoreOpp: Number(gs.finalOpp) || 0,
+        possession: wiz.resumePossessionOverride,
+        defendingEnd: 'Left',
+      };
+      wiz.play = { phase: wiz.game.possession === 'Us' ? 'callCheck' : 'playType' };
+      wiz.step = 3;
+      renderWizard();
+    });
+    card.appendChild(cont);
+    // Nathan: "The Game Wizard was done prior to plays being added, same
+    // for starting ball spot and ending ball spot... only some of the
+    // plays are effected by it. I need to be able to open that game and
+    // update the entire existing play log... If the wizard showed the info
+    // it has on the play (saying none if it wasn't included) then I
+    // should have an option to update for that play."
+    const auditBtn = document.createElement('button'); auditBtn.className = 'primaryBtn'; auditBtn.style.background = 'linear-gradient(135deg,#3ddcff,#0a8ab0)';
+    auditBtn.textContent = '🔍 Review & Fill In Missing Info';
+    auditBtn.addEventListener('click', function(){ startAuditMode(gs); });
+    card.appendChild(auditBtn);
+    const startOver = document.createElement('button'); startOver.className = 'ghostBtn'; startOver.textContent = '🔄 Start Over From Kickoff Instead';
+    startOver.addEventListener('click', function(){ wiz.step = 0; renderWizard(); });
+    card.appendChild(startOver);
+    const differentGame = document.createElement('button'); differentGame.className = 'ghostBtn'; differentGame.textContent = 'Pick a Different Game';
+    differentGame.addEventListener('click', function(){ gameSelect.value = ''; wizardWrap.style.display = 'none'; emptyWrap.style.display = ''; });
+    card.appendChild(differentGame);
+    area.appendChild(card);
+  }
+  // Tiny one-off chip row for the resume screen, before PLAYBOOK/chipGroupField
+  // (defined further down, in the play-loop section) exist yet in source
+  // order -- functionally identical, just named separately to avoid relying
+  // on wiz.play (which doesn't exist yet at this point in the flow).
+  function chipGroupFieldFake(container, label, options, current, onSelect){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + '</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    options.forEach(function(opt){
+      const val = Array.isArray(opt) ? opt[0] : opt;
+      const lbl = Array.isArray(opt) ? opt[1] : opt;
+      const c = document.createElement('div'); c.className = 'optChip' + (current === val ? ' active' : '');
+      c.textContent = lbl;
+      c.addEventListener('click', function(){ onSelect(val); });
+      row.appendChild(c);
+    });
+    wrap.appendChild(row);
+    container.appendChild(wrap);
+  }
+
+  // ---- Step 1: Confirm Starters ----
+  // Nathan: "Confirm starters for ease of picking players to assign to
+  // plays." Reads Coach Tools > Depth Chart (each position group's
+  // players[0] is its current starter) rather than inventing a second
+  // starters list -- this step is about CATCHING a stale depth chart
+  // before game day (an injury, a sub who's been starting all season that
+  // the chart was never updated for), not replacing it.
+  function renderStartersStep(area){
+    const byNum = rosterByNum();
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>Confirm Starters</h2><div class="sub">Auto-filled from Coach Tools &gt; Depth Chart -- tap anyone to swap in whoever\'s actually starting today. Backups rotate in a lot, so swapping isn\'t limited to that position\'s own depth list -- it\'s the whole roster.</div>';
+    ['offense','defense'].forEach(function(section){
+      const groups = depthGroups.filter(function(g){ return g.section === section; });
+      if (!groups.length) return;
+      const sec = document.createElement('div'); sec.className = 'groupSection'; sec.textContent = section === 'offense' ? 'Offense' : 'Defense';
+      card.appendChild(sec);
+      groups.forEach(function(g){
+        const starterNum = g.players && g.players[0];
+        const starter = starterNum ? byNum[String(starterNum)] : null;
+        const key = g.id;
+        if (wiz.state.starters[key] === undefined) wiz.state.starters[key] = starter ? String(starter.num) : null;
+        const row = document.createElement('div'); row.className = 'starterRow';
+        const chosenNum = wiz.state.starters[key];
+        const chosen = chosenNum ? byNum[String(chosenNum)] : null;
+        row.innerHTML = '<span class="posLabel">' + escapeHtml(g.label) + '</span>' +
+          '<span class="starterName' + (chosen ? '' : ' empty') + '">' + (chosen ? escapeHtml(playerLabel(chosen)) : 'Nobody set') + '</span>' +
+          '<span class="swapBtn">Swap</span>';
+        const swapBtn = row.querySelector('.swapBtn');
+        let altsOpen = false;
+        swapBtn.addEventListener('click', function(){
+          altsOpen = !altsOpen;
+          let alts = row.querySelector('.altList');
+          if (alts) { alts.remove(); if (!altsOpen) return; }
+          // Nathan: "since backups also play a lot to rotate, we need the
+          // ability to choose whomever." Used to only offer this
+          // position's OWN depth-chart backups (g.players) -- a rotation
+          // sub is often someone who isn't even listed at this position at
+          // all, so the full roster is the right candidate list, not a
+          // narrower one. This position's own listed players still show
+          // first since they're the likeliest picks, then everyone else,
+          // with a filter box since the full roster is a lot of chips to
+          // scan on a phone.
+          const ownNums = (g.players || []).map(String);
+          const own = ownNums.map(function(n){ return byNum[n]; }).filter(Boolean);
+          const rest = liveRoster.filter(function(p){ return ownNums.indexOf(String(p.num)) === -1; })
+            .slice().sort(function(a,b){ return Number(a.num) - Number(b.num); });
+          const wrap = document.createElement('div'); wrap.className = 'altList';
+          wrap.style.flexDirection = 'column'; wrap.style.alignItems = 'stretch';
+          const filterInput = document.createElement('input');
+          filterInput.className = 'writeIn'; filterInput.type = 'text'; filterInput.placeholder = '🔍 Filter by name or number…';
+          filterInput.style.marginTop = '0'; filterInput.style.marginBottom = '8px';
+          wrap.appendChild(filterInput);
+          const chipWrap = document.createElement('div'); chipWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+          wrap.appendChild(chipWrap);
+          function renderChips(filterText){
+            chipWrap.innerHTML = '';
+            const ft = (filterText || '').trim().toLowerCase();
+            function matches(p){
+              if (!ft) return true;
+              // Same number-precision fix as the play-loop's player chooser.
+              return /^\d+$/.test(ft) ? String(p.num).indexOf(ft) === 0 : p.name.toLowerCase().indexOf(ft) !== -1;
+            }
+            own.filter(matches).forEach(function(p){ chipWrap.appendChild(altChip(p, true)); });
+            rest.filter(matches).forEach(function(p){ chipWrap.appendChild(altChip(p, false)); });
+            const noneChip = document.createElement('div'); noneChip.className = 'altChip'; noneChip.textContent = 'None';
+            noneChip.addEventListener('click', function(){ wiz.state.starters[key] = null; renderWizard(); });
+            chipWrap.appendChild(noneChip);
+          }
+          function altChip(p, isOwn){
+            const chip = document.createElement('div'); chip.className = 'altChip';
+            chip.textContent = playerLabel(p) + (isOwn ? '' : ' ·'); // subtle marker so "this position's own list" vs "rest of roster" is still distinguishable once combined
+            chip.title = isOwn ? 'Listed at ' + g.label + ' on the depth chart' : 'Rest of roster';
+            chip.addEventListener('click', function(){ wiz.state.starters[key] = String(p.num); renderWizard(); });
+            return chip;
+          }
+          filterInput.addEventListener('input', function(){ renderChips(filterInput.value); });
+          renderChips('');
+          row.appendChild(wrap);
+          filterInput.focus();
+        });
+        card.appendChild(row);
+      });
+    });
+    // Nathan: "it should start to auto populate a selection from the
+    // roster that you can confirm." A team with no depth chart saved yet
+    // used to just show a "nothing to pick from" note here -- now it
+    // falls back to the roster itself, auto-checking nobody but making
+    // every player available to mark as starting today, so there's always
+    // something to confirm/adjust instead of an empty step.
+    if (!depthGroups.length){
+      const sec = document.createElement('div'); sec.className = 'groupSection'; sec.textContent = 'Whole Roster (no depth chart saved yet)';
+      card.appendChild(sec);
+      if (!wiz.state.rosterStarters) wiz.state.rosterStarters = {};
+      const rosterWrap = document.createElement('div'); rosterWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+      liveRoster.slice().sort(function(a,b){ return Number(a.num) - Number(b.num); }).forEach(function(p){
+        const on = !!wiz.state.rosterStarters[p.num];
+        const chip = document.createElement('div'); chip.className = 'altChip' + (on ? ' active' : '');
+        if (on) chip.style.cssText = 'border-color:var(--cyan);color:#fff;background:rgba(61,220,255,.12)';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ wiz.state.rosterStarters[p.num] = !on; renderWizard(); });
+        rosterWrap.appendChild(chip);
+      });
+      card.appendChild(rosterWrap);
+      const note = document.createElement('div'); note.className = 'sub'; note.style.marginTop = '10px';
+      note.textContent = 'Tap everyone starting today. For a real position-by-position quick-pick list, set one up in Coach Tools > Depth Chart.';
+      card.appendChild(note);
+    }
+    const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Confirm Starters →';
+    btn.addEventListener('click', function(){ wiz.step = 1; renderWizard(); });
+    card.appendChild(btn);
+    area.appendChild(card);
+  }
+
+  // ---- Step 2: Coin Toss ----
+  function renderCoinTossStep(area){
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>🪙 Coin Toss</h2><div class="sub">Sets who gets the ball first.</div>';
+
+    const q1 = document.createElement('div');
+    q1.innerHTML = '<div class="fieldLabel">Who won the toss?</div>';
+    const r1 = document.createElement('div'); r1.className = 'chipRow';
+    ['Us','Opponent'].forEach(function(v){
+      const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.tossWinner === v ? ' active' : ''); c.textContent = v;
+      c.addEventListener('click', function(){ wiz.state.tossWinner = v; renderWizard(); });
+      r1.appendChild(c);
+    });
+    q1.appendChild(r1);
+    card.appendChild(q1);
+
+    if (wiz.state.tossWinner){
+      const q2 = document.createElement('div');
+      q2.innerHTML = '<div class="fieldLabel">What did ' + (wiz.state.tossWinner === 'Us' ? 'we' : 'they') + ' choose?</div>';
+      const r2 = document.createElement('div'); r2.className = 'chipRow';
+      [['Receive','Take the ball first'], ['Defer','Kick first, receive to open the 2nd half']].forEach(function(pair){
+        const c = document.createElement('div'); c.className = 'optChip' + (wiz.state.tossChoice === pair[0] ? ' active' : '');
+        c.textContent = pair[0];
+        c.addEventListener('click', function(){
+          wiz.state.tossChoice = pair[0];
+          const winnerReceives = pair[0] === 'Receive';
+          wiz.state.receivingTeam = winnerReceives ? wiz.state.tossWinner : (wiz.state.tossWinner === 'Us' ? 'Opponent' : 'Us');
+          renderWizard();
+        });
+        r2.appendChild(c);
+      });
+      q2.appendChild(r2);
+      card.appendChild(q2);
+    }
+
+    if (wiz.state.receivingTeam){
+      const summary = document.createElement('div'); summary.className = 'summaryLine';
+      summary.innerHTML = '📋 <b>' + escapeHtml(wiz.state.receivingTeam) + '</b> receives the opening kickoff.';
+      card.appendChild(summary);
+
+      const q3 = document.createElement('div');
+      q3.innerHTML = '<div class="fieldLabel">Which end do we defend first? (for the sideline -- doesn\'t change how anything gets logged)</div>';
+      const strip = document.createElement('div'); strip.className = 'sideFieldStrip';
+      ['Left','Right'].forEach(function(v){
+        const half = document.createElement('div'); half.className = 'sideFieldHalf' + (wiz.state.endNote === v ? ' active' : '');
+        half.innerHTML = '<span class="sideShield">🛡️</span><span class="sideLabel">' + v + '</span>';
+        half.addEventListener('click', function(){ wiz.state.endNote = v; renderWizard(); });
+        strip.appendChild(half);
+      });
+      q3.appendChild(strip);
+      card.appendChild(q3);
+
+      const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = 'Continue to Kickoff →';
+      btn.addEventListener('click', function(){ wiz.step = 2; renderWizard(); });
+      card.appendChild(btn);
+    }
+
+    const back = document.createElement('button'); back.className = 'ghostBtn'; back.textContent = '← Back';
+    back.addEventListener('click', function(){ wiz.step = 0; renderWizard(); });
+    card.appendChild(back);
+    area.appendChild(card);
+  }
+
+  // ---- Step 3: Opening Kickoff ----
+  // Nathan: "Kickoff, you can mark where the ball landed, where it ended
+  // and who carried it." Kicking team is already decided by the coin
+  // toss (whoever ISN'T receiving); starts from the kicker's own 40, same
+  // fixed-by-rule convention stat-keeper.html's kickoffStartSpotRow uses.
+  function spotPicker(state, sideKey, yardKey, defaultYard, onChange){
+    if (state[sideKey] == null) state[sideKey] = 'OWN';
+    if (state[yardKey] == null) state[yardKey] = defaultYard;
+    const wrap = document.createElement('div');
+    const chipRow = document.createElement('div'); chipRow.className = 'chipRow';
+    [['OWN','Our Side'],['OPP',"Opponent's Side"]].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (state[sideKey] === pair[0] ? ' active' : ''); c.textContent = pair[1];
+      c.addEventListener('click', function(){ state[sideKey] = pair[0]; onChange(); });
+      chipRow.appendChild(c);
+    });
+    wrap.appendChild(chipRow);
+    const yardRow = document.createElement('div'); yardRow.className = 'yardRow'; yardRow.style.marginTop = '6px';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.min = 0; input.max = 50; input.value = state[yardKey];
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ state[yardKey] = Math.max(0, Number(input.value||0) - 1); onChange(); });
+    plus.addEventListener('click', function(){ state[yardKey] = Math.min(50, Number(input.value||0) + 1); onChange(); });
+    input.addEventListener('change', function(){ state[yardKey] = Math.max(0, Math.min(50, Number(input.value||0))); onChange(); });
+    yardRow.appendChild(minus); yardRow.appendChild(input); yardRow.appendChild(plus);
+    const suffix = document.createElement('span'); suffix.style.cssText = 'color:var(--dim);font-size:12px;margin-left:4px;'; suffix.textContent = 'yard line';
+    yardRow.appendChild(suffix);
+    wrap.appendChild(yardRow);
+    return wrap;
+  }
+  function renderKickoffStep(area){
+    const isUsKick = wiz.state.receivingTeam !== 'Us'; // whoever ISN'T receiving is kicking
+    if (!wiz.state.kickoff) wiz.state.kickoff = { catchSide:null, catchYard:20, endSide:null, endYard: isUsKick ? 30 : 40, returner:'' };
+    const k = wiz.state.kickoff;
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = '<h2>🏈 Opening Kickoff</h2><div class="sub"><b>' + (isUsKick ? 'We' : 'They') + '</b> kick from ' + (isUsKick ? 'our' : 'their') + ' own 40. Mark where it was caught and where the return ended.</div>';
+
+    card.innerHTML += '<div class="fieldLabel">Caught / Fielded At</div>';
+    card.appendChild(spotPicker(k, 'catchSide', 'catchYard', isUsKick ? 20 : 15, renderWizard));
+
+    const lbl2 = document.createElement('div'); lbl2.className = 'fieldLabel'; lbl2.textContent = 'Brought Ball To (final spot)';
+    card.appendChild(lbl2);
+    card.appendChild(spotPicker(k, 'endSide', 'endYard', isUsKick ? 30 : 40, renderWizard));
+
+    if (isUsKick){
+      const lbl3 = document.createElement('div'); lbl3.className = 'fieldLabel'; lbl3.textContent = 'Returner (optional, opponent -- if known)';
+      card.appendChild(lbl3);
+      // Opponent returner -- not on our roster, so a plain write-in field
+      // is the right tool here, not roster pills.
+      const input = document.createElement('input'); input.className = 'writeIn'; input.type = 'text';
+      input.placeholder = "Opponent's returner, if known";
+      input.value = k.returner || '';
+      input.addEventListener('input', function(){ k.returner = input.value; });
+      card.appendChild(input);
+    } else {
+      // Nathan: "as I start to enter the name in the field, it should auto
+      // recommend players on the roster. Or give me some pills under the
+      // bar with common players." Our own returner IS on the roster, so
+      // this gets the same starters-first, full-roster-searchable chooser
+      // as everywhere else in the play loop (it renders its own label).
+      renderPlayerChooser(card, 'Returner', k, 'returner', {optional:true});
+    }
+
+    const btn = document.createElement('button'); btn.className = 'primaryBtn'; btn.textContent = '✅ Log Kickoff & Start Game';
+    btn.addEventListener('click', commitKickoff);
+    card.appendChild(btn);
+    const back = document.createElement('button'); back.className = 'ghostBtn'; back.textContent = '← Back';
+    back.addEventListener('click', function(){ wiz.step = 1; renderWizard(); });
+    card.appendChild(back);
+    area.appendChild(card);
+  }
+
+  async function commitKickoff(){
+    const isUsKick = wiz.state.receivingTeam !== 'Us';
+    const k = wiz.state.kickoff;
+    const entry = {
+      type: 'kick', id: genId(), side: isUsKick ? 'offense' : 'defense', quarter: 1,
+      kickTeam: isUsKick ? 'Us' : 'Opponent', onside: false,
+      startSide: isUsKick ? 'OWN' : 'OPP', startYard: 40, // fixed kickoff spot, same convention Stat Keeper already uses
+      catchSide: k.catchSide, catchYard: k.catchYard, endSide: k.endSide, endYard: k.endYard,
+    };
+    if (isUsKick) entry.oppReturner = k.returner || ''; else entry.returner = k.returner || '';
+
+    loadStatus.textContent = 'Signing in…';
+    const ok = await ensureCoachAuth();
+    if (!ok){ loadStatus.textContent = ''; return; }
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      // Stat Keeper stores newest-first (see game-playback.html's own note
+      // on this) -- this kickoff IS the oldest play in the game, so it
+      // belongs at the very END of the array, not unshifted to the front.
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      const endAbs = absoluteSpot(entry.endSide, entry.endYard);
+      const gameState = {
+        plays: plays,
+        quarter: 1,
+        spot: endAbs != null ? clampSpot(endAbs) : 50,
+        down: 1, distance: 10,
+        finalUs: (existing && existing.finalUs) || '',
+        finalOpp: (existing && existing.finalOpp) || '',
+        updatedAt: new Date().toISOString(),
+      };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      // Nathan: "the wizard should walk you through continuously." Seeds
+      // the running game state the play loop uses from here on --
+      // possession starts with whoever just received.
+      wiz.game = {
+        spot: gameState.spot, down: 1, distance: 10, quarter: 1,
+        scoreUs: 0, scoreOpp: 0, possession: wiz.state.receivingTeam,
+        // Nathan: "It will automatically flip the field and retain down,
+        // distance and possession" for end of 2nd/3rd quarter (and, same
+        // rule, every quarter -- teams switch ends every quarter, not
+        // just at halftime). This is purely the sideline-orientation
+        // indicator from the coin toss, carried into the game header
+        // below; it never touches spot/down/distance/possession, which
+        // is exactly why those stay untouched across a quarter change --
+        // see logEvent('quarterEnd').
+        defendingEnd: wiz.state.endNote || 'Left',
+      };
+      // Nathan (follow-up): "it wouldn't recognize the first option to
+      // choose the play after kickoff. I had to leave and come back for
+      // it to show up." Real bug, not a rendering hiccup: this was
+      // hardcoded to 'callCheck' regardless of who actually received the
+      // kickoff. The play loop only knows how to show 'callCheck' when
+      // WE have the ball (there's no sideline call to check when the
+      // opponent has it) -- so if the other team received, this landed on
+      // a phase with no matching screen at all: blank, unresponsive,
+      // looked exactly like it "wouldn't recognize" anything. Leaving and
+      // coming back worked around it by accident, because the Resume
+      // screen picks the phase correctly. Same possession + film-review
+      // check startNextPlay() already uses correctly, applied here too.
+      wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    wiz.step = 3;
+    renderWizard();
+  }
+
+  // ---- Step 4+: Continuous Play Loop ----
+  // Nathan: "the wizard should walk you through continuously... Since we
+  // already know we are scoring for the Bengals, we automatically get the
+  // Offense Play Options." wiz.game tracks the running spot/down/distance/
+  // score/possession (same shape stat-keeper.html's own state does);
+  // wiz.play is the ONE play currently being built, phase by phase, reset
+  // after every commit. Reuses stat-keeper.html's exact play-type fields
+  // and math (formations, playbook, spot/down-distance advance) rather
+  // than inventing a second version of any of it.
+  const PLAYBOOK = ['Inside Zone','Outside Zone','Option','Blast','Double Blast','Option Pass','Sweep','Shuffle Pass'];
+  const FORMATIONS = ['Wing','Split'];
+  const PLAY_TAGS = ['Motion','Counter','Boot/Naked','Play-Action','Pass Option'];
+
+  function getQuickPickPlayers(){
+    const nums = {};
+    Object.keys(wiz.state.starters || {}).forEach(function(k){ if (wiz.state.starters[k]) nums[wiz.state.starters[k]] = true; });
+    Object.keys(wiz.state.rosterStarters || {}).forEach(function(n){ if (wiz.state.rosterStarters[n]) nums[n] = true; });
+    const byNum = rosterByNum();
+    return Object.keys(nums).map(function(n){ return byNum[n]; }).filter(Boolean).sort(function(a,b){ return Number(a.num)-Number(b.num); });
+  }
+  // Nathan (follow-up): "since backups also play a lot to rotate, we need
+  // the ability to choose whomever." Same starters-first-then-full-roster-
+  // with-a-filter shape as the Confirm Starters swap picker -- confirmed
+  // starters are the fast path, but nobody's locked out.
+  function renderPlayerChooser(container, label, stateObj, key, opts){
+    opts = opts || {};
+    const multi = !!opts.multi;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + (opts.optional ? ' (optional)' : '') + '</div>';
+    const quick = getQuickPickPlayers();
+    // Nathan: "it should auto recommend players on the roster, or give me
+    // pills under the bar with common players." Stores the player's NAME
+    // (not their number) -- same as Stat Keeper's own playerPicker, since
+    // describePlay everywhere just prints whatever's in this field as the
+    // display text directly. Storing the number here was a real bug: it
+    // would have shown a bare jersey number instead of a name on every
+    // carrier/passer/tackler in the whole play loop, not just here.
+    function selected(){ return multi ? (stateObj[key] || []) : (stateObj[key] ? [stateObj[key]] : []); }
+    if (quick.length){
+      const hotRow = document.createElement('div'); hotRow.className = 'chipRow';
+      quick.forEach(function(p){
+        const chip = document.createElement('div');
+        chip.className = 'optChip' + (selected().indexOf(p.name) !== -1 ? ' active' : '');
+        chip.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ togglePick(p.name); });
+        hotRow.appendChild(chip);
+      });
+      wrap.appendChild(hotRow);
+    }
+    const filterInput = document.createElement('input'); filterInput.className = 'writeIn';
+    filterInput.placeholder = '🔍 Search full roster, or type a name…';
+    // Nathan: "as I start to enter the name in the field, it should auto
+    // recommend players." Typing now does double duty: it filters the
+    // roster into matching pills below AND, on anyone not on the roster
+    // at all (a sub), just typing and moving on saves that free-text name
+    // directly -- same "write in a name" escape hatch Stat Keeper has.
+    if (!multi && stateObj[key] && quick.every(function(p){ return p.name !== stateObj[key]; })){
+      filterInput.value = stateObj[key]; // a previously written-in name that isn't a quick-pick chip
+    }
+    wrap.appendChild(filterInput);
+    const fullWrap = document.createElement('div'); fullWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;';
+    wrap.appendChild(fullWrap);
+    function renderMatches(){
+      const ft = filterInput.value.trim().toLowerCase();
+      fullWrap.innerHTML = '';
+      if (!ft) return;
+      // Nathan: "it would be great to reference either the player # or the
+      // name." Typing was already searching the combined "#5 Will J"
+      // label, but that meant a plain "5" also matched #15, #25, #45,
+      // #50... anyone with a 5 anywhere in their number. A purely numeric
+      // query now matches jersey numbers that START WITH those digits
+      // (so "5" narrows to 5, then "51" narrows further) instead of
+      // matching loosely anywhere in the combined label; anything else is
+      // still a normal name search.
+      const isNumeric = /^\d+$/.test(ft);
+      liveRoster.filter(function(p){
+        return isNumeric ? String(p.num).indexOf(ft) === 0 : p.name.toLowerCase().indexOf(ft) !== -1;
+      }).slice(0,14).forEach(function(p){
+        const chip = document.createElement('div'); chip.className = 'optChip' + (selected().indexOf(p.name) !== -1 ? ' active' : '');
+        chip.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+        chip.textContent = playerLabel(p);
+        chip.addEventListener('click', function(){ filterInput.value = ''; fullWrap.innerHTML = ''; togglePick(p.name); });
+        fullWrap.appendChild(chip);
+      });
+    }
+    filterInput.addEventListener('input', renderMatches);
+    if (!multi){
+      filterInput.addEventListener('blur', function(){ stateObj[key] = filterInput.value.trim() || null; });
+      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); stateObj[key] = filterInput.value.trim() || null; renderWizard(); } });
+    } else {
+      filterInput.placeholder = '🔍 Search, or type a name and press Enter…';
+      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); const v = filterInput.value.trim(); if (v) togglePick(v); filterInput.value = ''; fullWrap.innerHTML = ''; } });
+    }
+    function togglePick(name){
+      if (multi){
+        const arr = stateObj[key] || (stateObj[key] = []);
+        const idx = arr.indexOf(name);
+        if (idx === -1) arr.push(name); else arr.splice(idx,1);
+      } else {
+        stateObj[key] = name;
+      }
+      renderWizard();
+    }
+    container.appendChild(wrap);
+  }
+  function chipGroupField(container, label, stateObj, key, options, onSelect){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + '</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    options.forEach(function(opt){
+      const val = Array.isArray(opt) ? opt[0] : opt;
+      const lbl = Array.isArray(opt) ? opt[1] : opt;
+      const c = document.createElement('div'); c.className = 'optChip' + (stateObj[key] === val ? ' active' : '');
+      c.textContent = lbl;
+      c.addEventListener('click', function(){ stateObj[key] = val; if (onSelect) onSelect(val); else renderWizard(); });
+      row.appendChild(c);
+    });
+    wrap.appendChild(row);
+    container.appendChild(wrap);
+  }
+
+  function renderGameHeaderHtml(){
+    const g = wiz.game;
+    const spotTxt = spotLabelAbs(g.spot);
+    const oppAbbrev = ((selectedGame && selectedGame.opponent) || 'OPP').replace(/\(.*?\)/g,'').trim().split(/\s+/)[0].slice(0,3).toUpperCase() || 'OPP';
+    return '<div class="scoreBug" style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">BENGALS</div><div style="font-size:24px;font-weight:900;">' + g.scoreUs + '</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">' + quarterLbl(g.quarter) + '</div><div style="font-size:12px;color:var(--dim);margin-top:2px;">' + (g.possession === 'Us' ? '🏈 We have the ball' : '🛡️ They have the ball') + '</div></div>' +
+      '<div style="text-align:center;"><div style="font-size:10px;color:var(--dim2);">' + escapeHtml(oppAbbrev) + '</div><div style="font-size:24px;font-weight:900;">' + g.scoreOpp + '</div></div>' +
+      '</div>' +
+      '<div class="ddPanel" style="display:flex;justify-content:space-around;background:var(--console);border:1px solid var(--line-bright);border-radius:12px;padding:10px;margin-bottom:14px;text-align:center;">' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Down</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + ['1st','2nd','3rd','4th'][g.down-1] + '</div></div>' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Ball On</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + spotTxt + '</div></div>' +
+      '<div><div style="font-size:9.5px;color:var(--dim2);text-transform:uppercase;">Distance</div><div style="font-size:15px;font-weight:800;margin-top:2px;">' + g.distance + ' to go</div></div>' +
+      '</div>' +
+      '<div style="text-align:center;font-size:10.5px;color:var(--dim2);margin:-8px 0 12px;">🛡️ We defend the <b style="color:var(--dim);">' + g.defendingEnd + '</b> end this quarter</div>';
+  }
+  function quarterLbl(n){ return n <= 4 ? ('Q'+n) : ('OT'+(n-4)); }
+
+  // ---- Spot/down-distance math -- ported from stat-keeper.html/game-playback.html ----
+  function signedYardsFromSpots(startAbs, endAbs, isUsTeam){
+    if (startAbs == null || endAbs == null) return 0;
+    return isUsTeam ? (endAbs - startAbs) : (startAbs - endAbs);
+  }
+  function sideYardFromAbs(abs){ const y = Math.round(abs <= 50 ? abs : (100 - abs)); return { side: abs <= 50 ? 'OWN' : 'OPP', yard: y }; }
+
+  // Nathan: "I want to use the wizard to watch the game back... with the
+  // game film in the top of the screen and the wizard at the bottom." Uses
+  // whatever's already linked under this game's own Game Footage (same
+  // clips schedule.js's game detail page shows) -- YouTube and Google
+  // Drive links get embedded directly since both support that; anything
+  // else (Hudl, etc.) just gets a button, since most video hosts block
+  // being embedded in someone else's page and there's no reliable way
+  // around that. On a tablet, opening that link and using the OS's own
+  // split-view alongside this page is the practical fallback there.
+  // Nathan: "this whole feature isn't working well" -- the direct-video-
+  // file technique (converting a Drive share link to a streamable file URL
+  // for a native <video>) failed with a real "source not supported/
+  // blocked" error, most likely Google Drive's own virus-scan/large-file
+  // interstitial page coming back instead of actual video bytes when hit
+  // this way. Back to the plain /preview embed Google's own viewer uses --
+  // reliable, but no programmatic control, so filmTimestamp can't be
+  // auto-captured for Drive-hosted footage (still works for YouTube).
+  function embeddableFilmSrc(url){
+    if (!url) return null;
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (m) return { kind:'youtube', videoId: m[1] };
+    m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind:'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
+    return null;
+  }
+  let filmPanelCollapsed = false;
+  let filmClipIndex = 0;
+  let filmPanelBuiltForGameId = null; // which game's film is currently sitting in #filmPanelHost
+  let filmKind = null; // 'youtube' | 'drive' | null -- which control path getCurrentFilmTime/play-pause should use
+
+  // Nathan: "Video is always visible in the top and should not start over
+  // or reload when a play is saved." Builds the panel (and its <iframe>)
+  // into #filmPanelHost exactly ONCE per game -- re-picking a different
+  // clip or collapsing/expanding updates that same host in place rather
+  // than tearing the iframe down, and switching between wizard steps just
+  // shows/hides the host, never rebuilds it. That's the whole fix: nothing
+  // about logging a play ever touches this host at all anymore.
+  function ensureFilmPanelBuilt(){
+    if (filmPanelBuiltForGameId === selectedGame.id) return;
+    filmPanelBuiltForGameId = selectedGame.id;
+    filmClipIndex = 0;
+    renderFilmPanelContent();
+  }
+  // Nathan: "Give me the options of setting markers at the end of each
+  // play so there is a link between the plays and the clip." Picked
+  // option B (auto-capture) + C (auto-jump in Playback) -- this needs the
+  // real YouTube IFrame API (not just fire-and-forget postMessage
+  // commands like before), since reading the CURRENT time back out of the
+  // player requires an actual player object, not just sending it
+  // one-way instructions. Loaded once, reused by both the Wizard's own
+  // capture and (mirrored) Playback's auto-seek.
+  let ytApiLoadPromise = null;
+  function ensureYouTubeApi(){
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    if (ytApiLoadPromise) return ytApiLoadPromise;
+    ytApiLoadPromise = new Promise(function(resolve){
+      const prevCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function(){ if (prevCallback) prevCallback(); resolve(); };
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    });
+    return ytApiLoadPromise;
+  }
+  let ytPlayer = null;
+  function appendPlayPauseControls(wrap, onPlay, onPause){
+    // Nathan: "I need a quick pause and play option on it... Needs to be
+    // quick." Big, thumb-reachable buttons under the video -- faster to
+    // hit mid-play-call than the tiny controls inside an embedded player,
+    // especially one-handed. Same two buttons regardless of whether the
+    // video underneath is a YouTube player object or a native <video>.
+    const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    const playBtn = document.createElement('button'); playBtn.className = 'primaryBtn'; playBtn.style.margin = '0'; playBtn.textContent = '▶️ Play';
+    playBtn.addEventListener('click', onPlay);
+    const pauseBtn = document.createElement('button'); pauseBtn.className = 'primaryBtn'; pauseBtn.style.margin = '0'; pauseBtn.style.background = 'linear-gradient(135deg,#6b7480,#454c56)'; pauseBtn.textContent = '⏸ Pause';
+    pauseBtn.addEventListener('click', onPause);
+    controls.appendChild(playBtn); controls.appendChild(pauseBtn);
+    wrap.appendChild(controls);
+  }
+
+  function renderFilmPanelContent(){
+    const host = document.getElementById('filmPanelHost');
+    const clips = (selectedGame && Array.isArray(selectedGame.gameFootage)) ? selectedGame.gameFootage.filter(function(c){ return c && c.url; }) : [];
+    host.innerHTML = '';
+    ytPlayer = null; filmKind = null; // whatever player/embed existed belonged to the just-cleared content
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
+    const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎥 Game Film';
+    const toggleLbl = document.createElement('span'); toggleLbl.style.cssText = 'font-size:12px;color:var(--dim);cursor:pointer;';
+    toggleLbl.textContent = filmPanelCollapsed ? 'Show ▾' : 'Hide ▴';
+    toggleLbl.addEventListener('click', function(){ filmPanelCollapsed = !filmPanelCollapsed; renderFilmPanelContent(); });
+    headRow.appendChild(title); headRow.appendChild(toggleLbl);
+    wrap.appendChild(headRow);
+    if (!filmPanelCollapsed){
+      if (!clips.length){
+        const empty = document.createElement('div'); empty.className = 'sub'; empty.style.margin = '8px 0 0';
+        empty.textContent = 'No film linked to this game yet -- add a link under Game Footage on this game in Schedule.';
+        wrap.appendChild(empty);
+      } else {
+        if (clips.length > 1){
+          const pickRow = document.createElement('div'); pickRow.className = 'chipRow'; pickRow.style.marginTop = '8px';
+          clips.forEach(function(c, i){
+            const chip = document.createElement('div'); chip.className = 'optChip' + (filmClipIndex === i ? ' active' : '');
+            chip.style.cssText = 'padding:6px 10px;font-size:11px;flex:0 0 auto;min-width:auto;';
+            chip.textContent = c.title || ('Clip ' + (i+1));
+            // Switching clips is the one case that DOES need a fresh
+            // iframe (it's genuinely a different video) -- fine, since
+            // that's a deliberate choice, not an incidental side effect
+            // of logging a play.
+            chip.addEventListener('click', function(){ filmClipIndex = i; renderFilmPanelContent(); });
+            pickRow.appendChild(chip);
+          });
+          wrap.appendChild(pickRow);
+        }
+        const clip = clips[filmClipIndex] || clips[0];
+        const embed = embeddableFilmSrc(clip.url);
+        filmKind = embed ? embed.kind : null;
+        if (embed && embed.kind === 'youtube'){
+          const playerHost = document.createElement('div');
+          playerHost.id = 'filmPlayer';
+          playerHost.style.cssText = 'width:100%;height:min(38vh,320px);border-radius:10px;margin-top:8px;background:#000;';
+          wrap.appendChild(playerHost);
+          const thisClipIndex = filmClipIndex;
+          ensureYouTubeApi().then(function(){
+            // Bail if the panel's moved on since this resolved (clip
+            // switched, panel rebuilt) -- don't attach a player to a
+            // host that's no longer the one currently on screen.
+            if (filmClipIndex !== thisClipIndex || !document.getElementById('filmPlayer')) return;
+            ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
+          });
+          appendPlayPauseControls(wrap, function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }, function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
+        } else if (embed && embed.kind === 'drive'){
+          // Nathan: "this whole feature isn't working well." The direct-
+          // video-file technique (driveDirectVideoUrl -> native <video>)
+          // just failed with a real, specific error -- "source not
+          // supported/blocked" -- most likely Google Drive's own virus-
+          // scan/large-file interstitial page coming back instead of
+          // actual video bytes when hit this way. Reverting to the plain
+          // /preview embed Google's own viewer uses, which reliably
+          // displays the video -- the tradeoff is losing programmatic
+          // control (no auto-capturing a timestamp, no auto-seek in
+          // Playback for Drive-hosted film specifically), but a working,
+          // simple video beats a broken, fancier one.
+          const iframe = document.createElement('iframe');
+          iframe.src = embed.previewUrl; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+          iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+          wrap.appendChild(iframe);
+          const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+          hint.textContent = 'Use the play/pause controls built into the video above -- this embed can\'t be driven by a separate button, so timestamps can\'t be auto-captured for this film.';
+          wrap.appendChild(hint);
+        } else {
+          const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
+          openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';
+          openLink.textContent = '▶️ Open ' + (clip.title || 'Film') + ' in a New Tab';
+          wrap.appendChild(openLink);
+          const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+          hint.textContent = "This host doesn't allow embedding -- on a tablet, use your OS's split-view/split-screen to keep this open next to the Wizard.";
+          wrap.appendChild(hint);
+        }
+      }
+    }
+    host.appendChild(wrap);
+  }
+  // Nathan: "setting markers at the end of each play so there is a link
+  // between the plays and the clip." Reads the video's real current
+  // timestamp at the moment a play is actually committed (see
+  // commitCurrentPlay's use of this) -- no separate "mark this moment"
+  // button to remember to press, the natural instant a play gets logged
+  // IS the marker.
+  // Nathan: "this whole feature isn't working well" -- Drive is back to a
+  // plain /preview embed (see embeddableFilmSrc), which can't be read
+  // programmatically at all, so only YouTube can actually have a
+  // timestamp captured right now.
+  function getCurrentFilmTime(){
+    if (filmKind === 'youtube' && ytPlayer && typeof ytPlayer.getCurrentTime === 'function'){
+      try { const t = ytPlayer.getCurrentTime(); return (typeof t === 'number' && !isNaN(t)) ? t : null; } catch(e){ return null; }
+    }
+    return null;
+  }
+
+  // Nathan: "I am only worried about what we ran as going forward, the
+  // coach on the sideline doing the play calls won't be visible." Reusing
+  // Stat Keeper's log while watching film back means there's no sideline
+  // signal to compare against -- this skips straight to "what actually
+  // happened" every time instead of asking once per play.
+  // Nathan (follow-up): "we instructed the camera man to not show the play
+  // calls on the sideline so we won't ever know what play was called."
+  // Confirms this isn't a one-off for a single review session -- it's how
+  // every game from here on will be filmed. Defaulting from localStorage
+  // (and saving whenever it's toggled) means it's just already on the next
+  // time the Wizard opens, instead of a switch to remember to flip every
+  // single game.
+  let filmReviewMode = (function(){ try { return localStorage.getItem('bengalsWizardFilmReview') === '1'; } catch(e){ return false; } })();
+
+  function renderPlayLoopStep(area){
+    ensureFilmPanelBuilt();
+
+    const header = document.createElement('div');
+    header.innerHTML = renderGameHeaderHtml();
+    area.appendChild(header);
+    renderRecentPlaysPanel(area);
+
+    const utilRow = document.createElement('div'); utilRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;';
+    const toBtn = document.createElement('button'); toBtn.className = 'ghostBtn'; toBtn.style.margin = '0'; toBtn.textContent = '⏱ Timeout';
+    toBtn.addEventListener('click', function(){ logEvent('timeout'); });
+    const eqBtn = document.createElement('button'); eqBtn.className = 'ghostBtn'; eqBtn.style.margin = '0'; eqBtn.textContent = '🏁 End Quarter';
+    eqBtn.addEventListener('click', function(){ logEvent('quarterEnd'); });
+    // Nathan: "give me the option to Save the Current Stat Keeper for that
+    // game as a work in progress." Every play is already saved to Firebase
+    // the instant it's logged (this button doesn't change that), but
+    // there was never a way to mark a game as "still being worked on"
+    // instead of finished -- this stamps the game record with that status
+    // so it's not confused for a completed stat sheet if you have to walk
+    // away mid-game and pick it back up later.
+    const wipBtn = document.createElement('button'); wipBtn.className = 'ghostBtn'; wipBtn.style.margin = '0'; wipBtn.textContent = '💾 Save as Work in Progress';
+    wipBtn.addEventListener('click', saveAsWorkInProgress);
+    utilRow.appendChild(toBtn); utilRow.appendChild(eqBtn); utilRow.appendChild(wipBtn);
+    area.appendChild(utilRow);
+
+    const reviewToggle = document.createElement('div');
+    reviewToggle.className = 'optChip' + (filmReviewMode ? ' active' : '');
+    reviewToggle.style.cssText = 'display:inline-block;padding:6px 12px;font-size:11.5px;margin-bottom:14px;';
+    reviewToggle.textContent = '🎬 Reviewing Film (skip play-call check)';
+    reviewToggle.addEventListener('click', function(){
+      filmReviewMode = !filmReviewMode;
+      try { localStorage.setItem('bengalsWizardFilmReview', filmReviewMode ? '1' : '0'); } catch(e){}
+      renderWizard();
+    });
+    area.appendChild(reviewToggle);
+
+    if (wiz.game.possession === 'Us' && wiz.play.phase === 'callCheck' && filmReviewMode) wiz.play.phase = 'playType';
+
+    const card = document.createElement('div'); card.className = 'card';
+    const phase = wiz.play.phase;
+    if (phase === 'firstDownToast') renderPhaseFirstDownToast(card);
+    else if (wiz.game.possession === 'Us' && phase === 'callCheck') renderPhaseCallCheck(card);
+    else if (wiz.game.possession === 'Us' && phase === 'calledPlay') renderPhaseCalledPlay(card);
+    else if (phase === 'playType') renderPhasePlayType(card);
+    else if (phase === 'runDetail') renderPhaseRunDetail(card);
+    else if (phase === 'passDetail') renderPhasePassDetail(card);
+    else if (phase === 'penaltyDetail') renderPhasePenaltyDetail(card);
+    else if (phase === 'turnoverDetail') renderPhaseTurnoverDetail(card);
+    else if (phase === 'puntDetail') renderPhasePuntDetail(card);
+    else if (phase === 'resultSpot') renderPhaseResultSpot(card);
+    else if (phase === 'sackSpot') renderPhaseSackSpot(card);
+    else if (phase === 'tackler') renderPhaseTackler(card);
+    else if (phase === 'extraPoint') renderPhaseExtraPoint(card);
+    else if (phase === 'postScoreKickoff') renderPhasePostScoreKickoff(card);
+    else if (phase === 'touchdown') renderPhaseTouchdown(card);
+    area.appendChild(card);
+
+    const fixLink = document.createElement('a');
+    fixLink.href = 'stat-keeper.html?game=' + encodeURIComponent(selectedGame.id);
+    fixLink.className = 'ghostBtn'; fixLink.style.cssText = 'display:block;text-align:center;text-decoration:none;';
+    fixLink.textContent = '📋 Open in Stat Keeper (fix a mistake)';
+    area.appendChild(fixLink);
+  }
+
+  function backBtn(container, toPhase){
+    const b = document.createElement('button'); b.className = 'ghostBtn'; b.textContent = '← Back';
+    b.addEventListener('click', function(){ wiz.play.phase = toPhase; renderWizard(); });
+    container.appendChild(b);
+  }
+
+  // Nathan: "First is if we can see the play call. If yes, then select the
+  // call. If no, then it proceeds to the play."
+  function renderPhaseCallCheck(card){
+    card.innerHTML = '<h2>🏈 We\'re on Offense</h2><div class="sub">Can you see the play call from the sideline?</div>';
+    const row = document.createElement('div'); row.className = 'chipRow';
+    [['yes','Yes, I can see it'], ['no',"No, just log what happened"]].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip'; c.textContent = pair[1];
+      c.addEventListener('click', function(){
+        wiz.play.phase = pair[0] === 'yes' ? 'calledPlay' : 'playType';
+        renderWizard();
+      });
+      row.appendChild(c);
+    });
+    card.appendChild(row);
+  }
+  function renderPhaseCalledPlay(card){
+    card.innerHTML = '<h2>📣 Coach\'s Call</h2><div class="sub">What got signaled in.</div>';
+    chipGroupField(card, 'Formation', wiz.play, 'coachFormation', FORMATIONS);
+    if (wiz.play.coachFormation) chipGroupField(card, 'Formation Direction', wiz.play, 'coachFormationDir', ['Left','Right']);
+    chipGroupField(card, 'Play', wiz.play, 'coachCall', PLAYBOOK);
+    if (wiz.play.coachCall) chipGroupField(card, 'Play Direction', wiz.play, 'coachCallDir', ['Left','Right']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){ wiz.play.phase = 'playType'; renderWizard(); });
+    card.appendChild(next);
+    backBtn(card, 'callCheck');
+  }
+
+  // Nathan: "You choose Run, Pass, Penalty, Turnover... On 4th down, it
+  // should display an option for Punt... On defense, we won't have
+  // anything to do with play calls, just if the offense did a run, pass or
+  // punt."
+  function renderPhasePlayType(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>' + (onOffense ? '🏈 Choose the Play' : '🛡️ What Did They Run?') + '</h2>';
+    const opts = onOffense ? ['Run','Pass','Penalty','Turnover'] : ['Run','Pass','Punt','Penalty','Turnover'];
+    if (onOffense && wiz.game.down === 4) opts.push('Punt');
+    const row = document.createElement('div'); row.className = 'chipRow';
+    opts.forEach(function(t){
+      const c = document.createElement('div'); c.className = 'optChip'; c.textContent = t;
+      c.addEventListener('click', function(){
+        wiz.play.type = t;
+        wiz.play.phase = t === 'Run' ? 'runDetail' : t === 'Pass' ? 'passDetail' : t === 'Penalty' ? 'penaltyDetail' : t === 'Turnover' ? 'turnoverDetail' : 'puntDetail';
+        renderWizard();
+      });
+      row.appendChild(c);
+    });
+    card.appendChild(row);
+    if (onOffense) backBtn(card, wiz.play.coachCall !== undefined || wiz.play.calledSkipped ? 'calledPlay' : 'callCheck');
+  }
+
+  function renderPhaseRunDetail(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🏃 Run</h2>';
+    if (onOffense){
+      chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
+      if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
+      chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
+      if (wiz.play.playCall) chipGroupField(card, 'Play Direction', wiz.play, 'playCallDir', ['Left','Right']);
+      const tagsWrap = document.createElement('div'); tagsWrap.innerHTML = '<div class="fieldLabel">Add-ons (optional)</div>';
+      const tagsRow = document.createElement('div'); tagsRow.className = 'chipRow';
+      PLAY_TAGS.forEach(function(t){
+        const c = document.createElement('div'); c.className = 'optChip' + ((wiz.play.tags||[]).indexOf(t) !== -1 ? ' active' : '');
+        c.textContent = t;
+        c.addEventListener('click', function(){
+          const arr = wiz.play.tags || (wiz.play.tags = []);
+          const i = arr.indexOf(t); if (i === -1) arr.push(t); else arr.splice(i,1);
+          renderWizard();
+        });
+        tagsRow.appendChild(c);
+      });
+      tagsWrap.appendChild(tagsRow); card.appendChild(tagsWrap);
+      renderPlayerChooser(card, 'Ball Carrier', wiz.play, 'carrier');
+      chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
+    } else {
+      // Nathan (follow-up): "When I chose run, it no longer gave me the
+      // option of right middle or left like it should." Direction is
+      // which way the run actually went -- a fact about the play, not a
+      // "call" the way formation/playCall are, so unlike those it belongs
+      // on defense too. It lived only in the onOffense branch above;
+      // added here as well rather than moved, since offense still needs
+      // its own copy alongside the ball carrier field there.
+      renderPlayerChooser(card, 'Opponent Ball Carrier', wiz.play, 'oppCarrier', {optional:true});
+      chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
+    }
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){ wiz.play.phase = 'resultSpot'; renderWizard(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhasePassDetail(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🎯 Pass</h2>';
+    if (onOffense){
+      chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
+      if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
+      chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
+      if (wiz.play.playCall) chipGroupField(card, 'Play Direction', wiz.play, 'playCallDir', ['Left','Right']);
+      renderPlayerChooser(card, 'Passer', wiz.play, 'passer');
+      renderPlayerChooser(card, 'Target', wiz.play, 'target');
+    } else {
+      renderPlayerChooser(card, 'Opponent Passer', wiz.play, 'oppPasser', {optional:true});
+      wiz.play.oppTarget = wiz.play.oppTarget || '';
+    }
+    chipGroupField(card, 'Result', wiz.play, 'result', ['Complete','Incomplete','Sacked']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){
+      if (!wiz.play.result){ alert('Pick Complete, Incomplete, or Sacked first.'); return; }
+      if (wiz.play.result === 'Incomplete'){ commitCurrentPlay(); return; } // Nathan: "if incomplete, ball stays in the same spot as previous play" -- nothing left to ask
+      // Nathan (follow-up): "There are also instances when players get
+      // sacked instead of a rush for a loss. I don't want it to look like
+      // it was a designed run." A sack used to have no home on a Pass
+      // play at all -- Complete/Incomplete were the only options, so a
+      // sack could only get logged as a Run for negative yards, which
+      // then shows up in the Play Call Report as a called RUSHING play
+      // that lost yardage instead of a broken-down passing play. This
+      // stays a 'pass' type entry either way, just with its own simple
+      // spot phase (no "how did it end" chip -- a sack isn't a touchdown
+      // or out of bounds the way a completed pass can be).
+      wiz.play.phase = wiz.play.result === 'Sacked' ? 'sackSpot' : 'resultSpot';
+      renderWizard();
+    });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhaseSackSpot(card){
+    card.innerHTML = '<h2>💥 Sacked</h2><div class="sub">Where the QB went down -- this stays logged as a passing play, not a run.</div>';
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Sack & Continue';
+    next.addEventListener('click', function(){ commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'passDetail');
+  }
+
+  // Nathan: "It needs to understand basic football knowledge... if a
+  // penalty is on the play, such as Holding, i need to be able to know if
+  // it was called on the offense or defense but based on the down and
+  // distance, the program needs to know that holding is 10 yards and
+  // would result in a 1st down if on the defense, or a 2nd and 13 for the
+  // offense." Down/distance math for a penalty was already correct (see
+  // commitCurrentPlay's Penalty branch -- distance moves by the yardage,
+  // down never burns), but nothing suggested the RIGHT yardage or knew
+  // which penalty types are automatic first downs on defense in the first
+  // place, leaving that entirely on the coach to remember mid-game. This
+  // is a reasonable default ruleset, not a rulebook -- always still a
+  // suggestion the coach can override (see the toggle it sets below),
+  // since exact yardages and what's an automatic first down both vary by
+  // level/league.
+  const PENALTY_RULES = {
+    'Holding': { yards: 10, autoFirstDownOnDefense: true },
+    'False Start': { yards: 5, autoFirstDownOnDefense: false },
+    'Offsides': { yards: 5, autoFirstDownOnDefense: false },
+    'Delay of Game': { yards: 5, autoFirstDownOnDefense: false },
+    'Pass Interference': { yards: 15, autoFirstDownOnDefense: true },
+    'Facemask': { yards: 15, autoFirstDownOnDefense: true },
+    'Unsportsmanlike Conduct': { yards: 15, autoFirstDownOnDefense: true },
+    'Illegal Block': { yards: 10, autoFirstDownOnDefense: false },
+  };
+  function applyPenaltyAutoFirstDown(){
+    const rule = PENALTY_RULES[wiz.play.penType];
+    if (!rule || !wiz.play.penTeam) return;
+    const penalizedIsOffense = (wiz.play.penTeam === 'Us') === (wiz.game.possession === 'Us');
+    wiz.play.firstDown = !penalizedIsOffense && rule.autoFirstDownOnDefense;
+  }
+  function renderPhasePenaltyDetail(card){
+    card.innerHTML = '<h2>🚩 Penalty</h2>';
+    chipGroupField(card, 'Penalty On', wiz.play, 'penTeam', ['Us','Opponent'], function(v){ wiz.play.penTeam = v; applyPenaltyAutoFirstDown(); renderWizard(); });
+    chipGroupField(card, 'Penalty', wiz.play, 'penType', ['Holding','False Start','Offsides','Delay of Game','Pass Interference','Facemask','Unsportsmanlike Conduct','Illegal Block','Other'], function(v){
+      wiz.play.penType = v;
+      const rule = PENALTY_RULES[v];
+      if (rule) wiz.play.penYards = rule.yards;
+      applyPenaltyAutoFirstDown();
+      renderWizard();
+    });
+    const yardsWrap = document.createElement('div'); yardsWrap.innerHTML = '<div class="fieldLabel">Yards</div>';
+    if (wiz.play.penYards == null) wiz.play.penYards = 5;
+    const yr = document.createElement('div'); yr.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.value = wiz.play.penYards;
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ wiz.play.penYards = Math.max(0, wiz.play.penYards-1); renderWizard(); });
+    plus.addEventListener('click', function(){ wiz.play.penYards = wiz.play.penYards+1; renderWizard(); });
+    input.addEventListener('change', function(){ wiz.play.penYards = Math.max(0, Number(input.value||0)); });
+    yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+    yardsWrap.appendChild(yr); card.appendChild(yardsWrap);
+    const toggleRow = document.createElement('div'); toggleRow.className = 'chipRow'; toggleRow.style.marginTop = '10px';
+    [['declined','Declined'], ['firstDown','Automatic 1st Down']].forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (wiz.play[pair[0]] ? ' active' : '');
+      c.textContent = pair[1];
+      c.addEventListener('click', function(){ wiz.play[pair[0]] = !wiz.play[pair[0]]; renderWizard(); });
+      toggleRow.appendChild(c);
+    });
+    card.appendChild(toggleRow);
+    if (wiz.play.penType && wiz.play.penTeam && PENALTY_RULES[wiz.play.penType]){
+      const hint = document.createElement('div'); hint.className = 'sub'; hint.style.marginTop = '6px';
+      hint.textContent = '💡 ' + wiz.play.penYards + ' yds pre-filled for ' + wiz.play.penType + (wiz.play.firstDown ? ' -- usually an automatic 1st down on defense' : '') + '. Adjust either if this call is different.';
+      card.appendChild(hint);
+    }
+    wiz.play.spotSide = wiz.play.spotSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.spotYard = wiz.play.spotYard != null ? wiz.play.spotYard : sideYardFromAbs(wiz.game.spot).yard;
+    const spotDisplay = document.createElement('div');
+    spotDisplay.innerHTML = '<div class="fieldLabel">Spot</div><div style="color:var(--dim);font-size:14px;">' + spotLabelAbs(wiz.game.spot) + ' (current line of scrimmage)</div>';
+    card.appendChild(spotDisplay);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Penalty & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.penTeam || !wiz.play.penType){ alert('Pick who it\'s on and the penalty type.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhaseTurnoverDetail(card){
+    card.innerHTML = '<h2>🔄 Turnover</h2>';
+    chipGroupField(card, 'Type', wiz.play, 'toType', ['Fumble','Interception']);
+    renderPlayerChooser(card, 'Lost By (offense)', wiz.play, 'lostBy', {optional:true});
+    renderPlayerChooser(card, 'Recovered By (defense)', wiz.play, 'recoveredBy', {optional: true});
+    // Nathan: "Marked an interception but it didn't say where he caught it
+    // and where he was tackled. I put it at the 16 but it showed us with
+    // 1st and 10 at the 27 which was the previous spot." Two real, related
+    // bugs here: there was only ONE spot field for a turnover at all (an
+    // interception return covers two different spots -- where it was
+    // caught, and where the return ended, same as a punt already models
+    // with catchSide/endSide), AND that one field was saved as
+    // spotSide/spotYard while the spot-advance logic below reads
+    // endSide/endYard -- a name mismatch, so whatever was actually entered
+    // was saved onto the play but silently never used to move the ball.
+    wiz.play.catchSide = wiz.play.catchSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Intercepted / Recovered At'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+    wiz.play.endSide = wiz.play.endSide != null ? wiz.play.endSide : wiz.play.catchSide;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : wiz.play.catchYard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot (after any return -- same as above if no return)'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Turnover & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.toType){ alert('Pick Fumble or Interception.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  function renderPhasePuntDetail(card){
+    const isUs = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🦵 Punt</h2><div class="sub">4th down -- ' + (isUs ? 'we\'re' : 'they\'re') + ' punting it away.</div>';
+    if (isUs) renderPlayerChooser(card, 'Punter', wiz.play, 'punter');
+    else renderPlayerChooser(card, 'Opponent Punter', wiz.play, 'oppPunter', {optional:true});
+    chipGroupField(card, 'Result', wiz.play, 'puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']);
+    if (wiz.play.puntResult === 'Returned'){
+      if (isUs) renderPlayerChooser(card, 'Returned By (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      else renderPlayerChooser(card, 'Returned By', wiz.play, 'returner');
+    }
+    wiz.play.startSide = wiz.play.startSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.startYard = wiz.play.startYard != null ? wiz.play.startYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Punted From (spot)'; const r=document.createElement('div'); r.style.cssText='color:var(--dim);font-size:14px;'; r.textContent=spotLabelAbs(wiz.game.spot); const w=document.createElement('div'); w.appendChild(l); w.appendChild(r); return w; })());
+    if (wiz.play.puntResult === 'Returned'){
+      wiz.play.catchSide = wiz.play.catchSide || sideYardFromAbs(wiz.game.spot).side;
+      wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - 25);
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Caught At'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+    }
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - (wiz.play.puntResult === 'Returned' ? 20 : 30));
+    card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot'; return l; })());
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Punt & Continue';
+    next.addEventListener('click', function(){ if (!wiz.play.puntResult){ alert('Pick how it ended.'); return; } commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
+  }
+
+  // Nathan: "you choose the result, tackled, out of bounds, etc. You
+  // choose the spot of the ball at the end of the play." One combined
+  // screen for Run and completed Pass -- both need the same two things.
+  function renderPhaseResultSpot(card){
+    card.innerHTML = '<h2>📍 Where It Ended</h2>';
+    wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
+    card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    chipGroupField(card, 'How did it end?', wiz.play, 'resultKind', ['Tackled','Out of Bounds','Touchdown']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Play & Continue';
+    next.addEventListener('click', function(){
+      if (!wiz.play.resultKind){ alert('Pick how the play ended.'); return; }
+      wiz.play.td = wiz.play.resultKind === 'Touchdown';
+      wiz.play.oob = wiz.play.resultKind === 'Out of Bounds';
+      // Nathan: "if tackle is chosen, pick the tackler" -- only meaningful
+      // on DEFENSE (we only track OUR players' tackle credit; there's no
+      // tackler to name when it's our own guy getting tackled).
+      if (wiz.play.resultKind === 'Tackled' && wiz.game.possession === 'Opponent'){
+        wiz.play.phase = 'tackler';
+        renderWizard();
+        return;
+      }
+      commitCurrentPlay();
+    });
+    card.appendChild(next);
+    backBtn(card, wiz.play.type === 'Run' ? 'runDetail' : 'passDetail');
+  }
+
+  function renderPhaseTackler(card){
+    card.innerHTML = '<h2>🛡️ Who Made the Tackle?</h2><div class="sub">Solo tackler first -- add anyone else who assisted after.</div>';
+    renderPlayerChooser(card, 'Tackler (solo)', wiz.play, 'tackler');
+    renderPlayerChooser(card, 'Assist (optional, select all who helped)', wiz.play, 'assist', {multi:true, optional:true});
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Tackle & Continue';
+    next.addEventListener('click', function(){ commitCurrentPlay(); });
+    card.appendChild(next);
+    backBtn(card, 'resultSpot');
+  }
+
+  function renderPhaseFirstDownToast(card){
+    card.innerHTML = '<div class="handoffIcon">🎉</div><h2 style="text-align:center;">First down!</h2>' +
+      '<div class="sub" style="text-align:center;">' + (wiz.game.possession === 'Us' ? 'We' : 'They') + ' moved the chains -- next play is 1st &amp; ' + wiz.game.distance + '.</div>';
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Next Play →';
+    next.addEventListener('click', startNextPlay);
+    card.appendChild(next);
+  }
+
+  // Nathan: "at this level - a kick is worth 2 points and a play for a
+  // score is worth 1 point." The reverse of standard football (kick=1,
+  // run/pass conversion=2) -- naming these "Kick"/"Play" instead of the
+  // usual "PAT"/"2PT" on purpose, since those labels carry the standard
+  // assumption and would be actively misleading for this league's actual
+  // rule. Point values are hardcoded to this level's rule, not the chip
+  // labels doing double duty as the number.
+  function renderPhaseExtraPoint(card){
+    const g = wiz.game;
+    const scoringTeam = wiz.play.side === 'offense' ? 'Us' : 'Opponent'; // whoever just scored the TD attempts this, not necessarily still "on offense" by the time this renders
+    card.innerHTML = '<div class="handoffIcon">🏆</div><h2 style="text-align:center;">Touchdown, ' + scoringTeam + '!</h2>' +
+      '<div class="sub" style="text-align:center;">Extra point attempt -- at this level, a kick is worth 2, a run/pass play is worth 1.</div>';
+    chipGroupField(card, 'Attempt', wiz.play, 'xpType', [['kick','🦵 Kick (2 pts)'],['play','🏃 Run/Pass Play (1 pt)']]);
+    if (wiz.play.xpType) chipGroupField(card, 'Result', wiz.play, 'xpResult', ['Good','No Good']);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log It & Continue';
+    next.addEventListener('click', function(){
+      if (!wiz.play.xpType || !wiz.play.xpResult){ alert('Pick the attempt type and the result.'); return; }
+      commitExtraPoint(scoringTeam);
+    });
+    card.appendChild(next);
+  }
+  async function commitExtraPoint(scoringTeam){
+    const g = wiz.game;
+    const points = wiz.play.xpType === 'kick' ? 2 : 1;
+    const good = wiz.play.xpResult === 'Good';
+    if (good){ if (scoringTeam === 'Us') g.scoreUs += points; else g.scoreOpp += points; }
+    const entry = {
+      id: genId(), type:'score', side: wiz.play.side, quarter: g.quarter,
+      scoreKind: (wiz.play.xpType === 'kick' ? 'Kick' : 'Run/Pass Play') + ' (' + (good ? points + ' pt Good' : 'No Good') + ')',
+      scoreTeam: scoringTeam,
+    };
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    // Nathan: a touchdown+extra point is always followed by a real
+    // kickoff -- reuses the same idea as the opening kickoff (a real
+    // 'kick' play, possession flips, down/distance resets to 1st & 10)
+    // rather than handing off to Stat Keeper for it, same as the extra
+    // point itself no longer does.
+    wiz.play = { phase: 'postScoreKickoff', kickingTeam: scoringTeam };
+    renderWizard();
+  }
+
+  function renderPhasePostScoreKickoff(card){
+    const g = wiz.game;
+    const isUsKick = wiz.play.kickingTeam === 'Us';
+    const heading = wiz.play.isHalftime ? '🏈 Halftime — ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off to Start the 2nd Half' : '🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off';
+    card.innerHTML = '<h2>' + heading + '</h2><div class="sub">Same as the opening kickoff -- where it was caught, and where the return ended.</div>';
+    if (wiz.play.isHalftime){
+      // Nathan: "confirming the side we were defending." Pre-picked from
+      // the automatic flip in logEvent (teams do switch ends every
+      // quarter), but halftime specifically gets an actual confirm step
+      // rather than just trusting the silent flip -- easy to get turned
+      // around on which end is which after a break between halves.
+      chipGroupField(card, 'Which end do we defend for the 2nd half?', g, 'defendingEnd', ['Left','Right']);
+    }
+    chipGroupField(card, 'Onside Attempt?', wiz.play, 'onside', [[true,'Yes'],[false,'No']]);
+    if (wiz.play.onside){
+      chipGroupField(card, 'Recovered By', wiz.play, 'recoveredByTeam', ['Us','Opponent']);
+    } else {
+      if (isUsKick) renderPlayerChooser(card, 'Returner (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      else renderPlayerChooser(card, 'Returner', wiz.play, 'returner');
+      wiz.play.catchSide = wiz.play.catchSide != null ? wiz.play.catchSide : (isUsKick ? 'OPP' : 'OWN');
+      wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : 15;
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Caught At'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
+      wiz.play.endSide = wiz.play.endSide != null ? wiz.play.endSide : wiz.play.catchSide;
+      wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : wiz.play.catchYard;
+      card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Brought Ball To'; return l; })());
+      card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    }
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Kickoff & Continue';
+    next.addEventListener('click', function(){ commitPostScoreKickoff(); });
+    card.appendChild(next);
+  }
+  async function commitPostScoreKickoff(){
+    const g = wiz.game;
+    const isUsKick = wiz.play.kickingTeam === 'Us';
+    const entry = { id: genId(), type:'kick', side: isUsKick ? 'offense' : 'defense', quarter: g.quarter,
+      kickTeam: wiz.play.kickingTeam, onside: !!wiz.play.onside };
+    let newSpot = 50, newPossession = isUsKick ? 'Opponent' : 'Us';
+    if (wiz.play.onside){
+      entry.recoveredByTeam = wiz.play.recoveredByTeam;
+      newPossession = wiz.play.recoveredByTeam;
+      newSpot = g.spot; // onside kicks don't carry their own spot math -- same simplification stat-keeper.html already makes
+    } else {
+      entry.startSide = isUsKick ? 'OWN' : 'OPP'; entry.startYard = 40;
+      entry.catchSide = wiz.play.catchSide; entry.catchYard = wiz.play.catchYard;
+      entry.endSide = wiz.play.endSide; entry.endYard = wiz.play.endYard;
+      entry.returner = wiz.play.returner; entry.oppReturner = wiz.play.oppReturner;
+      const endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+      if (endAbs != null) newSpot = clampSpot(endAbs);
+    }
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry);
+      g.spot = newSpot; g.down = 1; g.distance = 10; g.possession = newPossession;
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    startNextPlay();
+  }
+
+  function startNextPlay(){
+    wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
+    renderWizard();
+  }
+
+  // Nathan: "we need a way of Logging a timeout to a team as an event...
+  // Same for end of quarters."
+  // Nathan: "give me the option to Save the Current Stat Keeper for that
+  // game as a work in progress." Stamps statsStatus directly onto the
+  // same statKeeperLogs/{gameId} record everything else already lives on
+  // -- a simple status flag, not a different save mechanism, since every
+  // play is already persisted the moment it's logged regardless.
+  async function saveAsWorkInProgress(){
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const gameState = Object.assign({}, existing, { statsStatus: 'in-progress', updatedAt: new Date().toISOString() });
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      loadStatus.textContent = '✅ Saved as work in progress';
+      setTimeout(function(){ if (loadStatus.textContent === '✅ Saved as work in progress') loadStatus.textContent = ''; }, 2500);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; }
+  }
+
+  async function logEvent(kind){
+    if (kind === 'timeout'){
+      const team = confirm('Timeout by US? (Cancel = Opponent)') ? 'Us' : 'Opponent';
+      await pushPlayEntry({ type:'timeout', id: genId(), side: team === 'Us' ? 'offense' : 'defense', quarter: wiz.game.quarter, team: team });
+    } else {
+      // Nathan (follow-up): "When I ended the 2nd quarter... it still says
+      // it's Q2." Real bug: pushPlayEntry (below) saves wiz.game.quarter
+      // into the overall game record, but it used to be called BEFORE
+      // wiz.game.quarter was incremented -- so the record that actually
+      // got persisted still had the OLD quarter number on it. The in-
+      // memory value looked right for the rest of that same session (it
+      // WAS incremented, just after the save already happened), which is
+      // exactly why it only showed up as wrong after leaving and coming
+      // back -- a fresh load reads back the stale number that was
+      // actually saved. Incrementing first, and saving the marker itself
+      // with the quarter that just ended (not the new one), fixes both.
+      const endingQuarter = wiz.game.quarter;
+      const wasHalftime = endingQuarter === 2;
+      wiz.game.quarter = endingQuarter + 1;
+      await pushPlayEntry({ type:'quarterEnd', id: genId(), quarter: endingQuarter });
+      // Nathan: "end of 2nd and 3rd quarters? It will automatically flip
+      // the field and retain down, distance and possession." Teams switch
+      // ends every quarter in real football, not just at halftime -- so
+      // this flips every time, uniformly, while everything else
+      // (spot/down/distance/possession) is simply never touched here at
+      // all, which is what "retain" actually means in this data: there's
+      // nothing to reset because a quarter change was never wired to
+      // reset it in the first place.
+      wiz.game.defendingEnd = wiz.game.defendingEnd === 'Left' ? 'Right' : 'Left';
+      // Nathan (follow-up): "instead of going to halftime, and starting
+      // the 2nd half with a kickoff and confirming the side we were
+      // defending, it still says it's Q2." Halftime is genuinely
+      // different from the Q1->Q2/Q3->Q4 flips above -- real football
+      // restarts with an actual kickoff, not a continuation of whatever
+      // drive was happening. Reuses the exact same post-score kickoff
+      // screen already built for "team just scored, now they kick off" --
+      // same shape of event, different trigger. The team that received
+      // the OPENING kickoff now kicks (receiving doesn't carry over
+      // between halves, by rule), and the end each team defends gets a
+      // real confirm step here instead of just being silently flipped.
+      if (wasHalftime && wiz.state.receivingTeam){
+        wiz.play = { phase: 'postScoreKickoff', kickingTeam: wiz.state.receivingTeam, isHalftime: true };
+      }
+    }
+    renderWizard();
+  }
+
+  async function pushPlayEntry(entry){
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      plays.push(entry); // oldest-last-in-array-order for pushed entries, same convention commitKickoff established
+      const gameState = {
+        plays: plays, quarter: wiz.game.quarter, spot: wiz.game.spot, down: wiz.game.down, distance: wiz.game.distance,
+        finalUs: (existing && existing.finalUs) || '', finalOpp: (existing && existing.finalOpp) || '',
+        updatedAt: new Date().toISOString(),
+      };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      loadStatus.textContent = '';
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; }
+  }
+
+  // Nathan: "If a play results in a first down, that should be recognized
+  // and the following play with be a first down." Builds the actual entry
+  // object(s) for whatever's in wiz.play, saves them, advances
+  // spot/down/distance/possession/score, then either shows the first-down
+  // toast or jumps straight into the next play.
+  async function commitCurrentPlay(){
+    const g = wiz.game;
+    const onOffense = g.possession === 'Us';
+    const wasFourthDown = g.down === 4;
+    const entries = [];
+    let type = wiz.play.type;
+    // Nathan: "Give me the options of setting markers at the end of each
+    // play so there is a link between the plays and the clip." Captured
+    // right here, at the exact moment a play is committed -- no separate
+    // button to remember, and it's on `base` so every entry type below
+    // (Run, Pass, Penalty, Turnover, Punt) gets it the same way. null on
+    // anything that isn't a YouTube video (Drive/Hudl links, or no film at
+    // all) rather than a fake/misleading number.
+    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter, filmTimestamp: getCurrentFilmTime() };
+    let startAbs = g.spot, endAbs = g.spot;
+    let converted = false;
+    let possessionFlips = false;
+
+    if (type === 'Run'){
+      const sy = sideYardFromAbs(g.spot);
+      startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+      const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+      converted = yards >= g.distance;
+      // Nathan: "Within the Wizard, it logged the offensive play and the
+      // tackle as two separate plays." That second, linked 'tackle' entry
+      // also had its own start/end spot fields, computed separately from
+      // the run's own -- which is exactly how it ended up showing a
+      // nonsense "-23 yds" tackle in the log. tackler/assist now live
+      // directly ON this same entry instead (matching the identical fix
+      // already made in stat-keeper.html), so there's only ever one entry
+      // per play, and nothing to get out of sync with the run itself.
+      entries.push(Object.assign({}, base, {
+        type:'run', runTeam: onOffense ? 'Us' : 'Opponent',
+        carrier: wiz.play.carrier, oppCarrier: wiz.play.oppCarrier,
+        startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard,
+        yards: yards, dir: wiz.play.dir, formation: wiz.play.formation, formationDir: wiz.play.formationDir,
+        playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir, tags: wiz.play.tags || [],
+        coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir,
+        coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+        firstDown: converted, td: !!wiz.play.td, oob: wiz.play.resultKind === 'Out of Bounds', down: g.down, distance: g.distance,
+        tackler: (!onOffense && wiz.play.resultKind === 'Tackled') ? wiz.play.tackler : undefined,
+        assist: (!onOffense && wiz.play.resultKind === 'Tackled') ? (wiz.play.assist || []) : undefined,
+      }));
+    } else if (type === 'Pass'){
+      if (wiz.play.result === 'Incomplete'){
+        const sy = sideYardFromAbs(g.spot);
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Incomplete',
+          passer: wiz.play.passer, target: wiz.play.target, oppPasser: wiz.play.oppPasser, oppTarget: wiz.play.oppTarget,
+          spotSide: sy.side, spotYard: sy.yard,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          down: g.down, distance: g.distance,
+        }));
+      } else if (wiz.play.result === 'Sacked'){
+        // Nathan: "There are also instances when players get sacked
+        // instead of a rush for a loss. I don't want it to look like it
+        // was a designed run." Still a 'pass' type entry, still keeps
+        // whatever playCall was actually called (the play WAS a called
+        // pass -- it just broke down into a sack instead of a
+        // completion), so the Play Call Report correctly counts this
+        // against passing, not as a designed rushing play that happened
+        // to lose yards.
+        const sy = sideYardFromAbs(g.spot);
+        startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Sacked',
+          passer: wiz.play.passer, oppPasser: wiz.play.oppPasser,
+          startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, yards: yards,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          down: g.down, distance: g.distance,
+        }));
+      } else {
+        const sy = sideYardFromAbs(g.spot);
+        startAbs = g.spot; endAbs = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        const yards = signedYardsFromSpots(startAbs, endAbs, onOffense);
+        converted = yards >= g.distance;
+        entries.push(Object.assign({}, base, {
+          type:'pass', passTeam: onOffense ? 'Us' : 'Opponent', result:'Complete',
+          passer: wiz.play.passer, target: wiz.play.target, oppPasser: wiz.play.oppPasser, oppTarget: wiz.play.oppTarget,
+          startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, yards: yards,
+          formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
+          coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
+          firstDown: converted, td: !!wiz.play.td, oob: wiz.play.resultKind === 'Out of Bounds', down: g.down, distance: g.distance,
+          tackler: (!onOffense && wiz.play.resultKind === 'Tackled') ? wiz.play.tackler : undefined,
+          assist: (!onOffense && wiz.play.resultKind === 'Tackled') ? (wiz.play.assist || []) : undefined,
+        }));
+      }
+    } else if (type === 'Penalty'){
+      entries.push(Object.assign({}, base, { type:'penalty', penTeam: wiz.play.penTeam, penType: wiz.play.penType, penOther: wiz.play.penOther,
+        penYards: wiz.play.penYards, declined: !!wiz.play.declined, firstDown: !!wiz.play.firstDown,
+        spotSide: wiz.play.spotSide, spotYard: wiz.play.spotYard, penPlayer: wiz.play.penPlayer }));
+      converted = !!wiz.play.firstDown;
+    } else if (type === 'Turnover'){
+      entries.push(Object.assign({}, base, { type:'turnover', toType: wiz.play.toType, lostBy: wiz.play.lostBy, recoveredBy: wiz.play.recoveredBy,
+        catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard, endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
+      possessionFlips = true;
+    } else if (type === 'Punt'){
+      const sy = sideYardFromAbs(g.spot);
+      entries.push(Object.assign({}, base, { type:'punt', puntTeam: onOffense ? 'Us' : 'Opponent', puntResult: wiz.play.puntResult,
+        punter: wiz.play.punter, oppPunter: wiz.play.oppPunter, returner: wiz.play.returner, oppReturner: wiz.play.oppReturner,
+        startSide: sy.side, startYard: sy.yard, catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard,
+        endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
+      possessionFlips = true;
+    }
+
+    // Save all entries from this play in one round-trip.
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      entries.forEach(function(e){ plays.push(e); });
+
+      // ---- advance spot ----
+      if (type === 'Run' || (type === 'Pass' && (wiz.play.result === 'Complete' || wiz.play.result === 'Sacked'))){
+        g.spot = clampSpot(endAbs);
+      } else if (type === 'Punt' || type === 'Turnover'){
+        const endA = absoluteSpotOf(wiz.play.endSide, wiz.play.endYard);
+        if (endA != null) g.spot = clampSpot(endA);
+      } else if (type === 'Penalty' && !wiz.play.declined){
+        const yds = Number(wiz.play.penYards||0);
+        g.spot = clampSpot(g.spot + (wiz.play.penTeam === 'Us' ? -yds : yds));
+      }
+
+      // ---- advance down/distance ----
+      // Sacked shares this branch with Run/Complete on purpose -- converted
+      // is always false for a sack (never set in that branch above), so it
+      // correctly falls to "down+1, distance grows by however many yards
+      // were lost" the same way a stuffed run does, without needing its
+      // own separate case.
+      if (type === 'Run' || (type === 'Pass' && (wiz.play.result === 'Complete' || wiz.play.result === 'Sacked'))){
+        if (converted){ g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot)); }
+        else { g.down = g.down + 1; g.distance = Math.max(1, g.distance - signedYardsFromSpots(startAbs, endAbs, onOffense)); }
+      } else if (type === 'Pass' && wiz.play.result === 'Incomplete'){
+        g.down = g.down + 1;
+      } else if (type === 'Penalty' && !wiz.play.declined){
+        // Nathan: "If a 1st down is set and then a penalty happens, it
+        // needs to update that on the down and distance." A penalty was
+        // already correctly moving the SPOT (see the block just above),
+        // but distance itself was never touched unless "Automatic 1st
+        // Down" was checked -- a plain 5-yard false start on 1st & 10
+        // should become 1st & 15, not silently stay 1st & 10. Down number
+        // itself is untouched either way (a penalty never burns a down by
+        // rule) unless the yardage happens to reach the line to gain on
+        // its own, which -- same as a real penalty -- is a first down
+        // whether or not "Automatic 1st Down" was checked.
+        const yds = Number(wiz.play.penYards||0);
+        const penalizedIsOffense = (wiz.play.penTeam === 'Us') === onOffense;
+        if (converted){
+          g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot));
+        } else if (penalizedIsOffense){
+          g.distance = g.distance + yds;
+        } else {
+          const newDist = g.distance - yds;
+          if (newDist <= 0){ converted = true; g.down = 1; g.distance = Math.max(1, Math.min(10, onOffense ? (100-g.spot) : g.spot)); }
+          else { g.distance = newDist; }
+        }
+      }
+
+      // ---- possession changes ----
+      if (possessionFlips || (wasFourthDown && (type === 'Run' || type === 'Pass') && !converted && g.down > 4)){
+        g.possession = g.possession === 'Us' ? 'Opponent' : 'Us';
+        g.down = 1; g.distance = 10;
+      }
+
+      const gameState = { plays: plays, quarter: g.quarter, spot: g.spot, down: g.down, distance: g.distance,
+        finalUs: g.scoreUs, finalOpp: g.scoreOpp, updatedAt: new Date().toISOString() };
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+
+    // Nathan: "when a run is called and its a touchdown - I need to be
+    // able to set if the PAT is good." The score bug never actually
+    // tracked points at all before this -- scoreUs/scoreOpp sat wherever
+    // they were initialized and finalUs/finalOpp only ever got set by
+    // hand elsewhere (Stat Keeper's own Final Score Check). A touchdown
+    // is worth 6 regardless of who scored it (offense, or a defensive/
+    // special-teams TD), credited to whichever team just had the ball.
+    if (entries.some(function(e){ return e.td; })){
+      if (onOffense) g.scoreUs += 6; else g.scoreOpp += 6;
+      // wiz.play still holds the just-committed run/pass's fields (formation,
+      // carrier, etc.) -- side was never one of them (it lives on the entry's
+      // `base` object, not the draft), so it's set explicitly here for
+      // renderPhaseExtraPoint to read who actually scored.
+      wiz.play.side = onOffense ? 'offense' : 'defense';
+      wiz.play.phase = 'extraPoint';
+      renderWizard();
+      return;
+    }
+    if (converted){ wiz.play.phase = 'firstDownToast'; renderWizard(); return; }
+    startNextPlay();
+  }
+  function absoluteSpotOf(side, yard){ return absoluteSpot(side, yard); }
+
+
+  // ---- Audit Mode: review an already-logged game, play by play ----
+  // Nathan: "The Game Wizard was done prior to plays being added, same for
+  // starting ball spot and ending ball spot. With those put in place
+  // afterwards, only some of the plays are effected by it... If the wizard
+  // showed the info it has on the play (saying none if it wasn't included,
+  // same for ball placements) then I should have an option to update for
+  // that play. I would have to go through all the plays from the game to
+  // ensure they are correct."
+  //
+  // Deliberately NOT the same phase-by-phase flow as building a brand new
+  // play (renderPhaseRunDetail etc.) -- those are wired to
+  // commitCurrentPlay(), which APPENDS a new play and re-advances the
+  // running spot/down/distance/possession simulation. Reviewing an
+  // existing play needs the opposite: show everything that play might
+  // carry on ONE screen, editable right there, saved back into that exact
+  // same array slot (matched by id) without touching anything else's
+  // spot/score/possession math at all. A field-descriptor table drives one
+  // generic renderer instead of ten near-duplicate per-type screens.
+  const AUDIT_FIELDS = {
+    run: [
+      {key:'formation', label:'Formation', kind:'chip', options:FORMATIONS},
+      {key:'formationDir', label:'Formation Direction', kind:'chip', options:['Left','Right']},
+      {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
+      {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
+      {key:'dir', label:'Run Direction', kind:'chip', options:['Left','Middle','Right']},
+      {key:'tags', label:'Motion/Add-Ons', kind:'tagsMulti', optional:true},
+      {key:'carrier', label:'Carrier (us)', kind:'player'},
+      {key:'oppCarrier', label:'Carrier (opponent)', kind:'player', optional:true},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'First Down', kind:'toggle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    pass: [
+      {key:'result', label:'Complete / Incomplete / Sacked', kind:'chip', options:['Complete','Incomplete','Sacked']},
+      {key:'formation', label:'Formation', kind:'chip', options:FORMATIONS},
+      {key:'formationDir', label:'Formation Direction', kind:'chip', options:['Left','Right']},
+      {key:'playCall', label:'Play Call', kind:'chip', options:PLAYBOOK},
+      {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
+      {key:'passer', label:'Passer (us)', kind:'player'},
+      {key:'target', label:'Target (us)', kind:'player'},
+      {key:'oppPasser', label:'Passer (opponent)', kind:'player', optional:true},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'First Down', kind:'toggle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    tackle: [
+      {key:'tackler', label:'Tackler (solo)', kind:'player'},
+      {key:'assist', label:'Assist(s)', kind:'playerMulti'},
+      {key:'spot', label:'Start / End Spot', kind:'spotPair'},
+      {key:'downdist', label:'Down & Distance', kind:'downdist'},
+      {key:'firstDown', label:'Opponent 1st Down', kind:'toggle'},
+    ],
+    kick: [
+      {key:'returner', label:'Returner (us)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    punt: [
+      {key:'puntResult', label:'Result', kind:'chip', options:['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']},
+      {key:'punter', label:'Punter (us)', kind:'player', optional:true},
+      {key:'oppPunter', label:'Punter (opponent)', kind:'player', optional:true},
+      {key:'returner', label:'Returner (us)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
+    ],
+    penalty: [
+      {key:'penTeam', label:'Penalty On', kind:'chip', options:['Us','Opponent']},
+      {key:'penType', label:'Penalty', kind:'chip', options:['Holding','False Start','Offsides','Delay of Game','Pass Interference','Facemask','Unsportsmanlike Conduct','Illegal Block','Other']},
+      {key:'penYards', label:'Yards', kind:'number'},
+      {key:'penPlayer', label:'Player', kind:'player', optional:true},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+      {key:'declined', label:'Declined', kind:'toggle'},
+      {key:'firstDown', label:'Automatic 1st Down', kind:'toggle'},
+    ],
+    turnover: [
+      {key:'toType', label:'Type', kind:'chip', options:['Fumble','Interception']},
+      {key:'lostBy', label:'Lost By', kind:'player', optional:true},
+      {key:'recoveredBy', label:'Recovered By', kind:'player', optional:true},
+      {key:'spot', label:'Recovered At / Final Spot', kind:'catchEndPair'},
+    ],
+    kneel: [
+      {key:'kneelType', label:'Type', kind:'chip', options:['Kneel','Spike']},
+      {key:'kneelYards', label:'Yards Lost', kind:'number'},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+    ],
+    defextra: [
+      {key:'extraType', label:'Type', kind:'chip', options:['INT','PBU','Sack']},
+      {key:'player', label:'Player', kind:'player'},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+      {key:'td', label:'Touchdown', kind:'toggle'},
+    ],
+    score: [
+      {key:'scoreKind', label:'Kind', kind:'chip', options:['Kick (2 pt Good)','Kick (No Good)','Run/Pass Play (1 pt Good)','Run/Pass Play (No Good)','Safety']},
+      {key:'scoreTeam', label:'Team', kind:'chip', options:['Us','Opponent']},
+      {key:'scorePlayer', label:'Player', kind:'player', optional:true},
+      {key:'spotSingle', label:'Spot', kind:'spotSingle'},
+    ],
+  };
+
+  let auditPlays = [];
+  let auditIndex = 0;
+  let auditDraft = {};
+
+  function startAuditMode(gs){
+    auditPlays = (gs.plays || []).filter(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; }).slice().reverse();
+    if (!auditPlays.length){ alert('No plays to review yet.'); return; }
+    auditIndex = 0;
+    loadAuditDraft();
+    wiz.step = 'audit';
+    renderWizard();
+  }
+  function loadAuditDraft(){ auditDraft = Object.assign({}, auditPlays[auditIndex]); }
+
+  function auditFieldValueText(play, f){
+    if (f.kind === 'spotPair'){
+      const a = spotLabel(play.startSide, play.startYard), b = spotLabel(play.endSide, play.endYard);
+      return (a && b) ? (a + ' → ' + b) : '— none —';
+    }
+    if (f.kind === 'catchEndPair'){
+      const a = spotLabel(play.catchSide, play.catchYard), b = spotLabel(play.endSide, play.endYard);
+      return (a && b) ? (a + ' → ' + b) : '— none —';
+    }
+    if (f.kind === 'spotSingle'){
+      const a = spotLabel(play.spotSide, play.spotYard);
+      return a || '— none —';
+    }
+    if (f.kind === 'spotTriple'){
+      const a = spotLabel(play.startSide, play.startYard), c = spotLabel(play.catchSide, play.catchYard), b = spotLabel(play.endSide, play.endYard);
+      if (!a && !c && !b) return '— none —';
+      return (a||'?') + ' → ' + (c||'(no catch spot)') + ' → ' + (b||'?');
+    }
+    if (f.kind === 'downdist'){
+      return (play.down != null && play.distance != null) ? (['1st','2nd','3rd','4th'][play.down-1] + ' & ' + play.distance) : '— none —';
+    }
+    if (f.kind === 'toggle') return play[f.key] ? 'Yes' : 'No';
+    if (f.kind === 'playerMulti') return (play[f.key] && play[f.key].length) ? play[f.key].join(', ') : '— none —';
+    if (f.kind === 'tagsMulti') return (play[f.key] && play[f.key].length) ? play[f.key].join(', ') : '— none —';
+    return play[f.key] || '— none —';
+  }
+
+  function renderAuditFieldEditor(container, f){
+    const wrap = document.createElement('div'); wrap.style.cssText = 'margin-bottom:4px;';
+    if (f.kind === 'chip') chipGroupField(wrap, f.label, auditDraft, f.key, f.options);
+    else if (f.kind === 'player') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {optional: f.optional});
+    else if (f.kind === 'playerMulti') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {multi:true, optional:true});
+    else if (f.kind === 'tagsMulti'){
+      const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
+      wrap.appendChild(l);
+      const row = document.createElement('div'); row.className = 'chipRow';
+      ['Motion','Counter','Boot/Naked','Play-Action','Pass Option'].forEach(function(t){
+        const on = (auditDraft[f.key] || []).indexOf(t) !== -1;
+        const c = document.createElement('div'); c.className = 'optChip' + (on ? ' active' : '');
+        c.textContent = t;
+        c.addEventListener('click', function(){
+          const arr = auditDraft[f.key] || (auditDraft[f.key] = []);
+          const i = arr.indexOf(t);
+          if (i === -1) arr.push(t); else arr.splice(i, 1);
+          renderWizard();
+        });
+        row.appendChild(c);
+      });
+      wrap.appendChild(row);
+    }
+    else if (f.kind === 'toggle'){
+      chipGroupField(wrap, f.label, auditDraft, f.key, [[true,'Yes'],[false,'No']]);
+    } else if (f.kind === 'number'){
+      const lbl = document.createElement('div'); lbl.className = 'fieldLabel'; lbl.textContent = f.label;
+      wrap.appendChild(lbl);
+      const yr = document.createElement('div'); yr.className = 'yardRow';
+      const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+      const input = document.createElement('input'); input.type = 'number'; input.value = auditDraft[f.key] != null ? auditDraft[f.key] : 0;
+      const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+      minus.addEventListener('click', function(){ auditDraft[f.key] = Math.max(0, (Number(input.value)||0)-1); renderWizard(); });
+      plus.addEventListener('click', function(){ auditDraft[f.key] = (Number(input.value)||0)+1; renderWizard(); });
+      input.addEventListener('change', function(){ auditDraft[f.key] = Number(input.value)||0; });
+      yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+      wrap.appendChild(yr);
+    } else if (f.kind === 'spotPair'){
+      if (auditDraft.startSide == null){ const sy = sideYardFromAbs(50); auditDraft.startSide = sy.side; auditDraft.startYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Start Spot';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'startSide', 'startYard', auditDraft.startYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'End Spot';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'catchEndPair'){
+      // Nathan: "it didn't say where he caught it and where he was
+      // tackled." Same shape as spotPair above, but catchSide/catchYard +
+      // endSide/endYard -- the actual fields a Turnover entry carries
+      // (there's no separate "start spot" stored on it; the interception/
+      // recovery spot itself is the first of the two).
+      if (auditDraft.catchSide == null){ const sy = sideYardFromAbs(50); auditDraft.catchSide = sy.side; auditDraft.catchYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Intercepted / Recovered At';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'catchSide', 'catchYard', auditDraft.catchYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'Final Spot (after any return)';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'spotSingle'){
+      if (auditDraft.spotSide == null){ const sy = sideYardFromAbs(50); auditDraft.spotSide = sy.side; auditDraft.spotYard = sy.yard; }
+      const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
+      wrap.appendChild(l); wrap.appendChild(spotPicker(auditDraft, 'spotSide', 'spotYard', auditDraft.spotYard, renderWizard));
+    } else if (f.kind === 'spotTriple'){
+      if (auditDraft.startSide == null){ const sy = sideYardFromAbs(50); auditDraft.startSide = sy.side; auditDraft.startYard = sy.yard; }
+      if (auditDraft.catchSide == null){ const sy = sideYardFromAbs(50); auditDraft.catchSide = sy.side; auditDraft.catchYard = sy.yard; }
+      if (auditDraft.endSide == null){ const sy = sideYardFromAbs(50); auditDraft.endSide = sy.side; auditDraft.endYard = sy.yard; }
+      const l1 = document.createElement('div'); l1.className = 'fieldLabel'; l1.textContent = 'Start Spot';
+      wrap.appendChild(l1); wrap.appendChild(spotPicker(auditDraft, 'startSide', 'startYard', auditDraft.startYard, renderWizard));
+      const l2 = document.createElement('div'); l2.className = 'fieldLabel'; l2.textContent = 'Caught At (leave as-is if there was no return)';
+      wrap.appendChild(l2); wrap.appendChild(spotPicker(auditDraft, 'catchSide', 'catchYard', auditDraft.catchYard, renderWizard));
+      const l3 = document.createElement('div'); l3.className = 'fieldLabel'; l3.textContent = 'Final Spot';
+      wrap.appendChild(l3); wrap.appendChild(spotPicker(auditDraft, 'endSide', 'endYard', auditDraft.endYard, renderWizard));
+    } else if (f.kind === 'downdist'){
+      if (auditDraft.down == null) auditDraft.down = 1;
+      if (auditDraft.distance == null) auditDraft.distance = 10;
+      const dWrap = document.createElement('div');
+      dWrap.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent=f.label; return l; })());
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+      row.appendChild(optChipsSimple(auditDraft, 'down', [[1,'1st'],[2,'2nd'],[3,'3rd'],[4,'4th']]));
+      const yr = document.createElement('div'); yr.className = 'yardRow';
+      const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+      const input = document.createElement('input'); input.type = 'number'; input.value = auditDraft.distance;
+      const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+      minus.addEventListener('click', function(){ auditDraft.distance = Math.max(1, auditDraft.distance-1); renderWizard(); });
+      plus.addEventListener('click', function(){ auditDraft.distance = auditDraft.distance+1; renderWizard(); });
+      input.addEventListener('change', function(){ auditDraft.distance = Math.max(1, Number(input.value)||1); });
+      yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+      row.appendChild(yr);
+      dWrap.appendChild(row);
+      wrap.appendChild(dWrap);
+    }
+    container.appendChild(wrap);
+  }
+  // Small chip helper for a plain [value,label] options list bound directly
+  // to a draft object -- same idea as chipGroupField but usable for the
+  // numeric `down` value (1-4) without it being confused for the string-
+  // valued chip fields chipGroupField normally handles.
+  function optChipsSimple(stateObj, key, options){
+    const row = document.createElement('div'); row.className = 'chipRow'; row.style.margin = '0';
+    options.forEach(function(pair){
+      const c = document.createElement('div'); c.className = 'optChip' + (stateObj[key] === pair[0] ? ' active' : '');
+      c.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
+      c.textContent = pair[1];
+      c.addEventListener('click', function(){ stateObj[key] = pair[0]; renderWizard(); });
+      row.appendChild(c);
+    });
+    return row;
+  }
+
+  function renderAuditStep(area){
+    const play = auditPlays[auditIndex];
+    const fields = AUDIT_FIELDS[play.type] || [];
+    const missingCount = fields.filter(function(f){ return auditFieldValueText(play, f) === '— none —'; }).length;
+
+    const progress = document.createElement('div');
+    progress.style.cssText = 'text-align:center;font-size:11px;color:var(--dim2);margin-bottom:6px;';
+    progress.textContent = 'Reviewing Play ' + (auditIndex+1) + ' of ' + auditPlays.length + (missingCount ? ' · ' + missingCount + ' field(s) blank' : ' · looks complete');
+    area.appendChild(progress);
+
+    const card = document.createElement('div'); card.className = 'card';
+    const sideTag = play.side ? (play.side === 'offense' ? 'OFF' : 'DEF') : '';
+    card.innerHTML = '<h2>' + (sideTag ? sideTag + ' · ' : '') + play.type.toUpperCase() + '</h2>' +
+      '<div class="sub">Quarter ' + (play.quarter || '?') + ' -- ' + escapeHtml(describePlay(play)) + '</div>';
+
+    const summary = document.createElement('div'); summary.style.cssText = 'margin:10px 0;padding:10px;background:#12161c;border-radius:8px;';
+    fields.forEach(function(f){
+      const val = auditFieldValueText(play, f);
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:12.5px;';
+      row.innerHTML = '<span style="color:var(--dim2);">' + escapeHtml(f.label) + '</span><span style="color:' + (val === '— none —' ? '#e0402a' : '#fff') + ';font-weight:600;text-align:right;">' + escapeHtml(val) + '</span>';
+      summary.appendChild(row);
+    });
+    card.appendChild(summary);
+
+    const editHeader = document.createElement('div'); editHeader.className = 'fieldLabel'; editHeader.style.marginTop = '4px'; editHeader.textContent = 'Fill in / correct anything below, then save:';
+    card.appendChild(editHeader);
+    fields.forEach(function(f){ renderAuditFieldEditor(card, f); });
+
+    const saveBtn = document.createElement('button'); saveBtn.className = 'primaryBtn'; saveBtn.textContent = '💾 Save & Next Play';
+    saveBtn.addEventListener('click', function(){ saveAuditDraft(true); });
+    card.appendChild(saveBtn);
+    const skipBtn = document.createElement('button'); skipBtn.className = 'ghostBtn'; skipBtn.textContent = 'Skip (Already Correct) →';
+    skipBtn.addEventListener('click', function(){ goToNextAuditPlay(); });
+    card.appendChild(skipBtn);
+    const navRow = document.createElement('div'); navRow.style.cssText = 'display:flex;gap:8px;';
+    const prevBtn = document.createElement('button'); prevBtn.className = 'ghostBtn'; prevBtn.style.margin = '0'; prevBtn.textContent = '← Previous Play';
+    prevBtn.disabled = auditIndex === 0;
+    prevBtn.addEventListener('click', function(){ auditIndex = Math.max(0, auditIndex-1); loadAuditDraft(); renderWizard(); });
+    const exitBtn = document.createElement('button'); exitBtn.className = 'ghostBtn'; exitBtn.style.margin = '0'; exitBtn.textContent = '▶️ Back to Live Plays';
+    exitBtn.addEventListener('click', resumeLivePlayLoop);
+    navRow.appendChild(prevBtn); navRow.appendChild(exitBtn);
+    card.appendChild(navRow);
+    area.appendChild(card);
+  }
+
+  function goToNextAuditPlay(){
+    if (auditIndex >= auditPlays.length - 1){
+      alert('That was the last play -- review complete!');
+      resumeLivePlayLoop();
+      return;
+    }
+    auditIndex += 1;
+    loadAuditDraft();
+    renderWizard();
+  }
+
+  async function saveAuditDraft(advance){
+    loadStatus.textContent = 'Saving…';
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const res = await fetch(url);
+      const existing = res.ok ? await res.json() : null;
+      const plays = (existing && Array.isArray(existing.plays)) ? existing.plays.slice() : [];
+      const idx = plays.findIndex(function(p){ return p.id === auditDraft.id; });
+      if (idx !== -1) plays[idx] = Object.assign({}, plays[idx], auditDraft);
+      const gameState = Object.assign({}, existing, { plays: plays, updatedAt: new Date().toISOString() });
+      const putUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+      const putRes = await fetch(putUrl, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(gameState) });
+      if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
+      // Quick-edit (from the live loop) never populated auditPlays/auditIndex
+      // for a real review sequence -- writing into them here would silently
+      // clobber an unrelated slot if a full Audit Mode session happened
+      // earlier in the tab. Skip that bookkeeping outright when not really
+      // auditing; goToNextAuditPlay (below) is the only thing that ever
+      // reads it back, and quick-edit never calls that.
+      if (!quickEditMode) auditPlays[auditIndex] = auditDraft;
+    } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
+    loadStatus.textContent = '';
+    if (advance) goToNextAuditPlay();
+  }
+
+  // Nathan: "I can't see the play log in the entry screen so I don't know
+  // what was added is accurate" + "It's still way too clunky" for fixing a
+  // mistake without leaving the live flow. Reuses the exact same
+  // AUDIT_FIELDS/renderAuditFieldEditor/saveAuditDraft machinery Audit
+  // Mode already has -- a "review one play" screen, not a second, parallel
+  // editor to keep in sync with the real one.
+  let quickEditMode = false;
+  function openQuickEdit(play){
+    auditDraft = Object.assign({}, play);
+    quickEditMode = true;
+    wiz.step = 'quickEdit';
+    renderWizard();
+  }
+  function renderQuickEditStep(area){
+    const fields = AUDIT_FIELDS[auditDraft.type] || [];
+    const card = document.createElement('div'); card.className = 'card';
+    const sideTag = auditDraft.side ? (auditDraft.side === 'offense' ? 'OFF' : 'DEF') : '';
+    card.innerHTML = '<h2>✏️ Fix This Play</h2><div class="sub">' + (sideTag ? sideTag + ' · ' : '') + (auditDraft.type||'').toUpperCase() + '</div>';
+    fields.forEach(function(f){ renderAuditFieldEditor(card, f); });
+    const saveBtn = document.createElement('button'); saveBtn.className = 'primaryBtn'; saveBtn.textContent = '💾 Save & Back to Live Plays';
+    saveBtn.addEventListener('click', async function(){ await saveAuditDraft(false); quickEditMode = false; resumeLivePlayLoop(); });
+    card.appendChild(saveBtn);
+    const cancelBtn = document.createElement('button'); cancelBtn.className = 'ghostBtn'; cancelBtn.textContent = 'Cancel (Discard Changes)';
+    cancelBtn.addEventListener('click', function(){ quickEditMode = false; resumeLivePlayLoop(); });
+    card.appendChild(cancelBtn);
+    area.appendChild(card);
+  }
+  // Nathan: "I can't see the play log in the entry screen." A live,
+  // recent-plays list right in the play loop -- no need to leave the flow
+  // (or guess) to confirm what actually got saved. Re-fetches fresh every
+  // time it's opened, so an edit made through this same panel or through
+  // Stat Keeper directly always shows up correctly.
+  let recentPlaysOpen = false;
+  let recentPlaysCache = [];
+  async function toggleRecentPlays(){
+    recentPlaysOpen = !recentPlaysOpen;
+    if (recentPlaysOpen){
+      try {
+        const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+        const res = await fetch(url);
+        const gs = res.ok ? await res.json() : null;
+        recentPlaysCache = (gs && Array.isArray(gs.plays)) ? gs.plays.filter(function(p){ return p.type !== 'quarterEnd' && p.type !== 'timeout'; }).slice(0, 6) : [];
+      } catch(e){ recentPlaysCache = []; }
+    }
+    renderWizard();
+  }
+  function renderRecentPlaysPanel(container){
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px'; wrap.style.marginBottom = '14px';
+    const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;cursor:pointer;';
+    headRow.innerHTML = '<span style="font-weight:800;font-size:13px;">📋 Recent Plays</span><span style="font-size:12px;color:var(--dim);">' + (recentPlaysOpen ? 'Hide ▴' : 'Show ▾') + '</span>';
+    headRow.addEventListener('click', toggleRecentPlays);
+    wrap.appendChild(headRow);
+    if (recentPlaysOpen){
+      if (!recentPlaysCache.length){
+        const empty = document.createElement('div'); empty.className = 'sub'; empty.style.margin = '8px 0 0'; empty.textContent = 'No plays logged yet.';
+        wrap.appendChild(empty);
+      }
+      // Nathan (follow-up): "recent play history doesn't show anything -
+      // should show the same way it does in the Stat Keeper." Two real
+      // bugs fixed together here: (1) this row was a flex row with an
+      // Edit button using .ghostBtn, which sets width:100% -- inside a
+      // flex row with flex:0 0 auto and no explicit width override, that
+      // 100% became the button's flex-basis, so it tried to claim the
+      // WHOLE row and squeezed the text down to nothing, wrapping it into
+      // a single narrow column exactly like the screenshot. Explicit
+      // width:auto below fixes that outright. (2) the summary text itself
+      // was a bare "TYPE · N yds" -- now it's the same describePlay/
+      // spotBadgeText/downDistBadgeText Stat Keeper's own play log uses,
+      // stacked the same way (tags on top, full description below).
+      recentPlaysCache.forEach(function(p){
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:8px 0;border-top:1px solid var(--line-bright);';
+        const sideTag = p.side === 'offense' ? 'OFF' : p.side === 'defense' ? 'DEF' : '';
+        const spotTxt = spotBadgeText(p), ddTxt = downDistBadgeText(p);
+        const tagsRow = document.createElement('div');
+        tagsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:10px;font-weight:800;margin-bottom:4px;';
+        tagsRow.innerHTML =
+          (sideTag ? '<span style="color:' + (sideTag==='OFF'?'var(--cyan)':'var(--orange)') + ';">' + sideTag + '</span>' : '') +
+          '<span style="color:var(--dim);">' + (p.type||'?').toUpperCase() + '</span>' +
+          (ddTxt ? '<span style="color:var(--dim2);">' + escapeHtml(ddTxt) + '</span>' : '') +
+          (spotTxt ? '<span style="color:#ffe14d;">📍 ' + escapeHtml(spotTxt) + '</span>' : '');
+        row.appendChild(tagsRow);
+        const bottomRow = document.createElement('div'); bottomRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;';
+        const summary = document.createElement('div'); summary.style.cssText = 'font-size:13px;color:#fff;flex:1;min-width:0;';
+        summary.textContent = describePlay(p);
+        const editBtn = document.createElement('button'); editBtn.className = 'ghostBtn';
+        editBtn.style.cssText = 'width:auto;margin:0;padding:5px 10px;font-size:11px;flex:0 0 auto;white-space:nowrap;';
+        editBtn.textContent = '✏️ Edit';
+        editBtn.addEventListener('click', function(){ openQuickEdit(p); });
+        bottomRow.appendChild(summary); bottomRow.appendChild(editBtn);
+        row.appendChild(bottomRow);
+        wrap.appendChild(row);
+      });
+    }
+    container.appendChild(wrap);
+  }
+
+  async function boot(){
+    loadStatus.textContent = 'Signing in…';
+    let ok = false;
+    try { ok = await ensureCoachAuth(); } catch(e){ ok = false; }
+    if (!ok){ loadStatus.textContent = 'Sign-in required — reload the page to try again.'; return; }
+    loadStatus.textContent = 'Loading games…';
+    try {
+      const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
+      const res = await fetch(schedUrl);
+      const games = res.ok ? (await res.json() || []) : [];
+      liveGamesCache = Array.isArray(games) ? games.filter(function(g){ return g && g.id; }) : [];
+    } catch(e){ loadStatus.textContent = '⚠️ Could not load games: ' + e.message; return; }
+    populateGameSelect();
+    loadStatus.textContent = liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.';
+    // Nathan: "I want this to be tied into Coach Nate profile where I have
+    // a KEEP STATS CTA on the game card" -- once that link exists (see
+    // schedule.js), it'll pass ?game=<id>; auto-select it here so tapping
+    // the card drops the coach straight into setup instead of the picker.
+    const params = new URLSearchParams(location.search);
+    const gid = params.get('game');
+    if (gid){ gameSelect.value = gid; loadGame(gid); }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

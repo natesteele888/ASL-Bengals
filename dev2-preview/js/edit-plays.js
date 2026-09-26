@@ -1,0 +1,2328 @@
+(function() {
+
+
+// Game HUD preview theme (see js/preview-theme.js) -- a handful of color/
+// fill constants swap here, once, at load time. The flag never changes
+// mid-session (only via a reload after the URL toggles it), so a one-time
+// check is correct; nothing below needs to be reactive.
+const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
+const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
+const BALLSTART_COLOR = '#d99000'; // gold -- "ball icon starts here" but not the credited carrier
+const DEFENSE_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
+const READKEY_COLOR = '#e0201a';
+const CIRCLE_R = 36;
+const STAGE_BG = GAME_HUD_PREVIEW ? '#14171a' : '#ffffff';
+// Offense circles stay white either way (matches the mockup: white player
+// dots read clearly against a dark field too) -- no new constant needed,
+// the existing fill:'#ffffff' at each drawCircle call site is unchanged.
+
+let wingSide = 'Left';
+let playKey = DATA.playTypes[0].key;
+let direction = 'Left';
+let readPosition = 'A';
+let insideOutside = 'Outside';
+// Nathan: "Both Option and Outside Zone need a new toggle for Counter."
+// Unlike Boot (a live ball-carrier swap, no new geometry), Counter needs a
+// real different route for #4's sweep -- so it's a stored sub-variant per
+// direction (Normal/Counter), same shape as Inside/Outside and Read A/B,
+// authored here by dragging points same as any other play/direction.
+let counterVariant = 'Normal';
+// Nathan: "we will need the toggle for Pop Pass 2. On the toggle it will
+// just change the path of the running backs" -- same shape as Counter
+// (a real, different stored route, not a live playback swap like Boot),
+// so it follows that exact pattern: its own sub-variant level in
+// getPlayVariant() below, gated on a new hasPopVariant flag (Pop Pass
+// only), authored by dragging points same as Normal/Counter or any
+// in/out toggle.
+let popVariant = 'Pop';
+
+function getPlayVariant(playType, dir) {
+  let v = playType.directions[dir];
+  if (playType.hasInsideOutside) v = v[insideOutside];
+  if (playType.hasReadToggle) v = v[readPosition];
+  if (playType.hasCounter) v = v[counterVariant];
+  if (playType.hasPopVariant) v = v[popVariant];
+  return v;
+}
+let selectedPlayer = null;
+// Defaults ON. This is a session-only display toggle -- it's never saved to
+// or loaded from Firebase, so it silently reset to off on every page load,
+// which looked exactly like "blocking breaks after I save": no blocking
+// lines drawn at all, for anyone, until someone happened to click
+// Blocking: On again. Defaulting to on means what's already on the page
+// (built-in or previously-saved) is visible immediately.
+let blockingEnabled = true;
+// Motion is a pure playback choice, exactly like Wing L/R and Dir L/R --
+// never authored per play, never saved. Whatever side #4 is set on,
+// turning this on always sends him to the opposite side before the snap.
+// Defaults off, matching Play Calls, so what's shown out of the box
+// matches the play as authored.
+let motionOn = false;
+let editMode = false;
+let speedMultiplier = 1; // 1 = normal, 2 = half speed
+let mainGroup = null;
+let circlesLayerRef = null;
+let lastRenderedPaths = []; // [{el, player, isBall}] -- populated on every render
+
+// Split route editing -- entirely separate data shape from Shotgun's
+// playType/direction/variant.paths (DATA.splitRoutes[side].wide/.flex[call]
+// are plain absolute point arrays, not authored per play), so it gets its
+// own small parallel state instead of being threaded through the Shotgun-
+// specific render()/writeBackPoint() machinery above.
+let editorFormation = 'shotgun'; // 'shotgun' | 'split'
+let splitSide = 'Left';
+let splitCall = 'seattle';
+let splitEditTarget = null; // 'wide' | 'flex' | null
+let splitSelectedHandle = null; // {arr, index} | null
+const SPLIT_ROUTE_LABELS_EDIT = { seattle: 'Seattle', houston: 'Houston', florida: 'Florida', boston: 'Boston' };
+
+const wingToggle = document.getElementById('wingToggle');
+const dirToggle = document.getElementById('dirToggle');
+const playSelect = document.getElementById('playSelect');
+const stage = document.getElementById('stage');
+const editSignalSelect = document.getElementById('editSignalSelect');
+const editSignalResetBtn = document.getElementById('editSignalResetBtn');
+const editSignalPreview = document.getElementById('editSignalPreview');
+
+const DUPLICATE_OPTION_VALUE = '__duplicate__';
+
+function rebuildPlaySelectOptions() {
+  playSelect.innerHTML = '';
+  DATA.playTypes.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.key;
+    opt.textContent = p.label;
+    playSelect.appendChild(opt);
+  });
+  const dupOpt = document.createElement('option');
+  dupOpt.value = DUPLICATE_OPTION_VALUE;
+  dupOpt.textContent = '+ Duplicate a play…';
+  playSelect.appendChild(dupOpt);
+}
+rebuildPlaySelectOptions();
+
+// --- Signal: which card represents this play, and the sequence it sits in --
+//
+// Nathan: "on play edits you should also be able to see and edit the play
+// signals." The deck (window.ALL_CARDS, plus js/signals.js's photo-less
+// PENDING signals) mixes several kinds of card -- finger counts, formation
+// touches, blocking calls -- only the 'Play Call' group is ever a play's own
+// identity card, so that's what this picker offers. The deck itself doesn't
+// change during a session, so it's built once.
+function playCallSignalDeck() {
+  const pending = (window.Signals && window.Signals.PENDING_IDS || []).map(id => window.Signals.get(id));
+  return (window.ALL_CARDS || []).concat(pending)
+    .filter(c => c && c.group === 'Play Call')
+    .sort((a, b) => a.meaning.localeCompare(b.meaning));
+}
+playCallSignalDeck().forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = String(c.id);
+  opt.textContent = c.meaning + ' (#' + c.id + ')';
+  editSignalSelect.appendChild(opt);
+});
+
+// The live "what would a coach actually see" strip -- built with
+// window.buildSignalSequence, the exact function Play Calls itself calls,
+// so this can't quietly drift out of sync with the real thing. Split mode
+// always previews the run call: this editor has no passOn/protection state
+// of its own (Split here is about SEATTLE/HOUSTON/etc. route shapes, not
+// the Pass toggle), so those steps just don't fire here, same as any other
+// play that hasn't had Pass turned on.
+function renderSignalPreview(playType) {
+  let seq;
+  try {
+    seq = window.buildSignalSequence(
+      playKey, wingSide, direction, insideOutside, motionOn, bootOn,
+      editorFormation, splitSide, false, counterVariant === 'Counter', popVariant === 'Pop2', null, false
+    );
+  } catch (e) { seq = []; }
+  editSignalPreview.innerHTML = '';
+  seq.forEach(step => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;width:52px';
+    const img = document.createElement('img');
+    img.src = step.src;
+    img.style.cssText = 'width:48px;height:59px;object-fit:cover;border-radius:5px;border:1px solid var(--line);background:#fff';
+    const cap = document.createElement('div');
+    cap.style.cssText = 'font-size:8.5px;text-align:center;color:var(--muted);line-height:1.2';
+    cap.textContent = step.label || '';
+    cell.appendChild(img);
+    cell.appendChild(cap);
+    editSignalPreview.appendChild(cell);
+  });
+}
+
+// Keeps the select showing whichever card THIS play is currently using
+// (including a coach's own prior override, via window.playSignalIdFor --
+// same lookup play-calls.js uses when it actually calls the play) and
+// redraws the preview. Called from render()/renderSplitEditor() so it
+// never falls out of sync with the play or any toggle.
+function syncSignalUI() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const currentId = window.playSignalIdFor && window.playSignalIdFor(playType, playKey);
+  if (currentId != null) editSignalSelect.value = String(currentId);
+  renderSignalPreview(playType);
+}
+
+editSignalSelect.addEventListener('change', () => {
+  if (isPlaying) return;
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType) return;
+  const id = Number(editSignalSelect.value);
+  const card = window.Signals && window.Signals.get(id);
+  playType.signalCardId = id;
+  playType.signalLabel = card ? card.meaning : undefined;
+  // Distinguishes a coach's real choice from the "cloud snapshot predates
+  // this flag" staleness normalizePlayData otherwise corrects -- see that
+  // function's own comment in play-calls.js.
+  playType.signalCardIdManual = true;
+  renderSignalPreview(playType);
+});
+
+editSignalResetBtn.addEventListener('click', () => {
+  if (isPlaying) return;
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType) return;
+  delete playType.signalCardId;
+  delete playType.signalLabel;
+  delete playType.signalCardIdManual;
+  syncSignalUI();
+});
+
+// Mirrors Play Calls' base signal-card mapping just enough to carry a
+// signal forward when duplicating one of the 6 standard plays.
+const BASE_SIGNAL_MAP = {
+  inside_zone: { id: 9, label: 'Inside Zone' }, outside_zone: { id: 10, label: 'Outside Zone' },
+  option: { id: 15, label: 'Option' }, option_pass: { id: 16, label: 'Option Pass' },
+  blast: { id: 13, label: 'Blast' }, double_blast: { id: 14, label: 'Double Blast' },
+  boot: { id: 26, label: 'Boot' },
+};
+
+// Asks which existing play to duplicate (a plain numbered prompt, matching
+// the rest of this tool's lightweight prompt()-based UX rather than
+// building a custom picker modal). Defaults to whichever play was open,
+// so hitting Enter behaves like the old duplicate button did.
+function promptForPlayToDuplicate() {
+  const list = DATA.playTypes.map((p, i) => `${i + 1}. ${p.label}`).join('\n');
+  const currentIdx = DATA.playTypes.findIndex(p => p.key === playKey);
+  const answer = prompt(`Which play do you want to duplicate?\n\n${list}\n\nEnter a number:`, String(currentIdx + 1));
+  if (!answer) return null;
+  const idx = parseInt(answer, 10) - 1;
+  if (isNaN(idx) || !DATA.playTypes[idx]) {
+    alert('Not a valid play number -- nothing duplicated.');
+    return null;
+  }
+  return DATA.playTypes[idx];
+}
+
+// Nathan: "within the whats new, it would be good to show new plays added
+// to the playbook." duplicatePlay() below is the only path that creates a
+// brand-new play key (as opposed to editing an existing one's routes) --
+// staged here in memory and only actually logged to whatsNew.json once
+// Save to Cloud succeeds (see saveCloudBtn below), so an abandoned/never-
+// saved duplicate never shows up as "new" to the team.
+let pendingNewPlays = [];
+
+// Nathan lost a duplicated-and-edited play (TW Sweep/Pop Pass) because
+// duplicatePlay() above only stages the new play in memory -- nothing
+// persists it until Save to Cloud actually succeeds, and a reload or
+// closed tab before that click loses it silently, with no warning at
+// all. This is the fix: the browser's own native "leave site? changes
+// won't be saved" prompt, firing whenever there's a duplicated play not
+// yet saved, or the coach is actively in edit mode (mid-route-edit on an
+// existing play carries the same real risk, even though it doesn't
+// create a new pendingNewPlays entry). Browsers don't allow a custom
+// message here (a long-standing, deliberate restriction across all of
+// them, to stop sites from writing manipulative alarm text) -- only
+// whether the prompt appears at all is in our control.
+window.addEventListener('beforeunload', (e) => {
+  if (pendingNewPlays.length > 0 || editMode) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+function duplicatePlay(original) {
+  const newLabel = prompt('Name for the new play (e.g. "Inside Zone Wham"):', original.label + ' Copy');
+  if (!newLabel || !newLabel.trim()) return;
+
+  let baseKey = newLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  let newKey = baseKey;
+  let n = 2;
+  while (DATA.playTypes.some(p => p.key === newKey)) { newKey = baseKey + '_' + n; n++; }
+
+  const clone = JSON.parse(JSON.stringify(original));
+  clone.key = newKey;
+  clone.label = newLabel.trim();
+  const carriedSignal = (original.signalCardId != null) ? { id: original.signalCardId, label: original.signalLabel }
+    : BASE_SIGNAL_MAP[original.key];
+  if (carriedSignal) { clone.signalCardId = carriedSignal.id; clone.signalLabel = carriedSignal.label; }
+
+  DATA.playTypes.push(clone);
+  pendingNewPlays.push({ key: newKey, label: clone.label });
+  rebuildPlaySelectOptions();
+  playSelect.value = newKey;
+  playKey = newKey;
+  updateReadPosVisibility();
+  render();
+  alert('"' + clone.label + '" created as a copy of "' + original.label + '". It reuses that signal for now -- edit routes/blocking freely, then Save to Cloud when ready.');
+}
+
+function wireToggle(el, getter, setter) {
+  const buttons = [...el.querySelectorAll('.toggle-btn')];
+  buttons.forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.value === getter() ? 'true' : 'false');
+    btn.addEventListener('click', () => {
+      if (isPlaying) return;
+      setter(btn.dataset.value);
+      buttons.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+      placeToggleThumb(el);
+      render();
+    });
+  });
+  // The thumb needs real layout to measure -- some groups (readPosToggle,
+  // insideOutsideToggle) start hidden (display:none) until a play with
+  // that flag is selected, so this initial call is a no-op for those and
+  // updateReadPosVisibility() re-calls it once they're actually shown.
+  placeToggleThumb(el);
+}
+// Programmatically sets a toggle's displayed state without a real click --
+// same aria-pressed + thumb-reposition steps wireToggle's own click
+// handler does, for the one case (noSplit auto-snap-back) that needs to
+// change a toggle's value from code, not a coach's tap.
+function syncToggleUI(el, value) {
+  [...el.querySelectorAll('.toggle-btn')].forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.value === value ? 'true' : 'false');
+  });
+  placeToggleThumb(el);
+}
+// Pop Pass has no Split formation data at all (Nathan: "remove the Split
+// toggle on Pop Pass, it can't be run out of Split") -- hides the Split
+// button outright for a noSplit play rather than just greying it out, so
+// there's no control sitting there implying a choice that doesn't exist
+// for this play.
+function updateSplitButtonAvailability() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const splitBtn = editFormationToggle.querySelector('[data-value="split"]');
+  if (!splitBtn) return;
+  const disabled = !!(playType && playType.noSplit);
+  splitBtn.disabled = disabled;
+  splitBtn.style.display = disabled ? 'none' : '';
+}
+// Exposed globally so play-calls-quiz.js (loaded after this file) can
+// reuse the exact same toggle-wiring behavior for its answer panel,
+// instead of duplicating it -- this whole file is wrapped in an IIFE, so
+// without this the bare name isn't reachable from other scripts.
+window.wireToggle = wireToggle;
+
+// QB Sneak (Split-only, no real Dir L/R of its own -- see isQbSneak in
+// play-calls.js's buildCard) keeps direction in lockstep with wingSide, so
+// every existing getPlayVariant(playType, direction) call site picks the
+// side-correct route data (the QB walks out to the actual split side)
+// without each one needing its own qb_sneak special case. Nathan: "split
+// left, he goes to the left, split right he goes to the right."
+wireToggle(wingToggle, () => wingSide, v => {
+  wingSide = v;
+  if (playKey === 'qb_sneak') { direction = v; syncToggleUI(dirToggle, v); }
+});
+wireToggle(dirToggle, () => direction, v => direction = v);
+
+// Formation -- Shotgun (existing editor, unchanged above) vs Split. Split
+// has no Play/Wing/Dir/Motion/Boot/Blocking/Read/In-Out/Ball-Carrier
+// concept -- those controls hide, and Split Side + Route Call show instead.
+const editFormationToggle = document.getElementById('editFormationToggle');
+const splitSideWrap = document.getElementById('splitSideWrap');
+const splitCallWrap = document.getElementById('splitCallWrap');
+const editSplitSideToggle = document.getElementById('editSplitSideToggle');
+const editSplitCallToggle = document.getElementById('editSplitCallToggle');
+const splitEditHint = document.getElementById('splitEditHint');
+const wingWrap = wingToggle.closest('.inline-control');
+const dirWrap = dirToggle.closest('.inline-control');
+const playWrapEl = document.getElementById('playWrap');
+
+function updateFormationControlsVisibility() {
+  const isSplit = editorFormation === 'split';
+  [wingWrap, playWrapEl, dirWrap, motionToggle.closest('.inline-control'), bootToggle.closest('.inline-control'), blockingToggle.closest('.inline-control')].forEach(el => {
+    if (el) el.style.display = isSplit ? 'none' : '';
+  });
+  splitSideWrap.style.display = isSplit ? '' : 'none';
+  splitCallWrap.style.display = isSplit ? '' : 'none';
+  splitEditHint.style.display = isSplit ? '' : 'none';
+  playBtn.style.display = isSplit ? 'none' : '';
+  if (isSplit) {
+    document.getElementById('ballCarrierWrap').style.display = 'none';
+    readPosGroup.style.display = 'none';
+    insideOutsideGroup.style.display = 'none';
+  } else {
+    updateReadPosVisibility(); // restores whatever the currently selected Shotgun play needs
+  }
+  requestAnimationFrame(() => {
+    [editFormationToggle, editSplitSideToggle, editSplitCallToggle].forEach(el => placeToggleThumb(el));
+  });
+}
+
+wireToggle(editFormationToggle, () => editorFormation, v => {
+  editorFormation = v;
+  editTarget = null;
+  selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
+  settingBallCarrier = false;
+  settingBallStart = false;
+  updateFormationControlsVisibility();
+});
+wireToggle(editSplitSideToggle, () => splitSide, v => { splitSide = v; splitEditTarget = null; splitSelectedHandle = null; });
+wireToggle(editSplitCallToggle, () => splitCall, v => { splitCall = v; splitSelectedHandle = null; });
+
+const motionToggle = document.getElementById('motionToggle');
+wireToggle(motionToggle, () => (motionOn ? 'on' : 'off'), v => motionOn = (v === 'on'));
+
+// Boot: QB (#1) keeps the ball instead of handing off -- everything else
+// about the play (routes, blocking) stays exactly as authored. Same idea
+// as Motion: a pure playback toggle, nothing saved, works for any play.
+let bootOn = false;
+const bootToggle = document.getElementById('bootToggle');
+wireToggle(bootToggle, () => (bootOn ? 'on' : 'off'), v => bootOn = (v === 'on'));
+
+// Wherever #4 actually is at the snap -- his set wing spot, or the
+// opposite one if Motion is on. Every player-4-specific point computation
+// (route start, block-relative offset anchor, seam-route offset anchor)
+// reads from this instead of the raw wing spot.
+// Nathan (Shuffle Pass): "the 4 should actually be on the opposite side."
+// Kept in sync with play-calls.js/two-minute-drill.js's own p4StartsOpposite
+// handling in their renderCardDiagram (see that comment for the full
+// explanation) -- without this, the editor's own preview/point-picker would
+// still show #4 anchored on the coach's literal Wing L/R side even for a
+// play whose real anchor is the opposite one, so a coach editing routes
+// for a decoy-wing play like this would be dragging points relative to the
+// wrong spot on the field.
+function p4HomeSide() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
+  return (playType && playType.p4StartsOpposite) ? oppositeSide : wingSide;
+}
+function p4Anchor() {
+  const homeSide = p4HomeSide();
+  if (!motionOn) return DATA.wing[homeSide];
+  const oppositeSide = homeSide === 'Left' ? 'Right' : 'Left';
+  return DATA.wing[oppositeSide];
+}
+// Which side #4 is ACTUALLY standing on -- his set wing side, or the
+// opposite one once Motion has sent him there. Block/seam offsets mirror
+// off of this (not the raw wingSide) since the anchor itself has moved:
+// using wingSide alone here left the mirror sign out of sync with
+// p4Anchor() whenever Motion was on, which sent block assignments miles
+// off their intended spot (occasionally clear off screen).
+function p4Side() {
+  const homeSide = p4HomeSide();
+  if (!motionOn) return homeSide;
+  return homeSide === 'Left' ? 'Right' : 'Left';
+}
+
+// 4x3 removed as an option -- everything is 4x4 now, most teams played are
+// a 4x4 front and it halves the number of blocking assignments to keep up
+// to date. Left as a variable (rather than ripping out every
+// defenseMode === '4x4' check below) since those checks all still work
+// correctly with a value that never changes.
+const defenseMode = '4x4';
+
+const insideOutsideGroup = document.getElementById('insideOutsideGroup');
+const insideOutsideToggle = document.getElementById('insideOutsideToggle');
+wireToggle(insideOutsideToggle, () => insideOutside, v => insideOutside = v);
+
+// Fixes a play that was duplicated from an Inside/Outside play (Blast,
+// Double Blast) but was never meant to have that toggle -- keeps whichever
+// side is currently selected as the play's only routes, discards the other
+// side, and removes the toggle. A regular data edit like any other; nothing
+// is final until Save to Cloud.
+const removeInOutBtn = document.getElementById('removeInOutBtn');
+removeInOutBtn.addEventListener('click', () => {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType || !playType.hasInsideOutside) return;
+  const keep = insideOutside;
+  const drop = keep === 'Inside' ? 'Outside' : 'Inside';
+  const ok = confirm(`Remove the Inside/Outside toggle from "${playType.label}"?\n\nThis keeps only the ${keep} routes you're currently viewing and permanently discards the ${drop} version. This can't be undone once you Save to Cloud.`);
+  if (!ok) return;
+  Object.keys(playType.directions).forEach(dir => {
+    playType.directions[dir] = playType.directions[dir][keep];
+  });
+  playType.hasInsideOutside = false;
+  updateReadPosVisibility();
+  render();
+  alert(`Done -- "${playType.label}" now always uses the ${keep} routes. Click Save to Cloud when you're ready to make this permanent.`);
+});
+
+const readPosGroup = document.getElementById('readPosGroup');
+const readPosToggle = document.getElementById('readPosToggle');
+wireToggle(readPosToggle, () => readPosition, v => readPosition = v);
+
+const counterGroup = document.getElementById('counterGroup');
+const counterToggle = document.getElementById('counterToggle');
+wireToggle(counterToggle, () => counterVariant, v => counterVariant = v);
+
+const popVariantGroup = document.getElementById('popVariantGroup');
+const popVariantToggle = document.getElementById('popVariantToggle');
+wireToggle(popVariantToggle, () => popVariant, v => popVariant = v);
+
+const blockingToggle = document.getElementById('blockingToggle');
+wireToggle(blockingToggle, () => (blockingEnabled ? 'on' : 'off'), v => blockingEnabled = (v === 'on'));
+
+const editToggle = document.getElementById('editToggle');
+const exportBtn = document.getElementById('exportBtn');
+const saveCloudBtn = document.getElementById('saveCloudBtn');
+const syncDefaultsBtn = document.getElementById('syncDefaultsBtn');
+wireToggle(editToggle, () => (editMode ? 'on' : 'off'), v => {
+  editMode = (v === 'on');
+  editTarget = null;
+  selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
+  settingBallCarrier = false;
+  settingBallStart = false;
+  exportBtn.style.display = editMode ? '' : 'none';
+  saveCloudBtn.style.display = editMode ? '' : 'none';
+  document.getElementById('ballCarrierWrap').style.display = (editMode && editorFormation !== 'split') ? '' : 'none';
+});
+
+document.getElementById('ballCarrierBtn').addEventListener('click', () => {
+  if (!editMode) return;
+  settingBallCarrier = true;
+  settingBallStart = false;
+  editTarget = null; // clear any route-editing target so the click goes to carrier selection
+  render();
+});
+
+// Ball Starts With: same tap-a-player flow as Ball Carrier, but writes
+// p.ballStart instead of p.ball -- see the HTML comment above this
+// button and selectPlayer()'s settingBallStart branch below for the full
+// mechanism (isBallStart/isBall, read by play-calls.js's animation).
+document.getElementById('ballStartsWithBtn').addEventListener('click', () => {
+  if (!editMode) return;
+  settingBallStart = true;
+  settingBallCarrier = false;
+  editTarget = null;
+  render();
+});
+
+const speedToggle = document.getElementById('speedToggle');
+wireToggle(speedToggle, () => (speedMultiplier === 2 ? 'half' : 'normal'), v => {
+  speedMultiplier = (v === 'half') ? 2 : 1;
+});
+
+exportBtn.addEventListener('click', () => {
+  const modal = document.getElementById('exportModal');
+  const text = document.getElementById('exportText');
+  text.value = JSON.stringify({ playTypes: DATA.playTypes, splitRoutes: DATA.splitRoutes }, null, 2);
+  modal.style.display = 'block';
+});
+document.getElementById('exportCloseBtn').addEventListener('click', () => {
+  document.getElementById('exportModal').style.display = 'none';
+});
+document.getElementById('exportCopyBtn').addEventListener('click', () => {
+  const text = document.getElementById('exportText');
+  text.select();
+  navigator.clipboard && navigator.clipboard.writeText(text.value).catch(() => {});
+});
+
+
+// Auto-heal blocking distances before every save. Older cloud saves (from
+// before blocking was extended to 90% of the way to the defender) can get
+// silently re-persisted by an unrelated edit+save, which is exactly what
+// broke playback for the coach. Rather than trust whatever's currently
+// loaded, every save recomputes each block's distance from its actual
+// start point and stretches anything short back out to 90%.
+function sanitizeBlockingDistances(playTypes) {
+  const NEW_FRAC = 0.9;
+  function dist(a, b) { return Math.hypot(a[0]-b[0], a[1]-b[1]); }
+  function closest(defenders, point) {
+    return defenders.reduce((best, d) => dist(d.pos, point) < dist(best.pos, point) ? d : best, defenders[0]);
+  }
+  playTypes.forEach(pt => {
+    Object.keys(pt.directions || {}).forEach(direction => {
+      const dirData = pt.directions[direction];
+      // Generic "flat vs nested sub-variant" unwrap -- same as
+      // normalizePlayData (play-calls.js) and getPlayVariant above. Used to
+      // be a hardcoded hasReadToggle/hasInsideOutside check, which silently
+      // stopped sanitizing Option/Outside Zone's blocking once they gained
+      // a THIRD kind of sub-variant (hasCounter's Normal/Counter) that
+      // hardcoded chain didn't know about -- Object.values() here reaches
+      // whatever sub-variant keys actually exist, regardless of which flag
+      // put them there. Only went one level deep though, which silently
+      // stopped sanitizing Blast's blocking the moment it stacked a SECOND
+      // sub-variant on top of its existing hasInsideOutside (Outside/Inside
+      // -> Normal/Counter, once Blast got its own Counter 2026-08-24) --
+      // recursing via play-calls.js's collectLeafVariants (global, shared)
+      // instead of a fixed-depth unwrap fixes that and any future stack.
+      const variants = collectLeafVariants(dirData);
+      variants.forEach(variant => {
+        (variant.paths || []).forEach(p => {
+          if (!p.isBlocking) return;
+          // sameSidePoints/crossPoints (player 4's block-relative fields) store
+          // an offset FROM the wing position, not an absolute field coordinate --
+          // comparing those against defenders' absolute positions doesn't mean
+          // anything, so only points/points4x4 (which are absolute) belong here.
+          if (p.blockRelative || p.motionIndependentBlock) return;
+          [['points', variant.defense], ['points4x4', variant.defense4x4]].forEach(([field, defenders]) => {
+            if (!p[field] || !defenders || !defenders.length) return;
+            const start = p[field][0];
+            const end = p[field][1];
+            const target = closest(defenders, end);
+            const distToDefender = dist(target.pos, end);
+            if (distToDefender > 130) return; // not actually aimed at this defender, leave alone
+            const newEnd = [start[0] + NEW_FRAC*(target.pos[0]-start[0]), start[1] + NEW_FRAC*(target.pos[1]-start[1])];
+            if (dist(newEnd, end) > 2) p[field] = [p[field][0], newEnd]; // only touch it if it's actually short -- keep the stored start point as-is, only fix the end
+          });
+        });
+      });
+    });
+  });
+  return playTypes;
+}
+
+const FIREBASE_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+const cloudStatusEl = document.getElementById('cloudStatus');
+
+// Split's Houston/Seattle/Florida routes save to their own Firebase key
+// rather than being folded into playEdits.json's shape (which Play Calls
+// and this tool both already expect to be a bare array of playTypes) --
+// keeps this additive instead of risking the well-tested existing save/
+// load path for Shotgun plays.
+const SPLIT_ROUTES_URL = `${FIREBASE_URL}/splitRouteEdits.json`;
+const WHATS_NEW_URL = `${FIREBASE_URL}/whatsNew.json`;
+
+// Appends entries to the shared What's New log (read-modify-write, same
+// pattern as Drive Builder/Schedule's whole-array PUT) -- fire-and-forget
+// from the caller's point of view; a failure here shouldn't block or roll
+// back the play save that already succeeded, it just means the feed
+// doesn't mention it this time.
+async function logToWhatsNew(entries) {
+  if (!entries.length) return;
+  try {
+    const url = await window.firebaseAuthed(WHATS_NEW_URL);
+    const existing = await fetch(url).then(r => r.ok ? r.json() : null);
+    const list = Array.isArray(existing) ? existing : [];
+    list.push(...entries);
+    await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) });
+  } catch (err) {
+    console.error('Could not log to What\'s New:', err);
+  }
+}
+function whatsNewEntry(key, label, note, before, after) {
+  const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
+  return {
+    id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    key, label, note: note || null,
+    // Full play snapshots from just before/after this save, so the What's
+    // New panel can actually draw an old-vs-new diagram instead of just a
+    // text description -- Nathan: "show the old play and show what
+    // changed." null for a brand-new play (nothing to compare against).
+    before: before || null, after: after || null,
+    addedAt: new Date().toISOString(), addedBy: (session && session.name) || null,
+  };
+}
+// Reads the play's CURRENT in-memory (about-to-be-saved) state as "after",
+// and whatever's still live in playEdits.json (not yet overwritten by this
+// save) as "before" -- must run before the save's own PUT below, or
+// "before" would just read back the same data as "after".
+async function capturePlaySnapshot(key) {
+  const after = DATA.playTypes.find(p => p.key === key) || null;
+  let before = null;
+  try {
+    const url = await window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`);
+    const saved = await fetch(url).then(r => r.ok ? r.json() : null);
+    if (Array.isArray(saved)) before = saved.find(p => p.key === key) || null;
+  } catch (e) { /* best-effort -- a missing before-snapshot just means no comparison shows */ }
+  return { before, after };
+}
+
+saveCloudBtn.addEventListener('click', async () => {
+  // Brand-new plays (via Duplicate) always announce themselves -- no
+  // prompt needed, that's inherently news. A coach editing an EXISTING
+  // play's routes can ALSO flag it for the team, in-season Nathan: "hey
+  // this is what is new this week for play calls, pay attention" --
+  // skipped when this save is already a new-play save (that's covered
+  // above) or nothing's open to attribute a note to. Asked up front,
+  // before the save actually starts, so it isn't confused with the save
+  // itself failing/succeeding.
+  // pendingNewPlays itself isn't cleared until the save actually succeeds
+  // below -- it also drives the beforeunload warning (see the listener
+  // above this function), which needs to stay armed if this save fails.
+  const toLog = pendingNewPlays.map(p => whatsNewEntry(p.key, p.label, null));
+  if (!toLog.length) {
+    const playType = DATA.playTypes.find(p => p.key === playKey);
+    if (playType) {
+      const note = prompt(`Let the team know what changed on "${playType.label}"? Leave blank to save quietly.`, '');
+      if (note && note.trim()) {
+        const { before, after } = await capturePlaySnapshot(playType.key);
+        toLog.push(whatsNewEntry(playType.key, playType.label, note.trim(), before, after));
+      }
+    }
+  }
+
+  saveCloudBtn.textContent = 'Saving\u2026';
+  const [playsUrl, splitUrl] = await Promise.all([
+    window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`),
+    window.firebaseAuthed(SPLIT_ROUTES_URL),
+  ]);
+  Promise.all([
+    fetch(playsUrl, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(sanitizeBlockingDistances(DATA.playTypes)),
+    }),
+    fetch(splitUrl, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(DATA.splitRoutes),
+    }),
+  ]).then(async ([r1, r2]) => {
+    if (r1.ok && r2.ok) {
+      pendingNewPlays = [];
+      saveCloudBtn.textContent = 'Saved!';
+      cloudStatusEl.textContent = 'Showing the latest saved play edits.';
+      logToWhatsNew(toLog);
+    } else {
+      const failed = !r1.ok ? r1 : r2;
+      const bodyText = await failed.text().catch(() => '');
+      saveCloudBtn.textContent = 'Save Failed';
+      cloudStatusEl.textContent = `Save failed (HTTP ${failed.status}): ${bodyText.slice(0, 200)}`;
+      console.error('Save to Cloud failed:', r1.status, r2.status, bodyText);
+    }
+    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
+  }).catch(err => {
+    saveCloudBtn.textContent = 'Save Failed';
+    cloudStatusEl.textContent = `Save failed: ${err.message}`;
+    console.error('Save to Cloud failed:', err);
+    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
+  });
+});
+
+// "Save to Cloud" above only ever writes to playEdits.json -- a coach's own
+// edit overlay. It never touches dev2PlayData/plays.json, the separate
+// "shipped defaults" node index.html itself boots window.DATA from (see
+// index.html's boot() and SHIPPED_PLAY_FLAGS in play-calls.js). Nothing in
+// a normal code push updates that node -- it only changes when someone
+// writes the deployed data/plays.json into it directly. Nathan hit this
+// after Counter shipped: a real data-model change (new hasCounter flag,
+// new Normal/Counter structure under each direction) that the Counter
+// toggle can't even appear for until dev2PlayData/plays.json itself has
+// that shape, and neither of us had a way to write to Firebase directly
+// (this session's own network is sandboxed off from it, and pasting a
+// fetch/PUT into the browser console runs into Chrome's paste-lock
+// warning). This button does the exact same fetch+PUT from inside the app
+// itself instead -- a normal click, no console needed -- using whichever
+// coach is logged in right now's own already-authenticated session.
+//
+// Originally this read data/plays.json over the network (same-origin
+// fetch), but this repo's GitHub Pages deploy doesn't publish the data/
+// folder as a static asset -- confirmed live: manifest.json and js/*.js
+// at other paths deploy fine, data/plays.json 404s. So instead it reads
+// window.SHIPPED_PLAYS_JSON, a byte-for-byte copy of data/plays.json
+// embedded directly in js/shipped-defaults.js (a real script, deploys
+// like any other .js file). See that file's own header comment: it must
+// be regenerated any time data/plays.json changes, or this button will
+// push stale data.
+if (syncDefaultsBtn) {
+  syncDefaultsBtn.addEventListener('click', async () => {
+    const ok = confirm(
+      'This overwrites the SHIPPED DEFAULTS in the cloud (dev2PlayData/plays.json) ' +
+      'with the play data baked into this build (js/shipped-defaults.js).\n\n' +
+      'It does NOT touch anything saved via "Save to Cloud" -- that stays exactly as-is.\n\n' +
+      'Only run this right after a deploy that changes the play data itself (a new toggle, ' +
+      'a new play, restructured routes) -- not as a routine save. Continue?'
+    );
+    if (!ok) return;
+    syncDefaultsBtn.textContent = 'Syncing…';
+    try {
+      const shippedPlays = window.SHIPPED_PLAYS_JSON;
+      if (!shippedPlays) throw new Error('js/shipped-defaults.js did not load -- refresh the page and try again');
+      const url = await window.firebaseAuthed(`${FIREBASE_URL}/dev2PlayData/plays.json`);
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shippedPlays),
+      });
+      if (res.ok) {
+        syncDefaultsBtn.textContent = 'Synced!';
+        cloudStatusEl.textContent = 'Shipped defaults synced to the cloud -- reload to pick them up.';
+      } else {
+        const bodyText = await res.text().catch(() => '');
+        syncDefaultsBtn.textContent = 'Sync Failed';
+        alert(`Sync failed (HTTP ${res.status}): ${bodyText.slice(0, 200)}`);
+        console.error('Sync shipped defaults failed:', res.status, bodyText);
+      }
+    } catch (err) {
+      syncDefaultsBtn.textContent = 'Sync Failed';
+      alert(`Sync failed: ${err.message}`);
+      console.error('Sync shipped defaults failed:', err);
+    }
+    setTimeout(() => { syncDefaultsBtn.textContent = 'Admin: Sync Shipped Defaults to Cloud'; }, 3000);
+  });
+}
+
+function loadSavedPlaysFromCloud() {
+  return Promise.all([
+    window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+    window.firebaseAuthed(SPLIT_ROUTES_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
+  ]).then(([savedPlays, savedSplitRoutes]) => {
+    let gotAny = false;
+    if (savedPlays && Array.isArray(savedPlays) && savedPlays.length) {
+      DATA.playTypes = normalizePlayData(savedPlays);
+      rebuildPlaySelectOptions();
+      // guard against the loaded data not including whatever play was
+      // already selected (e.g. a partial save) -- fall back to the first
+      // available play rather than crashing on an undefined lookup
+      if (!DATA.playTypes.some(p => p.key === playKey)) {
+        playKey = DATA.playTypes[0].key;
+        playSelect.value = playKey;
+      }
+      gotAny = true;
+    }
+    if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
+      // repairStaleSplitRoutes (play-calls.js) trusts the cloud copy as-is
+      // for anything actually saved -- an earlier version forced Right's
+      // routes back to shipped on every load, which also silently
+      // discarded real point-drag edits made here. It only fills in a
+      // route call that's flat-out missing from the saved data (e.g. a
+      // cloud save made before Boston existed), per side/slot, from the
+      // shipped defaults, so a not-yet-edited call still shows up with
+      // *something* to look at and drag instead of nothing at all.
+      DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
+      gotAny = true;
+    }
+    cloudStatusEl.textContent = gotAny ? 'Showing the latest saved play edits.' : 'No saved edits found -- showing the built-in defaults.';
+  }).catch(() => {
+    cloudStatusEl.textContent = 'Could not reach the cloud -- showing the built-in defaults.';
+  });
+}
+
+function updateReadPosVisibility() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  readPosGroup.style.display = playType.hasReadToggle ? 'flex' : 'none';
+  insideOutsideGroup.style.display = playType.hasInsideOutside ? 'flex' : 'none';
+  counterGroup.style.display = playType.hasCounter ? 'flex' : 'none';
+  popVariantGroup.style.display = playType.hasPopVariant ? 'flex' : 'none';
+  updateSplitButtonAvailability();
+  // These groups start hidden (display:none), so their thumb couldn't be
+  // measured correctly by wireToggle()'s initial call -- re-place it now
+  // that they're actually laid out, whenever they're shown.
+  if (playType.hasReadToggle) placeToggleThumb(readPosToggle);
+  if (playType.hasInsideOutside) placeToggleThumb(insideOutsideToggle);
+  if (playType.hasCounter) placeToggleThumb(counterToggle);
+  if (playType.hasPopVariant) placeToggleThumb(popVariantToggle);
+  // Boot doesn't make sense on plays where #1 already has the ball or
+  // already has a built-in fake (Option, Option Pass, Double Blast) --
+  // hide the toggle and force it back off so a swap from a previously
+  // selected play can't silently carry over onto one where it's a no-op.
+  const bootAllowed = !playType.noBoot;
+  bootToggle.parentElement.style.display = bootAllowed ? 'flex' : 'none';
+  if (!bootAllowed && bootOn) {
+    bootOn = false;
+    [...bootToggle.querySelectorAll('.toggle-btn')].forEach(b => b.setAttribute('aria-pressed', b.dataset.value === 'off' ? 'true' : 'false'));
+    placeToggleThumb(bootToggle);
+  } else if (bootAllowed) {
+    placeToggleThumb(bootToggle);
+  }
+}
+
+playSelect.addEventListener('change', () => {
+  if (isPlaying) return;
+  if (playSelect.value === DUPLICATE_OPTION_VALUE) {
+    playSelect.value = playKey; // snap the dropdown back before the prompt opens
+    const original = promptForPlayToDuplicate();
+    if (original) duplicatePlay(original);
+    return;
+  }
+  playKey = playSelect.value;
+  // Keep direction synced to whatever Wing L/R is already showing (see the
+  // wireToggle call above) -- landing on QB Sneak shouldn't require a
+  // coach to re-tap Wing just to get direction lined up with it.
+  if (playKey === 'qb_sneak') { direction = wingSide; syncToggleUI(dirToggle, wingSide); }
+  // noSplit plays (Pop Pass -- no Split formation data exists for it at
+  // all) shouldn't let a coach land on a formation with nothing to show.
+  // If Split is already selected when switching to one, snap back to
+  // Shotgun; either way, refresh whether the Split button itself is even
+  // choosable for whatever's now selected.
+  const newPlayType = DATA.playTypes.find(p => p.key === playKey);
+  if (newPlayType && newPlayType.noSplit && editorFormation === 'split') {
+    editorFormation = 'shotgun';
+    syncToggleUI(editFormationToggle, 'shotgun');
+    updateFormationControlsVisibility();
+  }
+  updateReadPosVisibility();
+  render();
+});
+
+function selectPlayer(n) {
+  if (isPlaying) return;
+  if (settingBallCarrier && editMode) {
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    variant.paths.forEach(p => { if (p.player !== null && !p.optionLine) p.ball = false; });
+    const targetPath = variant.paths.find(p => p.player === n && !p.optionLine);
+    if (targetPath) targetPath.ball = true;
+    settingBallCarrier = false;
+    render();
+    return;
+  }
+  if (settingBallStart && editMode) {
+    const variant = getPlayVariant(DATA.playTypes.find(p => p.key === playKey), direction);
+    // Tapping the SAME player who's already the credited Ball Carrier
+    // clears ballStart entirely rather than setting it to himself --
+    // "ball starts with the ball carrier" is the default with no ballStart
+    // set at all (see play-calls.js's initialEntry fallback), so keeping
+    // ballStart around in that case would be a redundant, meaningless
+    // no-op state that just clutters the data for no visual difference.
+    variant.paths.forEach(p => { if (p.player !== null && !p.optionLine) delete p.ballStart; });
+    const alreadyIsCarrier = variant.paths.find(p => p.player === n && !p.optionLine && p.ball);
+    if (!alreadyIsCarrier) {
+      const targetPath = variant.paths.find(p => p.player === n && !p.optionLine);
+      if (targetPath) targetPath.ballStart = true;
+    }
+    settingBallStart = false;
+    render();
+    return;
+  }
+  if (editMode) {
+    editTarget = (editTarget && editTarget.player === n) ? null : { player: n };
+    selectedHandle = null;
+    selectedPlayer = n; // keep the route visible/highlighted while editing it
+    render();
+    return;
+  }
+  selectedPlayer = (selectedPlayer === n) ? null : n;
+  render();
+}
+
+function selectOLineBlocker(id) {
+  if (isPlaying || !editMode) return;
+  editTarget = (editTarget && editTarget.id === id) ? null : { id };
+  selectedHandle = null;
+  render();
+}
+
+const playBtn = document.getElementById('playBtn');
+const ANIMATE_MS = 1400;
+const PAUSE_MS = 500;
+let isPlaying = false;
+
+function setControlsDisabled(disabled) {
+  [wingToggle, dirToggle, motionToggle, bootToggle, blockingToggle, speedToggle].forEach(el => {
+    [...el.querySelectorAll('.toggle-btn')].forEach(b => b.disabled = disabled);
+  });
+  playSelect.disabled = disabled;
+  playBtn.disabled = disabled;
+  playBtn.style.opacity = disabled ? 0.6 : 1;
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function tweenPoint(fromPt, toPt, durationMs, onFrame) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    function step() {
+      const t = Math.min(1, (Date.now() - start) / durationMs);
+      onFrame({ x: fromPt.x + (toPt.x - fromPt.x) * t, y: fromPt.y + (toPt.y - fromPt.y) * t });
+      if (t < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+// Draws a path on progressively (stroke-dashoffset) while sliding its
+// arrowhead along the growing tip, instead of a static SVG marker that
+// would just sit at the endpoint from the very start.
+function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl) {
+  return new Promise(resolve => {
+    const totalLen = pathEl.getTotalLength();
+    pathEl.style.strokeDasharray = totalLen;
+    pathEl.style.strokeDashoffset = totalLen;
+    if (arrowEl) arrowEl.style.opacity = 0;
+    setTimeout(() => {
+      const start = Date.now();
+      function step() {
+        const t = Math.min(1, (Date.now() - start) / durationMs);
+        pathEl.style.strokeDashoffset = totalLen * (1 - t);
+        if (arrowEl) {
+          arrowEl.style.opacity = t > 0.02 ? 1 : 0;
+          placeArrowAtFraction(arrowEl, pathEl, t);
+        }
+        if (circleEl) {
+          const pt = pathEl.getPointAtLength(t * totalLen);
+          circleEl.setAttribute('cx', pt.x);
+          circleEl.setAttribute('cy', pt.y);
+          if (textEl) { textEl.setAttribute('x', pt.x); textEl.setAttribute('y', pt.y + 12); }
+        }
+        if (t < 1) requestAnimationFrame(step);
+        else resolve();
+      }
+      requestAnimationFrame(step);
+    }, delayMs || 0);
+  });
+}
+
+async function playSequence() {
+  if (isPlaying) return;
+  isPlaying = true;
+  setControlsDisabled(true);
+  playBtn.textContent = '\u25B6 Playing\u2026';
+
+  const animMs = ANIMATE_MS * speedMultiplier;
+  const pauseMs = PAUSE_MS * speedMultiplier;
+
+  selectedPlayer = null;
+  render(); // full opacity, nothing dimmed -- we're watching the whole play develop
+
+  // the football -- starts at the snap (Center), goes to the QB, then
+  // travels to and tracks whoever actually carries it. Inserted BEHIND the
+  // circles layer so it renders under a player's circle while possessed,
+  // instead of floating on top of it.
+  const ball = svgEl('ellipse', {rx:34, ry:21, fill:'#7a4a24', stroke:'#f4e9dc', 'stroke-width':3});
+  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
+  const qbPos = { x: DATA.backfield['1'][0], y: DATA.backfield['1'][1] };
+  ball.setAttribute('cx', centerPos.x);
+  ball.setAttribute('cy', centerPos.y);
+  mainGroup.insertBefore(ball, circlesLayerRef);
+
+  await wait(250 * speedMultiplier); // beat before the snap, like a cadence
+  await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => {
+    ball.setAttribute('cx', pt.x);
+    ball.setAttribute('cy', pt.y);
+  });
+  await wait(150 * speedMultiplier);
+
+  // draw every path -- this is the play actually happening. Each path can
+  // carry its own delay (e.g. Double Blast's QB starts after the blockers,
+  // since he's following behind them, not moving in lockstep). startFrac/
+  // lenFrac (set on a handoff split's two segments -- see render()) scale
+  // a segment's own share of animMs by its share of the route's total
+  // drawn length, and push its start out by the other segment's share, so
+  // the two segments draw back-to-back at a matching pace instead of each
+  // taking the full animMs. Ported from js/play-calls.js's identical logic
+  // so the editor's own preview matches what Play Calls actually plays.
+  const pathPromises = lastRenderedPaths.map(({el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac}) =>
+    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
+      (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
+
+  // isBallStart (p.ballStart) marks who the floating ball icon visually
+  // starts with, which can be a different player than isBall/p.ball (who's
+  // actually credited as the carrier -- read by Boot's swap logic, quiz
+  // answer keys, etc). Ported unchanged from js/play-calls.js's
+  // playCardAnimation -- see that file's own comments for the full
+  // Shuffle-Pass-style walkthrough of why both fields exist. Every play
+  // that only ever sets p.ball, never p.ballStart, falls straight through
+  // to the old single-carrier behavior, unchanged.
+  const OFFY = 50; // peeks out below the circle, clear of the number
+  const ballEntry = lastRenderedPaths.find(p => p.isBallStart) || lastRenderedPaths.find(p => p.isBall);
+  const handoffEntry = lastRenderedPaths.find(p => p.handoffFraction != null && p.circleEl);
+  const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+    : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
+  const initialDelay = !initialEntry ? 0
+    : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
+    : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+  if (initialEntry) {
+    let carrier = initialEntry.circleEl;
+    // ease toward the carrier's LIVE position every frame (never a stale
+    // snapshot target) -- the carrier may already be moving by the time
+    // this starts, so tweening to a fixed captured point goes stale and
+    // causes a visible jump once tracking begins.
+    let cx = qbPos.x, cy = qbPos.y;
+    let catchingUp = true;
+    let easing = true;
+    let tracking = false;
+    function catchUpFrame() {
+      const targetX = Number(carrier.getAttribute('cx'));
+      const targetY = Number(carrier.getAttribute('cy')) + OFFY;
+      cx += (targetX - cx) * 0.25;
+      cy += (targetY - cy) * 0.25;
+      ball.setAttribute('cx', cx);
+      ball.setAttribute('cy', cy);
+      const dist = Math.hypot(targetX - cx, targetY - cy);
+      if (catchingUp && dist > 3) {
+        requestAnimationFrame(catchUpFrame);
+      } else {
+        catchingUp = false;
+        easing = false;
+        track();
+      }
+    }
+    function track() {
+      if (!tracking) return;
+      // paused mid-loop while a fresh catchUpFrame() eases toward a newly
+      // handed-off carrier below, instead of snapping straight to him
+      if (easing) { requestAnimationFrame(track); return; }
+      ball.setAttribute('cx', carrier.getAttribute('cx'));
+      ball.setAttribute('cy', Number(carrier.getAttribute('cy')) + OFFY);
+      requestAnimationFrame(track);
+    }
+
+    // A genuinely separate initial carrier (ballEntry) can hand off
+    // mid-play to whoever's marked with handoffIndex -- if handoffEntry is
+    // what we're ALREADY starting from (the plain Shuffle-Pass case
+    // above, no separate handoffIndex elsewhere), there's no second
+    // carrier left to switch to.
+    if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
+      const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
+      wait(handoffDelay).then(() => {
+        if (!tracking) return; // play already ended (or never started) -- nothing to hand off
+        carrier = handoffEntry.circleEl;
+        catchingUp = true;
+        easing = true;
+        catchUpFrame();
+      });
+    }
+
+    await wait(initialDelay);
+    tracking = true;
+    catchUpFrame();
+    await wait(animMs);
+    tracking = false;
+  } else {
+    await wait(animMs);
+  }
+  await Promise.all(pathPromises);
+
+  await wait(pauseMs);
+  ball.remove();
+
+  setControlsDisabled(false);
+  playBtn.textContent = '\u25B6 Play';
+  isPlaying = false;
+}
+playBtn.addEventListener('click', playSequence);
+
+function quadPathD(points) {
+  const [[x0,y0],[x1,y1],[x2,y2]] = points;
+  return `M ${x0} ${y0} Q ${x1} ${y1} ${x2} ${y2}`;
+}
+function straightPathD(points) {
+  const [[x0,y0],[x1,y1]] = points;
+  return `M ${x0} ${y0} L ${x1} ${y1}`;
+}
+function lineThenCurvePathD(points) {
+  const [[x0,y0],[x1,y1],[x2,y2],[x3,y3]] = points;
+  return `M ${x0} ${y0} L ${x1} ${y1} Q ${x2} ${y2} ${x3} ${y3}`;
+}
+function multiCurvePathD(points) {
+  // 5 points: start, control1, midpoint (on-curve), control2, end --
+  // two chained quadratic beziers, for routes that need to duck under/over
+  // multiple obstacles rather than one simple arc.
+  const [[x0,y0],[x1,y1],[x2,y2],[x3,y3],[x4,y4]] = points;
+  return `M ${x0} ${y0} Q ${x1} ${y1} ${x2} ${y2} Q ${x3} ${y3} ${x4} ${y4}`;
+}
+// Nathan: authoring #4's Counter sweep needed more shape than a single
+// bezier control point allows, and adding a 4th point via "Add Point to
+// End" appeared to do nothing -- the render() dispatch below only had
+// hand-built shapes for EXACTLY 2, 3, or 5 points; anything else (4, or
+// 6+) fell through to quadPathD, which only reads the first 3 points and
+// silently drops the rest. This generalizes quadPathD (3 pts, 1 segment)
+// and multiCurvePathD (5 pts, 2 chained segments)'s exact same semantic --
+// point 0 is the start (on-curve), then points alternate control/
+// on-curve/control/on-curve... -- to any point count, so every click of
+// Add Point actually changes the shape instead of silently no-op'ing
+// partway through. An even total (4, 6, ...) can't end cleanly on an
+// on-curve point under that alternation, so the last leftover point is
+// reached with a plain straight segment instead. Only used as a fallback
+// below (points.length !== 2, 3, 5, and no lineThenCurve) -- every
+// existing play's 2/3/5-point routes keep rendering through their exact
+// original functions above, untouched.
+function chainedCurvePathD(points) {
+  let d = `M ${points[0][0]} ${points[0][1]}`;
+  let i = 1;
+  for (; i + 1 < points.length; i += 2) {
+    const [cx, cy] = points[i];
+    const [ex, ey] = points[i + 1];
+    d += ` Q ${cx} ${cy} ${ex} ${ey}`;
+  }
+  if (i < points.length) {
+    const [lx, ly] = points[i];
+    d += ` L ${lx} ${ly}`;
+  }
+  return d;
+}
+// See the matching function/comment in js/play-calls.js -- same dispatch as
+// the main path-drawing code below, but callable on an arbitrary slice of a
+// route's points. Used to draw the two independently-colored halves of a
+// "Ball Starts Here" split (see handoffIndex).
+function routeDForRange(pts) {
+  if (pts.length === 2) return straightPathD(pts);
+  if (pts.length === 3) return quadPathD(pts);
+  if (pts.length === 5) return multiCurvePathD(pts);
+  return chainedCurvePathD(pts);
+}
+
+// Places an arrowhead polygon at a given fraction (0-1) along a path,
+// oriented along the path's direction of travel there -- this is what
+// lets the arrowhead slide along with the line as it draws, instead of
+// sitting fixed at the endpoint the whole time like an SVG marker would.
+function placeArrowAtFraction(arrowEl, pathEl, fraction) {
+  const totalLen = pathEl.getTotalLength();
+  const dist = Math.max(0, Math.min(totalLen, fraction * totalLen));
+  const pt = pathEl.getPointAtLength(dist);
+  const behind = pathEl.getPointAtLength(Math.max(0, dist - 2));
+  const angle = Math.atan2(pt.y - behind.y, pt.x - behind.x) * 180 / Math.PI;
+  arrowEl.setAttribute('transform', `translate(${pt.x},${pt.y}) rotate(${angle})`);
+}
+
+// Which end-cap a path's line should draw: 'run' (arrowhead, the existing
+// default) means the player keeps running that direction past this point;
+// 'block' (a straight perpendicular T-bar) means they plant and block right
+// there. A coach can set this explicitly per path in the editor (p.endType);
+// if it's never been touched, it falls back to whatever isBlocking already
+// implied, so old saved data keeps drawing exactly like it always did.
+function endTypeFor(p) {
+  return p.endType || (p.isBlocking ? 'block' : 'run');
+}
+
+// Builds the actual end-cap SVG element for a path -- an arrowhead polygon
+// for 'run', or a short perpendicular bar for 'block'. Both are positioned
+// identically via placeArrowAtFraction (translate to the point + rotate to
+// the direction of travel there), so the T-bar automatically ends up
+// perpendicular to the route without any extra math.
+function buildEndCapEl(endType, color, width) {
+  if (endType === 'block') {
+    const barLen = Math.max(13, width * 2.2);
+    return svgEl('line', {
+      x1: 0, y1: -barLen / 2, x2: 0, y2: barLen / 2,
+      stroke: color, 'stroke-width': Math.max(6, width + 2), 'stroke-linecap': 'round',
+    });
+  }
+  return svgEl('polygon', {points: '-2,-11 20,0 -2,11', fill: color});
+}
+
+function svgPointFromEvent(ev) {
+  const pt = stage.createSVGPoint();
+  pt.x = ev.clientX;
+  pt.y = ev.clientY;
+  const ctm = mainGroup.getScreenCTM();
+  if (!ctm) return {x: 0, y: 0};
+  const local = pt.matrixTransform(ctm.inverse());
+  return {x: local.x, y: local.y};
+}
+
+function getBlockFieldKey() {
+  const sameSide = p4Side() === direction;
+  const base = sameSide ? 'sameSidePoints' : 'crossPoints';
+  return (defenseMode === '4x4') ? base + '4x4' : base;
+}
+
+// ---- Motion-independent blocking (p.motionIndependentBlock) ----
+// Nathan (Shuffle Pass): "I can set the 4 as a blocker but as soon as I
+// swap him to the other side, it blocks his assignment on the other side."
+// followed up once the normal same/cross split (which mirrors #4's block
+// the instant MOTION changes which physical side he's standing on, exactly
+// like it does for a raw Wing L/R change -- see getBlockFieldKey/p4Side
+// above) turned out not to be what he wanted here: "It's more to [a fixed
+// target #4 chases back across the field to, regardless of Motion] by
+// default. But I need the option to reassign per variant and hit it save
+// and stick. With and without motion should be considered different
+// versions that can be altered from the default."
+//
+// So this is a second, opt-in blocking mode (set via p.motionIndependentBlock
+// instead of p.blockRelative) with a different rule: the SAME/CROSS bucket
+// is still chosen by wing side (mirrors correctly for Wing L vs Wing R, same
+// as ever), but that choice deliberately ignores Motion -- p4HomeSide(), not
+// p4Side() -- so by default toggling Motion just changes where #4 physically
+// draws from (p4Anchor()), not which target he's headed to. A coach can
+// still explicitly override the Motion-on case: tapping a defender while
+// Motion is on writes into a separate `...Motion` field (an absolute point,
+// since by then #4's anchor has already moved and there's no more mirroring
+// left to do) that takes over for that bucket going forward, independent of
+// the no-motion assignment.
+function motionIndependentBaseKey() {
+  const homeSide = p4HomeSide(); // wing-based only -- ignores Motion on purpose
+  const sameSide = homeSide === direction;
+  const base = (sameSide ? 'sameSidePoints' : 'crossPoints') + '4x4';
+  return { homeSide, base, motionKey: base + 'Motion' };
+}
+function getMotionIndependentTarget(p) {
+  const { homeSide, base, motionKey } = motionIndependentBaseKey();
+  if (motionOn && p[motionKey]) return p[motionKey][1]; // explicit per-variant override, absolute
+  const noMotionAnchor = DATA.wing[homeSide];
+  const stored = p[base] || p.points;
+  const [dx, dy] = stored[1];
+  const sign = homeSide === 'Left' ? 1 : -1;
+  return [noMotionAnchor[0] + sign * dx, noMotionAnchor[1] + dy];
+}
+
+// Old saved data (from before same-side/cross-side blocking was independent)
+// only has points/points4x4. Rather than crash on the missing field, migrate
+// it in-memory the first time it's touched, so old cloud saves keep working.
+//
+// Nathan: "I can set the 4 as a blocker but as soon as I swap him to the
+// other side, it blocks his assignment on the other side. Each variation
+// needs the ability to set independent blocking assignments." Root cause:
+// `p.sameSidePoints = p.sameSidePoints || p.points || fallback` and the
+// crossPoints line right after it both fell back to the exact same
+// `p.points` array OBJECT when neither had been split out yet -- not a
+// copy of it, the same reference. sameSidePoints and crossPoints looked
+// independent (two different property names), but pointed at one shared
+// array, so writeBackPoint's `p[fieldKey][1] = ...` mutated whichever
+// field was active AND silently changed the other one too. Cloning each
+// fallback separately means editing one side's assignment can never again
+// reach across and change the other's.
+function clonePts(arr) { return arr ? arr.map(pt => pt.slice()) : arr; }
+function getBlockPoints(p) {
+  const fieldKey = getBlockFieldKey();
+  if (!p[fieldKey]) {
+    const fallback = defenseMode === '4x4' ? (p.points4x4 || p.points) : p.points;
+    p.sameSidePoints = p.sameSidePoints || clonePts(p.points) || clonePts(fallback);
+    p.crossPoints = p.crossPoints || clonePts(p.points) || clonePts(fallback);
+    p.sameSidePoints4x4 = p.sameSidePoints4x4 || clonePts(p.points4x4) || clonePts(fallback);
+    p.crossPoints4x4 = p.crossPoints4x4 || clonePts(p.points4x4) || clonePts(fallback);
+  }
+  return p[fieldKey];
+}
+
+function getAbsolutePoints(p) {
+  // mirrors the same substitution logic used in render() for player 4's
+  // special path types, so chip-block math can read the CURRENT on-screen
+  // points without duplicating render()'s full pipeline
+  if (p.dualSideBlock) {
+    // Not anchored to #4 at all -- a fixed-position blocker (e.g. a TE)
+    // whose block TARGET flips between two authored options depending on
+    // whether the wing is on the same side as the play's direction or not.
+    // getBlockFieldKey()/getBlockPoints() already do exactly this same-side/
+    // cross-side lookup for #4's blockRelative paths -- reused as-is here
+    // since both are just "pick sameSidePoints or crossPoints".
+    return getBlockPoints(p);
+  }
+  if (p.player === 4 && !p.optionLine) {
+    const anchor = p4Anchor();
+    if (p.motionIndependentBlock) {
+      return [anchor, getMotionIndependentTarget(p)];
+    } else if (p.blockRelative) {
+      const [dx, dy] = getBlockPoints(p)[1];
+      const sign = p4Side() === 'Left' ? 1 : -1;
+      return [anchor, [anchor[0] + sign * dx, anchor[1] + dy]];
+    } else if (p.wingSeamRelative) {
+      const sameSide = p4Side() === direction;
+      const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
+      const sign = p4Side() === 'Left' ? 1 : -1;
+      return offsets.map(([dx, dy]) => [anchor[0] + sign * dx, anchor[1] + dy]);
+    }
+    return [anchor, ...p.points.slice(1)];
+  }
+  return p.points;
+}
+
+function applyChipBlock(p, defenderId, variant) {
+  const abs = getAbsolutePoints(p);
+  const start = abs[0];
+  const after = abs[2] || abs[abs.length - 1];
+  if (!defenderId) {
+    // no chip -- straighten the early part back to a simple, direct line
+    const mid = [(start[0] + after[0]) / 2, (start[1] + after[1]) / 2];
+    writeBackPoint(p, 1, mid[0], mid[1]);
+    return;
+  }
+  const d = getActiveDefenseArr(variant).find(x => x.id === defenderId);
+  if (!d) return;
+  const frac = 0.5; // brief chip -- only swings partway toward him, then releases
+  const chipPt = [start[0] + frac*(d.pos[0]-start[0]), start[1] + frac*(d.pos[1]-start[1])];
+  writeBackPoint(p, 1, chipPt[0], chipPt[1]);
+}
+
+function writeBackPoint(p, idx, absX, absY) {
+  const anchor = p4Anchor();
+  if (p.dualSideBlock) {
+    // Absolute coordinates, not #4-anchor-relative -- just write straight
+    // into whichever of sameSidePoints/crossPoints is currently showing.
+    getBlockPoints(p); // ensures the field exists (migrates old data if needed)
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey][idx] = [absX, absY];
+  } else if (p.motionIndependentBlock) {
+    if (idx === 0) return; // start always tracks #4's live position
+    const { homeSide, base, motionKey } = motionIndependentBaseKey();
+    if (motionOn) {
+      // Explicit per-variant override -- absolute, no mirroring needed
+      // (there's nothing left to un-mirror once the coach has tapped a
+      // real point on screen with Motion already on).
+      p[motionKey] = [[0, 0], [absX, absY]];
+    } else {
+      const sign = homeSide === 'Left' ? 1 : -1;
+      const noMotionAnchor = DATA.wing[homeSide]; // === anchor here, Motion is off
+      p[base] = [[0, 0], [(absX - noMotionAnchor[0]) / sign, absY - noMotionAnchor[1]]];
+    }
+  } else if (p.blockRelative) {
+    if (idx === 0) return; // start always tracks the wing circle itself
+    const sign = p4Side() === 'Left' ? 1 : -1;
+    getBlockPoints(p); // ensures the field exists (migrates old data if needed)
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey][1] = [(absX - anchor[0]) / sign, absY - anchor[1]];
+  } else if (p.wingSeamRelative) {
+    if (idx === 0) return;
+    const sameSide = p4Side() === direction;
+    const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
+    const sign = p4Side() === 'Left' ? 1 : -1;
+    offsets[idx] = [(absX - anchor[0]) / sign, absY - anchor[1]];
+  } else if (p.player === 4 && !p.optionLine) {
+    if (idx === 0) return;
+    // Storage is always the Left-authored (canonical) coordinates -- see
+    // the matching comment in render(). Dragging a handle gives us the
+    // point's CURRENT on-screen absolute position, which is already
+    // mirrored for display whenever #4 is actually on the right; un-mirror
+    // it back before writing, or every drag made while previewing the
+    // right side would silently corrupt the canonical (left) data with
+    // right-side coordinates -- exactly what produced the garbled routes
+    // this fix exists for.
+    if (p4Side() === 'Right') {
+      const centerX = DATA.formation.C[0];
+      p.points[idx] = [centerX + (centerX - absX), absY];
+    } else {
+      p.points[idx] = [absX, absY];
+    }
+  } else {
+    p.points[idx] = [absX, absY];
+  }
+}
+
+function getEditablePointsArray(p) {
+  // returns the actual mutable array backing this path's points, for add/remove
+  if (p.blockRelative || p.dualSideBlock || p.motionIndependentBlock || (p.player === 4 && p.wingSeamRelative)) return null; // structurally fixed, no add/remove
+  return p.points;
+}
+
+// handoffIndex (see "Ball Starts Here"/hasHandoffSplit in render()) is a
+// raw array index into p.points -- adding or removing a point anywhere at
+// or before that index shifts everything after it, so the marker would
+// silently drift onto the wrong point unless it's kept in sync here too.
+// Called from every Add Point / delete-point site that touches a route's
+// own points array (not the separate split-route editor, which has no
+// handoff concept at all).
+function adjustHandoffOnInsert(p, insertAtIndex) {
+  if (Number.isInteger(p.handoffIndex) && p.handoffIndex >= insertAtIndex) p.handoffIndex += 1;
+}
+function adjustHandoffOnDelete(p, deletedIndex) {
+  if (!Number.isInteger(p.handoffIndex)) return;
+  if (p.handoffIndex === deletedIndex) delete p.handoffIndex; // the marked point itself got removed
+  else if (p.handoffIndex > deletedIndex) p.handoffIndex -= 1;
+}
+
+// selectedHandle: {pathData, pointIndex} -- the point awaiting a placement click
+let selectedHandle = null;
+// editTarget: {player} | {id} -- which blocker/route is currently being configured in edit mode
+let editTarget = null;
+let settingBallCarrier = false;
+let settingBallStart = false;
+
+function getActiveDefenseArr(variant) {
+  return (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+}
+
+function assignBlockerToDefender(p, blockerStart, defenderId, variant) {
+  const d = getActiveDefenseArr(variant).find(d => d.id === defenderId);
+  if (!d) return;
+  const frac = 0.9;
+  const actualStart = (p.blockRelative || p.motionIndependentBlock) ? p4Anchor() : blockerStart;
+  const end = [actualStart[0] + frac*(d.pos[0]-actualStart[0]), actualStart[1] + frac*(d.pos[1]-actualStart[1])];
+  if (p.motionIndependentBlock) {
+    const { homeSide, base, motionKey } = motionIndependentBaseKey();
+    if (motionOn) {
+      // Explicit per-variant override, saved independently of the no-motion
+      // assignment -- see the comment on motionIndependentBaseKey() above.
+      p[motionKey] = [[0, 0], end];
+    } else {
+      const sign = homeSide === 'Left' ? 1 : -1;
+      const noMotionAnchor = DATA.wing[homeSide]; // === actualStart here, Motion is off
+      p[base] = [[0, 0], [(end[0]-noMotionAnchor[0])/sign, end[1]-noMotionAnchor[1]]];
+    }
+  } else if (p.blockRelative) {
+    const anchor = p4Anchor();
+    const sign = p4Side() === 'Left' ? 1 : -1;
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey] = [[0,0], [(end[0]-anchor[0])/sign, end[1]-anchor[1]]];
+  } else if (p.dualSideBlock) {
+    // Reassigning only updates whichever same-side/cross-side variant is
+    // currently showing -- the other one (the play run the opposite way
+    // relative to the wing) keeps whatever it was already set to.
+    const fieldKey = getBlockFieldKey();
+    p[fieldKey] = [blockerStart.slice(), end];
+  } else {
+    const targetKey = defenseMode === '4x4' ? 'points4x4' : 'points';
+    p[targetKey] = [blockerStart.slice(), end];
+  }
+}
+
+stage.addEventListener('click', (ev) => {
+  if (!editMode) return;
+  const target = ev.target;
+  if (target.classList && target.classList.contains('edit-handle')) return; // handled by its own listener
+  if (editorFormation === 'split') {
+    if (splitSelectedHandle) {
+      const local = svgPointFromEvent(ev);
+      splitSelectedHandle.arr[splitSelectedHandle.index] = [local.x, local.y];
+      splitSelectedHandle = null;
+      render();
+      return;
+    }
+    if (splitEditTarget) {
+      splitEditTarget = null;
+      render();
+    }
+    return;
+  }
+  if (selectedHandle) {
+    // clicked empty canvas while a handle is selected -> move it here
+    const local = svgPointFromEvent(ev);
+    writeBackPoint(selectedHandle.pathData, selectedHandle.pointIndex, local.x, local.y);
+    selectedHandle = null;
+    render();
+    return;
+  }
+  // clicked empty canvas with nothing picked -> back out of editing this player
+  if (editTarget) {
+    editTarget = null;
+    render();
+  }
+});
+
+function findEditTargetPath(variant) {
+  if (!editTarget) return null;
+  return variant.paths.find(p => {
+    if (editTarget.player !== undefined) return p.player === editTarget.player && p.player !== null;
+    if (editTarget.id !== undefined) return p.id === editTarget.id;
+    return false;
+  }) || null;
+}
+
+const editToolbar = document.getElementById('editToolbar');
+const assignPanel = document.getElementById('assignPanel');
+const assignLabel = document.getElementById('assignLabel');
+const endTypePanel = document.getElementById('endTypePanel');
+const endTypeRunBtn = document.getElementById('endTypeRunBtn');
+const endTypeBlockBtn = document.getElementById('endTypeBlockBtn');
+const delayInput = document.getElementById('delayInput');
+
+function updateEditUI(variant) {
+  const addPointBtn = document.getElementById('addPointBtn');
+  const ballStartsHereBtn = document.getElementById('ballStartsHereBtn');
+  const delayPanel = document.getElementById('delayPanel');
+  if (!editMode || !editTarget) {
+    editToolbar.style.display = 'none';
+    assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
+    delayPanel.style.display = 'none';
+    ballStartsHereBtn.style.display = 'none';
+    return;
+  }
+  editToolbar.style.display = 'flex'; // Done Editing is always available once a target is picked
+  const p = findEditTargetPath(variant);
+  if (!p) {
+    addPointBtn.style.display = 'none';
+    assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
+    delayPanel.style.display = 'none';
+    ballStartsHereBtn.style.display = 'none';
+    return;
+  }
+
+  const editableArr = getEditablePointsArray(p);
+  addPointBtn.style.display = editableArr ? '' : 'none';
+
+  // Start delay -- same field the animation engine already reads
+  // (js/play-calls.js's pathPromises/initialDelay), now settable directly
+  // instead of only hand-authored in the data. Same gate as End Type: any
+  // real drawn path, not a block assignment or option fake.
+  if (!p.optionLine && !p.fake) {
+    delayPanel.style.display = 'flex';
+    delayInput.value = p.delayMs || 0;
+  } else {
+    delayPanel.style.display = 'none';
+  }
+
+  // "Ball Starts Here" -- only makes sense on a real route (editableArr,
+  // same gate as Add Point) with a handle actually picked, and not on the
+  // very first point (index 0 would mean "no blue segment at all", which
+  // is just as easily expressed by leaving handoffIndex unset -- see
+  // hasHandoffSplit in render()) or the very last (nothing left to mark
+  // red). See index.html's comment on this button for the full feature.
+  const pickedIdx = (selectedHandle && selectedHandle.pathData === p) ? selectedHandle.pointIndex : null;
+  const canMarkHandoff = editableArr && pickedIdx !== null && pickedIdx >= 1 && pickedIdx <= editableArr.length - 1;
+  if (canMarkHandoff) {
+    ballStartsHereBtn.style.display = '';
+    ballStartsHereBtn.textContent = (p.handoffIndex === pickedIdx) ? '✕ Clear Ball Start' : '🏈 Ball Starts Here';
+  } else {
+    ballStartsHereBtn.style.display = 'none';
+  }
+
+  // End cap (Run arrow / Block T-bar) -- available for any real drawn path,
+  // independent of the assign-panel's own tap-a-defender/chip-block flow
+  // below. optionLine/fake paths never draw a cap at all (see render()), so
+  // there's nothing useful to toggle for those.
+  if (!p.optionLine && !p.fake) {
+    endTypePanel.style.display = 'flex';
+    const et = endTypeFor(p);
+    endTypeRunBtn.classList.toggle('active', et === 'run');
+    endTypeBlockBtn.classList.toggle('active', et === 'block');
+  } else {
+    endTypePanel.style.display = 'none';
+  }
+
+  if (p.isBlocking) {
+    assignPanel.style.display = 'flex';
+    const who = editTarget.player !== undefined ? `#${editTarget.player}` : editTarget.id;
+    // Nathan: "as soon as I set 4 as the blocker without Motion, it keeps
+    // the same blocking assignment when going With Motion. I switch it
+    // back and they both go to the same assignment." The underlying data
+    // IS independent per Motion state (motionIndependentBaseKey/
+    // getMotionIndependentTarget below) -- but with no on-screen cue that
+    // Motion's toggle even matters here, tapping a defender while Motion
+    // was already showing "the same" (its intentional default -- see the
+    // big comment on motionIndependentBaseKey) looks exactly like nothing
+    // happened, whether or not the tap actually landed. Spelling out which
+    // Motion state a tap is about to set removes that ambiguity -- for
+    // every OTHER isBlocking path this label is unchanged.
+    const motionQualifier = p.motionIndependentBlock ? (motionOn ? ' (Motion ON)' : ' (Motion OFF)') : '';
+    assignLabel.textContent = `${who} blocks${motionQualifier}: tap a defender on the field`;
+    [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
+  } else if (!p.skipChip && [4,5,6].includes(editTarget.player)) {
+    // a real route (going out for a pass) -- offer a quick chip block on
+    // the way, which only nudges the early part of the route and leaves
+    // the release/pattern itself alone. p.skipChip opts a specific path
+    // out entirely (e.g. Pop Pass's #4, who never blocks or chips on this
+    // play) -- clicking straight to his draggable route with no extra
+    // step, rather than every player 4/5/6 route getting this by default.
+    assignPanel.style.display = 'flex';
+    assignLabel.textContent = `#${editTarget.player} chip block: tap a defender on the field, then release`;
+    [...assignPanel.querySelectorAll('button')].forEach(b => b.remove());
+    const noneBtn = document.createElement('button');
+    noneBtn.textContent = 'No Chip';
+    noneBtn.addEventListener('click', () => {
+      applyChipBlock(p, null, variant);
+      selectedHandle = null;
+      render();
+    });
+    assignPanel.appendChild(noneBtn);
+  } else {
+    assignPanel.style.display = 'none';
+  }
+}
+
+// For players 4/5/6 specifically, Run/Block IS the single choice between
+// a real, freely-editable route and a fixed block assignment -- not just
+// a visual end-cap style layered on top of some separate mode. Nathan:
+// "We already say whether the path is a run or block path... so we
+// should be able to click 'run' on player 5 or 6 and make his path
+// whatever we want." Previously this needed a second, separate toggle
+// (isBlocking) a coach had to also know about and set correctly -- one
+// button now does both. Clearing blockRelative/dualSideBlock/
+// motionIndependentBlock/crossPoints alongside isBlocking matters because
+// a path inherited from a duplicated play (e.g. Sweep's wings) can carry
+// any of those, and getEditablePointsArray() treats each one as
+// "structurally fixed" on its own -- leaving one behind on "Run" would
+// silently reintroduce the exact same problem this exists to fix. Every
+// other position's endType (O-line, split ends, anyone not in this list)
+// is untouched -- it's still just the visual end-cap it always was.
+function setEditTargetEndType(newEndType) {
+  const playType = DATA.playTypes.find(pt => pt.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  p.endType = newEndType;
+  if ([4, 5, 6].includes(editTarget.player)) {
+    if (newEndType === 'block') {
+      p.isBlocking = true;
+    } else {
+      delete p.isBlocking;
+      delete p.blockRelative;
+      delete p.dualSideBlock;
+      delete p.motionIndependentBlock;
+      delete p.crossPoints;
+    }
+  }
+  render();
+}
+endTypeRunBtn.addEventListener('click', () => setEditTargetEndType('run'));
+endTypeBlockBtn.addEventListener('click', () => setEditTargetEndType('block'));
+
+// Writes p.delayMs on whatever's currently selected. 'change' (fires on
+// blur/enter) rather than 'input' (fires per keystroke) on purpose -- a
+// full render() on every single digit typed would fight the coach mid-type
+// (delayPanel repopulates from p.delayMs, which briefly diverges from
+// whatever's still an incomplete typed value); 'change' only commits once
+// they're done editing the field.
+delayInput.addEventListener('change', () => {
+  const playType = DATA.playTypes.find(pt => pt.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  const ms = Math.max(0, Number(delayInput.value) || 0);
+  if (ms === 0) delete p.delayMs; else p.delayMs = ms;
+  render();
+});
+
+document.getElementById('doneEditingBtn').addEventListener('click', () => {
+  editTarget = null;
+  selectedHandle = null;
+  splitEditTarget = null;
+  splitSelectedHandle = null;
+  render();
+});
+
+document.getElementById('addPointBtn').addEventListener('click', () => {
+  if (editorFormation === 'split') {
+    if (!splitEditTarget) return;
+    const routeData = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+    const arr = routeData && routeData[splitEditTarget] && routeData[splitEditTarget][splitCall];
+    if (!arr) return;
+    const insertAfter = splitSelectedHandle && splitSelectedHandle.arr === arr ? splitSelectedHandle.index : arr.length - 1;
+    const a = arr[insertAfter];
+    const b = arr[Math.min(insertAfter + 1, arr.length - 1)];
+    const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+    arr.splice(insertAfter + 1, 0, mid);
+    splitSelectedHandle = null;
+    render();
+    return;
+  }
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p) return;
+  const arr = getEditablePointsArray(p);
+  if (!arr) return;
+  const insertAfter = selectedHandle && selectedHandle.pathData === p ? selectedHandle.pointIndex : arr.length - 1;
+  const a = arr[insertAfter];
+  const b = arr[Math.min(insertAfter + 1, arr.length - 1)];
+  const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+  arr.splice(insertAfter + 1, 0, mid);
+  adjustHandoffOnInsert(p, insertAfter + 1);
+  selectedHandle = null;
+  render();
+});
+
+// Nathan: "when the 4 goes by the red line, he needs to switch to having
+// the ball and his line changes to red." Only enabled (see updateEditUI)
+// once a route handle is picked -- toggles that point as the handoff spot
+// (or clears it, if it's already marked there). Moving/removing points
+// around it afterward keeps it in sync via adjustHandoffOnInsert/Delete
+// above; moving the handoff to a DIFFERENT point just means picking that
+// handle and tapping this again.
+document.getElementById('ballStartsHereBtn').addEventListener('click', () => {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+  const p = findEditTargetPath(variant);
+  if (!p || !selectedHandle || selectedHandle.pathData !== p) return;
+  const idx = selectedHandle.pointIndex;
+  p.handoffIndex = (p.handoffIndex === idx) ? undefined : idx;
+  if (p.handoffIndex === undefined) delete p.handoffIndex;
+  render();
+});
+// ---- Split route editor: an entirely separate render path from Shotgun's
+// render() below. DATA.splitRoutes[side].wide/.flex[call] are plain
+// absolute point arrays (no blockRelative/dualSideBlock/wingSeamRelative
+// special-casing like Shotgun's player-4 paths have), so editing them just
+// means mutating that array directly -- same drag-a-handle / add-point /
+// delete-point interactions as the Shotgun editor, reimplemented small and
+// self-contained rather than threaded through render()'s Shotgun-specific
+// logic. Player 4's route isn't shown here -- it's automatically re-derived
+// (reanchored) from the flex route on the opposite side, not stored data
+// of its own, so there's nothing to edit for him directly. ----
+function renderSplitEditor() {
+  const [vw, vh] = DATA.viewBox;
+  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  stage.innerHTML = '';
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
+
+  const g = svgEl('g', {transform: `translate(0,${DATA.topPad})`});
+  const pathsLayer = svgEl('g', {});
+  const circlesLayer = svgEl('g', {});
+  const handlesLayer = svgEl('g', {});
+  const pos = DATA.split[splitSide];
+
+  function drawCircle(x, y, label, fontSize, r, stroke) {
+    stroke = stroke || '#111111';
+    const wrap = svgEl('g', {});
+    const circleEl = svgEl('circle', {cx:x, cy:y, r: r || CIRCLE_R, fill:'#ffffff', stroke, 'stroke-width':8});
+    wrap.appendChild(circleEl);
+    const t = svgEl('text', {x, y:y+12, 'font-size':fontSize, 'font-weight':900, 'font-style':'italic',
+      'text-anchor':'middle', fill:stroke});
+    t.textContent = label;
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  ['LT','LG','C','RG','RT'].forEach(k => {
+    circlesLayer.appendChild(drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22));
+  });
+
+  // Shared from js/play-calls.js (window.splitPersonnel) rather than this
+  // file's own guess -- this exact ternary was hardcoded here too, with the
+  // SAME mistake (flexNum wrong for Right), independently of play-calls.js's
+  // copy. See play-calls.js's splitPersonnel for the data it comes from.
+  const { wideNum, flexNum } = window.splitPersonnel
+    ? window.splitPersonnel(splitSide)
+    : { wideNum: splitSide === 'Right' ? 6 : 5, flexNum: 3 };
+  ['5', '6', '3', '4', '1', '2'].forEach(num => {
+    const role = (Number(num) === wideNum) ? 'wide' : (Number(num) === flexNum) ? 'flex' : null;
+    const isTarget = role && splitEditTarget === role;
+    const stroke = isTarget ? '#1a8c3a' : '#111111';
+    const c = drawCircle(pos[num][0], pos[num][1], num, 34, null, stroke);
+    if (role && editMode) {
+      c.style.cursor = 'pointer';
+      c.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        splitEditTarget = (splitEditTarget === role) ? null : role;
+        splitSelectedHandle = null;
+        render();
+      });
+    }
+    circlesLayer.appendChild(c);
+  });
+
+  function drawRoute(role, arr, color) {
+    if (!arr || !arr.length) return;
+    const d = arr.length === 5 ? multiCurvePathD(arr) : (arr.length === 2 ? straightPathD(arr) : quadPathD(arr));
+    const path = svgEl('path', {d, fill:'none', stroke: color, 'stroke-width': 7, 'stroke-linecap': 'round'});
+    pathsLayer.appendChild(path);
+    const arrowEl = buildEndCapEl('run', color, 7);
+    pathsLayer.appendChild(arrowEl);
+    placeArrowAtFraction(arrowEl, path, 1);
+
+    if (editMode && splitEditTarget === role) {
+      const guideD = arr.map((pt, i) => (i === 0 ? 'M' : 'L') + ` ${pt[0]} ${pt[1]}`).join(' ');
+      handlesLayer.appendChild(svgEl('path', {d: guideD, class: 'edit-handle-line'}));
+      arr.forEach((pt, idx) => {
+        const isPicked = splitSelectedHandle && splitSelectedHandle.arr === arr && splitSelectedHandle.index === idx;
+        const h = svgEl('circle', {cx: pt[0], cy: pt[1], r: isPicked ? 19 : 16,
+          class: 'edit-handle' + (isPicked ? ' picked' : '')});
+        h.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          splitSelectedHandle = isPicked ? null : { arr, index: idx };
+          render();
+        });
+        handlesLayer.appendChild(h);
+
+        if (isPicked && arr.length > 2) {
+          const bx = pt[0] + 26, by = pt[1] - 26;
+          const delBadge = svgEl('g', {});
+          delBadge.appendChild(svgEl('circle', {cx:bx, cy:by, r:15, fill:'#e0201a', stroke:'#fff', 'stroke-width':2}));
+          const xMark = svgEl('text', {x:bx, y:by+6, 'font-size':18, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          xMark.textContent = '✕';
+          delBadge.appendChild(xMark);
+          delBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            arr.splice(idx, 1);
+            splitSelectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(delBadge);
+        }
+        if (isPicked) {
+          const ax = pt[0] - 26, ay = pt[1] - 26;
+          const addBadge = svgEl('g', {});
+          addBadge.appendChild(svgEl('circle', {cx:ax, cy:ay, r:15, fill:'#1a8c3a', stroke:'#fff', 'stroke-width':2}));
+          const plusMark = svgEl('text', {x:ax, y:ay+6, 'font-size':20, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          plusMark.textContent = '+';
+          addBadge.appendChild(plusMark);
+          addBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const a = arr[idx];
+            const b = arr[Math.min(idx + 1, arr.length - 1)];
+            const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+            arr.splice(idx + 1, 0, mid);
+            splitSelectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(addBadge);
+        }
+      });
+    }
+  }
+
+  const routeData = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+  if (routeData) {
+    drawRoute('wide', routeData.wide && routeData.wide[splitCall], NOBALL_COLOR);
+    drawRoute('flex', routeData.flex && routeData.flex[splitCall], BALL_COLOR);
+  }
+
+  g.appendChild(pathsLayer);
+  g.appendChild(circlesLayer);
+  g.appendChild(handlesLayer);
+  circlesLayerRef = circlesLayer;
+  mainGroup = g;
+  stage.appendChild(g);
+
+  const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
+    'text-anchor':'middle', fill:'#111111'});
+  title.textContent = `SPLIT ${splitSide.toUpperCase()} – ${SPLIT_ROUTE_LABELS_EDIT[splitCall].toUpperCase()}`;
+  stage.appendChild(title);
+
+  const addPointBtn = document.getElementById('addPointBtn');
+  if (!editMode || !splitEditTarget) {
+    editToolbar.style.display = 'none';
+    assignPanel.style.display = 'none';
+    endTypePanel.style.display = 'none';
+  } else {
+    editToolbar.style.display = 'flex';
+    addPointBtn.style.display = '';
+    assignPanel.style.display = 'none'; // no blocking/chip-block concept for a route
+    endTypePanel.style.display = 'none'; // routes are always a run-style arrow here, no T-bar concept
+  }
+}
+
+function render() {
+  syncSignalUI();
+  if (editorFormation === 'split') { renderSplitEditor(); return; }
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const variant = getPlayVariant(playType, direction);
+
+  // Boot: swap which path is treated as the ball carrier, purely for this
+  // render/animation -- doesn't touch the play data, so nothing else about
+  // the play (routes, blocking, everyone else's paths) changes. No-op if
+  // #1 already has the ball (e.g. Option).
+  let bootBallPath = null, bootFakePath = null;
+  if (bootOn) {
+    const realBallPath = variant.paths.find(p => p.ball && !p.optionLine);
+    const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
+    if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
+  }
+
+  const ballCarrierBtn = document.getElementById('ballCarrierBtn');
+  if (ballCarrierBtn) {
+    ballCarrierBtn.textContent = settingBallCarrier ? 'Tap a player…' : 'Ball Carrier';
+    ballCarrierBtn.classList.toggle('active', settingBallCarrier);
+  }
+  const ballStartsWithBtn = document.getElementById('ballStartsWithBtn');
+  if (ballStartsWithBtn) {
+    ballStartsWithBtn.textContent = settingBallStart ? 'Tap a player…' : 'Ball Starts With';
+    ballStartsWithBtn.classList.toggle('active', settingBallStart);
+  }
+  const [vw, vh] = DATA.viewBox;
+  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  stage.innerHTML = '';
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
+
+  const g = svgEl('g', {transform: `translate(0,${DATA.topPad})`});
+  const pathsLayer = svgEl('g', {});
+  const circlesLayer = svgEl('g', {});
+  const handlesLayer = svgEl('g', {});
+  const anyPlayerSelected = selectedPlayer !== null;
+
+  function drawCircle(x, y, label, stroke, fontSize, dim, r, playerNum) {
+    r = r || CIRCLE_R;
+    const wrap = svgEl('g', {class: dim ? 'dimmed' : 'full-op'});
+    const circleEl = svgEl('circle', {cx:x, cy:y, r, fill:'#ffffff', stroke, 'stroke-width':8});
+    wrap.appendChild(circleEl);
+    const t = svgEl('text', {x, y:y+12, 'font-size':fontSize, 'font-weight':900, 'font-style':'italic',
+      'text-anchor':'middle', fill:stroke});
+    t.textContent = label;
+    wrap.appendChild(t);
+    wrap.circleEl = circleEl;
+    wrap.textEl = t;
+    if (playerNum !== undefined) {
+      wrap.classList.add('player-circle');
+      wrap.addEventListener('click', (ev) => { ev.stopPropagation(); selectPlayer(playerNum); });
+    }
+    return wrap;
+  }
+  const playerCircles = {}; // player number (string) -> {circleEl, textEl, startX, startY}
+
+  // QB Sneak is a real Split personnel grouping, not Shotgun -- see the
+  // matching comment in play-calls.js's renderCardDiagram for the full
+  // story. DATA.split[side] holds the real digitized Split alignment for
+  // 3/4/5/6 (O-line unchanged either way); reused here so the Edit tool's
+  // own diagram matches what a coach actually sees on the Plays tab card.
+  const splitPositions = playKey === 'qb_sneak' ? DATA.split[wingSide] : null;
+
+  // defense -- now dims too when a player is selected ("D" per the request)
+  const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+  const assignablePath = (editMode && editTarget) ? findEditTargetPath(variant) : null;
+  const isAssignableBlock = assignablePath && assignablePath.isBlocking;
+  const isAssignableChip = assignablePath && !assignablePath.isBlocking && !assignablePath.skipChip && [4,5,6].includes(editTarget && editTarget.player);
+  activeDefense.forEach(d => {
+    const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
+    const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
+    const r = d.extra ? 30 : CIRCLE_R;
+    const fs = d.extra ? 22 : 26;
+    const defCircle = drawCircle(d.pos[0], d.pos[1], d.label, stroke, fs, anyPlayerSelected, r);
+    if (isAssignableBlock || isAssignableChip) {
+      defCircle.style.cursor = 'pointer';
+      defCircle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (isAssignableBlock) {
+          const blockerStart = (assignablePath.blockRelative || assignablePath.motionIndependentBlock) ? [0,0] : assignablePath.points[0];
+          assignBlockerToDefender(assignablePath, blockerStart, d.id, variant);
+        } else {
+          applyChipBlock(assignablePath, d.id, variant);
+        }
+        selectedHandle = null;
+        render();
+      });
+    }
+    circlesLayer.appendChild(defCircle);
+    if (isReadKey) {
+      const bx = d.pos[0] + 44, by = d.pos[1] - 40;
+      const badge = svgEl('g', {class: anyPlayerSelected ? 'dimmed' : 'full-op'});
+      badge.appendChild(svgEl('circle', {cx:bx, cy:by, r:28, fill:READKEY_COLOR, stroke:'#fff', 'stroke-width':3}));
+      const bt = svgEl('text', {x:bx, y:by+10, 'font-size':34, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+      bt.textContent = 'R';
+      badge.appendChild(bt);
+      circlesLayer.appendChild(badge);
+    }
+  });
+
+  // formation (O-line + 5/6) -- now dims too ("line" per the request)
+  const p5Pos = splitPositions ? splitPositions[5] : DATA.formation['5'];
+  const c5Dim = anyPlayerSelected && selectedPlayer !== 5;
+  const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111111', 34, c5Dim, null, 5);
+  circlesLayer.appendChild(c5);
+  playerCircles['5'] = c5;
+  ['LT','LG','C','RG','RT'].forEach(k => {
+    const dimOLine = anyPlayerSelected || (editMode && editTarget && !(editTarget.id === k));
+    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111111', 22, dimOLine);
+    if (editMode) {
+      c.classList.add('player-circle');
+      c.addEventListener('click', (ev) => { ev.stopPropagation(); selectOLineBlocker(k); });
+    }
+    circlesLayer.appendChild(c);
+    playerCircles[k] = c;
+  });
+  const p6Pos = splitPositions ? splitPositions[6] : DATA.formation['6'];
+  const c6Dim = anyPlayerSelected && selectedPlayer !== 6;
+  const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111111', 34, c6Dim, null, 6);
+  circlesLayer.appendChild(c6);
+  playerCircles['6'] = c6;
+
+  // wing (#4) -- position depends on wingSide, independent of play direction
+  // (or the opposite of wingSide, for a p4StartsOpposite play like Shuffle
+  // Pass -- see p4HomeSide() above). Motion is a pure playback choice (like
+  // Wing/Dir) -- if it's on, he's drawn at the opposite of THAT spot
+  // instead, and everything below anchors off that same spot so his
+  // route/blocking math stays correct.
+  const wingPos = DATA.wing[p4HomeSide()];
+  const p4Pos = splitPositions ? splitPositions[4] : p4Anchor();
+  const wingDim = anyPlayerSelected && selectedPlayer !== 4;
+  const c4 = drawCircle(p4Pos[0], p4Pos[1], '4', '#111111', 34, wingDim, null, 4);
+  circlesLayer.appendChild(c4);
+  playerCircles['4'] = c4;
+
+  // motion path -- dotted line from #4's real lineup spot to the opposite
+  // side, always visible whenever Motion is on so it's clear at a glance.
+  if (motionOn) {
+    const motionLine = svgEl('path', {
+      d: `M ${wingPos[0]} ${wingPos[1]} L ${p4Pos[0]} ${p4Pos[1]}`,
+      fill: 'none', stroke: '#111111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
+    });
+    circlesLayer.appendChild(motionLine);
+  }
+
+  // backfield (#3, #1, #2) -- always fixed positions, except #3 splits out
+  // wide in real Split personnel (see splitPositions above) instead of
+  // standing in the backfield -- 1 and 2 sit in the same spot either way.
+  ['3','1','2'].forEach(num => {
+    const dim = anyPlayerSelected && String(selectedPlayer) !== num;
+    const pos = (splitPositions && num === '3') ? splitPositions[3] : DATA.backfield[num];
+    const c = drawCircle(pos[0], pos[1], num, '#111111', 34, dim, null, Number(num));
+    circlesLayer.appendChild(c);
+    playerCircles[num] = c;
+  });
+
+  // paths -- appended to a layer placed BEHIND the circles layer, so a
+  // player's number stays readable as their circle slides across a line.
+  lastRenderedPaths = [];
+  const animatePaths = [];
+  variant.paths.forEach(p => {
+    if (p.isBlocking && !blockingEnabled) return;
+    const isSelected = anyPlayerSelected && p.player === selectedPlayer;
+    const dim = anyPlayerSelected && (p.player === null || p.player !== selectedPlayer);
+    const wrap = svgEl('g', {class: dim ? 'dimmed' : 'full-op'});
+
+    // #4's own position depends on the Wing Side toggle, independent of the
+    // play data -- so his path (if any) always starts from wherever he's
+    // actually standing, not a coordinate baked into the play. Blocking
+    // paths for #4 also need their END point computed relative to his live
+    // position, since which defender he's nearest to depends on wing side.
+    let points = (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
+    if (p.dualSideBlock) {
+      // Fixed-position blocker (e.g. the Option play's playside TE) whose
+      // block target depends on whether the wing is on the same side as the
+      // play's direction or the opposite side -- see getBlockFieldKey().
+      points = getBlockPoints(p);
+    } else if (p.player === 4 && !p.optionLine) {
+      if (p.motionIndependentBlock) {
+        points = [p4Pos, getMotionIndependentTarget(p)];
+      } else if (p.blockRelative) {
+        const [dx, dy] = getBlockPoints(p)[1];
+        const sign = p4Side() === 'Left' ? 1 : -1; // offset authored assuming Left; mirror for Right
+        points = [p4Pos, [p4Pos[0] + sign * dx, p4Pos[1] + dy]];
+      } else if (p.wingSeamRelative) {
+        // Two shapes, both authored assuming Wing Left as the base: one for
+        // when he's on the SAME side as the play's direction (stays on his
+        // own side, attacks the near safety), one for when he's on the
+        // OPPOSITE side (a genuine crossing route to match the QB). This
+        // has to key off #4's ACTUAL side -- his set wing side, or the
+        // opposite one if Motion has sent him there -- not the raw wing
+        // side setting. Otherwise Motion just mirrors the same-side route
+        // instead of switching to the crossing route, sending him away
+        // from the pass action instead of into it. Mirror (flip dx)
+        // whenever he's actually standing on the right.
+        const sameSide = p4Side() === direction;
+        const offsets = sameSide ? p.sameSideOffsets : p.crossOffsets;
+        const sign = p4Side() === 'Left' ? 1 : -1;
+        points = offsets.map(([dx, dy]) => [p4Pos[0] + sign * dx, p4Pos[1] + dy]);
+      } else {
+        // Plain points (no wingSeamRelative/blockRelative/motionIndependentBlock)
+        // are authored assuming Wing Left as the base -- same convention as
+        // every other #4 special case above, confirmed by p.points[0] itself
+        // matching DATA.wing.Left. Regression fix: this used to only swap in
+        // the live anchor for point 0, leaving the REST of the route at its
+        // literal authored (Left-side) coordinates even when #4 is actually
+        // standing on the right -- his token correctly moved, but his route
+        // stayed put, producing a route that runs clear across the field
+        // instead of mirroring with him. Mirror every point around the
+        // field's center line (DATA.formation.C[0]) whenever he's actually
+        // on the right, same math as the wingSeamRelative branch just above.
+        if (p4Side() === 'Right') {
+          const centerX = DATA.formation.C[0];
+          points = points.map(([x, y]) => [centerX + (centerX - x), y]);
+        } else {
+          points = [p4Pos, ...points.slice(1)];
+        }
+      }
+    }
+
+    const matchesEditTarget = editTarget && (
+      (editTarget.player !== undefined && p.player === editTarget.player && p.player !== null) ||
+      (editTarget.id !== undefined && p.id === editTarget.id)
+    );
+    const showHandles = editMode && matchesEditTarget;
+    if (showHandles && !p.optionLine) {
+      const guideD = points.map((pt,i) => (i===0?'M':'L') + ` ${pt[0]} ${pt[1]}`).join(' ');
+      handlesLayer.appendChild(svgEl('path', {d: guideD, class: 'edit-handle-line'}));
+      const editableArrForP = getEditablePointsArray(p);
+      points.forEach((pt, idx) => {
+        const isPicked = selectedHandle && selectedHandle.pathData === p && selectedHandle.pointIndex === idx;
+        const h = svgEl('circle', {cx: pt[0], cy: pt[1], r: isPicked ? 19 : 16,
+          class: 'edit-handle' + (isPicked ? ' picked' : '')});
+        h.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (isPicked) {
+            selectedHandle = null; // tap again to deselect
+          } else {
+            selectedHandle = { pathData: p, pointIndex: idx };
+          }
+          render();
+        });
+        handlesLayer.appendChild(h);
+
+        // contextual delete badge, right next to the currently-picked point --
+        // easier to find on mobile than a toolbar button elsewhere on screen
+        if (isPicked && editableArrForP && editableArrForP.length > 2) {
+          const bx = pt[0] + 26, by = pt[1] - 26;
+          const delBadge = svgEl('g', {});
+          delBadge.appendChild(svgEl('circle', {cx:bx, cy:by, r:15, fill:'#e0201a', stroke:'#fff', 'stroke-width':2}));
+          const xMark = svgEl('text', {x:bx, y:by+6, 'font-size':18, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          xMark.textContent = '\u2715';
+          delBadge.appendChild(xMark);
+          delBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            editableArrForP.splice(idx, 1);
+            adjustHandoffOnDelete(p, idx);
+            selectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(delBadge);
+        }
+        if (isPicked && editableArrForP) {
+          const ax = pt[0] - 26, ay = pt[1] - 26;
+          const addBadge = svgEl('g', {});
+          addBadge.appendChild(svgEl('circle', {cx:ax, cy:ay, r:15, fill:'#1a8c3a', stroke:'#fff', 'stroke-width':2}));
+          const plusMark = svgEl('text', {x:ax, y:ay+6, 'font-size':20, 'font-weight':900, 'text-anchor':'middle', fill:'#fff'});
+          plusMark.textContent = '+';
+          addBadge.appendChild(plusMark);
+          addBadge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const a = editableArrForP[idx];
+            const b = editableArrForP[Math.min(idx + 1, editableArrForP.length - 1)];
+            const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2 - 20];
+            editableArrForP.splice(idx + 1, 0, mid);
+            adjustHandoffOnInsert(p, idx + 1);
+            selectedHandle = null;
+            render();
+          });
+          handlesLayer.appendChild(addBadge);
+        }
+      });
+    }
+
+    if (p.optionLine) {
+      const [[x1,y1],[x2,y2]] = p.points;
+      const path = svgEl('path', {d:`M ${x1} ${y1} L ${x2} ${y2}`, fill:'none', stroke:'#555555',
+        'stroke-width':p.width, 'stroke-linecap':'round', 'stroke-dasharray':'9 7'});
+      wrap.appendChild(path);
+      pathsLayer.appendChild(wrap);
+      return;
+    }
+
+    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
+    // Ball Starts With (p.ballStart) is a visual/timing cue distinct from
+    // who's actually credited (p.ball/effectiveBall) -- only meaningfully
+    // different from the ball-carrier color when it's set on a DIFFERENT
+    // path than the real carrier (Shuffle-Pass-style); if a coach set it
+    // on the same player who's already the carrier, effectiveBall's own
+    // color already covers it and there's nothing extra to show.
+    const color = effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR);
+
+    // Nathan: "when the 4 goes by the red line, he needs to switch to
+    // having the ball and his line changes to red." handoffIndex (set via
+    // the "Ball Starts Here" button below, once a route handle is picked)
+    // splits the route into two independently-colored segments instead of
+    // the usual single path -- blue up to the handoff point, red from
+    // there on. See the matching block/comment in js/play-calls.js, which
+    // also handles the animated hand-off itself; this file only needs the
+    // static (and edit-preview) rendering.
+    const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
+    const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1 && !p.fake;
+
+    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    const ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
+    let arrowEl = null;
+
+    if (hasHandoffSplit) {
+      const leftPts = points.slice(0, handoffIdx + 1);
+      const rightPts = points.slice(handoffIdx);
+      const leftPath = svgEl('path', {d: routeDForRange(leftPts), fill:'none', stroke:NOBALL_COLOR, 'stroke-width':p.width, 'stroke-linecap':'round'});
+      wrap.appendChild(leftPath);
+      let rightPath = null;
+      if (rightPts.length >= 2) {
+        rightPath = svgEl('path', {d: routeDForRange(rightPts), fill:'none', stroke:BALL_COLOR, 'stroke-width':p.width, 'stroke-linecap':'round'});
+        wrap.appendChild(rightPath);
+      }
+      pathsLayer.appendChild(wrap);
+      const leftLen = leftPath.getTotalLength();
+      const rightLen = rightPath ? rightPath.getTotalLength() : 0;
+      const totalLen = leftLen + rightLen;
+      const startFracRight = totalLen > 0 ? leftLen / totalLen : 1;
+
+      arrowEl = buildEndCapEl(endTypeFor(p), BALL_COLOR, p.width);
+      wrap.appendChild(arrowEl);
+      placeArrowAtFraction(arrowEl, rightPath || leftPath, 1);
+
+      lastRenderedPaths.push({el: leftPath, arrowEl: rightPath ? null : arrowEl, player: p.player, isBall: false,
+        delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+        textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: 0, lenFrac: startFracRight});
+      if (isSelected) animatePaths.push({el: leftPath, arrowEl: rightPath ? null : arrowEl,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+        startFrac: 0, lenFrac: startFracRight});
+      if (rightPath) {
+        lastRenderedPaths.push({el: rightPath, arrowEl, player: p.player, isBall: false,
+          delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+          textEl: ownerCircle ? ownerCircle.textEl : null, startFrac: startFracRight, lenFrac: 1 - startFracRight,
+          handoffFraction: startFracRight});
+        if (isSelected) animatePaths.push({el: rightPath, arrowEl,
+          circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+          startFrac: startFracRight, lenFrac: 1 - startFracRight});
+      }
+    } else {
+      // Nathan: "if i remove 3 or more points from a route in play edits it
+      // gets rid of the entire play, it all goes blank." Root cause:
+      // lineThenCurvePathD hard-destructures exactly 4 points, so once a
+      // point add/remove above changed a lineThenCurve route's actual
+      // count away from 4, this threw and crashed render() mid-draw,
+      // leaving the whole stage blank (it had already been cleared).
+      // Gating on the real current point count -- not just the authored
+      // flag -- falls through to the length-appropriate generic handler
+      // instead of crashing whenever the count no longer matches.
+      const d = (p.lineThenCurve && points.length === 4) ? lineThenCurvePathD(points)
+        : points.length === 5 ? multiCurvePathD(points)
+        : points.length === 2 ? straightPathD(points)
+        : points.length === 3 ? quadPathD(points)
+        : chainedCurvePathD(points);
+      const attrs = {d, fill:'none', stroke:color, 'stroke-width':p.width, 'stroke-linecap':'round'};
+      if (p.fake) attrs['stroke-dasharray'] = '10 8';
+      const path = svgEl('path', attrs);
+      wrap.appendChild(path);
+
+      if (!p.fake) {
+        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        wrap.appendChild(arrowEl);
+        placeArrowAtFraction(arrowEl, path, 1); // static: sits at the finished tip until animated
+      }
+
+      pathsLayer.appendChild(wrap);
+
+      lastRenderedPaths.push({el: path, arrowEl, player: p.player, isBall: effectiveBall,
+        isBallStart: !!p.ballStart, delayMs: p.delayMs || 0, circleEl: ownerCircle ? ownerCircle.circleEl : null,
+        textEl: ownerCircle ? ownerCircle.textEl : null});
+      if (isSelected) animatePaths.push({el: path, arrowEl,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null});
+    }
+  });
+
+  g.appendChild(pathsLayer);
+  g.appendChild(circlesLayer);
+  g.appendChild(handlesLayer);
+  circlesLayerRef = circlesLayer;
+  mainGroup = g;
+  stage.appendChild(g);
+
+  const title = svgEl('text', {x:vw/2, y:vh-30, 'font-size':44, 'font-weight':900, 'font-style':'italic',
+    'text-anchor':'middle', fill:'#111111'});
+  title.textContent = `WING ${wingSide.toUpperCase()}` + (motionOn ? ' MOTION' : '') +
+    ` ${playType.label.toUpperCase()} ${direction.toUpperCase()}` + (bootOn ? ' BOOT' : '') +
+    (playType.hasCounter && counterVariant === 'Counter' ? ' COUNTER' : '') +
+    (playType.hasPopVariant && popVariant === 'Pop2' ? ' 2' : '');
+  stage.appendChild(title);
+
+
+  animatePaths.forEach(({el, arrowEl, circleEl, textEl, startFrac, lenFrac}) => {
+    // startFrac/lenFrac (set on a handoff split's two segments -- see
+    // hasHandoffSplit above) scale each segment's share of ANIMATE_MS by
+    // its share of the route's drawn length, so a split route's preview
+    // draws at the same overall pace as everything else instead of each
+    // half separately taking the full ANIMATE_MS.
+    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * ANIMATE_MS, (startFrac || 0) * ANIMATE_MS, circleEl, textEl);
+  });
+
+  updateEditUI(variant);
+}
+
+
+
+window.initEditPlays = function() {
+  playSelect.value = playKey;
+  updateReadPosVisibility();
+  // Nathan: "the paths for double blast, inside zone, all of them changed"
+  // -- they hadn't; this used to call render() immediately with whatever
+  // un-customized shipped defaults window.DATA started with, then swap in
+  // the coach's real saved edits and re-render once
+  // loadSavedPlaysFromCloud() resolved. Normally that round-trip is fast
+  // enough not to notice, but on a slow connection it left several seconds
+  // of every play looking wrong (or looking like a stranger's edits, e.g.
+  // after Nathan had an old tab open) before quietly correcting itself.
+  // Skip that misleading first paint entirely: show a plain loading state
+  // and only draw a play once the real cloud check has actually finished,
+  // success or failure either way (loadSavedPlaysFromCloud() catches its
+  // own network errors internally and still resolves, so this .then()
+  // always runs).
+  showEditPlaysLoading();
+  loadSavedPlaysFromCloud().then(() => {
+    updateReadPosVisibility();
+    render();
+  });
+};
+
+// Blank, non-misleading placeholder shown for the brief window between
+// entering Edit Plays and loadSavedPlaysFromCloud() resolving -- see
+// window.initEditPlays above. Uses the same viewBox/background render()
+// itself sets up so nothing jumps when the real render() replaces it.
+function showEditPlaysLoading() {
+  const [vw, vh] = DATA.viewBox;
+  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  stage.innerHTML = '';
+  stage.appendChild(svgEl('rect', {x:0, y:0, width:'100%', height:'100%', fill:STAGE_BG}));
+  stage.appendChild(svgEl('text', {x:vw/2, y:vh/2, 'font-size':32, 'font-weight':700,
+    'text-anchor':'middle', fill:'#999999'})).textContent = 'Loading your saved plays…';
+}
+})();

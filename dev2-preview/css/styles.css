@@ -1,0 +1,3035 @@
+:root{
+  --bengal-orange:#ff6a13; --bengal-orange-dark:#e0570a; --bengal-black:#111111;
+  --ink:#1b1b1b; --paper:#f4f2ee; --card:#ffffff; --line:#e6e2da; --muted:#8a8a8a;
+  /* Selected/active-state accent. In light mode this stays a step darker
+     than --bengal-orange (which is reserved for brand/CTA spots -- logo,
+     login screen, primary buttons) so it doesn't compete with them; in
+     dark mode it's redefined below to the actual bright brand orange,
+     since that's the color that pops against near-black surfaces. */
+  --accent: var(--bengal-orange-dark);
+
+  /* Formation Builder's own SVG field (js/formation-builder.js) -- ported
+     from dev-preview.html's identical block. Never lived in this file
+     before since the builder never had a real page to render in. */
+  --fb-turf:#eceae4; --fb-yardline:#b9b4a8; --fb-los:#e0570a;
+  --fb-line-fill:#1b1b1b; --fb-line-stroke:#1b1b1b; --fb-line-text:#ffffff;
+  --fb-skill-fill:#ffffff; --fb-skill-stroke:#1b1b1b; --fb-skill-text:#1b1b1b;
+  --fb-accent:var(--bengal-orange);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);overflow-x:hidden}
+html{overflow-x:hidden}
+/* Safety net: any <img> with no explicit size (or a size rule that fails
+   to apply for any reason) still can't blow out the layout width -- every
+   image-heavy card below (schedule/practice rows, team badges) already
+   sets its own explicit width/height too, this is just the fallback. */
+img{max-width:100%;height:auto}
+
+/* ===== Login gate ===== */
+.loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;background-color:#000;background-image:url(../assets/images/login-bg.jpg);
+  background-size:cover;background-position:center;opacity:1;transition:opacity 1.5s ease}
+.loginScreen.fadeOut{opacity:0;pointer-events:none}
+.loginScreen.hide{display:none}
+.loginOverlay{position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.6) 0%, rgba(0,0,0,.72) 55%, rgba(0,0,0,.88) 100%);
+  pointer-events:none}
+.loginGlow{position:absolute;left:50%;bottom:-38%;width:150%;height:65%;transform:translateX(-50%);
+  background:radial-gradient(ellipse at center, rgba(255,106,19,.4) 0%, rgba(255,106,19,.16) 38%, rgba(255,106,19,0) 72%);
+  filter:blur(6px);pointer-events:none}
+.loginContent{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:16px;
+  padding:24px;max-width:340px;width:100%;box-sizing:border-box}
+.loginLogo{width:80px;height:80px;object-fit:contain;border-radius:16px;background:#fff;padding:8px;
+  box-shadow:0 8px 24px rgba(255,106,19,.35)}
+.loginTitle{color:#fff;text-align:center;line-height:1.15;text-transform:uppercase;margin:0;
+  text-shadow:0 2px 10px rgba(0,0,0,.6)}
+.bengalsBig{display:block;font-size:34px;font-weight:900;letter-spacing:.02em;color:#fff;white-space:nowrap}
+.loginSubtitle{display:block;font-size:15px;font-weight:700;letter-spacing:.08em;color:var(--bengal-orange);margin-top:6px}
+.loginInput{width:100%;padding:13px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.06);color:#fff;font-size:15px;text-align:center;letter-spacing:.05em;
+  outline:none;box-sizing:border-box}
+.loginInput::placeholder{color:rgba(255,255,255,.4)}
+.loginInput:focus{border-color:var(--bengal-orange)}
+/* Nathan: "add another profile doesn't work... blank box and doesn't show
+   a change when you click to type a name." Root cause: .loginInput's
+   white-on-near-transparent-white look was designed for the dark login
+   gate background it was born on, but it's reused as-is inside .lbCard
+   popups (Switch Profile's name/PIN fields, the child-search box) which
+   have a plain #fff card background -- so the text (and almost the whole
+   field) was rendering white-on-white the entire time, not actually
+   broken/uneditable, just invisible. Overriding it back to dark-on-light
+   whenever a .loginInput lands inside a .lbCard fixes every current and
+   future reuse of this field style in a light popup at once. */
+.lbCard .loginInput{background:#f5f5f7;border-color:#ccc;color:#1a1a1a}
+.lbCard .loginInput::placeholder{color:#999}
+.lbCard .loginInput:focus{border-color:var(--bengal-orange);background:#fff}
+.loginBtn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--bengal-orange);color:#fff;
+  font-size:15px;font-weight:800;letter-spacing:.03em;cursor:pointer;text-transform:uppercase}
+.loginBtn:active{background:var(--bengal-orange-dark)}
+.loginError{color:#ff8a8a;font-size:12.5px;min-height:16px;text-align:center;margin:-6px 0 0}
+/* Nathan: "in first login, you should be able to choose Player, Coach or
+   Parent." Same dark-glass look as .loginInput/.toolbarBtn above (this
+   screen sits right on top of the same login background), just sized as
+   big tappable cards instead of a text field. */
+.roleBtnGrid{display:flex;gap:10px;width:100%}
+.roleBtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;
+  border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);
+  color:#fff;font-size:12.5px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;cursor:pointer}
+.roleBtnIcon{font-size:26px}
+.roleBtn:active{background:rgba(255,106,19,.35);border-color:var(--bengal-orange)}
+.loginBuildVersion{position:absolute;left:0;right:0;bottom:14px;z-index:1;color:#ffffff;opacity:.35;font-size:10px;text-align:center;letter-spacing:.02em}
+.editBuildVersion{position:absolute;top:4px;right:8px;z-index:5;color:#ffffff;background:rgba(17,17,17,.55);padding:2px 8px;border-radius:9px;font-size:10px;letter-spacing:.02em;pointer-events:none}
+@keyframes loginShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}
+  40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.loginContent.shake{animation:loginShake .4s}
+
+/* z-index:300 -- must stay ABOVE .topSections (280) and .modeTabs (270)
+   below. Reason: header creates its own stacking context (position:sticky +
+   z-index), and the player-menu dropdown lives nested inside it with its
+   own much higher z-index:1200 -- but a descendant's z-index is only ever
+   compared *within* its own ancestor's stacking context, never against
+   siblings of that ancestor. With header pinned at the same 280 as
+   .topSections, DOM order (topSections comes after header) made
+   .topSections win the tie and paint over the open dropdown, even though
+   1200 > 280 on paper. Bumping header itself above both sticky bars lets
+   everything nested inside it (including that dropdown) render on top of
+   them too, with zero effect on normal scroll layout since header,
+   .topSections and .modeTabs tile vertically and never overlap outside of
+   an open dropdown overflowing past header's own box. */
+header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-bottom:3px solid var(--accent)}
+/* Nathan: "toolbar is not staying with the toolbar, and stays over
+   everything, I don't want that" -- this used to be position:fixed,
+   pinned to the viewport's top-right corner regardless of scroll position.
+   That was fine back when it was one small pill, but once it grew to an
+   icon row + player pill row (+ an optional child-pill row), the taller
+   fixed box started visibly covering page content (photos, cards) as
+   people scrolled past it. Now a normal flex child of .headerRow instead
+   -- it's part of the header's own box, so it scrolls and sticks together
+   with the header (header is position:sticky) rather than floating
+   independently over whatever's beneath it. See the --header-h/--subnav-h
+   custom properties below (set by index.html's syncStickyOffsets(), via a
+   ResizeObserver on header/#topSections) for how the two sticky bars below
+   the header stay correctly positioned now that header's height isn't a
+   fixed constant anymore. */
+.topToolbar{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto}
+.toolbarRow{display:flex;gap:6px}
+.toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
+  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.toolbarBtn:active{background:rgba(17,17,17,.85)}
+/* Nathan: "there should be a 2nd pill next to your own pill for the
+   player" -- playerMenuWrap and childPillsWrap's own child-pill wraps now
+   sit side by side in this row instead of playerMenuWrap being the whole
+   row by itself, wrapping onto a second line on narrow screens rather than
+   overflowing. */
+.pillRow{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.playerMenuWrap{position:relative}
+.childPillWrap{position:relative}
+/* Nathan: "have the player pill button with a football icon and their name
+   and # if added" -- moved below the icon row (old dev2Tag/"V3" spot,
+   which is gone now), so it no longer has to squeeze between the toolbar
+   icons and can run wider before truncating. Child pills (below) reuse
+   this same look. */
+.playerMenuBtn{position:relative;height:22px;padding:0 10px;border-radius:12px;background:rgba(17,17,17,.65);
+  border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer;
+  backdrop-filter:blur(3px);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playerIdBadgeNum{opacity:.75;font-weight:800;margin-left:2px}
+.whatsNewDot{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bengal-orange);border:1.5px solid #fff;}
+/* My Stats "new badge" dot (index.html's #myStatsNewBadgeDot) -- same idea
+   as .whatsNewDot but inline rather than position:absolute, since this one
+   sits inside a plain dropdown list button rather than the position:relative
+   profile pill .whatsNewDot anchors against. */
+.myStatsNewDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bengal-orange);margin-left:6px;vertical-align:middle}
+.playerMenuBtn:active{background:rgba(17,17,17,.85)}
+.playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);display:none;min-width:150px;overflow:hidden;z-index:1200}
+.playerMenuDropdown.show{display:block}
+.playerMenuDropdown button{display:block;width:100%;text-align:left;padding:10px 14px;background:none;
+  border:none;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer}
+.playerMenuDropdown button:active{background:var(--paper)}
+.playerMenuDropdown button + button{border-top:1px solid var(--line)}
+[data-theme="dark"] .playerMenuDropdown{background:var(--card)}
+/* A couple px taller than before (10px -> 13px vertical padding) so the
+   toolbar's button row + tiny DEV2 tag underneath it both fit comfortably
+   within the header instead of crowding its bottom edge. */
+.headerRow{display:flex;align-items:center;gap:8px;padding:13px 14px;flex-wrap:wrap}
+/* Nathan: "swap the white icon out with the Tiger head with the white
+   outline used on the game page." header-logo.png is already the tiger
+   head art (it has real alpha transparency, verified via Pillow -- there
+   was never a white background baked into the file), but this rule was
+   wrapping it in a solid white rounded square, which is what actually
+   read as "a white icon" at 34px. Dropping background/padding here to
+   match .scheduleTeamBadge.hasLogo's treatment on the schedule page
+   (transparent, no backdrop) lets the tiger's own black/white outline
+   show directly, and reclaims the padding as extra width for the pills. */
+.headerRow img{width:34px;height:34px;object-fit:contain;background:transparent}
+.headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
+.headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+/* Nathan: "on Mobile the name pills are too big and collide with the
+   title and resizes the menu... make the title text on the left bigger
+   so it all fits in the same size header." At full pill width (170px max
+   + padding) plus a possible 2nd child pill, .pillRow could run wider
+   than a phone screen has room for next to the logo+title, forcing
+   .headerRow{flex-wrap:wrap} to drop the toolbar to its own line --
+   growing the header's real height (see syncStickyOffsets() in
+   index.html) rather than the app just showing a slightly squeezed pill.
+   Tightening the pill/icon sizing here reclaims enough width that both
+   stay on one line on a typical phone, with room left over to size the
+   title UP rather than down. */
+@media (max-width: 600px) {
+  .headerRow{gap:6px;padding:11px 12px}
+  .headerRow img{width:28px;height:28px}
+  .headerRow h1{font-size:20px}
+  .headerRow p{font-size:9.5px}
+  .topToolbar{gap:3px}
+  .toolbarRow{gap:4px}
+  .toolbarBtn{width:18px;height:18px;font-size:9px}
+  .pillRow{gap:4px}
+  .playerMenuBtn{max-width:96px;height:20px;padding:0 7px;font-size:9.5px}
+}
+
+/* Top-level section switcher (Play / This Week / ...), sits above the
+   existing sub-tab bar -- both sticky, so #modeTabs' top offset is pushed
+   down by this bar's own height (~50px) to stack cleanly instead of
+   overlapping while scrolling. */
+.topSections{position:sticky;top:var(--header-h, 63px);z-index:280;display:flex;background:var(--bengal-black);border-bottom:2px solid var(--bengal-orange)}
+.topSections .modeBtn{color:rgba(255,255,255,.55)}
+.topSections .modeBtn.active{color:#fff;border-bottom-color:var(--bengal-orange)}
+/* Nathan (2026-08-25): "The 2 Minute Drill is now ready to be unleashed...
+   needs to be available on the navigation bar... I don't want them hidden
+   under more, but need a way to show them." Reverses the earlier
+   equal-width-squeeze-then-"More"-dropdown design (see git history for the
+   old .modeMoreWrap/.modeMoreToggle/.modeMoreMenu rules this replaced).
+   First pass made this a fixed-width horizontally-scrolling row; Nathan's
+   follow-up -- "I don't love that you have to scroll - lets rename and
+   resize the icons so 6 can fit" -- undid that in favor of shorter labels
+   (see index.html) plus smaller icons/type here, back to one equal-width
+   row with no scrolling, same as the original three-tab version. */
+.modeTabs{position:sticky;top:var(--subnav-h, 113px);z-index:270;display:flex;background:#fff;
+  border-bottom:2px solid var(--bengal-black)}
+.modeBtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;padding:8px 2px 7px;text-align:center;color:#8a8a8a;border:none;border-bottom:2px solid transparent;
+  background:none;cursor:pointer;position:relative}
+.modeBtn .modeIcon{font-size:20px;line-height:1}
+.modeBtn .modeLabel{font-size:9.5px;font-weight:800;line-height:1.1;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.modeBtn.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* #modeTabs specifically (the six-item Play sub-nav) gets smaller icons/
+   type than .topSections' four-or-so items so all six fit one row without
+   crowding or scrolling. */
+.modeTabs .modeBtn{padding:7px 1px 6px}
+.modeTabs .modeBtn .modeIcon{font-size:16px}
+.modeTabs .modeBtn .modeLabel{font-size:8.5px}
+/* Nathan: "make sure we call out 2 min drill as a new game" -- small
+   attention-getting pill in the tab's top-right corner; hidden for good
+   once someone's actually opened the drill (see study-quiz.js's
+   openTwoMinDrillOverlay click handler / localStorage flag). */
+.modeNewBadge{position:absolute;top:2px;right:2px;background:#e0201a;color:#fff;font-size:7px;
+  font-weight:800;letter-spacing:.02em;padding:1.5px 3px;border-radius:5px;line-height:1.2}
+
+.modePanel{display:none;padding:8px 10px 14px}
+.modePanel.show{display:block}
+
+/* ===== Collapsible section headers (Study Signals) ===== */
+.vaSubHeader{font-size:13.5px;font-weight:800;color:#fff;background:var(--tile-color,var(--bengal-black));
+  padding:10px 14px;border-radius:10px;margin:18px 0 10px;text-transform:uppercase;letter-spacing:.03em;
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.vaSubHeader:first-child{margin-top:0}
+.vaChevron{font-size:12px;transition:transform .18s;flex-shrink:0}
+.vaSubHeader.collapsed .vaChevron{transform:rotate(-90deg)}
+.vaSubBody.collapsed{display:none}
+.vaCount{font-weight:600;opacity:.85;font-size:11px;text-transform:none;letter-spacing:0}
+.study-grid-inner{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;padding:2px 0 6px}
+.study-card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  display:flex;flex-direction:column}
+.study-card img{width:100%;aspect-ratio:9/11;object-fit:cover;object-position:top;display:block}
+.study-card .info{padding:8px 8px 10px;text-align:center}
+.study-card .num{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.study-card .meaning{font-size:12px;font-weight:800;color:var(--ink);line-height:1.25}
+
+/* ===== Quiz ===== */
+.quizStats{text-align:center;font-size:11.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
+/* Structured version of the stats line (currently just the Study/Quiz
+   header) -- a tidy round/score/streak row plus a dot progress strip for
+   position within the round, instead of one long dot-separated sentence. */
+.qsRow{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
+  font-size:11.5px;font-weight:700;color:var(--muted)}
+.qsRow .qsScore{color:var(--ink);font-weight:800}
+.qsStreak{color:var(--bengal-orange-dark)}
+[data-theme="dark"] .qsStreak{color:var(--accent)}
+.qsDots{display:flex;justify-content:center;align-items:center;gap:5px;margin-top:6px}
+.qsDot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:transform .15s}
+.qsDot.filled{background:var(--bengal-orange)}
+[data-theme="dark"] .qsDot.filled{background:var(--accent)}
+.qsDot.current{width:8px;height:8px;background:var(--bengal-black)}
+[data-theme="dark"] .qsDot.current{background:var(--ink)}
+.timedClockBig{text-align:center;font-size:40px;font-weight:900;color:var(--ink);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;margin-bottom:2px;line-height:1.1}
+.doneScreen{text-align:center;max-width:380px;margin:20px auto 0}
+.doneScreen h2{font-size:20px;margin-bottom:6px;color:var(--ink)}
+.doneScreen p{color:var(--muted);font-size:13px;margin-bottom:14px}
+.navBtn{background:var(--bengal-orange);color:#fff;border:none;border-radius:50px;padding:11px 20px;
+  font-size:13px;font-weight:700;cursor:pointer}
+.navBtn.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}
+/* Alert-red variant -- Coach Tools > Settings' practice-cancellation
+   Activate/End buttons (js/practice-cancel.js), same alert red as the
+   full-screen notice card below so the coach-facing control visually
+   matches what everyone else is about to see. */
+.navBtn.danger{background:#c62828}
+.navBtn:active{transform:scale(.96)}
+
+/* ===== Practice Cancellation full-screen notice (js/practice-cancel.js) =====
+   Nathan: "a full screen panel that pops up to say its canceled and they
+   have to confirm before they move on" -- then, 2nd pass: "looking for it
+   to be full screen [not a card]... a cool graphic of a football field
+   with lightning in the distance, animated." Deliberately the app's
+   highest z-index (above .welcomeOverlay's 1600) and no way to dismiss
+   except the Confirm tap -- see index.html for why this isn't reusing
+   .lbOverlay/.lbCard.
+   Nathan (4th pass): "I really like this realistic image for the
+   background instead" -- pointed at an actual night-storm football-field
+   photo (lightning striking beyond the goal post, rain streaking past a
+   sideline light pole, wet track in the foreground), so the procedural
+   CSS sky/cloud/field layers from the 2nd pass are gone; .cancelSky now
+   just paints that photo full-bleed (assets/images/cancel-storm-field.jpg)
+   instead of a gradient.
+   The photo's own lightning bolt sits almost exactly in the vertical
+   center of the frame -- which is also where a vertically-centered text
+   block would naturally land -- so .cancelNoticeContent is anchored to
+   the BOTTOM of the screen instead (over the photo's foreground wet
+   pavement, which doesn't need to be seen clearly) and .cancelVignette's
+   dark halo is centered down there with it. That leaves the sky/bolt in
+   the upper two-thirds of the screen fully visible instead of getting
+   washed out behind the message. prefers-reduced-motion freezes the rain
+   and flash and lets the photo alone read as a stormy field, just not
+   moving.
+
+   Nathan (7th pass): "instead of the lightning bolts and the lines on the
+   screen, we use the rain drops from the LYBS card app and just have the
+   lightning in the background photo get super bright and dim with the
+   lightning." Two swaps from the 3rd pass:
+   1. The JS-drawn jagged SVG bolt polylines, and the separate
+      .cancelFlash white screen-blend overlay they flashed alongside, are
+      gone. In their place, js/practice-cancel.js's flashSkyPhoto()
+      animates THIS layer's own filter:brightness() up then back down --
+      the photo's own baked-in bolt is what visibly flashes, instead of a
+      separately drawn shape floating over the photo.
+   2. .cancelRaindrop/@keyframes cancelRainFall below are now a straight
+      port of LYBS Cards' own .raindrop/@keyframes rainFall (individual
+      falling streaks with randomized length/speed/opacity/angle, spawned
+      into #cancelRainHost by js/practice-cancel.js's spawnCancelRain())
+      instead of the single scrolling repeating-gradient texture the 4th
+      pass used. */
+.cancelNoticeOverlay{position:fixed;inset:0;z-index:1800;overflow:hidden;
+  background:#060a13;display:none}
+.cancelNoticeOverlay.show{display:block}
+
+.cancelScene{position:absolute;inset:0;overflow:hidden}
+.cancelSky{position:absolute;inset:0;background-color:#05070d;
+  background-image:url(../assets/images/cancel-storm-field.jpg);
+  background-size:cover;background-position:center 40%;background-repeat:no-repeat;
+  filter:brightness(1)}
+/* Nathan (6th pass): "use this photo for cancellation of a GAME" -- a
+   second real storm-over-field photo, swapped in only for game cancellations
+   (js/practice-cancel.js's showPanel() toggles .cancelNoticeOverlay.game
+   based on the active notice's eventType). Practices keep the original
+   4th-pass photo above unchanged. */
+.cancelNoticeOverlay.game .cancelSky{background-image:url(../assets/images/cancel-storm-game.jpg)}
+
+#cancelRainHost{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.cancelRaindrop{position:absolute;width:1px;
+  background:linear-gradient(180deg,
+    rgba(160,210,255,0) 0%,
+    rgba(180,220,255,.3) 50%,
+    rgba(200,230,255,.45) 100%);
+  border-radius:0 0 1px 1px;filter:blur(.8px);opacity:0;
+  animation:cancelRainFall linear infinite}
+@keyframes cancelRainFall{
+  0%{opacity:0;transform:translateY(-10vh)}
+  6%{opacity:1}
+  94%{opacity:.4}
+  100%{opacity:0;transform:translateY(110vh)}}
+
+/* Soft dark halo behind the text/button -- keeps the message legible
+   against a background that's constantly changing brightness, and on a
+   short/wide viewport where the field's top edge can sit close to the
+   vertically-centered content, blends that overlap instead of it reading
+   like a layout bug. */
+.cancelVignette{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 95% 62% at 50% 92%, rgba(0,0,0,.72) 0%, rgba(0,0,0,0) 58%)}
+
+.cancelNoticeContent{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;text-align:center;
+  padding:24px 24px calc(44px + env(safe-area-inset-bottom, 0px));box-sizing:border-box}
+.cancelNoticeIcon{font-size:min(15vw,64px);line-height:1;margin-bottom:10px;
+  filter:drop-shadow(0 4px 14px rgba(0,0,0,.6));animation:cancelIconPulse 2.6s ease-in-out infinite}
+@keyframes cancelIconPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.cancelNoticeHeader{font-size:min(7vw,26px);font-weight:900;font-style:italic;color:#fff;
+  text-shadow:0 2px 4px rgba(0,0,0,.7), 0 0 24px rgba(198,40,40,.7);margin-bottom:14px}
+.cancelNoticeMessage{font-size:15.5px;line-height:1.6;color:#f5f7fb;max-width:440px;
+  text-shadow:0 1px 3px rgba(0,0,0,.85);margin-bottom:12px;white-space:pre-wrap}
+.cancelNoticeMeta{font-size:12.5px;color:#c9d3e6;text-shadow:0 1px 3px rgba(0,0,0,.85);margin-bottom:26px}
+.cancelNoticeConfirmBtn{width:100%;max-width:320px;padding:15px;border:none;border-radius:50px;
+  background:#c62828;color:#fff;font-weight:800;font-size:16px;letter-spacing:.02em;cursor:pointer;
+  box-shadow:0 4px 18px rgba(198,40,40,.55);animation:cancelBtnGlow 2.6s ease-in-out infinite}
+.cancelNoticeConfirmBtn:active{transform:scale(.97)}
+@keyframes cancelBtnGlow{0%,100%{box-shadow:0 4px 18px rgba(198,40,40,.55)}50%{box-shadow:0 4px 26px rgba(198,40,40,.9)}}
+
+@media (prefers-reduced-motion: reduce){
+  .cancelRaindrop,.cancelNoticeIcon,.cancelNoticeConfirmBtn{animation:none}
+  .cancelSky{transition:none}
+  /* js/practice-cancel.js also checks this same media query itself and
+     skips spawning rain / firing flashes / playing audio entirely when it
+     matches, rather than doing all that and relying on CSS alone to
+     suppress the motion. */
+}
+
+/* Gameday splash (js/gameday.js) -- full-bleed background photo with a
+   bottom-anchored gradient panel for the matchup/times/CTA, same
+   position:fixed;inset:0 full-screen-overlay shape as .cancelNoticeOverlay
+   above, but z-index 1750 (just under that overlay's 1800) so a same-day
+   practice cancellation always wins if both would otherwise fire. */
+.gameDaySplashOverlay{position:fixed;inset:0;z-index:1750;display:none;overflow:hidden}
+.gameDaySplashOverlay.show{display:block}
+.gameDaySplashBg{position:absolute;inset:0;background:#05070d url(../assets/images/gameday-bg.jpg) center top / cover no-repeat}
+.gameDaySplashVignette{position:absolute;left:0;right:0;bottom:0;height:58%;pointer-events:none;
+  background:linear-gradient(to top, rgba(5,7,13,.97) 0%, rgba(5,7,13,.8) 40%, rgba(5,7,13,0) 100%)}
+.gameDaySplashContent{position:absolute;left:0;right:0;bottom:0;z-index:1;
+  padding:22px 22px calc(28px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;text-align:center;color:#fff;
+  animation:gameDaySplashRise .5s ease-out}
+@keyframes gameDaySplashRise{0%{opacity:0;transform:translateY(24px)}100%{opacity:1;transform:translateY(0)}}
+.gameDayMatchup{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px}
+/* Nathan: "instead of using the circle logos, use the PNG images exactly
+   as they are on the schedule page with a VS in between" -- was a 64px
+   white-backed circle (object-fit:cover, i.e. cropped to fill the circle).
+   Swapped to the same treatment as .scheduleTeamBadge.hasLogo on the
+   Schedule page's own game hero: transparent, rounded-square, object-fit
+   contain so the PNG shows uncropped exactly as authored. The no-logo
+   fallback (colored circle w/ initials, built by gameday.js) keeps the
+   original circle shape -- only .hasLogo drops it, same split as
+   .scheduleTeamBadge vs .scheduleTeamBadge.hasLogo. Sized up from the old
+   64px to 84px (matches .scheduleDetailHero .scheduleTeamBadge) since the
+   splash's hero context has more room than the compact schedule row. */
+.gameDayTeamLogo{width:84px;height:84px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  background:var(--bengal-orange);box-shadow:0 4px 14px rgba(0,0,0,.4);flex-shrink:0;
+  color:#fff;font-weight:900;font-size:24px}
+.gameDayTeamLogo.hasLogo{border-radius:10px;background:transparent;box-shadow:none}
+.gameDayTeamLogo img{width:100%;height:100%;object-fit:contain;display:block}
+.gameDayVs{font-size:15px;font-weight:900;color:var(--bengal-orange);letter-spacing:.05em;text-shadow:0 2px 6px rgba(0,0,0,.7)}
+.gameDayOpponentName{font-size:20px;font-weight:900;margin-bottom:10px;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+.gameDayTimes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px}
+.gameDayTimeRow{font-size:13px;font-weight:700;color:rgba(255,255,255,.92);background:rgba(255,255,255,.14);
+  padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.3)}
+.gameDayCtaBtn{width:100%;max-width:360px;padding:16px;border:none;border-radius:14px;
+  background:linear-gradient(135deg, var(--bengal-orange), #b3410a);color:#fff;font-size:18px;font-weight:900;
+  letter-spacing:.02em;cursor:pointer;box-shadow:0 8px 26px rgba(255,106,19,.45);
+  animation:gameDayCtaPulse 1.8s ease-in-out infinite}
+.gameDayCtaBtn:active{transform:scale(.97)}
+@keyframes gameDayCtaPulse{0%,100%{box-shadow:0 8px 26px rgba(255,106,19,.45)}50%{box-shadow:0 8px 34px rgba(255,106,19,.75)}}
+@media (prefers-reduced-motion: reduce){
+  .gameDaySplashContent,.gameDayCtaBtn{animation:none}
+}
+
+#signalQuiz{max-width:380px;margin:0 auto}
+#timedQuiz{max-width:380px;margin:0 auto}
+.sigHint{color:var(--muted);font-size:11px;text-align:center;margin-bottom:6px}
+.sigImgWrap{position:relative;width:min(360px, 92vw, 36.8vh);height:auto;aspect-ratio:9/11;margin:0 auto 8px;border-radius:14px;overflow:hidden;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);background:var(--card);aspect-ratio:9/11}
+.sigImgWrap img{width:100%;height:100%;display:block;object-fit:cover;object-position:top}
+.sigNavRow{display:flex;gap:12px;justify-content:center;margin-bottom:4px}
+.startOverlay{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;
+  justify-content:center;cursor:pointer}
+.pcqGetReady{position:absolute;inset:0;background:rgba(20,20,20,.88);display:none;align-items:center;
+  justify-content:center;color:#fff;font-size:22px;font-weight:800;letter-spacing:.02em;text-align:center}
+.startOverlay.show{display:flex}
+.startOverlayText{color:#fff;font-size:16px;font-weight:800;text-align:center;line-height:1.5;
+  text-shadow:0 2px 8px rgba(0,0,0,.5)}
+
+@keyframes flashGreen{0%{background:#fff}45%{background:#8fe08f}100%{background:#e3f7e3}}
+@keyframes flashRed{0%{background:#fff}45%{background:#f08a8a}100%{background:#fbe6e6}}
+.seq-choice.correct{animation:flashGreen .55s ease}
+.seq-choice.wrong{animation:flashRed .55s ease}
+.seq-choices{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+#sigChoices, #timedChoices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#sigChoices .seq-choice, #timedChoices .seq-choice{text-align:center}
+.seq-choice{padding:9px 13px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+  font-weight:700;font-size:12.5px;cursor:pointer;text-align:left;color:var(--ink);line-height:1.25}
+.seq-choice:active{background:#f6f4f0}
+.seq-choice.correct{background:#e3f7e3;border-color:#2d7a2d;color:#1c5c1c}
+.seq-choice.wrong{background:#fbe6e6;border-color:#b03030;color:#8a1f1f}
+.seq-choice[disabled]{cursor:default}
+.seq-feedback{text-align:center;font-weight:800;margin:2px 0 6px;min-height:16px;font-size:12.5px}
+.seq-feedback.good{color:#2d7a2d}
+.seq-feedback.bad{color:#b03030}
+
+/* ===== Leaderboard ===== */
+.lbOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:none;
+  align-items:center;justify-content:center;padding:20px}
+.lbOverlay.show{display:flex}
+/* Sits above loginScreen (1000) and the header/toolbar (280) so it's
+   visible the instant the page loads, before anyone has logged in. */
+.welcomeOverlay{z-index:1600}
+/* Static (non-interactive) toggle-look pills for the welcome crash-course
+   mockups -- deliberately not the real .toggle-group component so this
+   overlay doesn't depend on play-calls.js's thumb-placement JS running. */
+.mockPillRow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.mockPill{font-size:11px;font-weight:800;padding:6px 10px;border-radius:20px;
+  border:2px solid #ddd;color:#999;background:#fff}
+.mockPill.active{border-color:var(--bengal-orange);color:#fff;background:var(--bengal-orange)}
+.lbCard{background:#fff;border-radius:16px;max-width:360px;width:100%;max-height:80vh;overflow-y:auto;
+  padding:18px}
+.lbCard h3{margin:0 0 4px;font-size:16px;color:var(--ink);text-align:center}
+/* Base .lbSub -- was previously only defined scoped to .lbCard (the
+   leaderboard/overlay popups), so every .lbSub used on a regular page
+   (Schedule's coach-edit form labels, etc.) had no styling at all and
+   rendered as plain, full-size body text. Nathan: "we dont need to say
+   this so big and bold... this is not noticable" about exactly one of
+   those -- this fixes it (and every other .lbSub outside a .lbCard) at
+   the source instead of one-off inline styles. The more specific
+   .lbCard .lbSub rule below still wins inside overlays (extra centering/
+   margin), this is just the fallback everywhere else. */
+.lbSub{color:var(--muted);font-size:11px}
+.lbCard .lbSub{text-align:center;color:var(--muted);font-size:11px;margin-bottom:14px}
+
+/* Nathan: "want this to be branded on the help screen at the bottom as a
+   Steele Sports Product - Patent Pending." Small, out-of-the-way footer
+   line under the tips overlay's "Got it!" button -- same muted/quiet
+   treatment as .lbSub, not meant to compete with the actual tips. */
+.tipsBrand{text-align:center;color:var(--muted);font-size:9.5px;font-weight:600;
+  letter-spacing:.02em;margin-top:10px}
+
+.lbCardCool{padding:0;position:relative}
+.lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
+  padding:22px 18px 20px;text-align:center;margin-bottom:16px;border-radius:16px 16px 0 0}
+.lbHeroTrophy{font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));margin-bottom:4px}
+.lbHeroHeader h3{color:#fff;font-size:19px;font-weight:900;margin:0 0 2px;text-shadow:0 1px 3px rgba(0,0,0,.2)}
+.lbHeroHeader .lbSub{color:rgba(255,255,255,.9);font-size:11.5px;font-weight:700;margin:0}
+.lbCardCool .lbList{padding:0 18px}
+.lbCardCool > button:not(.lbXClose){margin-left:18px;width:calc(100% - 36px) !important}
+
+/* Badge-just-earned popup (js/study-quiz.js's celebrateNewBadges) --
+   same .lbHeroTrophy the rank-up card uses, plus its own pop/bounce-in
+   so the badge icon itself feels like the moment, not just the card. */
+.badgeCongratsIcon{animation:badgeCongratsPop .5s cubic-bezier(.2,1.8,.4,1)}
+@keyframes badgeCongratsPop{
+  0%{transform:scale(.2) rotate(-15deg);opacity:0}
+  60%{transform:scale(1.25) rotate(8deg);opacity:1}
+  100%{transform:scale(1) rotate(0deg);opacity:1}
+}
+/* Player card (js/player-profile.js) needs a touch more width than the
+   generic 360px leaderboard popup to fit a photo + name/meta side by
+   side without cramping. */
+.playerCardModal{max-width:420px}
+.lbSectionHeader{font-size:12px;font-weight:800;color:var(--bengal-orange-dark);text-transform:uppercase;
+  letter-spacing:.04em;margin:14px 0 8px;text-align:center}
+.lbSectionHeader:first-of-type{margin-top:0}
+.adminStatGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.adminStatCard{background:var(--paper);border-radius:12px;padding:14px 8px;text-align:center}
+.adminStatCard .num{font-size:26px;font-weight:900;color:var(--bengal-orange-dark);line-height:1.1}
+.adminStatCard .lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;
+  letter-spacing:.03em;margin-top:2px}
+.adminDashGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.adminDashBtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 8px;
+  font-size:13px;font-weight:800;color:var(--ink);cursor:pointer;text-align:center;line-height:1.3}
+.adminDashBtn:active{background:var(--bengal-orange);color:#fff;border-color:var(--bengal-orange)}
+.adminDashCount{font-size:11px;font-weight:700;color:var(--bengal-orange-dark);background:#fff;
+  border-radius:20px;padding:1px 8px}
+.adminBackBtn{margin-bottom:12px}
+.lbList{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.lbRow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;background:var(--paper)}
+.lbRow.me{background:#fff4e8;border:1px solid var(--bengal-orange)}
+.lbRank{width:26px;height:26px;border-radius:50%;background:var(--bengal-black);color:#fff;font-size:13px;
+  font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lbRow.top3{background:linear-gradient(90deg, #fff7ec, var(--paper))}
+.lbRow:nth-child(1) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(2) .lbRank{background:transparent;font-size:20px}
+.lbRow:nth-child(3) .lbRank{background:transparent;font-size:20px}
+.lbName{flex:1;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbScore{font-size:13px;font-weight:800;color:var(--bengal-orange)}
+.lbEmpty{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0}
+
+/* Rank-up celebration (js/study-quiz.js's showRankUpCelebration) -- a
+   gold-toned variant of .lbHeroHeader (same layout, warmer color) so it
+   reads as a distinct "you earned this" moment rather than just another
+   plain leaderboard popup. */
+.rankUpHeroHeader{background:linear-gradient(160deg, #ffb703 0%, var(--bengal-orange) 100%)}
+.rankUpMeRow{position:relative;z-index:1;box-shadow:0 2px 10px rgba(255,106,19,.35)}
+
+/* "Keep playing" nudge (js/study-quiz.js's showQuizNudge) -- a cooler
+   blue/green variant of .lbHeroHeader so it visually reads as a nudge/
+   reminder rather than the warmer gold "you earned this" rank-up/personal-
+   best celebration above. */
+.nudgeHeroHeader{background:linear-gradient(160deg, #1f6fb2 0%, #2d7a2d 100%)}
+
+/* Daily coach digest (js/coachtools-dashboard.js's maybeShowCoachDailyDigest)
+   -- a cooler, more "report" toned navy variant, distinct from the warm
+   kid-facing celebration/nudge colors above since this is a coach-only
+   status summary, not a reward moment. */
+.digestHeroHeader{background:linear-gradient(160deg, #2c3e6b 0%, #1a2647 100%)}
+
+/* ---- Global engagement callout (index.html's #globalCallout, right below
+   the header on every section; js/study-quiz.js's renderEngagementCallout)
+   -- Nathan: "promote taking the timed quiz, promote moving up the
+   leaderboard... callouts to everyone who opens the app... calling out top
+   users who are setting the example." Nathan (follow-up): "top of the
+   leaderboard banner should be moved to just below the ASL Bengals header
+   bar - it should rotate with key events and be clickable to go to that
+   page... have the banners be dynamic and colorful." A single auto-rotating
+   carousel: all slides are absolutely stacked in .gcStage and cross-faded
+   via .active, so the banner never reflows the layout beneath it as it
+   rotates. Each tone is a distinct saturated gradient so different slide
+   types ("you're #N", streak, schedule, leaderboard...) are readable as
+   different colors at a glance, not just different text. */
+/* Nathan (2026-08-25): "The rotating banner is too big and in the way,
+   should only be visible to start and then goes away when you go to
+   another screen." Shrunk stage height/padding/fonts (~35% smaller
+   footprint) -- the show-once-then-dismiss behavior itself is JS (see
+   study-quiz.js's hideGlobalCallout(), wired into the nav click handlers).
+   Nathan (2026-09-01, follow-up): "Instead of changing banner - it should
+   be a scrolling ticker - basic details of next game on schedule, top 3 on
+   the all time leaderboard, weekly call out for weeks most improved."
+   Replaces the card-fade carousel above with a single continuous
+   marquee-style scroll -- one navy strip, plain text items separated by a
+   dot, looping seamlessly (the JS renders the item list twice back-to-back
+   and the keyframe scrolls exactly one copy's width). */
+/* Nathan (follow-up x3): "the banner is really hard to see with the
+   orange -- change it to black with a slight gradient to dark grey at the
+   top and bottom." White text over solid orange wasn't reading well;
+   dark grey top/bottom fading into black in the middle gives the text
+   contrast everywhere across the strip without going flat black. Drag-to-
+   slide is still there (cursor:grab), just no longer clickable to open
+   the Leaderboard -- see study-quiz.js's gcSetupTicker. */
+.globalCallout{position:relative;margin:0;overflow:hidden;cursor:grab;background:linear-gradient(180deg, #2b2e33 0%, #0d0e10 50%, #2b2e33 100%)}
+.globalCallout:active{cursor:grabbing}
+.globalCallout:active{cursor:grabbing}
+/* Nathan: "make it so you can slide it with your finger" -- js/study-quiz.js's
+   gcSetupTicker() now drives the scroll itself via requestAnimationFrame +
+   inline transform (paused/overridden during a drag) instead of a fixed
+   CSS @keyframes animation, so the old `animation`/`--gcDur` properties are
+   gone; touch-action:pan-y leaves vertical page scrolling alone but stops
+   the browser's own horizontal swipe handling (e.g. iOS's edge back-swipe)
+   from fighting the drag. */
+.gcTickerTrack{display:flex;align-items:center;width:max-content;white-space:nowrap;
+  padding:7px 0;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.gcTickerItem{display:inline-flex;align-items:center;gap:5px;padding:0 20px;flex-shrink:0;
+  font-size:11px;font-weight:700;color:#fff}
+.gcTickerIcon{font-size:13px;line-height:1}
+.gcTickerSep{padding:0 4px;opacity:.4;color:#fff}
+
+/* Confetti -- a handful of small colored rectangles JS drops in on a
+   timer, falling + drifting + spinning via this one keyframe, each with
+   its own random duration/delay/drift/rotation set as inline custom
+   properties at spawn time (see spawnConfetti). Confined to the overlay's
+   own bounds (position:absolute inside the position:fixed overlay), not
+   pointer-interactive, and self-removing after their animation ends. */
+.rankUpConfettiHost{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5}
+.confettiPiece{position:absolute;top:-16px;opacity:0;border-radius:2px;
+  animation-name:confettiFall;animation-timing-function:ease-in;animation-fill-mode:forwards}
+@keyframes confettiFall{
+  0%{opacity:1;transform:translateY(0) translateX(0) rotate(0deg)}
+  100%{opacity:.85;transform:translateY(640px) translateX(var(--confettiDrift)) rotate(var(--confettiRotate))}
+}
+@media (prefers-reduced-motion: reduce){
+  .confettiPiece{display:none}
+  /* js/study-quiz.js's spawnConfetti/showRankUpCelebration also check this
+     same media query themselves and skip spawning confetti + the row-slide
+     transform entirely when it matches, rather than relying on CSS alone. */
+}
+
+/* Nathan: "players who are excelling then those who are struggling and
+   what they could do." Same lbRow layout as everywhere else in this
+   panel, but the name needs a second, wrapping line underneath for the
+   data-driven tip -- .lbName itself is nowrap+ellipsis (fine for a bare
+   name, wrong for a two-line tip), so this is a separate stack instead of
+   reusing it. */
+.lbNameTip{flex:1;min-width:0;}
+.lbNameTipTitle{font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbTip{font-size:9.5px;font-weight:600;color:var(--muted);margin-top:2px;line-height:1.3}
+/* Nathan: "I can't read the whole thing - needs to show it all" (a longer
+   What's New play label got cut off by .lbNameTipTitle's default
+   nowrap+ellipsis). Scoped to just What's New's rows rather than changing
+   the shared class, since other users of .lbNameTipTitle (e.g. the Coach
+   Dashboard's excelling/needs-attention lists) are short names that are
+   fine truncated. */
+.lbNameTipTitle.wnTitle{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3}
+/* Nathan: "show the old play and show what changed... a visual of the play
+   running." Each What's New entry that carries before/after route
+   snapshots (js/edit-plays.js's capturePlaySnapshot) gets real diagrams
+   here instead of just a text description -- see js/whats-new.js's
+   renderSnapshotDiagram, which draws into these <svg> elements by
+   temporarily swapping window.DATA.playTypes to just that one snapshot. */
+.wnEntry{text-align:left;padding:10px 0;border-bottom:1px solid var(--line);}
+.wnEntry:last-child{border-bottom:none;}
+.wnDiagramRow{display:flex;gap:10px;margin-top:8px;}
+.wnDiagramCol{flex:1;min-width:0;}
+.wnDiagramCol .lbSub{margin:0 0 3px;font-size:10px;}
+.wnMiniDiagram{display:block;width:100%;height:110px;background:#fafafa;border:1px solid var(--line);border-radius:8px;}
+.wnMiniDiagramSolo{height:150px;margin-top:8px;}
+.wnWatchBtn{display:block;width:100%;margin-top:8px;box-sizing:border-box;}
+
+/* Per-player expandable history (Nathan: "keep all record history
+   available to see") -- plain <details>/<summary> so no extra JS wiring
+   is needed to open/close each player's row; just strip the browser's
+   default marker/list-item styling and let .lbRow's flex layout drive it. */
+.activityDetails{margin-bottom:6px;}
+.activityDetails summary{list-style:none;cursor:pointer;}
+.activityDetails summary::-webkit-details-marker{display:none;}
+.activityDetails summary.lbRow{border-radius:9px;}
+.activityDetails[open] summary.lbRow{border-radius:9px 9px 0 0;}
+.activityHistoryList{background:var(--paper);border-radius:0 0 9px 9px;padding:2px 14px 10px 46px;}
+.activityHistoryRow{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink);padding:2px 0;}
+
+/* ===== Position picker (posPromptOverlay) -- reuses .lbOverlay/.lbCard chrome ===== */
+.posPillGrid{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin:4px 0 14px}
+.posPill{background:var(--paper);border:2px solid var(--line);border-radius:10px;padding:12px 6px;
+  font-size:13px;font-weight:800;color:var(--ink);cursor:pointer;text-align:center;line-height:1.25}
+.posPill .posPillSub{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-top:1px}
+.posPill:active{background:#fff4e8}
+.posPill.active{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+.posPill.active .posPillSub{color:rgba(255,255,255,.85)}
+[data-theme="dark"] .posPill{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .posPill.active{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+.lbOfflineNote{text-align:center;color:#b0722f;font-size:10.5px;padding:8px 6px 2px;line-height:1.4}
+.lbCloseBtn{width:100%}
+/* Nathan: "there is no padding around the bottom stat sections - need
+   some breathing room." The Recent Games box's own margin-bottom was
+   getting flush against the Close button right below it with nothing
+   else in between. */
+#playerProfileBody{padding-bottom:6px}
+#playerProfileCloseBtn{margin-top:16px!important}
+
+/* ===== Study Guide (studyGuideOverlay) -- reuses .lbOverlay/.lbCard chrome ===== */
+.sgRow{background:var(--paper);border-radius:10px;padding:9px 12px;margin-bottom:7px}
+.sgPlay{font-size:12.5px;font-weight:800;color:var(--bengal-orange-dark);margin-bottom:2px}
+.sgText{font-size:13px;color:var(--ink);line-height:1.4}
+/* The pre-snap half of a lineman's key -- who is lined up over him before the
+   ball moves. Quieter than the assignment above it: it is what he looks at,
+   not what he does. */
+.sgKey{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:3px}
+/* The same key hoisted out of every row when it doesn't vary by play. */
+.sgSharedKey{font-size:12px;color:var(--ink);background:var(--paper);border-left:3px solid var(--bengal-orange);
+  border-radius:0 8px 8px 0;padding:7px 11px;margin-bottom:9px;line-height:1.4}
+
+/* ===== My Stats -- rank progress bars ===== */
+.msStatList{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.msStatCard{background:var(--paper);border-radius:12px;padding:10px 12px}
+.msStatCard.msHero{background:linear-gradient(135deg, var(--bengal-orange) 0%, var(--bengal-orange-dark) 100%)}
+.msStatTop{display:flex;align-items:center;gap:9px}
+.msIcon{font-size:19px;width:22px;text-align:center;flex-shrink:0}
+.msLabel{flex:1;font-size:12.5px;font-weight:800;color:var(--ink)}
+.msHero .msLabel{color:#fff}
+.msValue{font-size:13.5px;font-weight:900;color:var(--bengal-orange-dark)}
+.msHero .msValue{color:#fff}
+.msBarTrack{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:7px}
+.msHero .msBarTrack{background:rgba(255,255,255,.3)}
+.msBarFill{height:100%;border-radius:4px;background:var(--bengal-orange);transition:width .4s ease}
+.msHero .msBarFill{background:#fff}
+.msCaption{font-size:10.5px;color:var(--muted);font-weight:700;margin-top:5px}
+.msHero .msCaption{color:rgba(255,255,255,.85)}
+[data-theme="dark"] .msStatCard{background:var(--card)}
+[data-theme="dark"] .msValue{color:var(--accent)}
+[data-theme="dark"] .msBarFill{background:var(--accent)}
+
+/* Badges (js/study-quiz.js's computeBadges/badgeGridHtml, shown in My
+   Stats) -- a locked/earned grid, same .msStatCard paper-card language as
+   the rank rows above so it reads as part of the same page. Locked badges
+   stay visible (grayed, with a progress fraction) rather than hidden, since
+   seeing "18/25" is itself part of the motivation to keep playing. */
+.badgeGrid{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-top:8px}
+.badgeCard{background:var(--paper);border-radius:12px;padding:10px 6px;text-align:center;opacity:.45}
+.badgeCard.earned{opacity:1;background:linear-gradient(160deg, #fff7e6 0%, #ffe8c2 100%);box-shadow:0 2px 8px rgba(255,183,3,.35)}
+.badgeIcon{font-size:24px;line-height:1;margin-bottom:4px}
+.badgeLabel{font-size:10px;font-weight:800;color:var(--ink);line-height:1.2}
+.badgeProgress{font-size:9.5px;font-weight:700;color:var(--muted);margin-top:3px}
+.badgeCard.earned .badgeProgress{color:var(--bengal-orange-dark);font-weight:900}
+[data-theme="dark"] .badgeCard{background:var(--card)}
+[data-theme="dark"] .badgeCard.earned{background:linear-gradient(160deg, #3a2c10 0%, #4a3410 100%)}
+[data-theme="dark"] .badgeCard.earned .badgeProgress{color:var(--accent)}
+
+/* New-features intro (index.html's #newFeaturesOverlay, js/study-quiz.js's
+   maybeShowNewFeaturesIntro) -- Nathan: "We would also need a callout to
+   speak to the new features." A simple stacked list inside the same
+   .lbCardCool chrome badgesIntroOverlay uses, one row per feature. */
+.nfList{padding:14px 18px 4px;display:flex;flex-direction:column;gap:12px}
+.nfRow{display:flex;align-items:flex-start;gap:12px}
+.nfIcon{font-size:22px;line-height:1;flex-shrink:0;margin-top:1px}
+.nfTitle{font-size:13.5px;font-weight:800;color:var(--ink)}
+.nfDesc{font-size:12px;font-weight:600;color:var(--muted);line-height:1.4;margin-top:2px}
+/* Getting Started wizard (#gettingStartedOverlay) -- same .nfRow/.nfList
+   chrome as the badges/new-features intros, just clickable: each step
+   jumps straight to that part of the app instead of only describing it. */
+.gsRow{cursor:pointer;border-radius:10px;padding:6px;margin:-6px;transition:background .15s ease}
+.gsRow:hover, .gsRow:active{background:rgba(0,0,0,.05)}
+[data-theme="dark"] .gsRow:hover, [data-theme="dark"] .gsRow:active{background:rgba(255,255,255,.08)}
+.gsArrow{margin-left:auto;align-self:center;font-size:16px;opacity:.5;flex-shrink:0}
+
+/* Spotlight (js/study-quiz.js's renderSpotlight, inside #lbOverlay) -- a
+   small callout strip above the leaderboard tabs naming each board's #1
+   plus the current streak leader. Warm gold-tinted card (same family as the
+   earned badge cards above) so it reads as "good news", not just more list
+   rows. */
+.lbSpotlightWrap{margin:0 18px 10px;background:linear-gradient(160deg, #fff7e6 0%, #ffe8c2 100%);border-radius:12px;padding:10px 12px}
+.lbSpotlightHeader{font-size:11.5px;font-weight:900;color:var(--bengal-orange-dark);margin-bottom:6px}
+.spotlightRow{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:11.5px;font-weight:700;color:var(--ink)}
+.spotlightIcon{font-size:15px;flex-shrink:0}
+[data-theme="dark"] .lbSpotlightWrap{background:linear-gradient(160deg, #3a2c10 0%, #4a3410 100%)}
+[data-theme="dark"] .lbSpotlightHeader{color:var(--accent)}
+
+.lbTabRow{display:flex;gap:4px;margin:0 18px 10px;background:var(--paper);border-radius:10px;padding:4px}
+.lbTabBtn{flex:1;min-width:0;border:none;background:transparent;padding:9px 3px;border-radius:8px;font-size:10.5px;
+  font-weight:800;color:var(--muted);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbTabBtn.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+/* All-Time / This Week pill toggle (Overall tab only) -- smaller and
+   text-only next to .lbTabRow's icon+label tabs above, since this is a
+   secondary filter on the Overall board, not a sibling top-level tab. */
+.lbRangeToggle{display:flex;gap:4px;margin:-4px 18px 10px;background:var(--paper);border-radius:20px;padding:3px}
+.lbRangeBtn{flex:1;border:none;background:transparent;padding:6px 4px;border-radius:16px;font-size:11px;
+  font-weight:800;color:var(--muted);cursor:pointer}
+.lbRangeBtn.active{background:var(--bengal-orange);color:#fff}
+[data-theme="dark"] .lbRangeToggle{background:var(--paper)}
+.lbXClose{position:absolute !important;top:10px !important;right:10px !important;left:auto !important;
+  margin:0 !important;z-index:5;width:32px !important;height:32px !important;border-radius:50%;
+  border:none;background:rgba(255,255,255,.25);color:#fff;font-size:22px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.lbXClose:active{background:rgba(255,255,255,.4)}
+/* Nathan: "since the background is white, you can't see the white X in the
+   corner to close - make sure its black X so it's visible" -- .lbXClose is
+   shared with several dark-background overlays (leaderboard, rank-up,
+   badges, etc.) where white-on-translucent-white is the right look, so this
+   only overrides it for the 2 Minute Drill's own light (#f4f2ee) overlay
+   rather than changing the shared default everywhere. */
+.twoMinDrillOverlay .lbXClose{background:rgba(0,0,0,.08);color:#1a1a1a}
+.twoMinDrillOverlay .lbXClose:active{background:rgba(0,0,0,.16)}
+
+.lbSaveForm{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px;background:var(--paper);
+  border-radius:10px}
+.lbSaveForm input{padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-size:13px;text-align:center}
+.lbSaveHint{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.35}
+
+.tipsList{list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:10px}
+.tipsList li{font-size:12.5px;color:var(--ink);line-height:1.45;text-align:left}
+.tipsList b{color:var(--bengal-orange-dark)}
+
+.missedList{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-height:48vh;overflow-y:auto}
+.missedItem{display:flex;align-items:center;gap:10px;background:var(--paper);border-radius:9px;padding:7px}
+.missedItem img{width:44px;height:54px;object-fit:cover;object-position:top;border-radius:7px;flex-shrink:0}
+.missedItem .missedNum{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.missedItem .missedMeaning{font-size:12.5px;font-weight:800;color:var(--ink);line-height:1.25}
+.missedItem .missedStat{font-size:10.5px;color:var(--muted);margin-top:2px}
+.reviewMissedBtnRow{display:flex;justify-content:center;margin-bottom:8px}
+.reviewMissedBtn{background:#fff;border:1px solid var(--line);border-radius:20px;padding:9px 18px;
+  font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer}
+.reviewMissedBtn:active{background:#f6f4f0}
+.practiceTag{display:inline-block;background:var(--bengal-orange);color:#fff;font-size:10.5px;font-weight:800;
+  border-radius:20px;padding:3px 10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+
+/* ===== Dark mode ("Stadium lights") =====
+   This is now the default look for the whole app (see the pre-paint
+   script in index.html), not just an opt-in toggle.
+   Scope note: covers the general app chrome -- header/tabs, overlays,
+   leaderboard, quiz screens, forms -- plus (as of this pass) the Play
+   Calls/Edit Plays CARD CHROME (accordion shell, card face, title bar,
+   buttons, toggle pills). The field diagram drawn INSIDE each card (SVG
+   player circles/routes) is deliberately left untouched -- those circles
+   already have solid white fill with colored stroke/text baked in by the
+   JS that draws them, so they read fine (better, even -- like numbers
+   under stadium lights) against a dark card without needing their own
+   theme awareness. Most of the general UI above already uses the
+   --paper/--card/--ink/--line/--muted variables, so redefining them here
+   is most of the work; the rest are explicit overrides for spots that
+   had a literal #fff/#111 instead. */
+[data-theme="dark"]{
+  --ink:#eee9e2; --paper:#161616; --card:#232323; --line:#3a3a3a; --muted:#9a9a9a;
+  /* Per Nathan: dark-mode callouts (active tab, header border, streak,
+     progress dots) should be the actual bright Bengals brand orange, not
+     a softer amber -- pops more against the near-black surfaces. */
+  --accent:var(--bengal-orange);
+
+  --fb-turf:#1d1d1d; --fb-yardline:#4a4a4a; --fb-los:#ff6a13;
+  --fb-line-fill:#eee9e2; --fb-line-stroke:#eee9e2; --fb-line-text:#161616;
+  --fb-skill-fill:#232323; --fb-skill-stroke:#eee9e2; --fb-skill-text:#eee9e2;
+}
+[data-theme="dark"] body{background:var(--paper);color:var(--ink)}
+[data-theme="dark"] .modeTabs{background:#1c1c1c}
+[data-theme="dark"] .navBtn.secondary,
+[data-theme="dark"] .quizBar button.tool,
+[data-theme="dark"] .reviewMissedBtn{background:var(--card);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] .reviewMissedBtn:active{background:#2c2c2c}
+[data-theme="dark"] .lbCard{background:var(--card);color:var(--ink)}
+[data-theme="dark"] .lbCard .loginInput{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .lbCard .loginInput::placeholder{color:var(--muted)}
+[data-theme="dark"] .lbTabBtn.active{background:#333;color:var(--ink)}
+[data-theme="dark"] .adminDashBtn{background:var(--paper);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .adminDashCount{background:#333}
+[data-theme="dark"] .lbRow.me{background:#3a2a12;border-color:var(--bengal-orange)}
+[data-theme="dark"] .lbOfflineNote{color:#e0a020}
+[data-theme="dark"] .seq-choice:active{background:#2c2c2c}
+[data-theme="dark"] .seq-choice.correct{background:#1c3a1c;border-color:#3fae3f;color:#8fe08f}
+[data-theme="dark"] .seq-choice.wrong{background:#3a1c1c;border-color:#c65050;color:#f08a8a}
+[data-theme="dark"] #adminPinInput,
+[data-theme="dark"] #lbNameInput,
+[data-theme="dark"] #timedLbNameInput,
+[data-theme="dark"] #pcGateInput,
+[data-theme="dark"] #playerIdNameInput,
+[data-theme="dark"] #playerIdPinInput,
+[data-theme="dark"] .lbSaveForm input{background:var(--card);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] .pcqGetReady{background:rgba(0,0,0,.92)}
+
+/* Play card chrome (accordion shell + flip card) -- see scope note above.
+   The <svg> field diagram itself is untouched; only the frame around it. */
+[data-theme="dark"] .accordion-item{border-color:var(--line);background:var(--card)}
+[data-theme="dark"] .accordion-header{background:var(--card);color:var(--ink)}
+[data-theme="dark"] .card-face{background:var(--card);border-color:var(--line)}
+[data-theme="dark"] .card-title-bar{background:var(--paper);border-bottom-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .card-btn{background:var(--card);border-color:var(--line);color:var(--ink)}
+[data-theme="dark"] .card-btn.play-btn{background:var(--bengal-orange);border-color:var(--bengal-orange);color:#fff}
+[data-theme="dark"] .speed-toggle{background:var(--card);border-color:var(--line)}
+[data-theme="dark"] .speed-toggle button{color:var(--ink)}
+[data-theme="dark"] .speed-toggle button.active{background:var(--ink);color:var(--paper)}
+[data-theme="dark"] .switch-label{color:var(--ink)}
+[data-theme="dark"] .empty-note{color:var(--muted)}
+/* the Wing/Dir/Motion/etc. pill toggles -- keep the white sliding "active"
+   thumb as-is (it already contrasts against a dark track), just lighten
+   the track tint and the inactive-label color so they aren't reading as
+   near-black-on-near-black. */
+[data-theme="dark"] .toggle-group{background:rgba(255,255,255,.1)}
+[data-theme="dark"] .toggle-group .toggle-btn{color:rgba(255,255,255,.45)}
+
+/* ===== Play Calls (DEV) ===== */
+.play-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .accordion-item {
+    border: 2px solid var(--bengal-black);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .accordion-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border: none;
+    background: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    font-style: italic;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .accordion-item.open .accordion-header {
+    background: var(--bengal-black);
+    color: #fff;
+  }
+  .accordion-chevron {
+    font-size: 12px;
+    transition: transform .2s;
+  }
+  .accordion-item.open .accordion-chevron {
+    transform: rotate(180deg);
+  }
+  .accordion-body {
+    display: none;
+    padding: 10px;
+  }
+  .accordion-item.open .accordion-body {
+    display: block;
+  }
+  .accordion-body .card-outer {
+    aspect-ratio: 16 / 15;
+  }
+
+  .empty-note {
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    padding: 20px;
+  }
+
+  /* Formation-first browsing: pick a formation, then its plays as a fixed
+     2-column grid (run above pass), tap one to open the detail card below. */
+  .pc-back-btn {
+    display: inline-block;
+    background: none;
+    border: none;
+    padding: 6px 0 10px;
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--bengal-orange-dark);
+    cursor: pointer;
+  }
+  /* Plain muted instructional text -- .hint already exists twice in this
+     file, but both times scoped to #editPlaysMode specifically. This is
+     a bare, unscoped, LOWER-specificity class, so it can't override either
+     existing rule inside Edit Plays; it just fills the gap everywhere else
+     (Formation Builder, Create a Play) the way dev-preview.html's own
+     identically-named, unscoped .hint already does on that page. */
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* A single, standalone diagram in a bordered card -- Formation Builder's
+     own field and Create a Play's Build-step field both need this; neither
+     is the flip-card apparatus .card-stage-wrap is built for (that one
+     needs .card-outer's aspect-ratio and front/back faces around it). */
+  .diagramCard {
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .diagramCard svg { width: 100%; height: auto; display: block; }
+
+  .formation-picker {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .formation-card {
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--card);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .formation-card svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .formation-card-cap {
+    padding: 9px 11px;
+    border-top: 1px solid var(--line);
+    font-weight: 800;
+    font-size: 14px;
+    text-align: center;
+  }
+  .formation-play-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto 10px;
+  }
+  .formation-play-title {
+    text-align: center;
+    font-weight: 800;
+    font-size: 16px;
+    margin: 0;
+    flex: 1;
+  }
+  /* "Modify" (custom formations only) -- select plays to remove, or tap
+     the + tile to jump into Play Builder already on this formation. */
+  .pc-modify-btn {
+    border: none;
+    border-radius: 50px;
+    padding: 7px 16px;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    background: var(--bengal-orange);
+    color: #fff;
+  }
+  .pc-add-play-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    border: 2px dashed var(--line);
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .pc-add-play-tile .play-tile-cap { border-top: none; justify-content: center; }
+  .pc-add-play-plus {
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--bengal-orange);
+  }
+  /* Grows in place once tapped -- start blank, or copy+remake an existing
+     Wing play (js/playbuilder/legacy-import.js). Spans both grid columns
+     once open so the picker has room, instead of squeezing into one tile. */
+  .pc-add-play-tile-open {
+    grid-column: 1 / -1;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    cursor: default;
+    min-height: 0;
+  }
+  .pc-add-play-blank-btn { width: 100%; }
+  .pc-add-play-hint { margin: 2px 0 0; text-align: center; }
+  .pc-add-play-source-select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 14px;
+  }
+  .pc-add-play-copy-btn { width: 100%; }
+  .pc-add-play-copy-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .formation-play-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .play-tile {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--card);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .play-tile-new-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    background: #2e7d32;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    padding: 3px 7px;
+    border-radius: 6px;
+  }
+  /* Browse Plays never needed a picked state (it's read-only); Create a
+     Play's own step-2 grid reuses this same tile for toggling which plays
+     a formation can call, so it needs one. */
+  .play-tile.selected {
+    border-color: var(--bengal-orange);
+    border-width: 2px;
+  }
+  /* Nathan: "In the formations screen where it says modify, I should be
+     able to click modify then have a pencil on the play diagram to edit
+     and an X to archive it." Same small-circle-icon-button convention as
+     .lbXClose elsewhere, scaled down to fit a tile-sized diagram.
+     Pencil = top-left (jump straight into Play Builder on this exact
+     play); X = bottom-right, away from the top-right "NEW" badge some
+     tiles also carry. */
+  .pc-modify-edit-btn, .pc-modify-archive-btn {
+    position: absolute;
+    z-index: 3;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pc-modify-edit-btn:active, .pc-modify-archive-btn:active { background: rgba(0,0,0,.75); }
+  .pc-modify-edit-btn { top: 6px; left: 6px; }
+  /* Real bug, found in review (live, mobile-measured): `bottom: 6px` put
+     this on top of .play-tile-cap's own RUN/PASS pill, which sits at the
+     SAME bottom-right corner of the tile -- confirmed ~23px of horizontal
+     and near-total vertical overlap, obscuring the pill down to a sliver
+     of its text. The original comment only accounted for the top-right
+     NEW badge, not the caption bar's own pill. Lifted clear of the
+     caption row (.play-tile-cap's own padding/font-size puts it at
+     ~36-40px tall) into the diagram's own empty space instead, so it
+     never lands on top of either. */
+  .pc-modify-archive-btn { bottom: 44px; right: 6px; background: rgba(192,52,42,.85); }
+  .pc-modify-archive-btn:active { background: rgba(192,52,42,1); }
+
+  /* The Build screen's ball-path/route coupling flag -- ported from
+     dev-preview.html's own identical rule (that page's <style> block,
+     not this file, until now). */
+  .stale-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #a8720a;
+    background: rgba(217, 144, 0, .14);
+    border-radius: 6px;
+    padding: 3px 7px;
+    margin: 2px 0;
+  }
+
+  /* The Build screen's two color-coded panels (Routes & blocks / Ball
+     path) -- same source as .stale-chip above, ported for the same
+     reason: this page never had them before. */
+  .build-panel {
+    border-radius: 10px;
+    padding: 10px 12px 4px;
+    margin: 16px 0 0;
+    border: 1px solid var(--line);
+  }
+  .build-panel-lineup { border-left: 4px solid var(--bengal-orange); }
+  .build-panel-play { border-left: 4px solid #d99000; }
+  .build-panel-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 2px;
+  }
+  .build-panel-lineup .build-panel-label { color: var(--bengal-orange-dark); }
+  .build-panel-play .build-panel-label { color: #a8720a; }
+  .play-tile svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .play-tile-cap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 9px;
+    border-top: 1px solid var(--line);
+  }
+  .play-tile-nm {
+    flex: 1;
+    font-weight: 800;
+    font-size: 12.5px;
+  }
+  .play-tile-pill {
+    flex-shrink: 0;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    color: #fff;
+  }
+  .play-tile-pill.run { background: var(--bengal-orange); }
+  .play-tile-pill.pass { background: #2a78d6; }
+
+  /* the flip card */
+  .card-outer {
+    perspective: 1400px;
+    aspect-ratio: 16 / 12;
+  }
+  /* Nathan, screenshot: "the Add to Game Plan button is getting cut off."
+     Confirmed live -- a card with several toggle rows showing (Overload +
+     Wing/Dir + Motion, etc.) sized itself purely off aspect-ratio, same
+     root cause the existing mobile-only fix below already documents, just
+     never extended past that one breakpoint -- the "+ Add to Game Plan"
+     button (added after both of these aspect-ratios were last tuned) sat
+     ~7px past the card's own bottom edge, clipped by .card-face's
+     overflow:hidden. min-height is a FLOOR on top of the aspect-ratio
+     (not a replacement -- a card with fewer toggle rows still sizes off
+     the ratio as before), generous enough for the tallest real combination
+     (title + 2 toggle rows + a real diagram + the button) at this width. */
+  @media (min-width: 481px) {
+    .card-outer, .accordion-body .card-outer {
+      min-height: 560px;
+    }
+  }
+  .card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform .6s;
+    transform-style: preserve-3d;
+  }
+  .card-outer.flipped .card-inner {
+    transform: rotateY(180deg);
+  }
+  .card-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    background: #fff;
+    border: 2px solid var(--bengal-black);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .card-front { display: flex; flex-direction: column; }
+  .card-back {
+    transform: rotateY(180deg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-title-bar {
+    padding: 6px 10px;
+    font-weight: 800;
+    font-size: 12px;
+    text-align: center;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+  .card-stage-wrap {
+    flex: 1;
+    position: relative;
+  }
+  .card-stage-wrap svg { width: 100%; height: 100%; display: block; }
+
+  .card-controls {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    right: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .card-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--bengal-black);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .card-btn.play-btn { background: var(--bengal-orange); color: #fff; border-color: var(--bengal-orange); }
+  .card-btn svg { width: 16px; height: 16px; }
+
+  .speed-toggle {
+    display: flex;
+    background: #fff;
+    border: 2px solid var(--bengal-black);
+    border-radius: 999px;
+    overflow: hidden;
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .speed-toggle button {
+    border: none;
+    background: transparent;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--bengal-black);
+  }
+  .speed-toggle button.active { background: var(--bengal-black); color: #fff; }
+
+  .card-toggle-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 8px 0;
+  }
+  /* Row 1: Wing + Dir, every play has both, always in this order. */
+  .toggle-row-basics {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  /* Row 2: one fixed slot each for In/Out, Motion, Boot, Read -- a play
+     that doesn't have a given toggle just leaves that slot empty instead
+     of letting the others shift over, so the same toggle always lands in
+     the same spot from card to card. */
+  .toggle-row-extras {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .toggle-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    /* A custom formation can land more than one alignment toggle in this
+       SAME slot (Heavy + Overload, both real on "I") -- flex's default
+       nowrap forced them onto one line and clipped, confirmed live
+       (Overload's pills cut off mid-word). Wrap instead of clip; the
+       slot's min-height (not a fixed height) lets it grow for a 2nd row. */
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  /* Split formation: In/Out and Read don't apply, so their slots are hidden
+     entirely (see updateFormationRows in play-calls.js) and the remaining
+     Left/Right route-call slots each get a full half of the row instead of
+     a cramped quarter. */
+  .toggle-row-extras.split-extras {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Route-call picker (Left/Right + Seattle/Houston/Florida): stack the
+     label above the pills instead of beside them -- side-by-side, the label
+     plus a 3-option pill group don't fit in these slots on a phone and ran
+     together illegibly. */
+  .switch-control.route-call-wrap {
+    flex-direction: column;
+    gap: 3px;
+  }
+  /* Shared toggle-group pill system -- used for every L/R-style toggle in
+     the app (Wing, Dir, Motion, Boot, In/Out, Read, and Edit Plays' own
+     Wing/Dir/Motion/Boot/Blocking/Speed/Edit controls). One reusable
+     component instead of a hand-copied color variant per toggle: a tinted
+     track, a white "active" pill that slides/resizes to fit whichever
+     label is currently pressed, and a color modifier class per group so
+     each still reads at a glance. Scoped to `.toggle-group .toggle-btn`
+     (not a bare `.toggle-btn`) so it doesn't affect standalone buttons
+     that happen to reuse the toggle-btn class (Ball Carrier, Remove
+     Toggle) outside of a toggle-group.
+     Requires a `.toggle-thumb` span as the toggle-group's first child;
+     placeToggleThumb() in play-calls.js sizes/positions it to match
+     whichever button has aria-pressed="true". */
+  .toggle-group {
+    position: relative;
+    display: inline-flex;
+    height: 30px;
+    border-radius: 999px;
+    background: var(--toggle-tint, #f0f0f0);
+    padding: 2px;
+    isolation: isolate;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    height: calc(100% - 4px);
+    width: 0;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.15);
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), width .2s ease;
+    z-index: 0;
+  }
+  .toggle-group .toggle-btn {
+    position: relative;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    height: 26px;
+    line-height: 26px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(0,0,0,.4);
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toggle-group .toggle-btn[aria-pressed="true"] { color: var(--toggle-color, #333); }
+  .toggle-group .toggle-btn:active { transform: scale(.95); }
+  .toggle-group .toggle-btn:disabled { cursor: default; opacity: .6; }
+
+  /* per-group color coding -- reused by both Play Calls' per-card toggles
+     and Edit Plays' matching controls */
+  .toggle-group.toggle-orange { --toggle-color: var(--bengal-orange); --toggle-tint: rgba(232,114,12,.12); }
+  .toggle-group.toggle-black  { --toggle-color: var(--bengal-black); --toggle-tint: rgba(0,0,0,.06); }
+  .toggle-group.toggle-green  { --toggle-color: #2e7d32; --toggle-tint: rgba(46,125,50,.1); }
+  .toggle-group.toggle-red    { --toggle-color: #c62828; --toggle-tint: rgba(198,40,40,.1); }
+  .toggle-group.toggle-brown  { --toggle-color: #7a4a24; --toggle-tint: rgba(122,74,36,.12); }
+
+  /* compact variant for corner controls (Edit Plays' In/Out and Read) */
+  .toggle-group.toggle-tiny { height: 24px; }
+  .toggle-group.toggle-tiny .toggle-btn { height: 20px; line-height: 20px; padding: 0 7px; font-size: 10px; }
+
+  /* Compact on/off switch for simple binary toggles (Motion, Boot) -- one
+     label plus a small sliding red/green pill, instead of a two-button
+     group that has to repeat the word ("Motion Off" / "Motion On"). */
+  .switch-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .switch-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--bengal-black);
+    white-space: nowrap;
+  }
+  .switch-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .switch-track {
+    display: block;
+    width: 34px;
+    height: 18px;
+    border-radius: 999px;
+    background: #e74c3c;
+    position: relative;
+    transition: background-color .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-track { background: #2ecc71; }
+  .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+    transition: transform .15s ease;
+  }
+  .switch-toggle[aria-pressed="true"] .switch-thumb { transform: translateX(16px); }
+  .switch-toggle:disabled { cursor: default; opacity: .6; }
+
+  .flip-btn {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+  }
+
+  .signal-stage {
+    width: 88%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .signal-stage img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .signal-label {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    min-height: 24px;
+    padding: 0 10px;
+  }
+  .signal-progress {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .signal-progress .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ddd;
+  }
+  .signal-progress .dot.done { background: var(--bengal-orange); }
+
+  .replay-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 16px;
+    border: 2px solid var(--bengal-orange);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--bengal-orange);
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .replay-btn:active { background: var(--bengal-orange); color: #fff; }
+
+  .edit-handle { fill: #ffde00; stroke: #111; stroke-width: 2; }
+  /* Nathan: "I actually don't like the call out being lower opacity for the
+     others. Let's keep them full opacity but have an orange pulsing glow
+     to the indicated player." Play Calls' own diagrams (renderCardDiagram/
+     renderSplitDiagram in play-calls.js) no longer emit 'dimmed' at all --
+     everyone always renders at full opacity, and the selected player's
+     circle/path additionally gets 'selected-glow'. This rule is left in
+     place (opacity 1, a no-op) only because Edit Plays' own, separate
+     selection UI still uses 'dimmed'/'full-op' for its own purpose -- see
+     the #editPlaysMode-scoped override further down, which is what
+     actually controls that one. */
+  .dimmed { opacity: 1; }
+  .full-op { opacity: 1; }
+  @keyframes selectedGlowPulse {
+    0%, 100% { filter: drop-shadow(0 0 2px var(--bengal-orange)) drop-shadow(0 0 2px var(--bengal-orange)); }
+    50% { filter: drop-shadow(0 0 8px var(--bengal-orange)) drop-shadow(0 0 14px var(--bengal-orange)); }
+  }
+  .selected-glow { animation: selectedGlowPulse 1.3s ease-in-out infinite; }
+
+  /* Nathan: "this needs to be a bigger callout - have the CB flash..." --
+     the Option TE-read callout's block target. A hard on/off flash (steps,
+     not ease-in-out) so it reads as an alert, distinct from the smooth
+     selected-player glow above -- and red (matches the callout text) not
+     orange, so it doesn't look like a position-highlight selection. */
+  @keyframes teReadFlashPulse {
+    0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+    50% { filter: drop-shadow(0 0 10px #e0201a) drop-shadow(0 0 18px #e0201a) drop-shadow(0 0 26px #e0201a); }
+  }
+  .te-read-flash { animation: teReadFlashPulse 0.7s steps(1, jump-none) infinite; }
+
+
+.pcInfoOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.pcInfoOverlay.show { display: flex; }
+.pcInfoCard {
+  background: #fff;
+  border-radius: 14px;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 18px;
+}
+.pcInfoHeader {
+  font-size: 17px;
+  font-weight: 900;
+  font-style: italic;
+  margin-bottom: 10px;
+}
+.pcInfoBody p {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  color: #333;
+}
+.pcInfoCloseBtn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--bengal-orange);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.pcInfoBtn {
+  margin-left: 6px;
+  border: 2px solid var(--bengal-black);
+  background: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* Kid-facing Play Calls tutorial: a few short steps instead of one wall
+   of text, each with a small mock-up of the real control so it's obvious
+   what to look for and tap once they're in the actual app. */
+.pcTutorialCard { max-width: 360px; }
+.pcTutorialStep { display: none; }
+.pcTutorialStep.active { display: block; }
+.pcTutorialHeader {
+  font-size: 17px;
+  font-weight: 900;
+  font-style: italic;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.pcTutorialIllustration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 18px 14px;
+  margin-bottom: 12px;
+}
+.mockToggleRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.mockToggle { pointer-events: none; }
+.mockAccordionHeader {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bengal-black);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-style: italic;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mockChevron { font-size: 12px; }
+.mockFormationRow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.mockFormationChip { background: var(--bengal-black); color: #fff; padding: 10px 12px; border-radius: 10px; font-weight: 800; font-style: italic; font-size: 12px; border: 2px solid transparent; }
+.mockFormationChip.active { border-color: var(--bengal-orange); background: var(--bengal-orange); }
+.mockPlayerCircle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid var(--bengal-black);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--bengal-black);
+}
+.mockFlipBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--bengal-black);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--bengal-black);
+}
+.mockTapHint {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #999;
+  text-align: center;
+}
+.pcTutorialText {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 0 0 4px;
+  color: #333;
+  text-align: center;
+}
+.pcTutorialDots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0;
+}
+.pcTutorialDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ddd;
+}
+.pcTutorialDot.active { background: var(--bengal-orange); }
+.pcTutorialNav {
+  display: flex;
+  gap: 8px;
+}
+.pcTutorialNavBtn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+.pcTutorialNavBtn.primary {
+  border: none;
+  background: var(--bengal-orange);
+  color: #fff;
+}
+.pcTutorialNavBtn.secondary {
+  border: 2px solid #ccc;
+  background: #fff;
+  color: #666;
+}
+.pcTutorialNavBtn.secondary:disabled { visibility: hidden; }
+
+
+/* ===== Edit Plays (diagram builder, embedded) ===== */
+
+  #editPlaysMode {
+    --bengal-orange: #e8720c;
+    --bengal-black: #111111;
+    --ball-color: #e0201a;
+    --noball-color: #123a8c;
+    position: relative;
+  }
+#editPlaysMode * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  /* Nathan: "showing all the toggles on the bottom instead of on the right
+     of a two column with 70 weight on the left with the play" -- side by
+     side once there's room for both at a sane width, stacked below that
+     (same shape as Formation Builder's own field+side-panel row, just a
+     70/30 grow split here instead of a fixed sidebar). basis is a floor,
+     not the split itself -- only the space beyond both floors divides
+     7:3, so neither column gets crushed illegibly on a mid-size screen. */
+#editPlaysMode .editPlaysLayout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+  }
+#editPlaysMode .editPlaysLayout > .diagramCard { flex: 7 1 0; min-width: 380px; margin: 0; }
+#editPlaysMode .editPlaysLayout > .coachToolsSubPanel { flex: 3 1 0; min-width: 260px; margin: 0; }
+
+  /* Nathan: "many of the toggles overlap on the screen and it's messy, the
+     toolbar needs to be revamped" -- then, after seeing Create a Play's
+     Build step: "that framework could be the same framework for the edit
+     play rebuild." index.html now builds this screen from the same shared
+     components (.diagramCard/.coachToolsSubPanel/.build-panel/.navBtn) as
+     Formation Builder and Create a Play, instead of this file's own
+     bespoke .controls/.action-row/.diagram-card -- those three rules and
+     .control-group (a short-lived intermediate fix, superseded by
+     .build-panel) are gone; .inline-control/.standalone-btn/select below
+     are still real, still-used pieces, kept and themed to match. */
+#editPlaysMode .inline-control {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+  }
+#editPlaysMode .inline-control label {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+#editPlaysMode #playWrap { flex: 1 1 auto; min-width: 90px; }
+#editPlaysMode select {
+    font-size: 13px;
+    padding: 6px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    width: 100%;
+    background: var(--card);
+    color: var(--ink);
+  }
+#editPlaysMode .standalone-btn {
+    padding: 6px 10px;
+    border: 2px solid var(--bengal-black);
+    border-radius: 6px;
+    background: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 30px;
+    flex-shrink: 0;
+  }
+#editPlaysMode .standalone-btn.active {
+    background: var(--bengal-black);
+    color: #fff;
+  }
+#editPlaysMode .standalone-btn.tiny { padding: 3px 8px; font-size: 10px; min-width: 22px; }
+  /* .variantPanel's chips (Read/In-Out/Counter/Pop Pass 2) -- a small,
+     distinct "which stored variant" look, kept from the pre-rebuild
+     version since .build-panel-label already marks the section itself. */
+#editPlaysMode .corner-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 3px 6px;
+  }
+#editPlaysMode .corner-control label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+#editPlaysMode .dimmed { opacity: .6; transition: opacity .25s; }
+#editPlaysMode .full-op { opacity: 1; transition: opacity .25s; }
+#editPlaysMode .player-circle { cursor: pointer; }
+#editPlaysMode .hint {
+    max-width: 1400px;
+    margin: 8px auto 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 8px;
+  }
+#editPlaysMode .edit-handle {
+    cursor: pointer;
+    fill: #ffde00;
+    stroke: #111;
+    stroke-width: 3;
+  }
+#editPlaysMode .edit-handle.picked {
+    fill: #e0201a;
+    stroke: #fff;
+    stroke-width: 3;
+  }
+#editPlaysMode .edit-handle-line {
+    stroke: #ffde00;
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+    fill: none;
+    opacity: .8;
+  }
+  /* .editingPointPanel's own chips -- editToolbar/endTypePanel/delayPanel/
+     assignPanel each still toggle their own display:none/flex exactly as
+     before (they can show in any combination -- editToolbar and
+     assignPanel really are both visible together for a block assignment,
+     see js/edit-plays.js's setEditTargetEndType); the flex-wrap row they
+     sit in (inline in index.html) is what keeps however many are active
+     from ever landing on the same pixels. */
+#editPlaysMode .edit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+#editPlaysMode .edit-toolbar button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 2px solid var(--bengal-black);
+    background: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+  }
+#editPlaysMode .assign-panel {
+    background: var(--card);
+    border: 2px solid var(--bengal-black);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+#editPlaysMode .assign-panel .assign-label {
+    font-size: 11px;
+    font-weight: 800;
+    width: 100%;
+  }
+#editPlaysMode .assign-panel button {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 2px solid #999;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  /* Per-path end cap: Run (arrow, keep running) vs Block (T-bar, plant and
+     block here) -- available any time a real route/block is selected,
+     independent of the assign-panel's own tap-a-defender/chip-block flow
+     alongside it. */
+#editPlaysMode .end-type-panel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f5f5f5;
+    border: 2px solid var(--bengal-black);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+#editPlaysMode .end-type-panel .assign-label {
+    font-size: 10.5px;
+    font-weight: 800;
+  }
+#editPlaysMode .end-type-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 2px solid #999;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+#editPlaysMode .end-type-btn.active {
+    background: var(--bengal-black);
+    border-color: var(--bengal-black);
+    color: #fff;
+  }
+#editPlaysMode #exportModal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+  }
+#editPlaysMode .export-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+  }
+#editPlaysMode .export-panel {
+    position: relative;
+    max-width: 600px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 80vh;
+  }
+#editPlaysMode .export-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 800;
+    font-size: 14px;
+  }
+#editPlaysMode #exportText {
+    width: 100%;
+    height: 300px;
+    font-family: monospace;
+    font-size: 11px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+  }
+#editPlaysMode .export-footer { display: flex; justify-content: flex-end; }
+
+  /* Play Calls cards on phones: with Wing/Motion/Dir/Boot (and sometimes
+     In/Out) all showing at once, the toggle row can wrap to 2-3 lines.
+     card-outer used to size itself purely off aspect-ratio, so a taller
+     toggle row squeezed the diagram down to almost nothing. Shrinking the
+     toggle buttons cuts down on wrapping, and swapping aspect-ratio for a
+     generous fixed height guarantees the diagram always has real room to
+     breathe, no matter how many lines the toggles wrap to. */
+  @media (max-width: 480px) {
+    .card-toggle-row {
+      gap: 4px;
+      padding: 6px 6px 0;
+    }
+    /* the pill toggles already shrink to fit their text, but tighten them
+       up a bit further on very small phones */
+    .toggle-group { height: 26px; }
+    .toggle-group .toggle-btn { height: 22px; line-height: 22px; padding: 0 8px; font-size: 10px; }
+    .toggle-slot { min-height: 26px; }
+    .toggle-row-basics, .toggle-row-extras { gap: 4px; }
+    .card-outer, .accordion-body .card-outer {
+      aspect-ratio: auto;
+      height: 420px;
+    }
+    /* Nathan: "on split, you cant see boston on the right side because it
+       takes up too much room -- maybe we abbreviate them on mobile view to
+       SEA HOU FLO BOS." Full names ("Seattle") don't fit 4-across in the
+       Left/Right route-call pickers on a phone -- "Boston" especially ran
+       past the edge of its slot. buildToggleGroup stamps a `data-short`
+       attribute (e.g. "BOS") onto any option that provides one; hide the
+       real label and show that instead, only at this width. Desktop/
+       tablet still show the full names untouched.
+       Route-call toggles use the .toggle-tiny modifier, whose own
+       `.toggle-group.toggle-tiny .toggle-btn` font-size rule (3 classes)
+       otherwise outranks a plain `.toggle-btn[data-short]` (class +
+       attribute = 2) regardless of source order -- CSS specificity, not
+       cascade position, decides ties, so the real "Seattle" text was
+       never actually shrinking to 0 and both labels rendered at once
+       ("SeattleSEA"). Matching the fuller `.toggle-group.toggle-tiny
+       .toggle-btn[data-short]` selector here beats it outright. */
+    .toggle-group.toggle-tiny .toggle-btn[data-short] { font-size: 0; }
+    .toggle-group.toggle-tiny .toggle-btn[data-short]::after { content: attr(data-short); font-size: 10px; }
+  }
+
+  @media (min-width: 640px) {
+#editPlaysMode .standalone-btn { padding: 8px 16px; font-size: 14px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) { height: 34px; }
+#editPlaysMode .toggle-group:not(.toggle-tiny) .toggle-btn { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; }
+  }
+  /* BUG FIX (found via nesting-depth trace, not just brace-count, which
+     stayed "balanced" the whole time and hid this): this @media block's
+     closing brace used to be missing here and instead sat ~190 lines
+     down, after the dark-theme attempt-box overrides -- which meant every
+     rule in between (Play Calls Quiz panel, This Week keys box, all of
+     Coach Tools/Schedule's .gameplanChip pills, the whole Schedule/
+     Practices card system, stats tables, roster forms, turnovers, the
+     player card) only ever applied on screens >=640px wide. Fine on a
+     desktop browser window, completely absent on every phone -- which is
+     exactly the "looks right on desktop, broken on mobile, survives a
+     private-tab reload" bug Nathan reported. Everything below is now
+     correctly unscoped/global again. */
+
+/* Play Calls Quiz answer panel -- reuses the same .controls/.inline-control
+   shape as Edit Plays' toggle row, but that CSS is scoped to #editPlaysMode,
+   so it's mirrored here rather than widening the original selector. */
+#playcallsquizMode .controls {
+  max-width: 420px; margin: 10px auto; background: #fff; border-radius: 10px;
+  padding: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.06);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+}
+#playcallsquizMode .inline-control { display: flex; flex-direction: row; align-items: center; gap: 5px; }
+#playcallsquizMode .inline-control label {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #888; white-space: nowrap;
+}
+#playcallsquizMode select { font-size: 13px; padding: 6px; border-radius: 6px; border: 1px solid #ccc; background: #fafafa; }
+.lbLinkBtn { background: none; border: none; color: var(--bengal-orange); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; }
+/* The quiz answer panel is regular app UI (not a diagram surface), so
+   unlike the rest of this file's Play Calls / Edit Plays section, this
+   one spot does need dark-mode overrides. */
+[data-theme="dark"] #playcallsquizMode .controls { background: var(--card); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+[data-theme="dark"] #playcallsquizMode .inline-control label { color: var(--muted); }
+[data-theme="dark"] #playcallsquizMode select { background: var(--paper); color: var(--ink); border-color: var(--line); }
+
+/* ---- This Week (3 Keys + featured plays) ---- */
+.thisweekKeysBox { max-width: 600px; margin: 14px auto; background: var(--card); border: 2px solid var(--bengal-orange); border-radius: 12px; padding: 14px 18px; }
+/* Nathan: "I dont like that the week ahead is just a little text blurb.
+   Would love a more infographic style look with callouts for number of
+   games and practices - logos for games can be brought in just make it a
+   place to visit." Reuses .adminStatCard's existing big-number look
+   (Coach Dashboard's Team Snapshot) for the callouts, and .scheduleRow/
+   .practiceRow (already styled dark scoreboard cards, opponent logos
+   included) for the actual clickable games/practices below it -- see
+   js/thisweek.js's weekAheadInfographicHtml. This is the one new rule
+   needed on top of those existing components, just laying the stat cards
+   out in a row instead of the 2-column grid .adminStatGrid uses elsewhere. */
+.weekAheadStats { display: flex; gap: 10px; margin-bottom: 4px; }
+.weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 80px; }
+/* Nathan: "also keep a short write up in there with a little
+   motivation." then: "hype line is weak - move it to the top and have
+   it be worth having there." then (2026-09-01): "don't need the pump up
+   copy to be in that orange CTA style bar, just have it as an AI write
+   up of the week ahead with more context." So this dropped the bold
+   orange banner treatment in favor of the same plain, readable paragraph
+   look as .scheduleWriteup (Game Write-Up / Scouting Report) -- reads
+   like a real short write-up now, not a shouty callout, while staying the
+   first thing in the box ahead of the stat cards (see
+   js/thisweek.js's weekAheadInfographicHtml/weekAheadWriteupText). */
+.weekAheadWriteup { font-size: 14px; line-height: 1.5; color: var(--ink); text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; margin: 0 0 12px; }
+/* Nathan: "Game and Practices cards on Week Ahead should be side by
+   side." 2 columns on anything wide enough to hold them (the
+   .scheduleRow/.practiceRow cards inside still read fine narrower than
+   their usual full-width Schedule-tab home), collapsing to 1 column
+   under 480px so a phone doesn't squeeze team names/logos down to
+   nothing. If only one of the two columns has content (e.g. a
+   practice-only week), grid-column:1/-1 lets it take the full row
+   instead of leaving an empty second column. */
+.weekAheadColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.weekAheadCol:only-child { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .weekAheadColumns { grid-template-columns: 1fr; }
+}
+.thisweekKeysTitle { font-weight: 900; font-size: 14px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
+.thisweekKeysList { margin: 0; padding-left: 22px; }
+.thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
+.thisweekKeyInput { display: block; width: 100%; padding: 10px; margin-bottom: 8px; border: 2px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+.thisweekKeyInput:focus { border-color: var(--bengal-orange); outline: none; }
+.thisweekCoachName { font-weight: 800; font-size: 13px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .02em; margin: 10px 0 4px; }
+.thisweekCoachName:first-child { margin-top: 0; }
+.thisweekCoachEditRow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.thisweekCoachNameInput { flex: 1; padding: 9px 10px; border: 2px solid #ccc; border-radius: 8px; font-size: 13.5px; font-weight: 800; box-sizing: border-box; font-family: inherit; }
+.thisweekCoachNameInput:focus { border-color: var(--bengal-orange); outline: none; }
+.thisweekCoachRemoveBtn { flex: none; border: none; background: transparent; color: #e0201a; font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 4px; }
+.thisweekCoachEditCard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 2px; margin-bottom: 12px; background: var(--paper); }
+.gameplanCardsGrid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 960px; margin: 0 auto; padding: 0 10px; }
+.gameplanCard { width: 220px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.gameplanCardLabel { font-size: 10.5px; font-weight: 800; text-align: center; padding: 6px 4px; text-transform: uppercase; letter-spacing: .02em; }
+.gameplanCardSpotlight { font-size: 10px; font-weight: 800; text-align: center; color: #fff; background: #2e7d32; padding: 3px 4px; }
+.gameplanCardSvg { display: block; width: 100%; height: auto; background: #fff; }
+.gameplanPickerGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+/* Nathan: "keep the pills a consistent size" -- these sit in a flex row
+   with no shared width, so a short label ("Games") and a long one ("Full
+   Schedule"/"Drive Scripts") hugged their own text and made the row look
+   uneven. A shared min-width (still lets long labels grow past it) plus
+   centered text gives every chip a matching floor size instead. */
+.gameplanChip { border: 2px solid var(--chip-color, var(--line)); background: #fff; color: var(--chip-color, var(--ink)); border-radius: 20px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; min-width: 84px; text-align: center; }
+.gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
+/* Nathan: "confusing with the second set of pill buttons... need a better
+   way of visually breaking those up." Coach Tools' category row (the top
+   5 sections) keeps the normal-size chip above; the specific tools inside
+   whichever category is selected now sit in this shaded, labeled panel
+   with smaller/more muted chips (.coachToolsSubChip below) -- reads as
+   "here's what's inside that tab" instead of a second row of
+   equal-weight buttons that happened to be stacked underneath. */
+.coachToolsSubPanel { background: rgba(0,0,0,.035); border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 12px; margin-bottom: 6px; }
+[data-theme="dark"] .coachToolsSubPanel { background: rgba(255,255,255,.04); }
+.coachToolsSubPanelLabel { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); text-align: center; margin-bottom: 8px; }
+.gameplanChip.coachToolsSubChip { min-width: 0; padding: 6px 12px; font-size: 11px; border-width: 1.5px; opacity: .85; }
+.gameplanChip.coachToolsSubChip.active { opacity: 1; }
+/* Nathan (follow-up): "Rethink this with a high level bar and sub menus
+   because this is painful to navigate and look at." Two of the three
+   navigation tiers here (the top 5 categories, and a module's own
+   internal navigation like Stats' Enter Stats/Leaderboard/Tendencies/
+   Film Views row) were both plain .gameplanChip pills -- only the
+   middle tier (category -> its tabs) had ever gotten a visually distinct
+   treatment. This gives every tier its own clear identity: a dark,
+   full-width bar for the top-level category (reads as real app-level
+   navigation, not just another row of pills), the existing muted panel
+   for the tabs within it, and underlined tabs for a module's own
+   internal navigation -- so scanning down the page, each row visually
+   announces which tier it belongs to instead of three rows of
+   similar-looking buttons stacked on top of each other. */
+.coachToolsCategoryBar { display: flex; background: #1a1a1a; border-radius: 12px; padding: 4px; gap: 2px; margin-bottom: 10px; overflow-x: auto; }
+[data-theme="dark"] .coachToolsCategoryBar { background: #000; }
+/* Nathan: "very congested tool bar... hitting the icon on top of the word"
+   -- icon-over-label stack (same .modeIcon/.modeLabel spans the Play tab's
+   own row already uses) instead of one wide inline "EMOJI Label" string,
+   so five categories fit a phone width comfortably instead of crowding/
+   truncating each other. overflow-x:auto above stays as a safety net for
+   an unusually long label or a future sixth category, not the primary fix. */
+.coachToolsCategoryBtn { flex: 1; min-width: 58px; border: none; background: transparent; color: #aaa; border-radius: 9px; padding: 8px 4px 7px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.coachToolsCategoryBtn.active { background: var(--bengal-orange, #e0201a); color: #fff; }
+.coachToolsModuleTabs { display: flex; gap: 4px; border-bottom: 2px solid var(--line); margin-bottom: 12px; overflow-x: auto; }
+.coachToolsModuleTab { border: none; background: transparent; color: var(--muted); padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.coachToolsModuleTab.active { color: var(--bengal-orange, #e0201a); border-bottom-color: var(--bengal-orange, #e0201a); }
+[data-theme="dark"] .thisweekKeysList li { color: var(--ink); }
+[data-theme="dark"] .gameplanCard { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .thisweekKeyInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .thisweekCoachNameInput { background: var(--card); color: var(--ink); border-color: var(--line); }
+[data-theme="dark"] .thisweekCoachEditCard { background: var(--card); }
+[data-theme="dark"] .gameplanChip { background: var(--paper); }
+
+/* Nathan: "I need to be able to choose plays from the playbook, with the
+   directions and toggles I want" -- js/play-calls.js's own "+ Add to Game
+   Plan" button (buildCard, coach-only) and js/thisweek.js's new review list
+   showing exactly what's been added, each entry removable. */
+.card-gameplan-btn { display: block; margin: 10px auto 0; font-size: 12px; padding: 8px 18px; }
+.gameplanList { display: flex; flex-direction: column; gap: 6px; max-width: 640px; margin: 0 auto; }
+.gameplanListRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.gameplanListLabel { font-size: 12.5px; font-weight: 700; }
+/* min-width/min-height (not just padding) so the tap target stays a real
+   ~40px regardless of the glyph's own tiny intrinsic size -- found too
+   small (22x21px) checking this list on a real mobile viewport. */
+.gameplanListRemoveBtn { flex: none; border: none; background: transparent; color: #e0201a; font-size: 15px; font-weight: 800; cursor: pointer; line-height: 1; min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+[data-theme="dark"] .gameplanListRow { background: var(--paper); }
+/* Nathan: "pills under Schedule... should show orange like light mode."
+   Root cause: this dark-mode override above and the base `.gameplanChip.
+   active` rule (which already sets the orange/chip-color background
+   unconditionally) are the same specificity (0,2,0) -- with a tie, CSS
+   falls back to source order, and this rule sits later in the file, so
+   in dark mode it was winning and silently flattening every selected
+   chip back to the plain unselected --paper background, active or not.
+   This adds the missing higher-specificity override so .active still
+   reads as selected in dark mode exactly like it does in light mode. */
+[data-theme="dark"] .gameplanChip.active { background: var(--chip-color, var(--bengal-orange)); color: #fff; }
+
+/* ---- Drive Builder ---- */
+.driveScriptRow { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; }
+.driveScriptRow:active { background: #fff4e8; }
+.driveScriptRowName { font-weight: 800; font-size: 14px; color: var(--ink); }
+.driveScriptRowCount { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.driveScriptPlayList { list-style: none; margin: 0; padding: 0; }
+.driveScriptPlayRow, .driveScriptEmptyRow { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px; }
+.driveScriptEmptyRow { color: var(--muted); font-size: 12.5px; justify-content: center; }
+.driveScriptPlayLabel { font-weight: 700; font-size: 13px; }
+/* Nathan: "check drive scripts on mobile too" -- these were a fixed
+   26x26px, the same too-small-for-a-thumb size the Game Plan list's own
+   Remove button was found and fixed at. Bumped to 34px (not the full
+   40px used there) since three of these sit side by side against a
+   label that can now be a longer v2-style call (Phase C lets a script
+   hold real Game Plan entries, not just short legacy labels) -- kept
+   room for both rather than crowding the row. */
+.driveScriptRowControls { display: flex; gap: 4px; }
+.driveScriptRowControls button { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 34px; height: 34px; font-size: 14px; cursor: pointer; color: var(--ink); }
+.driveScriptRowControls button:disabled { opacity: .3; cursor: default; }
+[data-theme="dark"] .driveScriptRow, [data-theme="dark"] .driveScriptPlayRow, [data-theme="dark"] .driveScriptEmptyRow { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .driveScriptRowControls button { background: var(--paper); border-color: var(--line); color: var(--ink); }
+
+/* ---- Schedule -- ESPN / Apple Sports style scoreboard cards. Nathan:
+   "I want the app to look like the styling of ESPN mobile app with team
+   logos and schedule looking like this more dynamic." Deliberately always
+   dark (independent of the app's own light/dark theme toggle) -- a
+   scoreboard reads like a scoreboard, matching the reference screenshots,
+   which stay dark regardless of the host app's theme too. ---- */
+.scheduleRow { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.scheduleRow:active { filter: brightness(1.12); }
+/* Nathan: "for completed games... this more condensed version is nice...
+   give some visual difference." One less line (no kickoff time -- see
+   gameTime in js/schedule.js) once a game's final, so the card can sit
+   tighter too. */
+.scheduleRow.scheduleRowFinal { padding: 8px 14px; gap: 4px; }
+/* Nathan: "the other cards for upcoming games let's add an orange stroke
+   around the box to show that is the current game for that week." */
+.scheduleRow.scheduleRowCurrentWeek { border: 2px solid var(--bengal-orange); }
+/* "See Game Stats" reuses .scheduleKeepStatsBtn's own pill shape but in a
+   neutral tone -- a completed game's stats are already locked in, not an
+   action still waiting to be done, so it shouldn't read as the same
+   call-to-action orange as "Keep Stats." Real bug, found in review: the
+   element carries BOTH classes at once (js/schedule.js's keepStatsBtn),
+   and this single-class selector had equal specificity to
+   .scheduleKeepStatsBtn's own orange background below it in file order --
+   source order alone decided the winner, and .scheduleKeepStatsBtn's
+   later position meant the neutral tone here never actually rendered.
+   The compound selector outranks the single-class one regardless of
+   which comes first in the file. */
+.scheduleKeepStatsBtn.scheduleSeeStatsBtn { background: linear-gradient(135deg, #333c45, #23282e); }
+/* Nathan: "Date and time should appear in the middle of the upcoming game
+   card - small team name under the logo - location can stay at the top."
+   Top line = location (+ home/away) only; center column = date/time +
+   result status; each team side is now a vertical stack (badge, small
+   name, score) instead of a horizontal row. */
+/* Nathan: "the game cards are so tall it requires scrolling -- make it
+   shorter to fit more in less space." Location + game-type tag now share
+   one flex row instead of stacking as two separate lines, and the row
+   reserves space on the right so long location text truncates instead of
+   running under the Week badge (see .scheduleWeekBadge below). */
+.scheduleRowTop { display: flex; align-items: center; gap: 8px; padding-right: 76px; }
+.scheduleRowDate { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Real bug, found in review: the completed-game date used to be appended
+   onto the END of .scheduleRowDate's own truncated string, so a real
+   location (an imported address can run 50+ characters) or the game-type
+   tag eating extra width usually pushed the date past the ellipsis --
+   confirmed the date was fully hidden, not just tight, on both phone and
+   desktop widths. Its own flex:0 0 auto span can't be shrunk by the
+   truncating location text next to it, so the date always stays visible;
+   the location is what gives up space when the row is tight. */
+.scheduleRowDateChip { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; flex: 0 0 auto; white-space: nowrap; }
+.scheduleRowMatchup { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Nathan: "have the Week shown in the top right corner, like Week 1, Week
+   8." Absolutely positioned within the (now position:relative) card so it
+   sits on top of the top line rather than adding a line of its own. */
+.scheduleWeekBadge { position: absolute; top: 10px; right: 12px; font-size: 9.5px; font-weight: 900; color: #cfd7de; background: rgba(255,255,255,.08); border: 1px solid #333c45; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+/* Nathan: "can we do PNG logos for the teams instead of having them in the
+   little circles? I would also like the logo to appear bigger so we can
+   make the cards larger if needed." Base size bumped 34px -> 56px; real
+   team PNGs (.hasLogo) drop the circle crop entirely and show full via
+   object-fit:contain so nothing gets cut off, while the auto-generated
+   initials fallback (no logo on file yet) keeps the colored circle.
+   Nathan later asked for shorter cards overall -- trimmed to 44px so the
+   list fits more games per screen without losing the logo treatment. */
+.scheduleTeamBadge { width: 44px; height: 44px; min-width: 44px; min-height: 44px; max-width: 44px; max-height: 44px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; color: #fff; background: var(--bengal-orange); overflow: hidden; }
+.scheduleTeamBadge.hasLogo { border-radius: 10px; background: transparent; }
+.scheduleTeamBadge img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.scheduleTeamSide { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; flex: 1 1 0; min-width: 0; max-width: 100%; text-align: center; }
+/* Nathan, with a corrected reference screenshot: "close but the number is
+   in the same block as the logo, needs to be more like this" -- the
+   score is its own column between the logo and the center result pill
+   (Logo ... Score [Pill] Score ... Logo), not paired with the logo. See
+   .scheduleRowCenter.final below -- js/schedule.js's centerHtml now
+   holds both scores plus the pill. Bigger/bolder than the default
+   .scheduleTeamScore since it's the focal number on a completed card. */
+.scheduleRowFinal .scheduleTeamScore { font-size: 30px; }
+.scheduleTeamName { font-size: 11.5px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+/* Real bug, found in review: a completed card's center group (two fixed
+   40px score slots + gaps + the result pill, ~180px total) leaves each
+   team column much narrower than the 106px it has on an upcoming card --
+   as little as ~55px at 360px wide. .scheduleTeamName's own fixed 100px
+   cap (sized for the WIDER upcoming-card column) let a longer opponent
+   name ("Northbridge-Uxbridge", "Clinton (Scrimmage)") spill past both
+   sides of its own narrower flex column; .scheduleRow's overflow:hidden
+   then clipped it flush against the card's edge instead of ellipsizing
+   cleanly. Capping to the column's own real width (already min-width:0
+   via .scheduleTeamSide) fixes this without touching the wider,
+   already-correct upcoming-card layout. */
+.scheduleRowFinal .scheduleTeamName { max-width: 100%; }
+/* Nathan: "If teams have a record, it should be shown below the team name
+   on the game cards." Bengals-only -- see the code comment on
+   bengalsRecord() in js/schedule.js for why the opponent side doesn't get
+   one. */
+.scheduleTeamRecord { font-size: 9.5px; font-weight: 700; color: #9aa4ae; margin-top: -1px; }
+/* Nathan: "add in projected weather for the event when available." See
+   js/weather.js -- hidden entirely (display:none) when no forecast is
+   available rather than showing an empty/error state. */
+.weatherBox { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.03); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+.weatherIcon { font-size: 28px; line-height: 1; flex: 0 0 auto; }
+.weatherText { font-size: 13px; color: var(--ink); line-height: 1.35; }
+[data-theme="dark"] .weatherBox { background: rgba(255,255,255,.04); }
+/* Compact weather chip for the right side of a practice list row -- see
+   .practiceRow (flex row) in js/practices.js. Small enough to sit next
+   to the date/time text without competing with it. Nathan: "drone icon
+   on the practice card should be in the same spot as the weather - once
+   the practice is done, the weather goes away anyway so it can take
+   it's place" -- weather.js hides #practiceRowWeather-{id} entirely for
+   any past date (see fetchForecast's daysOut<0 check), so the two are
+   naturally almost never both showing at once; .practiceRowRight just
+   groups them into the one right-aligned slot instead of the drone
+   badge getting its own separate spot earlier in the row. */
+.practiceRowRight { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.practiceRowWeather { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; flex: 0 0 auto; }
+.practiceRowWeather .weatherIcon { font-size: 16px; }
+/* Nathan: "add that little weather icon in the bottom of the center of the
+   Game card as well as the end of all cards on the full schedule cards."
+   Centered (not right-aligned like .practiceRowWeather above) since these
+   cards' layout doesn't have a natural "right side" slot the way a
+   practice row's single date/time line does. */
+.scheduleRowWeatherCenter { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #cfd7de; margin-top: 2px; width: 100%; }
+/* Nathan: "a KEEP STATS CTA on the game card which allows me to launch the
+   STATKEEPER and score the game." Coach-only -- see renderList's
+   `approved` gate in schedule.js. A block-level pill under the rest of
+   the card rather than squeezed into the existing rows, so it reads as
+   its own action rather than another piece of game info. */
+.scheduleKeepStatsBtn { display: block; text-align: center; margin-top: 8px; padding: 8px; border-radius: 10px; background: linear-gradient(135deg, var(--bengal-orange), var(--bengal-orange-dark)); color: #fff; font-size: 11.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; cursor: pointer; }
+.scheduleKeepStatsBtn:active { filter: brightness(1.12); }
+.scheduleRowWeatherCenter .weatherIcon { font-size: 15px; }
+/* Nathan: "we dont need to say this so big and bold... can be fine print
+   at the bottom of the page." True fine print, not just a smaller .lbSub. */
+.scheduleFinePrint { font-size: 9.5px; color: var(--muted); text-align: center; margin-top: 18px; opacity: .7; }
+.scheduleTeamScore { font-size: 20px; font-weight: 900; color: #fff; min-width: 28px; text-align: center; }
+.scheduleRowCenter { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0 8px; min-width: 78px; }
+/* Completed-game card: score, pill, score -- side by side instead of the
+   date/time stack above, matching Nathan's own corrected reference
+   screenshot exactly. Nathan, catching a real misalignment across cards:
+   "the result pill needs to be dead center aligned between all cards...
+   the left score is right justified and aligned, while the right score
+   is left justified and aligned." Root cause -- the two scores previously
+   sized to their own digit count (1 vs 2 digits), so a lopsided pair
+   (e.g. "36"/"6") pushed the pill off-center within this group even
+   though the group itself sat centered in the row. Fixed-width slots on
+   each score (below) make the pill's position independent of how many
+   digits either score has, on every card. */
+/* Nathan, with a screenshot: "the numbers are too close to the results
+   pill. Make the results pill 25% bigger and add twice the padding
+   between the pill and numbers." Gap doubled (14px -> 28px); the pill
+   itself is sized up via .scheduleRowCenter.final .scheduleResultBadge
+   below, scoped to this completed-game context only -- the SAME
+   .scheduleResultBadge class is also shared by the upcoming-game card's
+   own date/time stack and the detail hero page, neither of which this
+   ask was about. */
+.scheduleRowCenter.final { flex-direction: row; align-items: center; gap: 28px; min-width: 0; padding: 0 4px; }
+.scheduleRowCenter.final .scheduleTeamScore.home { flex: 0 0 40px; min-width: 40px; text-align: right; }
+.scheduleRowCenter.final .scheduleTeamScore.away { flex: 0 0 40px; min-width: 40px; text-align: left; }
+.scheduleRowCenter.final .scheduleResultBadge { font-size: 13px; padding: 4px 13px; }
+.scheduleRowCenterDate { font-size: 12px; font-weight: 900; color: #fff; text-transform: uppercase; letter-spacing: .02em; text-align: center; }
+.scheduleRowCenterTime { font-size: 10.5px; font-weight: 700; color: #9aa4ae; text-align: center; }
+.scheduleResultBadge { display: inline-block; font-size: 10.5px; font-weight: 900; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
+.scheduleResultBadge.win { background: #1c8a3e; color: #fff; }
+.scheduleResultBadge.loss { background: #c0342a; color: #fff; }
+.scheduleResultBadge.tie { background: #666; color: #fff; }
+.scheduleResultBadge.upcoming { background: #333c45; color: #cfd7de; }
+/* Nathan: "I also need to tag the game as something - for instance the
+   Clinton game is a scrimmage and the Marlborough game is the jamboree." */
+.scheduleGameTypeTag { display: inline-block; font-size: 10px; font-weight: 900; padding: 2px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .04em; background: #4a5fc9; color: #fff; }
+/* Nathan: "Week 3 we have a bye, let's put one in there to call out the
+   bye." Same card family (dark scoreboard gradient, Week badge in the
+   corner) but collapsed to one centered line since there's no matchup to
+   show -- much shorter than a real game card, same background/border. */
+.scheduleRowBye { min-height: 44px; align-items: center; justify-content: center; }
+.scheduleByeText { font-size: 13px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .06em; }
+.scheduleWriteup { font-size: 14px; line-height: 1.5; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+/* Big score header on the game detail page, same dark scoreboard family as the list rows. */
+.scheduleDetailHero { background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 16px; padding: 18px 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.25); width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+.scheduleDetailHero .scheduleTeamName { font-size: 14px; max-width: 140px; }
+.scheduleDetailHero .scheduleTeamBadge { width: 88px; height: 88px; min-width: 88px; min-height: 88px; max-width: 88px; max-height: 88px; font-size: 24px; }
+.scheduleDetailHero .scheduleTeamScore { font-size: 32px; }
+.scheduleDetailHero .scheduleRowCenterDate { font-size: 14px; }
+.scheduleDetailHero .scheduleRowCenterTime { font-size: 11.5px; }
+[data-theme="dark"] .scheduleWriteup { background: var(--card); border-color: var(--line); }
+
+/* ---- Head-to-Head -- Nathan, from the Apple Sports "Team Stats" screenshot:
+   "It has a bar under the stat with a color representing each team's stats
+   as a portion of the total." Us always orange (brand color, matches every
+   other "our side" accent in the app); them uses the same per-opponent
+   hashColor() every opponent badge/initials fallback already uses, so the
+   bar color always matches that team's badge elsewhere on the page. ---- */
+.h2hBox { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 4px; margin-bottom: 4px; }
+.h2hStat { margin-bottom: 14px; }
+.h2hStatRow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.h2hVal { font-size: 19px; font-weight: 900; color: var(--ink); min-width: 32px; }
+.h2hVal.us { text-align: left; color: var(--bengal-orange); }
+.h2hVal.them { text-align: right; }
+.h2hStatLabel { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); text-align: center; flex: 1; }
+.h2hBar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.h2hBarUs { background: var(--bengal-orange); }
+
+/* ---- Split (center-diverging) comparison bars -- Nathan: "a comparison
+   for penalties, penalty yards, and all in a split screen style where the
+   length of the bar from center shows how much they got." Unlike .h2hBar
+   above (one bar, split proportionally between the two teams' SHARE of a
+   combined total), each side here grows independently out from a shared
+   center line, sized relative to whichever side's own value is bigger --
+   so e.g. a 10-9 penalty count reads as two nearly-equal bars, not one bar
+   arbitrarily split down the middle. ---- */
+.splitBarRow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.splitBarHalf { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; display: flex; }
+.splitBarHalf.left { justify-content: flex-end; }
+.splitBarHalf.right { justify-content: flex-start; }
+.splitBarFillUs { height: 100%; background: var(--bengal-orange); }
+.splitBarFillThem { height: 100%; }
+.splitBarLabel { flex: 0 0 auto; min-width: 78px; text-align: center; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.splitBarVal { flex: 0 0 auto; min-width: 30px; font-size: 14px; font-weight: 900; color: var(--ink); }
+.splitBarVal.us { text-align: right; color: var(--bengal-orange); }
+.splitBarVal.them { text-align: left; }
+
+/* ---- Season Leaders -- Nathan: "showing their profile image with name
+   under it, even placeholders before stats are there." Same colored-
+   initials-circle fallback used for opponent badges when there's no real
+   photo on file yet. ---- */
+/* Nathan (follow-up): "reformat the Season Leaders section to be the same
+   2 column style." Rows now (leaderCardHtml in schedule.js), not the older
+   card-grid layout this section originally used. */
+.leaderList { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 2px 10px; margin-bottom: 4px; }
+.leaderPhoto { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: #2c333b; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; color: #fff; flex: 0 0 auto; }
+.leaderPhoto.placeholder { background: var(--paper); border: 2px dashed var(--line); color: var(--muted); }
+.leaderPhoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Nathan (follow-up): "use the circle photos of the players in the Game
+   Leaders Section - reformat the Season Leaders section to be the same 2
+   column style with name and circle player photo." Smaller variant for
+   the denser row layout both sections now share (a 48px circle is right
+   for a standalone card, too big sitting inline next to a name in a
+   list row) -- same photo/fallback-initials logic as .leaderPhoto,
+   just scaled down. */
+.leaderPhoto.small { width: 32px; height: 32px; font-size: 11px; }
+.leaderRow2Col { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--line); gap: 10px; }
+.leaderRow2Col:last-child { border-bottom: none; }
+.leaderRow2ColLeft { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.leaderRow2ColName { font-size: 12.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderRow2ColCat { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.leaderRow2ColStat { font-size: 13px; font-weight: 900; color: var(--bengal-orange); flex: 0 0 auto; }
+
+/* ---- Injury Report -- Nathan: "Injury Report section that coaches can add
+   in guys to it with a write-in for status (Probable, Questionable, Out)." ---- */
+.injuryEditRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.injuryEditSelect { flex: 1 1 130px; padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryEditStatus { padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryEditNote { flex: 1 1 110px; padding: 7px; border: 2px solid #ccc; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+.injuryList { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; }
+.injuryRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.injuryRow:last-child { border-bottom: none; }
+.injuryRowName { font-size: 13px; font-weight: 800; color: var(--ink); flex: 1 1 auto; }
+.injuryRowNote { font-size: 11px; color: var(--muted); width: 100%; }
+.injuryStatus { font-size: 9.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; padding: 3px 9px; border-radius: 10px; color: #fff; flex: 0 0 auto; }
+.injuryStatus.probable { background: #2e7d32; }
+.injuryStatus.questionable { background: #c98a12; }
+.injuryStatus.out { background: #c0342a; }
+
+/* ---- Last 5 Games / Vs This Opponent -- Nathan: "two tab section showin
+   LAST 5 GAMES. Show date opponent and result with score." Reuses the same
+   .scheduleRow card the main Schedule list uses, just with the compact
+   single date line up top instead of the full home/away+location line, and
+   tighter margins since a few of these stack inside one page. ---- */
+.last5List .scheduleRow.last5Row { margin-bottom: 8px; padding: 10px 14px; }
+.last5List .scheduleRow.last5Row:last-child { margin-bottom: 0; }
+
+/* ---- Practices / Film Nights -- Nathan: "I also wants to add in
+   practices to the app to... They need date, time and location with map
+   function. Once season starts, there will be a film night instead of
+   practice so we need an option for that." Same dark card family as
+   Schedule's game cards, but no team badges/score -- just a type badge,
+   date/time, and location. ---- */
+.practiceRow { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #1a2029 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.practiceRow:active { filter: brightness(1.12); }
+.practiceTypeBadge { display: inline-block; font-size: 10.5px; font-weight: 900; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
+.practiceTypeBadge.practice { background: var(--bengal-orange); color: #fff; }
+.practiceTypeBadge.film { background: #4a5fc9; color: #fff; }
+.practiceTypeBadge.game { background: #1c6fc0; color: #fff; }
+/* Nathan: "add another type of practice to the schedule which is Walk
+   Through." Distinct color from Practice (orange)/Film Night (blue-purple)/
+   Game (blue) so the badge is glanceable in the list. */
+.practiceTypeBadge.walkthrough { background: #2e9e5b; color: #fff; }
+/* Nathan: "let's add the weather to the right side of the practice
+   cards." Badge + date/time + (optional) weather chip share one row now,
+   with the weather pushed to the far right via margin-left:auto on
+   .practiceRowWeather; location/notes stay stacked below as before. */
+.practiceRowTop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; }
+.practiceRowDateTime { font-size: 14px; font-weight: 800; color: #fff; }
+.practiceRowLoc { font-size: 11.5px; color: #9aa4ae; }
+.practiceRowNotes { font-size: 11.5px; color: #cfd7de; }
+/* Nathan: "if drone footage is available - it should show a drone icon on
+   the practice bar to indicate it's available. If you haven't clicked to
+   see it, it should have a corner callout." The dot reuses .whatsNewDot's
+   exact look (same small orange corner dot already used for the What's
+   New pill elsewhere) rather than inventing a new indicator style --
+   js/drone-footage.js decides per-practice whether the icon/dot show at
+   all (visibility toggle + per-device "seen" tracking). */
+.practiceDroneBadge { position: relative; font-size: 14px; line-height: 1; flex: 0 0 auto; }
+
+/* ---- Game stats table ---- */
+.statsTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+.statsTable th { background: var(--bengal-black); color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; padding: 6px 4px; text-align: center; }
+.statsTable td { border: 1px solid var(--line); padding: 4px; text-align: center; }
+.statsTable tbody tr:nth-child(even) { background: rgba(0,0,0,.03); }
+.statsCellInput { width: 46px; border: none; background: transparent; text-align: center; font-size: 12px; font-family: inherit; padding: 3px 2px; }
+.statsCellInput:focus { outline: 2px solid var(--bengal-orange); border-radius: 4px; }
+.statsRmBtn { border: none; background: none; color: #c0342a; font-size: 13px; cursor: pointer; padding: 2px 6px; }
+.statsGroupHeading { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); margin: 14px 0 4px; }
+.statsGroupHeading:first-child { margin-top: 0; }
+.statsIdentityCell { font-weight: 700; font-size: 12px; color: var(--ink); background: rgba(0,0,0,.03); }
+[data-theme="dark"] .statsTable td { border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .statsTable tbody tr:nth-child(even) { background: rgba(255,255,255,.04); }
+[data-theme="dark"] .statsCellInput { color: var(--ink); }
+
+/* ---- Attempt-grid stat entry (Rushing/Passing/Receiving/Kickoffs/Tackles) ---- */
+.attemptSectionBox { margin-bottom: 6px; }
+.attemptRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.attemptRowLabel { font-weight: 800; font-size: 12.5px; min-width: 84px; color: var(--ink); }
+.attemptBoxesWrap { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; flex: 1; }
+.attemptBox { position: relative; width: 30px; height: 30px; border: 1.5px solid var(--line); border-radius: 4px; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ink); flex: none; }
+.attemptBox.incomplete { color: var(--muted); }
+.attemptBox.fd::after { content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 8px 8px 0; border-color: transparent var(--bengal-orange) transparent transparent; }
+.attemptBoxDirTag { position: absolute; bottom: -1px; left: -1px; background: var(--bengal-black); color: #fff; font-size: 7px; font-weight: 900; line-height: 1; padding: 1.5px 2px; border-radius: 3px 0 3px 0; }
+.attemptBoxTdTag { position: absolute; top: -1px; right: -1px; background: #ddd; color: #888; font-size: 6.5px; font-weight: 900; line-height: 1; padding: 1.5px 2px; border-radius: 0 3px 0 3px; cursor: pointer; opacity: .55; }
+.attemptBoxTdTag.on { background: gold; color: #5a4700; opacity: 1; }
+.attemptBox.tackleBox { background: linear-gradient(135deg, #fff 50%, #fff 50%); cursor: pointer; }
+.attemptBox.tackleBox.solo { background: var(--bengal-black); }
+
+/* ---- Depth Chart (Coach Tools) ---- */
+.depthChartGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 6px; }
+.depthChartCard { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+.depthChartCardTitle { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-weight: 900; font-size: 13px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+.depthChartRemoveGroupBtn { width: 18px; height: 18px; font-size: 9px; opacity: .5; }
+.depthChartRemoveGroupBtn:hover { opacity: 1; }
+.depthChartAddGroupRow { display: flex; gap: 6px; margin-top: 8px; max-width: 360px; }
+.depthChartNewGroupInput { flex: 1; padding: 7px 9px; border: 1.5px dashed var(--line); border-radius: 7px; font-size: 12px; font-family: inherit; background: #fff; color: var(--ink); }
+.depthChartRow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.depthChartRow:last-of-type { border-bottom: none; }
+.depthChartSlotLabel { font-size: 9.5px; font-weight: 800; color: var(--muted); text-transform: uppercase; min-width: 52px; flex: none; }
+.depthChartPlayer { flex: 1; font-weight: 700; color: var(--ink); }
+.depthChartRowBtns { display: flex; gap: 2px; flex: none; }
+.depthChartIconBtn { background: none; border: 1px solid var(--line); border-radius: 5px; width: 22px; height: 22px; font-size: 10px; line-height: 1; cursor: pointer; color: var(--ink); padding: 0; }
+.depthChartIconBtn:disabled { opacity: .3; cursor: default; }
+.depthChartRemoveBtn { color: #c62828; border-color: #c62828; }
+.depthChartAddRow { margin-top: 8px; }
+.depthChartAddRow select { width: 100%; padding: 7px; border: 1.5px solid var(--line); border-radius: 7px; font-size: 12px; font-family: inherit; background: #fff; color: var(--ink); }
+/* Nathan (follow-up): "this is used primarily on mobile so that just gives
+   me a big string of cards - not defined by spots on the field. Maybe we
+   use the basic wing formation and have that be at the top and down below
+   are the players listed in the order when a position is selected." A full
+   grid of position cards never fits a phone screen the way it fits the
+   reference image's wide printed page -- this replaces it with a small,
+   fixed-size formation map (one marker per position, label only, no
+   roster info on the marker itself) plus a single roomy detail panel below
+   showing whichever position was last tapped. Only one position's full
+   list on screen at a time is exactly what a phone can actually show well. */
+.depthChartDiagram { position: relative; width: 100%; height: 150px; background: linear-gradient(180deg, #2a6b38, #1e5c2e); border-radius: 10px; margin: 8px 0; overflow: hidden; }
+.depthChartDiagram::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0, rgba(255,255,255,.06) 1px, transparent 1px, transparent 10%); pointer-events: none; }
+.depthChartMarker { position: absolute; transform: translate(-50%, -50%); min-width: 34px; padding: 4px 6px; border-radius: 8px; border: 2px solid #fff; background: rgba(17,17,17,.75); color: #fff; font-size: 9.5px; font-weight: 800; text-align: center; cursor: pointer; line-height: 1.1; }
+.depthChartMarker.selected { background: var(--bengal-orange); border-color: #fff; box-shadow: 0 0 0 3px rgba(255,106,19,.35); }
+/* Compact +/- style arrow cluster for nudging the SELECTED marker's spot on
+   the diagram above -- lives in the detail card below, not on the tiny
+   marker itself, since there's no room to tap precisely on something that
+   small. */
+.depthChartNudge { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.depthChartNudgeLabel { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.depthChartNudgeBtns { display: flex; gap: 4px; }
+.attemptBox.tackleBox.assist { background: linear-gradient(225deg, var(--bengal-black) 50%, #fff 50%); }
+.attemptRowTotal { font-size: 11px; font-weight: 800; color: var(--bengal-orange-dark); white-space: nowrap; margin-left: auto; }
+.attemptAddWrap { display: flex; align-items: center; gap: 3px; margin-left: 4px; }
+.attemptAddInput { width: 54px; padding: 5px; border: 1.5px solid #ccc; border-radius: 5px; font-size: 12px; text-align: center; }
+.statsSmallBtn { border: 1.5px solid var(--bengal-orange); background: #fff; color: var(--bengal-orange-dark); border-radius: 5px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.statsSmallBtn:active { background: var(--bengal-orange); color: #fff; }
+.statsRmBtnSmall { border: none; background: none; color: #c0342a; font-size: 11px; cursor: pointer; padding: 1px 4px; }
+.statsAddRowWrap { display: flex; gap: 8px; align-items: center; margin: 8px 0 16px; }
+.statsRosterPicker { padding: 6px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 12.5px; }
+
+/* ---- Roster ---- */
+.statsRosterBox { margin-bottom: 4px; }
+.statsRosterList { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.statsRosterChip { display: inline-flex; align-items: center; gap: 5px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 5px 10px; font-size: 12px; }
+.statsRosterAddForm { display: flex; gap: 6px; align-items: center; }
+.statsRosterNumInput { width: 48px; padding: 7px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 13px; text-align: center; }
+.statsRosterNameInput { flex: 1; max-width: 200px; padding: 7px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 13px; }
+
+/* ---- Turnovers ---- */
+.turnoverList { display: flex; flex-direction: column; gap: 6px; }
+.turnoverRow { display: flex; align-items: center; gap: 8px; }
+.turnoverNum { font-weight: 900; font-size: 12px; color: var(--bengal-orange-dark); width: 18px; text-align: right; flex: none; }
+.turnoverInput { flex: 1; padding: 7px 9px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 13px; }
+
+[data-theme="dark"] .attemptBox { background: var(--paper); border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .attemptBox.tackleBox { background: linear-gradient(135deg, var(--paper) 50%, var(--paper) 50%); }
+[data-theme="dark"] .attemptRow { border-color: var(--line); }
+[data-theme="dark"] .statsRosterChip { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .attemptAddInput, [data-theme="dark"] .statsRosterPicker, [data-theme="dark"] .statsRosterNumInput, [data-theme="dark"] .statsRosterNameInput, [data-theme="dark"] .turnoverInput { background: var(--paper); color: var(--ink); border-color: var(--line); }
+
+/* ---- Player Card -- Nathan: "Let's expand the player profile to appear
+   like a player card shown here [ESPN reference]. Copy the formatting as
+   best you can." Dark header band (photo + name/position/HT-WT), same
+   always-dark family as the Schedule cards, sitting on top of the
+   existing .lbCardCool chrome so it bleeds edge-to-edge like
+   .lbHeroHeader does. Below the header: fixed-column stat tables that
+   show a "-" placeholder instead of hiding a category outright --
+   "showing '-' where stats aren't available." ---- */
+.playerCardHead { background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); padding: 18px; border-radius: 16px 16px 0 0; display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.playerCardPhotoWrap { flex: 0 0 auto; width: 84px; height: 96px; border-radius: 10px; overflow: hidden; background: #2c333b; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.playerCardPhotoWrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.playerCardPhotoPlaceholder { color: #6b7580; font-size: 26px; font-weight: 900; }
+.playerCardHeadInfo { flex: 1 1 auto; min-width: 0; padding-top: 2px; }
+.playerCardName { color: #fff; font-size: 18px; font-weight: 900; line-height: 1.2; word-break: break-word; }
+.playerCardMeta { color: var(--bengal-orange); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; margin-top: 5px; }
+.playerCardHW { color: #9aa4ae; font-size: 11.5px; font-weight: 700; margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
+.playerCardHW b { color: #fff; font-weight: 800; }
+.playerCardEditToggle { color: var(--bengal-orange); font-size: 11px; font-weight: 800; background: none; border: none; cursor: pointer; padding: 8px 0 0; text-decoration: underline; }
+.playerCardEditForm { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; background: rgba(255,255,255,.05); border-radius: 10px; padding: 10px; }
+.playerCardEditForm label { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .03em; display: block; margin-bottom: 3px; }
+.playerCardEditForm input[type="text"] { width: 100%; padding: 8px; border: none; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.playerCardEditForm input[type="file"] { color: #cfd7de; font-size: 11px; }
+.playerCardEditRow { display: flex; gap: 8px; }
+.playerCardEditRow > div { flex: 1 1 0; min-width: 0; }
+/* Nathan: "add more padding around the stats area on the player cards." A
+   bordered, padded box around each table (season/career/recent games)
+   instead of the table sitting flush against the rest of the card, plus
+   roomier cell padding inside the tables themselves. */
+.playerCardStatBox, .playerCardGamesBox { background: rgba(0,0,0,.025); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+[data-theme="dark"] .playerCardStatBox, [data-theme="dark"] .playerCardGamesBox { background: rgba(255,255,255,.03); }
+.playerCardStatTable { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.playerCardStatTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 9px 6px; text-align: center; }
+.playerCardStatTable td { border: 1px solid var(--line); padding: 10px 6px; text-align: center; font-weight: 700; }
+.playerCardStatTable td.playerCardDash { color: var(--muted); font-weight: 400; }
+.playerCardStatTable tbody tr:nth-child(even) { background: rgba(0,0,0,.03); }
+[data-theme="dark"] .playerCardStatTable td { border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .playerCardStatTable tbody tr:nth-child(even) { background: rgba(255,255,255,.04); }
+.playerCardGamesTable { width: 100%; border-collapse: collapse; font-size: 11px; }
+.playerCardGamesTable th { background: var(--bengal-black); color: #fff; font-size: 9px; text-transform: uppercase; letter-spacing: .02em; padding: 8px 6px; text-align: center; }
+.playerCardGamesTable td { border: 1px solid var(--line); padding: 8px 6px; text-align: center; }
+.playerCardGamesTable td.playerCardGameOpp { text-align: left; font-weight: 700; }
+.playerCardGamesTable td.playerCardDash { color: var(--muted); }
+[data-theme="dark"] .playerCardGamesTable td { border-color: var(--line); color: var(--ink); }
+
+/* ===== 2 Minute Drill -- in-app overlay (Nathan, 2026-08-23): "press and
+   hold the logo for 3 seconds launches it." Ported from the standalone
+   two-minute-drill-test.html prototype's own <style> block into a real
+   full-screen overlay, same position:fixed;inset:0 pattern as
+   .gameDaySplashOverlay/.cancelNoticeOverlay. See js/two-minute-drill.js
+   for the game logic and index.html for the markup. ===== */
+.twoMinDrillOverlay { position: fixed; inset: 0; z-index: 1900; display: none; overflow-y: auto; background: var(--paper); }
+.twoMinDrillOverlay.show { display: block; }
+.twoMinWrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
+.twoMinHeader { text-align: center; margin-bottom: 6px; padding-right: 30px; }
+.twoMinHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+
+/* ===== Game Plan Builder -- same full-screen overlay convention as
+   .twoMinDrillOverlay directly above (see that block's own comment). A
+   distinct z-index (not 1900) since the two are never open at once but
+   shouldn't silently rely on that. See js/gameplan-builder.js. ===== */
+.gamePlanBuilderOverlay { position: fixed; inset: 0; z-index: 1910; display: none; overflow-y: auto; background: var(--paper); }
+.gamePlanBuilderOverlay.show { display: block; }
+.gamePlanBuilderOverlay .lbXClose { background: rgba(0,0,0,.08); color: #1a1a1a; }
+.gamePlanBuilderOverlay .lbXClose:active { background: rgba(0,0,0,.16); }
+.gpbWrap { max-width: 760px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
+.gpbHeader { text-align: center; margin-bottom: 10px; padding-right: 30px; }
+.gpbHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+.gpbSubtitle { font-size: 13px; color: var(--muted); font-weight: 600; }
+.gpbScreen { max-width: 680px; margin: 0 auto; }
+.gpbOpponentList { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin: 0 auto; }
+.gpbOpponentBtn { border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 12px 14px; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.gpbOpponentBtn.selected { border-color: var(--bengal-orange); background: rgba(224,32,26,.08); }
+.gpbModeChoice { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; max-width: 560px; margin: 0 auto; }
+.gpbModeBtn { flex: 1 1 220px; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 14px; padding: 22px 16px; cursor: pointer; text-align: center; }
+.gpbModeBtn.selected { border-color: var(--bengal-orange); background: rgba(224,32,26,.08); }
+.gpbModeBtnIcon { font-size: 34px; }
+.gpbModeBtnLabel { font-size: 17px; font-weight: 800; }
+.gpbModeBtnHint { font-size: 12px; color: var(--muted); font-weight: 500; }
+.gpbPlayGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.gpbPlayGrid .gameplanChip { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+.gpbPlaylist { display: flex; flex-direction: column; gap: 8px; max-width: 640px; margin: 0 auto; }
+.gpbPlaylistRow { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); }
+.gpbPlaylistThumb { display: block; width: 84px; height: 63px; flex: none; background: #fff; border-radius: 6px; }
+.gpbPlaylistLabel { flex: 1; font-size: 13px; font-weight: 600; min-width: 0; }
+.gpbEditPanel { border: 2px solid var(--bengal-orange); border-radius: 10px; padding: 10px; margin: -4px 0 4px; background: var(--paper); }
+.gpbEditPanelTopRow { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; justify-content: flex-end; background: var(--paper); padding-bottom: 8px; margin: -2px -2px 6px; }
+.gpbEditPanelTopRow .navBtn { width: auto; flex: none; padding: 8px 14px; }
+.gpbSpotlightTag { display: inline-block; margin-top: 3px; font-size: 11px; font-weight: 800; color: #fff; background: #2e7d32; border-radius: 6px; padding: 2px 6px; }
+.gpbTagPanel { border: 2px solid #2e7d32; border-radius: 10px; padding: 10px; margin: -4px 0 4px; background: var(--paper); }
+.gpbTagList { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+[data-theme="dark"] .gpbOpponentBtn { background: var(--card); border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] .gpbPlaylistRow { background: var(--card); border-color: var(--line); }
+.twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
+
+/* ---- start / end screens ---- */
+.twoMinPanel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 18px; text-align: center; }
+.twoMinPanel p { font-size: 14px; line-height: 1.5; color: var(--ink); opacity: .85; }
+.twoMinBigBtn { display: inline-block; margin-top: 10px; padding: 14px 28px; border: none; border-radius: 12px;
+  background: var(--bengal-orange); color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; }
+.twoMinBigBtn:disabled { opacity: .5; cursor: default; }
+.twoMinBigBtn:active:not(:disabled) { transform: scale(.97); }
+.twoMinEndStat { font-size: 15px; margin: 6px 0; }
+/* Nathan: "At the end of the game, have a drive recap." -- a scrollable
+   play-by-play list under the summary stats, one row per resolved round
+   (gain/touchdown/false start/delay of game), oldest first. */
+#driveRecapWrap { text-align: left; margin: 16px 0 6px; }
+.twoMinRecapTitle { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 6px; }
+#driveRecap { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); }
+.twoMinRecapRow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px;
+  font-size: 13px; border-bottom: 1px solid var(--line); }
+.twoMinRecapRow:last-child { border-bottom: none; }
+.twoMinRecapRow .recapPlay { color: var(--ink); flex: 1; }
+.twoMinRecapRow .recapResult { font-weight: 800; white-space: nowrap; }
+.twoMinRecapRow.gain .recapResult { color: #1e7c34; }
+.twoMinRecapRow.touchdown .recapResult { color: var(--bengal-orange); }
+.twoMinRecapRow.penalty .recapResult { color: #c62828; }
+
+/* Nathan: "make the entry screen cooler with 2 options, play and
+   leaderboard" -- reuses the .lbHeroHeader/.lbHeroTrophy gradient-hero
+   chrome the rest of the app already uses for celebration/leaderboard
+   popups, instead of the old plain single "Start Drive" button. */
+.twoMinEntryPanel { padding: 0; overflow: hidden; }
+.twoMinEntryPanel .lbHeroHeader { margin-bottom: 0; }
+.twoMinEntryBody { padding: 18px; }
+.twoMinEntryBtnRow { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.twoMinEntryBtnRow .twoMinBigBtn { flex: 1 1 130px; margin-top: 0; }
+.twoMinBigBtnAlt { background: linear-gradient(160deg, #ffb703 0%, #b8540a 100%); color: #2a1400; }
+
+/* ---- HUD ---- */
+.twoMinHud { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-weight: 800; font-size: 14px; flex-wrap: wrap; }
+.twoMinHud > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+#hudClock { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--ink); }
+#hudClock.urgent { color: #e0201a; animation: twoMinPulse 1s infinite; }
+#hudStreak { color: var(--bengal-orange); min-width: 20px; text-align: center; }
+@keyframes twoMinPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.twoMinTimeoutBtn { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px;
+  font-weight: 800; font-size: 13px; color: var(--ink); cursor: pointer; }
+.twoMinTimeoutBtn:active:not(:disabled) { transform: scale(.95); }
+.twoMinTimeoutBtn:disabled { opacity: .4; cursor: default; }
+.twoMinTimeoutBtn #timeoutCount { color: var(--bengal-orange); }
+
+/* ---- field strip ---- */
+.twoMinFieldOuter { position: relative; height: 36px; border-radius: 8px; overflow: hidden; margin-bottom: 8px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.32) 0 1px, transparent 1px 10%),
+    linear-gradient(90deg, #7a1f1f 0 4%, #245c2e 4% 96%, #7a1f1f 96% 100%);
+  border: 2px solid #111; }
+.twoMinFieldMarker { position: absolute; top: 50%; width: 20px; height: 20px; margin-left: -10px; margin-top: -10px;
+  border-radius: 50%; background: #7a4a24; border: 2px solid #f4e9dc; transition: left .5s ease; z-index: 3; }
+.twoMinFieldMarkerLabel { position: absolute; top: 50%; margin-top: -9px; transform: translateX(-50%);
+  font-size: 10px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; z-index: 4; }
+
+/* ---- signal display ----
+   Nathan: "Whole game should fit to one screen" -- min-height trimmed from
+   300 to 210 (with matching trims to the field strip/choice buttons/HUD
+   below, plus .gameActive further down) so the drill's HUD+field+signal+
+   choices stack comfortably inside one phone-portrait viewport without
+   needing .twoMinDrillOverlay's own scroll fallback in normal use. */
+.twoMinSignalStage { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin-bottom: 8px; min-height: 210px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; overflow: hidden; }
+#getReadyEl { display: none; align-items: center; justify-content: center; font-size: 20px; font-weight: 900;
+  color: var(--bengal-orange); letter-spacing: .04em; }
+#signalImg { width: auto; max-width: 100%; height: auto; max-height: 190px; border-radius: 10px; }
+#signalTextCard { display: none; font-size: 34px; font-weight: 900; text-align: center; color: var(--ink);
+  padding: 40px 16px; }
+.twoMinProgress { display: flex; gap: 5px; margin-top: 10px; }
+.twoMinProgress .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.twoMinProgress .dot.done { background: var(--bengal-orange); }
+
+/* ---- multiple choice ---- */
+.twoMinChoices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+@media (max-width: 480px) { .twoMinChoices { grid-template-columns: 1fr; } }
+.twoMinChoiceBtn { padding: 10px 8px; font-size: 13px; font-weight: 700; border-radius: 10px; border: 2px solid var(--line);
+  background: var(--card); color: var(--ink); cursor: pointer; text-align: center; line-height: 1.25; }
+.twoMinChoiceBtn:active:not(:disabled) { transform: scale(.97); }
+.twoMinChoiceBtn:disabled { cursor: default; }
+.twoMinChoiceBtn.picked-correct, .twoMinChoiceBtn.reveal-correct { background: #1e5c2a; border-color: #2e7d32; color: #fff; }
+.twoMinChoiceBtn.picked-wrong { background: #6b1f1f; border-color: #c62828; color: #fff; }
+
+/* ---- play diagram ----
+   Nathan: "I would rather it overlays where the coaching signals are so
+   you don't need to scroll." Absolutely positioned to fill .twoMinSignalStage
+   (its new parent, position:relative, see index.html) instead of sitting in
+   normal document flow below the choices grid -- showing it no longer adds
+   any page height at all, since it just covers the signal card in place.
+   Own opaque background means it fully occludes the GET READY/signal image/
+   progress dots underneath while it plays. */
+#playDiagramWrap { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+  background: var(--card); border-radius: 14px; padding: 10px; z-index: 2; }
+#playDiagramSvg { width: 100%; height: auto; display: block; }
+
+/* Nathan: "Whole game should fit to one screen" -- toggled on .twoMinWrap
+   only while #gameScreen is the active screen (see startGame()/endGame()
+   in js/two-minute-drill.js); the start/leaderboard/end screens keep the
+   normal roomier padding since their content (rules text, leaderboard
+   rows, drive recap) isn't trying to fit inside exactly one viewport. */
+.twoMinWrap.gameActive { padding-top: 8px; padding-bottom: 6px; }
+.twoMinWrap.gameActive .twoMinHeader { margin-bottom: 2px; }
+.twoMinWrap.gameActive .twoMinLoadingNote { display: none; }
+
+/* ---- big bold result banner (raised above the overlay's own
+   z-index:1900 -- was 500 on the standalone page, which had nothing else
+   on top of it to worry about) ---- */
+/* Nathan: "colored banner at the top is a little too big - needs to be
+   smaller" -- shrunk font sizes/padding/radius across the board (roughly
+   -30%), position and animation timing unchanged. */
+.twoMinBanner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%) scale(.7); z-index: 1950;
+  font-size: 21px; font-weight: 900; text-align: center; padding: 12px 18px; border-radius: 12px;
+  color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 8px 28px rgba(0,0,0,.5);
+  transition: opacity .15s ease, transform .15s ease; max-width: 90vw; }
+.twoMinBanner::before { content: ''; position: absolute; inset: -22px; border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0%, transparent 68%); opacity: 0; z-index: -1; }
+.twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .45s cubic-bezier(.2,1.7,.4,1); }
+.twoMinBanner.show::before { animation: twoMinBannerRing .65s ease-out; }
+.twoMinBanner.good { background: linear-gradient(135deg, #3fb454, #1b5e20 65%, #0d3d13); color: #eafff0; }
+.twoMinBanner.good::before { color: #3fb454; }
+.twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 24px; }
+.twoMinBanner.good.big::before { color: #f9a825; }
+.twoMinBanner.show.good.big { animation: twoMinBannerPunch .5s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .5s ease .18s; }
+.twoMinBanner.bad { background: linear-gradient(135deg, #e5433d, #c62828 55%, #7a1f1f); }
+.twoMinBanner.bad::before { color: #c62828; }
+.twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 18px; }
+.twoMinBanner.timeout::before { color: #4fc3f7; }
+.twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 29px; }
+.twoMinBanner.touchdown::before { color: var(--bengal-orange); }
+.twoMinBanner.show.touchdown { animation: twoMinBannerPunch .55s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .6s ease .2s, twoMinBannerGlow 1.3s ease-in-out .5s infinite; }
+@keyframes twoMinBannerPunch { 0% { transform: translate(-50%, -50%) scale(.5); } 60% { transform: translate(-50%, -50%) scale(1.12); } 100% { transform: translate(-50%, -50%) scale(1); } }
+@keyframes twoMinBannerRing { 0% { opacity: .55; transform: scale(.25); } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes twoMinBannerShake {
+  0%, 100% { margin-left: 0; }
+  20% { margin-left: -6px; } 40% { margin-left: 5px; } 60% { margin-left: -4px; } 80% { margin-left: 3px; }
+}
+@keyframes twoMinBannerGlow {
+  0%, 100% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 0 rgba(255,140,0,0); }
+  50% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 34px 10px rgba(255,150,20,.55); }
+}
+
+/* Particle burst spawned by js/two-minute-drill.js's spawnBurst() on every
+   positive result (gain / big play / touchdown) -- fixed-position elements
+   animated purely via the Web Animations API, self-removing on finish, so
+   this rule only needs to cover their starting look. z-index raised to sit
+   just under the result banner, same reasoning as .twoMinBanner above. */
+.twoMinSpark { position: fixed; z-index: 1949; font-size: 18px; line-height: 1; pointer-events: none;
+  transform: translate(-50%, -50%); text-shadow: 0 0 6px currentColor; }
+
+/* ---- League Standings (js/standings.js) -- pasted in under Coach Tools,
+   shown read-only on the top-level Standings tab. ---- */
+.standingsTableWrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.standingsTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.standingsTable th, .standingsTable td { padding: 8px 10px; text-align: left; white-space: nowrap; }
+.standingsTable th { background: var(--paper); color: var(--muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .03em; border-bottom: 1px solid var(--line); }
+.standingsTable td { border-bottom: 1px solid var(--line); color: var(--ink); }
+.standingsTable tr:last-child td { border-bottom: none; }
+.standingsTable td:first-child, .standingsTable th:first-child { text-align: center; color: var(--muted); }
+.standingsRowUs td { background: rgba(230, 111, 45, .1); font-weight: 800; }
+.standingsDivTag { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; white-space: normal; }
+.standingsTeamLink { background: none; border: none; padding: 0; font: inherit; font-weight: 700;
+  color: var(--bengal-orange); cursor: pointer; text-decoration: underline; }
+/* Power rank + week-over-week trend arrow (Nathan: "trending like they do
+   in the NFL showing an arrow up or down for where they moved since the
+   last week") -- see js/standings.js's computePowerRanks/powerRankCellHtml. */
+.standingsPowerCell { font-weight: 800; }
+.standingsTrend { display: inline-block; font-size: 10px; font-weight: 800; margin-left: 2px; }
+.standingsTrendUp { color: #2e7d32; }
+.standingsTrendDown { color: #c62828; }
+.standingsTrendSame { color: var(--muted); }
+
+/* ============================================================
+   Game HUD preview theme -- see js/preview-theme.js for how the
+   .gameHudPreview class gets onto <html> (a per-device localStorage flag,
+   never a server-side setting -- nobody else sees any of this). Every
+   rule below is scoped under that class so a device without the flag is
+   byte-for-byte unaffected; nothing here touches the unscoped selectors
+   themselves.
+
+   Deliberately dark and angled regardless of the existing light/dark
+   toggle, same principle the real header already uses (header{} is
+   black in both themes) -- extended here to the full nav chrome so it
+   reads as one consistent HUD rather than half-themed.
+   ============================================================ */
+html.gameHudPreview .headerRow,
+html.gameHudPreview .headerRow h1,
+html.gameHudPreview .headerRow p { font-family: 'Barlow', -apple-system, sans-serif; }
+
+html.gameHudPreview header {
+  position: relative;
+  overflow: hidden;
+  background: #0c0d0f;
+  border-bottom: none;
+}
+html.gameHudPreview header::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 46%; height: 100%;
+  background: linear-gradient(100deg, #ff6a13 0%, #e0570a 100%);
+  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0% 100%);
+  pointer-events: none;
+}
+html.gameHudPreview .headerRow { position: relative; z-index: 1; }
+html.gameHudPreview .headerRow h1 {
+  font-family: 'Anton', sans-serif; text-transform: uppercase;
+  font-weight: 400; letter-spacing: .01em;
+}
+html.gameHudPreview .headerRow p {
+  font-family: 'Anton', sans-serif; text-transform: uppercase;
+  color: #ffb37a; letter-spacing: .12em;
+}
+
+html.gameHudPreview .topSections {
+  background: #0c0d0f;
+  border-bottom: 4px solid #ff6a13;
+}
+html.gameHudPreview .topSections .modeBtn.active {
+  color: #17181a;
+  background: #ff6a13;
+  border-bottom-color: #ff6a13;
+}
+
+html.gameHudPreview .modeTabs {
+  background: #17181a;
+  border-bottom: none;
+}
+html.gameHudPreview .modeTabs .modeBtn {
+  color: rgba(255,255,255,.55);
+  font-family: 'Barlow', -apple-system, sans-serif;
+  font-weight: 800;
+}
+html.gameHudPreview .modeTabs .modeBtn.active {
+  color: #fff;
+  background: rgba(255,106,19,.16);
+  border-bottom-color: #ff6a13;
+}
+
+/* Edit Plays' control toolbar (now .coachToolsSubPanel/.build-panel, like
+   Formation Builder and Create a Play -- see the rebuild comment in
+   index.html) mostly already themes itself via var(--card)/var(--line)/
+   var(--ink), but next to the dedicated dark GAME_HUD_PREVIEW stage
+   background (see STAGE_BG in js/edit-plays.js) even those read as a
+   slightly-too-light bar sitting on top of the new look. Themed here,
+   scoped the same as everything else in this section. .navBtn.secondary
+   (Export Points) is the one still-hardcoded-white piece worth covering;
+   .navBtn itself already reads fine in bengal-orange on a dark stage. */
+html.gameHudPreview #editPlaysMode .coachToolsSubPanel {
+  background: #17181a;
+  border: 1px solid #2a2c2f;
+}
+html.gameHudPreview #editPlaysMode .inline-control label {
+  color: rgba(255,255,255,.45);
+}
+html.gameHudPreview #editPlaysMode select {
+  background: #0c0d0f;
+  border-color: #3a3d42;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .standalone-btn {
+  background: #0c0d0f;
+  border-color: #4a4d52;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .standalone-btn.active {
+  background: #ff6a13;
+  border-color: #ff6a13;
+  color: #17181a;
+}
+html.gameHudPreview #editPlaysMode .navBtn.secondary {
+  background: #0c0d0f;
+  border-color: #4a4d52;
+  color: #fff;
+}
+html.gameHudPreview #editPlaysMode .diagramCard {
+  background: #14171a;
+  border: 1px solid #2a2c2f;
+}
+html.gameHudPreview #editPlaysMode .corner-control {
+  background: rgba(12,13,15,.9);
+  border-color: #3a3d42;
+}
+html.gameHudPreview #editPlaysMode .corner-control label {
+  color: rgba(255,255,255,.55);
+}
+html.gameHudPreview #editPlaysMode .hint {
+  color: rgba(255,255,255,.4);
+}
+/* The shared toggle pill (Wing/Dir/Motion/etc, also reused by Play Calls'
+   per-card toggles) keeps its white sliding thumb in every theme -- that's
+   what the pressed color (--toggle-color) contrasts against, and it
+   already reads fine sitting on a dark track. Only the resting track tint
+   needed a bump: the light-mode tint values (e.g. rgba(0,0,0,.06)) are
+   nearly invisible against a dark card. */
+html.gameHudPreview .toggle-group {
+  background: var(--toggle-tint-dark, rgba(255,255,255,.1));
+}
+html.gameHudPreview .toggle-group .toggle-btn {
+  color: rgba(255,255,255,.4);
+}
+

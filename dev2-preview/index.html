@@ -1,0 +1,2523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASL Bengals — Signal Study Guide</title>
+
+<!-- Game HUD preview theme -- per-device only (see the file's own header
+     comment). Loaded here, before styles.css and before any other script,
+     specifically so window.isGameHudPreview() exists and the
+     .gameHudPreview class is already on <html> before first paint -- no
+     flash of the normal theme, and every later script that checks the
+     flag (edit-plays.js's route colors) can rely on it being set. -->
+<script src="js/preview-theme.js?v=20260913a"></script>
+
+<!-- IMPORTANT: this ?v= is a SEPARATE, hand-maintained version string from
+     BUILD_V further down this file -- it's a plain <link> tag parsed before
+     any JS runs (so it can't just read window.BUILD_V), which is exactly
+     why it silently drifted out of sync for a while: css/styles.css kept
+     getting edited (most recently to add the 2 Minute Drill overlay's
+     .twoMinDrillOverlay display:none/position:fixed rules) without this
+     bump, so a browser that had already cached the old stylesheet kept
+     applying pre-overlay CSS to the new overlay markup -- no display:none,
+     no position:fixed -- which rendered it as a plain inline block at
+     wherever it sits in the DOM instead of a hidden full-screen overlay
+     (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
+     the bottom of the Schedule page). Bump this by hand every time
+     css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
+<link rel="stylesheet" href="css/styles.css?v=20260926aa">
+
+<!-- PWA / Add to Home Screen support -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/images/icon-192.png">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bengals">
+
+<!-- jsPDF: powers the live, on-demand "Save Sideline Playbook PDF" export
+     (js/playbook-pdf.js) -- generates straight from whatever's actually
+     loaded in the browser right now (same DATA, same renderCardDiagram/
+     renderSplitDiagram the Play Calls tab itself uses), so the PDF can
+     never drift out of sync with live coach edits the way the old
+     externally-synced static PDF did. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- (svg2pdf.js was tried here and dropped -- it kept mis-drawing curved
+     routes on anything more complex than a gentle bend, even after
+     flattening every curve to straight segments. js/playbook-pdf.js now
+     rasterizes each diagram via the browser's own native SVG rendering
+     instead, which can't have that class of bug. -->
+<script>
+  // Registers sw.js so the app qualifies for a full "Install app" / Add to
+  // Home Screen prompt on Chrome (some Android versions require a service
+  // worker for this, not just a valid manifest). Safe no-op in browsers
+  // without service worker support.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').then(function(reg){
+        // Nathan (2026-08-24): "it started happening 2 commits ago -- 2
+        // minute drill appears everywhere as kids are signing in." Root
+        // cause was css/styles.css's hand-maintained ?v= cache-buster
+        // going stale across multiple pushes (see the comment on that
+        // <link> tag) -- but the browser also only checks whether sw.js
+        // itself changed on its own internal schedule (frequently
+        // throttled to roughly once a day), so a player's device that
+        // already had the app open, or hadn't reloaded recently, could
+        // keep serving an old cached shell for a long time even after a
+        // fix goes live. This explicitly nudges that check to happen
+        // right now, on every fresh page load, instead of waiting on the
+        // browser's own timer -- cheap and harmless if nothing changed.
+        reg.update().catch(function(){});
+      }).catch(function(e){
+        console.error('Service worker registration failed:', e);
+      });
+    });
+    // Drone footage notification tapped while a tab was ALREADY open --
+    // sw.js's notificationclick focuses that tab and postMessages the
+    // target practice id here (the ?practice= query-param path in
+    // player-identity.js's gate() only covers a freshly-opened tab, which
+    // can't receive a postMessage before it exists). Registered
+    // unconditionally, not gated on login -- by the time a real message
+    // arrives the app is already running and window.openPracticeDetail is
+    // loaded, since that only happens from an interaction with an
+    // already-open instance of this same page.
+    navigator.serviceWorker.addEventListener('message', function(e){
+      if (e.data && e.data.type === 'openPractice' && window.openPracticeDetail) {
+        window.openPracticeDetail(e.data.id);
+      } else if (e.data && e.data.type === 'openThisWeek' && typeof setSection === 'function') {
+        setSection('thisweek');
+      }
+    });
+  }
+</script>
+</head>
+<body>
+<script>
+  // "Stadium lights" (dark) is now the default look for the whole app, not
+  // just an opt-in toggle -- applied synchronously, before first paint, so
+  // there's never a flash of the light theme. Only an explicit past choice
+  // of light mode (stored as 'light' by the toggle in auth.js) opts back
+  // out; anything else -- no preference yet, or localStorage unavailable
+  // -- defaults to dark.
+  try {
+    if (localStorage.getItem('bengalsTheme') !== 'light') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch(e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+</script>
+<!-- BUILD_VERSION: 2026-08-13c (fix cloud data overwriting missing plays -- Sweep now survives real cloud data) -->
+
+<!--
+  Nathan: "lets make sure it's all stable and loading quickly - I noticed
+  some features not popping up on load. Or loading as straight text."
+  Real gap, not just perception: for a remembered device, auth.js hides
+  #loginScreen the MOMENT login is confirmed -- which happens well before
+  the ~62 feature scripts below (study-quiz.js, schedule.js, etc.) have
+  finished loading, since those load one at a time AFTER auth resolves.
+  In that window the raw app shell is visible with none of the JS that
+  populates/styles/wires it having run yet -- exactly "features not
+  popping up" and "straight text." This overlay sits on top of everything
+  (higher z-index than the login screen itself) and only gets removed by
+  boot()'s own script-loading loop once every last one has actually
+  finished, so there's no gap where an unfinished shell is visible either
+  behind the login screen or after it hides.
+-->
+<div id="appLoadingOverlay" style="position:fixed;inset:0;z-index:99998;background:#0b0e13;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;overflow:hidden;">
+  <!-- Nathan: "use the attached image as the desktop loading screen... reformat it like the vertical one for mobile." Both images already have
+       "LOADING..." baked into the artwork itself, including a static decorative bar under it -- the old circular-logo-plus-bar approach is
+       replaced entirely by this full-bleed background, with only the real, script-driven progress bar overlaid roughly where the art's own
+       static one sits, so it reads as that bar actually filling in rather than two separate loading indicators stacked on the page.
+       Nathan (follow-up): "desktop image is showing on mobile - that doesn't work." Real bug in the previous version: the image URL was set as
+       an INLINE style attribute on this element, and inline styles always beat rules in a <style> block -- media query or not -- so the mobile
+       override below could never actually win no matter how it was written. Both background layers below get their image from the stylesheet
+       now instead, which is the only way the media query swap can work at all.
+       Nathan (follow-up): "add a secondary blurred version under the clean version to help fill the areas... accommodate the screen ratio."
+       #appLoadingBgBlur sits behind the sharp, fully-visible #appLoadingBg layer -- same image, scaled up and blurred so its cropped, softened
+       edges fill the letterboxed space `contain` leaves empty, rather than that space just being flat background color. Common "blurred
+       backdrop" technique (Spotify's now-playing screen, Apple Photos, etc.) -- I don't have an image-generation tool available to actually
+       paint in new background content the way "generate more background" would need, so this is the CSS-only version of that idea. -->
+  <div id="appLoadingBgBlur"></div>
+  <div id="appLoadingBg"></div>
+  <div style="position:relative;width:17%;max-width:180px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:9%;">
+    <div id="appLoadingBar" style="width:0%;height:100%;background:#ff6a13;transition:width .2s ease;"></div>
+  </div>
+</div>
+<style>
+  #appLoadingOverlay { transition: opacity .4s ease; }
+  #appLoadingBg, #appLoadingBgBlur {
+    position: absolute; inset: 0;
+    background-image: url('assets/images/loading-desktop.jpg');
+    background-position: center; background-repeat: no-repeat;
+  }
+  #appLoadingBg {
+    background-size: cover; /* Nathan (follow-up): "I made the new desktop loading image big enough that it should be set to fill so you don't see any bars on the top or bottom." Desktop's sharp layer switches from contain to cover now that the new image is sized to actually fill the screen without cropping anything important. */
+    animation: appLoadingBreathe 6s ease-in-out infinite;
+  }
+  #appLoadingBgBlur {
+    background-size: cover;
+    filter: blur(28px) brightness(.5);
+    transform: scale(1.15); /* avoids the blur's soft edge showing a hard, un-blurred border */
+  }
+  @media (max-width: 640px) {
+    #appLoadingBg, #appLoadingBgBlur { background-image: url('assets/images/loading-mobile.jpg'); }
+    /* The mobile image wasn't resized the same way -- keeping this on
+       contain here (letterboxed, filled by the blur layer showing through)
+       so switching desktop to cover doesn't reintroduce the mobile
+       cropping bug from a few rounds back ("can't see all of it"). */
+    #appLoadingBg { background-size: contain; }
+  }
+  @keyframes appLoadingBreathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #appLoadingBg { animation: none; }
+  }
+</style>
+
+<!-- Nathan: "toolbar is not staying with the toolbar, and stays over
+     everything, I don't want that" -- #topToolbar moved from here (a
+     free-floating position:fixed div, independent of the header) into
+     .headerRow below, as a normal flex child, so it scrolls/sticks
+     together with the header instead of floating over page content. -->
+
+
+<div class="loginScreen" id="loginScreen">
+  <div class="loginOverlay"></div>
+  <div class="loginGlow"></div>
+  <div class="loginContent">
+    <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
+    <h1 class="loginTitle"><span class="bengalsBig">11U Bengals</span><span class="loginSubtitle">Signal &amp; Play Study Guide</span></h1>
+    <input class="loginInput" id="loginCode" type="password" placeholder="Enter access code"
+      autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button class="loginBtn" id="loginBtn">Log In</button>
+    <div class="loginError" id="loginError"></div>
+  </div>
+  <div class="loginBuildVersion" id="loginBuildVersion"></div>
+</div>
+
+<!-- Nathan: "in first login, you should be able to choose Player, Coach or
+     Parent. For Coach profile, you will need to put in 'FrontSeat' as the
+     password... For coaches that are already in there and noted... they
+     will be granted Coach access without additional setup." Shown right
+     after the shared team code above (that part's unchanged -- still the
+     one wall keeping the app private to people who've been given the
+     code). Typing the OLD coach code directly at that first screen still
+     works too (auth.js) and skips this screen entirely, so nobody who
+     already knows it has to learn a new step. Picking Coach here reveals
+     a small password field checked against the exact same secret
+     ('FrontSeat') as that old coach code -- same protection, new door.
+     Player and Parent need nothing further here; player-identity.js's
+     name+PIN screen runs right after either one. -->
+<div class="loginScreen hide" id="roleScreen">
+  <div class="loginOverlay"></div>
+  <div class="loginGlow"></div>
+  <div class="loginContent">
+    <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
+    <h1 class="loginTitle"><span class="bengalsBig">Who are you?</span></h1>
+    <p style="color:#ccc;font-size:12px;text-align:center;max-width:280px;margin:0 auto 14px;">Pick one to continue.</p>
+    <div class="roleBtnGrid" id="roleBtnGrid">
+      <button class="roleBtn" type="button" data-role="player"><span class="roleBtnIcon">🏈</span><span>Player</span></button>
+      <button class="roleBtn" type="button" data-role="parent"><span class="roleBtnIcon">👪</span><span>Parent</span></button>
+      <button class="roleBtn" type="button" data-role="coach"><span class="roleBtnIcon">🔐</span><span>Coach</span></button>
+    </div>
+    <div id="roleCoachPasswordWrap" style="display:none;width:100%;">
+      <input class="loginInput" id="roleCoachPassword" type="password" placeholder="Coach password"
+        autocomplete="off" autocapitalize="off" spellcheck="false" style="margin-top:14px;">
+      <button class="loginBtn" id="roleCoachSubmitBtn" style="margin-top:10px;">Continue</button>
+      <button class="navBtn secondary" id="roleCoachBackBtn" type="button" style="width:100%;margin-top:8px;">‹ Back</button>
+    </div>
+    <div class="loginError" id="roleError"></div>
+  </div>
+</div>
+
+<!-- Nathan: "the app update screen is far too little. The kids haven't
+     seen the play calls at all or the play quiz. They need a crash course
+     for using it. Both shotgun and split formations." -- a real multi-step
+     walkthrough (same look/mechanics as the in-app Play Calls "i" tutorial,
+     just its own instance/IDs) shown once, on top of whichever screen the
+     page lands on. Covers: what's new, Play Calls in Shotgun, Play Calls
+     in Split (route calls), and Play Quiz. Dismissing (via the last step's
+     "Let's go!") just sets a flag -- doesn't touch auth state or progress,
+     and doesn't replace the existing Play Calls "i" tutorial, which still
+     also shows itself the first time someone actually opens that tab. -->
+<div class="pcInfoOverlay welcomeOverlay" id="welcomeOverlay">
+  <div class="pcInfoCard pcTutorialCard" id="welcomeTutorialCard">
+    <div id="welcomeTutorialSteps">
+
+      <div class="pcTutorialStep active" data-step="0">
+        <div class="pcTutorialHeader">🏈 The app got an upgrade!</div>
+        <div class="pcTutorialIllustration">
+          <div style="font-size:40px">🎉</div>
+          <div class="mockTapHint">A quick look at what's new before you dive in</div>
+        </div>
+        <p class="pcTutorialText">Same team code, same login as always. First time picking a name? Just make one up along with a 4-digit code — that's yours from now on. A few new screens are worth a quick look first.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="1">
+        <div class="pcTutorialHeader">📋 Play Calls — pick a formation</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPillRow">
+            <span class="mockPill active">Wing</span><span class="mockPill">Split</span><span class="mockPill">5 Guys</span><span class="mockPill">I</span><span class="mockPill">I Wing</span>
+          </div>
+          <div class="mockPillRow">
+            <span class="mockPill active">Wing L</span><span class="mockPill">Wing R</span>
+            <span class="mockPill active">Dir L</span><span class="mockPill">Dir R</span>
+          </div>
+          <div class="mockTapHint">👆 Tap a formation, then a play, flip a toggle, tap your number</div>
+        </div>
+        <p class="pcTutorialText">Open the <strong>Play Calls</strong> tab and pick a <strong>formation</strong> first — <strong>Wing</strong>, <strong>Split</strong>, <strong>5 Guys</strong>, <strong>I</strong>, or <strong>I Wing</strong> — then tap any play to see its diagram. Flip <strong>Wing</strong> or <strong>Direction</strong> to see it run the other way. <strong>Tap your number</strong> on the diagram to glow it orange, then tap ▶ to watch it run. Tap the flip icon to see the hand signal.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="2">
+        <div class="pcTutorialHeader">🎛️ Every formation, its own calls</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPillRow">
+            <span class="mockPill">Shotgun</span><span class="mockPill active">Split</span>
+          </div>
+          <div class="mockPillRow">
+            <span class="mockPill active">Split L</span><span class="mockPill">Split R</span>
+            <span class="mockPill active">Pass On</span>
+          </div>
+          <div class="mockTapHint">👆 Look for that formation's own toggles</div>
+        </div>
+        <p class="pcTutorialText"><strong>Split</strong>: pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on, and each side calls its own route — <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or <strong>Boston</strong>. <strong>I</strong> has its own <strong>Heavy</strong> toggle, and some plays add <strong>Overload</strong> — tap-to-glow works everywhere.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="3">
+        <div class="pcTutorialHeader">🧠 Play Quiz</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockFlipBtn">🧠</div>
+          <div class="mockTapHint">Watch the signal, then set up the call</div>
+        </div>
+        <p class="pcTutorialText">Head to the <strong>Play Quiz</strong> tab to test yourself. It plays a hand signal (twice), then you set the toggles to match what you saw and submit. Ten rounds, easiest to hardest, and it saves your best score on the leaderboard.</p>
+      </div>
+
+      <!-- Nathan: "update tool tips to show the latest - go over the
+           schedule and this week features" -- Schedule and This Week both
+           shipped well after this walkthrough was first written, so
+           neither one had ever been introduced here. auth.js's SEEN_KEY
+           was bumped to a new version alongside adding these two steps so
+           this pops back up once for everyone who already dismissed the
+           old 4-step version, not just brand-new logins. -->
+      <div class="pcTutorialStep" data-step="4">
+        <div class="pcTutorialHeader">🗓️ Schedule</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPillRow">
+            <span class="mockPill active">Games</span><span class="mockPill">Practices</span><span class="mockPill">Full Schedule</span>
+          </div>
+          <div class="mockAccordionHeader">vs. Clinton <span class="mockChevron">▾</span></div>
+          <div class="mockTapHint">👆 Tap a game for times, weather, and the season record</div>
+        </div>
+        <p class="pcTutorialText">The <strong>Schedule</strong> tab covers every game and practice, plus a combined <strong>Full Schedule</strong> view. Tap any game for arrival/warmup/kickoff times, weather, field directions, and an auto-written preview — or add it straight to your phone's calendar.</p>
+      </div>
+
+      <div class="pcTutorialStep" data-step="5">
+        <div class="pcTutorialHeader">🎯 This Week</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockAccordionHeader">Coach Nate's 3 Keys <span class="mockChevron">▾</span></div>
+          <div class="mockTapHint">1️⃣ Play fast &nbsp; 2️⃣ Protect the ball &nbsp; 3️⃣ Finish every block</div>
+        </div>
+        <p class="pcTutorialText">Check <strong>This Week</strong> for the week-ahead write-up and each coach's own <strong>3 Keys</strong> heading into the next game. You'll get a notification any time a coach updates theirs, so it's worth a look after every practice.</p>
+      </div>
+
+    </div>
+    <div class="pcTutorialDots" id="welcomeTutorialDots"></div>
+    <div class="pcTutorialNav">
+      <button id="welcomeTutorialBackBtn" class="pcTutorialNavBtn secondary">Back</button>
+      <button id="welcomeTutorialNextBtn" class="pcTutorialNavBtn primary">Next</button>
+    </div>
+  </div>
+</div>
+
+<div class="loginScreen hide" id="playerIdScreen">
+  <div class="loginOverlay"></div>
+  <div class="loginGlow"></div>
+  <div class="loginContent">
+    <img class="loginLogo" src="assets/images/login-logo.png" alt="Bengals logo">
+    <h1 class="loginTitle"><span class="bengalsBig">Who's playing?</span></h1>
+    <p style="color:#ccc;font-size:12px;text-align:center;max-width:280px;margin:0 auto 14px;">Type your name and a 4-digit code. First time? Just make one up — that's your code from now on, so your spot follows you back next time.</p>
+    <input class="loginInput" id="playerIdNameInput" type="text" placeholder="Your name" maxlength="20" autocomplete="off">
+    <input class="loginInput" id="playerIdPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4-digit code" autocomplete="off" style="margin-top:8px;">
+    <button class="loginBtn" id="playerIdBtn" style="margin-top:10px;">Continue</button>
+    <div class="loginError" id="playerIdError"></div>
+  </div>
+</div>
+
+<header>
+  <div class="headerRow">
+    <img id="headerLogo" src="assets/images/header-logo.png" alt="Bengals logo">
+    <div>
+      <!-- Nathan: "Change the title in the corner from ASL Bengals Signal
+           Study Guide to 11U ASL Bengals Team Dashboard" -- later: "remove
+           11U from the headline" so the pill(s) fit next to it on mobile
+           without wrapping/growing the header. -->
+      <h1>ASL Bengals</h1>
+      <p>Team Dashboard</p>
+    </div>
+    <div class="topToolbar" id="topToolbar" style="display:none">
+      <div class="toolbarRow">
+        <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
+        <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
+        <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
+        <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
+      </div>
+      <!-- Nathan: "I hate the placement of this... right below the top icons
+           next to the V3 icon. v3 icon can now go away." Moved out of the icon
+           row into the dev tag's old spot (dev2Tag removed below), and
+           redesigned to show a football icon + name + jersey # instead of just
+           a bare name -- see player-identity.js's updateBadge() for how the #
+           gets filled in (best-effort roster name match, since a session
+           doesn't carry a jersey # of its own). -->
+      <div class="pillRow" id="pillRow">
+        <div class="playerMenuWrap" id="playerMenuWrap">
+          <button class="playerMenuBtn" id="playerMenuBtn"><span id="playerIdBadgeIcon">🏈 </span><span id="playerIdBadgeName"></span><span id="playerIdBadgeNum" class="playerIdBadgeNum"></span><span id="whatsNewDot" class="whatsNewDot" style="display:none;"></span></button>
+            <div class="playerMenuDropdown" id="playerMenuDropdown">
+              <button id="whatsNewMenuBtn">🆕 What's New<span id="whatsNewCount" class="adminDashCount" style="display:none;"></span></button>
+              <!-- Nathan: "NEW PLAY ADDED" alerts. Real background push (works
+                   with the app fully closed) needs a paid Firebase plan, which
+                   Nathan opted out of -- see js/whats-new.js for the free
+                   alternative this wires up instead: a real OS notification
+                   fired the moment the app is opened and it finds a play added
+                   since the last one it already notified about, reusing this
+                   same What's New data. Label/behavior toggled by
+                   refreshNotifyBtn() in js/whats-new.js based on
+                   Notification.permission. -->
+              <button id="notifyOptInBtn" style="display:none;">🔔 Enable Notifications</button>
+              <button id="thisweekMenuBtn" style="display:none;">🎯 This Week</button>
+              <!-- Nathan: "By clicking it up a menu dropdown with card and
+                   progress" -- My Card opens the same ESPN-style player card
+                   view roster/stats pages use (window.showPlayerProfile), looked
+                   up by the same best-effort roster name match as the jersey #
+                   badge above; hidden if there's no roster match to open. -->
+              <button id="myCardBtn" style="display:none;">🃏 My Card</button>
+              <!-- Nathan: "make sure they are aware of the badges when they
+                   log in" -- inline dot (not .whatsNewDot's position:absolute
+                   corner-callout treatment, which needs a position:relative
+                   button it doesn't have here) shown whenever
+                   js/study-quiz.js's maybeShowBadgesIntro/showMyStats finds
+                   an earned badge they haven't actually opened My Stats to
+                   see yet. -->
+              <button id="myStatsBtn">📊 My Stats<span id="myStatsNewBadgeDot" class="myStatsNewDot" style="display:none;"></span></button>
+              <button id="myPositionBtn">🏈 My Position</button>
+              <!-- Parent-only -- hidden for everyone else, shown/hidden opposite
+                   myStatsBtn/myPositionBtn by refreshCoachToolsVisibility() in
+                   study-quiz.js (a parent has no quiz stats or a position of
+                   their own to set). Opens the linked child's card directly if
+                   there's only one, or the childPromptOverlay picker (in "change"
+                   mode) if there's more than one or none linked yet. -->
+              <button id="myChildBtn" style="display:none;">👤 My Child</button>
+              <!-- Nathan: hidden for now -- shipped v1 didn't have enough useful
+                   info per position. Keeping the button/overlay/study-guide.js in
+                   place so this is a one-line toggle to bring back once it has
+                   more substance (see js/study-guide.js for the "Lite vs Full"
+                   scoping notes). -->
+              <button id="studyGuideBtn" style="display:none">📖 Study Guide</button>
+              <button id="playerIdSwitchBtn">🚪 Sign Out</button>
+            </div>
+        </div>
+        <!-- Nathan: "If you are a Coach or Parent and you have a Child (Player)
+             linked to your account - there should be a 2nd pill next to your
+             own pill for the player... which would have a menu for his card and
+             his progress." One pill per linked child (usually just one), built
+             by player-identity.js's renderChildToolbarPills() -- same trigger
+             points as the existing parentChildBanner below Schedule, so it
+             always mirrors whatever's actually linked. -->
+        <div id="childPillsWrap"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Nathan (2026-09-01): "top of the leaderboard banner should be moved to
+     just below the ASL Bengals header bar - it should rotate with key
+     events and be clickable to go to that page... have the banners be
+     dynamic and colorful." Sits right under the header so it's visible on
+     every section (Play, This Week, Schedule, Coach Tools) -- unlike the
+     Play sub-tabs below, this isn't scoped to any one part of the app.
+     Populated/rotated by js/study-quiz.js's renderEngagementCallout(),
+     called once per open from player-identity.js's gate(). Empty by
+     default so it never leaves a visible gap before that runs. -->
+<div id="globalCallout" class="globalCallout" style="display:none;"></div>
+
+<!-- Nathan: "I dont want This Week to appear as another tab - we will need
+     to have a seperate top tab to choose between play tabs and this week
+     and other coaches and players tabs to come." -- a top-level section
+     switcher sits above the existing sub-tab bar now: "Play" (everything
+     that used to be the whole nav -- Study/Quiz/Timed/Play Calls/Play
+     Quiz/Edit) and "This Week", with room to add more top-level sections
+     later (a Schedule section, a Coach section, etc. -- see the app
+     roadmap) without any of them crowding into the Play sub-tabs.
+
+     Then: "have all these things be visible only on the coaching login
+     FrontSeat on not on the kids side until we add it over" -- This Week
+     and Schedule are still brand new/unfinished from a player's point of
+     view, so both start hidden (style="display:none") and only appear for
+     an actual coach login (window.isCoachSession, auth.js's two-code gate
+     -- the "coaching side" vs. "kids side" distinction), same idea as
+     Coach Tools already being hidden for everyone but an approved coach
+     profile. refreshTopSectionVisibility() in study-quiz.js flips these on
+     for a coach session, off for a player session. Play stays visible to
+     both -- studying/Play Calls is exactly the thing both sides already
+     share. -->
+<div class="topSections" id="topSections">
+  <button class="modeBtn active" data-section="play" id="playSectionBtn"><span class="modeIcon">🏈</span><span class="modeLabel">Play</span></button>
+  <button class="modeBtn" data-section="thisweek" id="thisweekSectionBtn" style="display:none;"><span class="modeIcon">🎯</span><span class="modeLabel">This Week</span></button>
+  <button class="modeBtn" data-section="schedule" id="scheduleSectionBtn" style="display:none;"><span class="modeIcon">📅</span><span class="modeLabel">Schedule</span></button>
+  <!-- Nathan: "did you add in the functionality where I can copy the
+       standing from the coaches app and drop it in so you can display
+       standings on a new tab?" League standings, pasted in by a coach
+       under Coach Tools (js/standings.js), shown read-only here to
+       everyone -- same visibility as Schedule (players/parents included),
+       not gated behind isCoachSession/approvedCoach like This Week/Coach
+       Tools are. -->
+  <button class="modeBtn" data-section="standings" id="standingsSectionBtn" style="display:none;"><span class="modeIcon">🏆</span><span class="modeLabel">Standings</span></button>
+  <!-- Coach-only top-level section (Drive Builder now, Coach Dashboard
+       later) -- hidden by default, only shown to an approved coach profile
+       (window.isApprovedCoachProfile(), see auth.js) once a name/session is
+       actually known. refreshCoachToolsVisibility() in study-quiz.js flips
+       this on/off. -->
+  <button class="modeBtn" data-section="coachtools" id="coachToolsSectionBtn" style="display:none;"><span class="modeIcon">🛠️</span><span class="modeLabel">Coach Tools</span></button>
+</div>
+
+<!-- Nathan: "by having that [the child pill] there, remove the links
+     between the two rows of icons" -- the old #parentChildBanner ("Name's
+     Card"/"Name's Progress" text links, shown here between the top-level
+     mode tabs and the Play sub-tabs) is gone; the toolbar's child pill
+     (index.html's #childPillsWrap, up in #topToolbar) covers the same
+     Card/Progress access now. -->
+
+<!-- Nathan (later, 2026-08-25): "The 2 Minute Drill is now ready to be
+     unleashed... needs to be available on the navigation bar. Study should
+     have the Signals and the Play Calls, then Quiz, Timed Quiz, Play Quiz
+     and 2 Minute Drill. I don't want them hidden under more, but need a
+     way to show them." Reverses the earlier "More" dropdown (all six tabs
+     used to squeeze onto one equal-width row, then Timed/Play Quiz/Edit got
+     tucked behind a dropdown to de-clutter it) -- now all six sit directly
+     on the row in this exact order. Nathan (follow-up): "I don't love that
+     you have to scroll - lets rename and resize the icons so 6 can fit" --
+     back to one equal-width row (like the original three-tab version), just
+     with shorter labels (Signals/Plays/Timed/2 Min Drill) and smaller
+     icons/type so all six actually fit without scrolling (see
+     .modeTabs/.modeBtn in styles.css). Same data-mode/ids/click-to-setMode()
+     wiring as before. -->
+<div class="modeTabs" id="modeTabs">
+  <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Signals</span></button>
+  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Plays</span></button>
+  <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
+  <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
+  <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
+  <!-- Nathan (earlier, 2026-08-24): "every single page has 2 minute drill
+       at the bottom... remove it immediately" -- pulled off every page and,
+       for a while, reachable only via a hidden 5-tap-the-logo gesture. Now
+       reversed twice over: it's a normal, discoverable tab again (here on
+       the Play row instead of on every page), and the old logo gesture
+       itself was removed outright (2026-09-01, "remove the 5 clicks of the
+       Logo launching the 2 min drill") since this tab is the one way in
+       now. It opens the same full-screen overlay (window.openTwoMinDrillOverlay,
+       js/two-minute-drill.js), not a modePanel, so its click is
+       special-cased in study-quiz.js's modeBtn wiring rather than going
+       through setMode(). Nathan: "make sure we call out 2 min drill as a
+       new game" -- .modeNewBadge below (auto-hidden after someone actually
+       opens it once, see study-quiz.js's dismissTwoMinuteNewBadge). -->
+  <button class="modeBtn" data-mode="twominute" id="twoMinuteTabBtn"><span class="modeIcon">🏈⏱️</span><span class="modeLabel">2 Min Drill</span><span class="modeNewBadge" id="twoMinuteNewBadge">NEW</span></button>
+  <button class="modeBtn" data-mode="editplays" id="editPlaysTabBtn" style="display:none;"><span class="modeIcon">✏️</span><span class="modeLabel">Edit</span></button>
+</div>
+
+<!-- Nathan: "when a coach logs in, they can click their profile and choose
+     gameplan. They can write in a focus for the offense then choose 5-15
+     plays that will appear... featured or very important to the game plan."
+     Then, mid-build: "coaches should be able to click their profile name and
+     go to 'This Week' and they can add their 3 Keys to the week for all
+     players to see." -- so the focus text became a structured "3 Keys"
+     list, and it's reachable both from the main nav tab above and from the
+     profile dropdown (see playerMenuDropdown below). One shared team page
+     (not per-coach) -- any coach can edit it, every signed-in player/coach
+     sees the same "This Week" section. Editing controls (the 3 Keys inputs
+     + play picker) only show for a coach session; everyone else sees a
+     read-only view of whatever's currently saved. -->
+<div id="thisweekMode" class="modePanel">
+  <!-- Nathan: "For 'This Week' can we incorporate an AI generated look
+       ahead for the team?... Would be nice to be a little write up of the
+       week ahead." then: "I dont like that the week ahead is just a
+       little text blurb. Would love a more infographic style look with
+       callouts for number of games and practices - logos for games can be
+       brought in just make it a place to visit." Composed client-side
+       from Schedule's actual games + practices in the current Mon-Sun
+       window (js/thisweek.js's buildWeekAheadData/weekAheadInfographicHtml)
+       -- no backend/API key needed (this is a static site; a real hosted
+       LLM call would have to expose a key publicly), and it's always
+       accurate since it's built straight from the same data the Schedule
+       tab shows. Real clickable game/practice cards, not just prose --
+       tapping one jumps straight to that game's/practice's own Schedule
+       detail page. Nathan (later, 2026-09-01): "Should appear at the top
+       of the This Week block" -- moved ahead of the game link/Watch
+       Footage button below, so it's the very first thing anyone sees. -->
+  <!-- Nathan: "We also have footage from the other teams we play... When
+       you click into This Week it should have a Watch Footage button
+       that opens the film from the upcoming opponent." Same link this
+       week's linked game carries on its own Schedule page (schedule.js's
+       opponentFilmUrl) -- only shown once a coach has actually set one on
+       that game. This CTA (id="thisweekWatchFootageBtn"/
+       "thisweekWatchFootageNote") went through two earlier placements --
+       below the whole box, then "right below the AI write-up" -- before
+       Nathan's precise final ask (2026-09-01): "move the CTA to just below
+       the number icons callouts... so it would sit just above the Games
+       This Week section." The write-up, the icon stat cards
+       (.weekAheadStats), and the Games/Practices columns are all rendered
+       together into #thisweekAheadText below by js/thisweek.js's
+       weekAheadInfographicHtml() -- so to land between the stat cards and
+       the columns, this button/note now has to be generated as PART of
+       that same innerHTML (see weekAheadInfographicHtml) rather than living
+       here as a separate static element the way it used to. renderWeekAhead()
+       populates it right after setting that innerHTML. -->
+  <div id="thisweekAheadBox" class="thisweekKeysBox" style="display:none;">
+    <div class="thisweekKeysTitle">📅 Week Ahead</div>
+    <div id="thisweekAheadText"></div>
+    <div class="lbSub" style="margin-top:8px;text-align:center;">Auto-generated from this week's Schedule -- tap a card to open it</div>
+  </div>
+  <!-- Nathan: "I don't like that the Build Game Plan full screen is at the
+       bottom. It should be right below the top box." Moved out of
+       #thisweekEditSection (further down) so it's the first coach action
+       on the page, right after Week Ahead -- own visibility toggle in
+       js/thisweek.js's renderEditor() (that section's own approved-coach
+       gate doesn't apply to this element anymore since it's no longer
+       inside it). -->
+  <!-- Nathan: "the Create Your Game Plan CTA is justified left, it should
+       be centered under the other section." A <button> defaults to
+       display:inline-block, and margin:auto only centers a block-level
+       element -- #thisweekAheadBox above centers correctly because it's a
+       plain <div> (block by default); this button never actually got
+       display:block set, so its own margin:0 auto silently did nothing
+       and it just sat at its normal inline-flow position instead. -->
+  <button type="button" class="navBtn" id="thisweekBuildGamePlanBtn" style="display:none;width:100%;max-width:560px;margin:0 auto 16px;text-align:center;">🏈 Create Your Game Plan</button>
+  <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
+       the upcoming games so players can check them out and be prepared."
+       This Week stays one shared page, but can point at a specific
+       upcoming Schedule game -- shown as a tappable link here, and pulled
+       onto that game's own Schedule detail page too (see schedule.js). -->
+  <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
+  <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
+    No keys or featured plays set for this week yet.
+  </div>
+  <div id="thisweekKeysBox" class="thisweekKeysBox" style="display:none;">
+    <div class="thisweekKeysTitle">🔑 Coaches' Keys This Week</div>
+    <div id="thisweekKeysList"></div>
+  </div>
+  <!-- Nathan: "assigning plays to study for a particular player." Only
+       shown when the logged-in session resolves to a real roster player
+       (js/roster.js's myRosterEntry()) -- js/thisweek.js's renderReadOnly()
+       toggles this. -->
+  <button type="button" id="thisweekMyPlaysBtn" class="lbLinkBtn" style="display:none;margin:0 auto 10px;text-align:center;width:100%;font-size:13px;"></button>
+  <div class="gameplanCardsGrid" id="thisweekCardsGrid"></div>
+
+  <div id="thisweekEditSection" style="display:none;max-width:900px;margin:22px auto 0;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">🔐 Coach editing — the inputs below aren't visible to players, only the result above is</div>
+    <select id="thisweekGameSelect" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px;"></select>
+    <!-- Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS...
+         they should be editable and removable if needed." Replaces the old
+         single shared 3-input block -- js/thisweek.js builds one card per
+         coach in here (name field + 3 key inputs + Remove), seeded from
+         DEFAULT_COACHES on first-ever save. -->
+    <div id="thisweekCoachEditorList"></div>
+    <button type="button" class="lbLinkBtn" id="thisweekAddCoachBtn" style="display:block;margin:4px auto 16px;">+ Add Coach</button>
+    <div id="thisweekPickerCount" class="lbSub" style="margin:14px 0 6px;text-align:center;">Game Plan</div>
+    <div class="gameplanPickerGrid" id="thisweekPickerGrid"></div>
+    <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Your Game Plan this week</div>
+    <div class="gameplanList" id="thisweekGamePlanList"></div>
+    <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
+    <button class="navBtn secondary" id="thisweekPrintCallSheetBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📋 Print Call Sheet</button>
+    <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- Nathan: "I want to have a Drive Builder for coaches where they can
+     select either a goal such as run the ball for 30 yards, have a series
+     of plays ready to go." No yardage/outcome data is tracked per play yet
+     (Stats is a separate, still-pending feature), so a real goal-driven
+     generator has nothing to calculate from -- Nathan chose manual drive
+     scripting instead: build/name an ordered list of plays for a drive or
+     situation (e.g. "Opening Script", "Red Zone", "2-Minute"), saved and
+     pullable back up on the sideline. Lives inside the coach-only Coach
+     Tools section (see topSections above) -- Coach Dashboard (task #28)
+     will join it here later as a second area. -->
+<div id="coachtoolsMode" class="modePanel">
+  <!-- Nathan: "I don't like how it's all in one list, it should be tabs at
+       the top or CTAs at the top that shows the different sections like
+       Resources where you have the option to print everything. Then theres
+       at stats section where you can add stats to a game on the schedule."
+       Four CTAs at the top switch between panels below; each panel's JS
+       lazy-inits the first time it's shown (js/coachtools.js). -->
+  <!-- Nathan (follow-up): "need this fixed - just looks awful." This div still had class="gameplanPickerGrid" (display:flex, a horizontal
+       row) left over from before the category-bar/sub-panel redesign. coachtools-nav.js now builds its own full block-level structure inside
+       here (the dark category bar stacked above the sub-panel), which that leftover flex-row class was fighting the whole time -- forcing the
+       category bar and the "IN [category]:" panel to sit side by side instead of stacked, and squeezing the category bar itself down to
+       whatever width a flex item happened to get rather than the full row, which is why the active button looked oversized next to squashed,
+       unstyled-looking text for the rest. This container doesn't need any layout class of its own anymore -- coachtools-nav.js owns it. -->
+  <div id="coachToolsSubNav" style="margin-bottom:18px;"></div>
+
+  <!-- ---- Resources: print everything ---- -->
+  <div id="coachResourcesPanel" class="coachToolsPanel">
+    <div class="lbSectionHeader" style="text-align:center;">🖨️ Resources</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Print materials for game day.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:520px;margin:0 auto;">
+      <button class="navBtn" id="coachPrintPlaybookBtn" style="flex:1 1 210px;">📘 Print Playbook</button>
+      <button class="navBtn" id="coachPrintCallSheetBtn" style="flex:1 1 210px;">📋 Print Play Sheet</button>
+      <button class="navBtn" id="coachPrintBlankStatsBtn" style="flex:1 1 210px;">🏈 Print Blank Stat Sheet</button>
+    </div>
+  </div>
+
+  <!-- ---- Standings: paste in the league standings table, shown read-only
+       on the new top-level Standings tab (js/standings.js). Nathan: "a
+       place where I can copy standing from the coaches app and drop it
+       directly into a field under Coaching Tools to paste in to update the
+       standings. It should show the record for opponents and update them
+       as the season goes on." ---- -->
+  <div id="coachStandingsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🏆 Standings</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Paste the league standings table here (copy straight from the coaches' league site -- Team, Record, PF, PA columns) to update the Standings tab everyone sees.</div>
+    <div id="coachStandingsWrap" style="max-width:640px;margin:0 auto;"></div>
+  </div>
+
+  <!-- ---- Schedule Import: paste the league site's schedule/locker page
+       text, parsed straight into the Schedule tab everyone sees.
+       js/schedule-import.js. Nathan: "I also need to be able to copy all
+       the information from the coaches site and extract the game schedule
+       with field, kickoff time, arrival time and other details needed...
+       Would be great for this to just go into the site without manually
+       extracting out the info." ---- -->
+  <div id="coachScheduleImportPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📅 Schedule Import</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Paste the full schedule/locker page text here (copy straight from the coaches' league site, Week headers and all) to add or update games on the Schedule tab. Medical coverage details are skipped automatically.</div>
+    <div id="coachScheduleImportWrap" style="max-width:640px;margin:0 auto;"></div>
+  </div>
+
+  <!-- ---- Stats: pick a game, enter its stats, see the leaderboard ---- -->
+  <div id="coachStatsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📊 Stats</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Add stats to a game on the Schedule -- they automatically roll up into the team leaderboard below.</div>
+    <!-- coachtools-stats.js's renderSubNav() sets its own className ('coachToolsModuleTabs') at runtime, overwriting whatever's here --
+         removing the leftover gameplanPickerGrid class for clarity, same reasoning as the #coachToolsSubNav fix above, even though this one
+         was already harmless since JS replaces it before anyone sees it. -->
+    <div id="coachStatsSubNav" style="margin-bottom:14px;"></div>
+    <div id="coachStatsBody" style="max-width:700px;margin:0 auto;"></div>
+  </div>
+
+  <!-- ---- Roster: name / # / position, feeds stat entry automatically ---- -->
+  <div id="coachRosterPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">👥 Team Roster</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every player added here is auto-assigned into a game's stat sheet the first time you open it -- no retyping names/numbers per game.</div>
+    <div id="coachRosterWrap" style="max-width:600px;margin:0 auto;"></div>
+
+    <!-- ---- Coaching Staff: same idea as Team Roster above, but for the
+         staff itself -- Nathan: "add a coaching staff section to go with
+         the roster so we can link log ins to coaches." Link each coach's
+         name to the actual login they sign in with, same loginPlayerId
+         pattern Team Roster uses for players. See js/coaching-staff.js. ---- -->
+    <div class="lbSectionHeader" style="text-align:center;margin-top:26px;">🧑‍🏫 Coaching Staff</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Link each coach's name to the login they actually sign in with.</div>
+    <div id="coachingStaffWrap" style="max-width:600px;margin:0 auto;"></div>
+  </div>
+
+  <!-- ---- Depth Chart: Madden-style position groups, +/- reorders depth
+       within a position only (doesn't touch the master roster above). See
+       js/depth-chart.js. ---- -->
+  <div id="coachDepthChartPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📋 Depth Chart</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Set who's starting and who's backing them up at each spot. This only reorders depth -- it doesn't add or remove anyone from the Team Roster.</div>
+    <div id="depthChartBody" style="max-width:900px;margin:0 auto;"></div>
+  </div>
+
+  <!-- ---- Drive Scripts ---- -->
+  <div id="coachDriveScriptsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🧢 Drive Scripts</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a named, ordered list of plays ahead of time -- an opening script, a red zone package, a 2-minute drill -- and pull it back up here on the sideline.</div>
+
+    <div id="driveScriptListWrap" style="max-width:500px;margin:0 auto;">
+      <div id="driveScriptList"></div>
+      <button class="navBtn" id="driveScriptNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ New Drive Script</button>
+      <button class="lbLinkBtn" id="driveScriptStarterBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">🌱 Add Starter Scripts (Opening, Red Zone, 2-Minute, Short Yardage)</button>
+      <div id="driveScriptCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+
+    <div id="driveScriptEditor" style="display:none;max-width:700px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="driveScriptBackBtn">‹ All Scripts</button>
+      </div>
+      <input type="text" id="driveScriptNameInput" placeholder="Script name (e.g. &quot;Opening Script&quot;)" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:15px;font-weight:700;box-sizing:border-box;margin-bottom:12px;">
+      <ol id="driveScriptPlayList" class="driveScriptPlayList"></ol>
+      <div class="lbSub" style="text-align:center;margin:14px 0 6px;">Tap a play to add it to the script</div>
+      <div class="gameplanPickerGrid" id="driveScriptPickerGrid"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="navBtn" id="driveScriptSaveBtn" style="flex:1;">Save Script</button>
+        <button class="navBtn secondary" id="driveScriptDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+      </div>
+      <div id="driveScriptEditorStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- ---- Updates: post a note straight to the team's What's New feed ---- -->
+  <div id="coachUpdatesPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📣 Updates</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Post a note straight to What's New -- everyone (players and parents included) will see it there, same as a new play getting added.</div>
+    <div style="max-width:520px;margin:0 auto;">
+      <textarea id="coachUpdateNoteInput" placeholder="e.g. Houston Route updated -- outside receiver runs a Post instead of a Fly" rows="2" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+      <button class="navBtn" id="coachUpdateAddBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Post to What's New</button>
+      <div id="coachUpdateStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+      <div id="coachUpdateList" style="margin-top:18px;"></div>
+    </div>
+  </div>
+
+  <!-- ---- Dashboard: team-wide usage + coaching insights -- Nathan: "I
+       think we could move everything from the 5 button tap coach stats to
+       a dashboard in Coach Tools." Replaces the old hidden 5-tap-logo + PIN
+       overlay (js/coachtools-dashboard.js); the 5-tap gesture still works
+       as a quick jump straight here (see study-quiz.js), but the PIN gate
+       is gone -- Coach Tools itself is already hidden from everyone but an
+       approved coach, so a second gate on top of it was redundant. ---- -->
+  <div id="coachDashboardPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📊 Dashboard</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 4px;text-align:center;">Team-wide usage and coaching insights -- not visible to players or parents.</div>
+    <div class="lbSub" style="opacity:.6;text-align:center;margin-bottom:10px;">Build <span id="coachDashBuildVersion">—</span></div>
+    <div id="coachDashboardBody" style="max-width:700px;margin:0 auto;"><div class="lbEmpty">Loading…</div></div>
+  </div>
+  <!-- Nathan: "Drone footage visible toggle should come out of Dashboard
+       and have a new pill called settings with that and other toggles to
+       turn on and off visibility to groups." Moved out of Dashboard --
+       js/coachtools-settings.js owns this now, with room to grow into more
+       group-visibility toggles over time without cluttering the Dashboard
+       tab. -->
+  <div id="coachSettingsPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">⚙️ Settings</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Visibility toggles for what players/parents can see -- not visible to them.</div>
+    <div id="coachSettingsBody" style="max-width:520px;margin:0 auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 10px;padding:10px;border:2px solid #ccc;border-radius:8px;">
+        <span style="font-size:13px;font-weight:700;">🚁 Drone footage visible to parents/players</span>
+        <button type="button" class="navBtn" id="coachSettingsDroneToggleBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">…</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 auto 10px;padding:10px;border:2px solid #ccc;border-radius:8px;">
+        <span style="font-size:13px;font-weight:700;">👁️ See the app as a player sees it</span>
+        <button type="button" class="navBtn" id="coachSettingsPreviewBtn" style="padding:6px 12px;flex:0 0 auto;white-space:nowrap;">Preview</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Film Vault: every drone clip from every practice, alphabetized by
+       play name (clip titles are named after the play they show), with a
+       live search box to narrow the list -- Nathan: "make it so any drone
+       videos added are in a Film Vault tab in Coaches Tools - they should be
+       categorized by alphabetical order since they are written by play" +
+       "have that be searchable to narrow the list." The actual data still
+       lives on each practice's droneClips (js/drone-footage.js) -- this tab
+       is a flattened, alphabetized, searchable view over all of them at
+       once. See js/drone-footage.js's Film Vault section. ---- -->
+  <div id="coachFilmVaultPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🎬 Film Vault</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Every drone clip from every practice, alphabetized by play name -- search to narrow it down, or group them into your own categories.</div>
+    <div style="max-width:600px;margin:0 auto;">
+      <!-- Coach-only category management (add/rename/delete) -- built fresh
+           by renderVaultCategoriesPanel() (js/drone-footage.js), same
+           create-element convention as the rest of this file rather than
+           static markup, since its contents are entirely data-driven. -->
+      <div id="filmVaultCategoriesPanel"></div>
+      <!-- "All" + one chip per category, narrows which group(s) show below.
+           Hidden entirely when no categories exist yet. -->
+      <div id="filmVaultCategoryFilterRow" style="display:none;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;"></div>
+      <input type="text" id="filmVaultSearch" placeholder="🔍 Search by play name…" autocomplete="off" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:6px;">
+      <div class="lbSub" id="filmVaultCount" style="text-align:center;margin-bottom:10px;"></div>
+      <div id="filmVaultList"><div class="lbEmpty">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ---- How To: plain-language walkthroughs for the device-level stuff
+       that isn't really a "play calls" question -- adding a second family
+       member's login on a shared phone, installing this as a home-screen
+       app, etc. Nathan: "Develop a how to section in the coaching tools...
+       walkthrough explanations of how to do things such as add another
+       login to your device, save the app as an app on your phone home
+       screen." Same accordion shell (see css/styles.css's .accordion-item)
+       Play Calls already uses -- tap a question to expand its steps, one
+       open at a time. Built once and left alone after that (see
+       js/coachtools-howto.js) so re-opening this tab doesn't collapse
+       whatever a coach already had expanded. ---- -->
+  <div id="coachHowToPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">❓ How To</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Step-by-step walkthroughs for common device/account questions -- tap a question to expand it.</div>
+    <div id="coachHowToList" style="max-width:600px;margin:0 auto;"></div>
+  </div>
+
+  <!-- Play Builder -- formation creation, formation edits, play creation,
+       and play edits, all in one place. Nathan: "we can't have two places
+       - work to combine the i form and all formation creation, formation
+       edits, play creation and play edits all in one. This needs to be
+       correct." Replaces the two panels this category used to hold
+       (Formation Builder, Create a Play -- unlinked, then actually
+       deleted -- js/coachtools-formationbuilder.js/js/coachtools-
+       createplay.js and their own panel divs here -- once Play Builder V2
+       had proven itself through a full session) and, via retiring the
+       Play tab's own Edit entry point below, js/edit-plays.js too.
+       js/coachtools-playbuilder.js builds this panel's ENTIRE body at
+       init time (same pattern coachtools-stats.js's own slim-shell panels
+       use) -- reuses js/playbuilder/editor.js + formation-editor.js's
+       interaction logic completely unchanged, see the plan file for the
+       full Phase 0-5 verification history behind it. -->
+  <div id="coachPlayBuilderPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">🧩 Play Builder</div>
+    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a formation (including a brand-new one, like I-Formation), pick which plays it runs, and edit every route, block, ball path, and signal -- all from one screen.</div>
+    <div id="coachPlayBuilderBody"></div>
+  </div>
+  <!-- js/coachtools-signals-admin.js builds this panel's entire body at
+       init time, same pattern as coachPlayBuilderPanel just above. -->
+  <div id="coachSignalsAdminPanel" class="coachToolsPanel" style="display:none;">
+    <div class="lbSectionHeader" style="text-align:center;">📇 Signal Cards</div>
+    <div class="hint" style="max-width:480px;margin:6px auto 14px;text-align:center;">Add a new signal -- pick or create a category, type what it means, choose a photo. Live immediately for every coach, no deploy needed.</div>
+    <div id="coachSignalsAdminBody"></div>
+  </div>
+</div>
+
+<!-- Nathan: "there was a schedule button that shows an interactive schedule
+     for the year. All games listed with home or away, time and location in
+     a whiteboard style display. After game results are added it shows a W
+     in green or L in red to show the result. It should show score and have
+     a button to show a write up for the game." Visible to everyone (not
+     coach-only, like This Week) -- only the add/edit controls are gated to
+     an approved coach profile. Games are entered by coaches through this
+     page itself (same self-serve pattern as This Week / Drive Builder)
+     rather than needing the season schedule handed to Claude to hardcode.
+     The "more info" panel has a placeholder for a real stat line -- that
+     needs the Stats feature (task #31, still pending) before it can show
+     anything real. -->
+<div id="scheduleMode" class="modePanel">
+  <!-- Nathan: "I also wants to add in practices to the app to - not sure
+       they should all be together in the same list." Games and Practices
+       stay two separate lists (a practice has no score/opponent/stat sheet,
+       so the ESPN-style scoreboard card doesn't fit it) under one Schedule
+       section, switched with these two CTAs rather than a whole new
+       top-level tab. -->
+  <div class="gameplanPickerGrid" id="scheduleSubNav" style="margin-bottom:16px;"></div>
+
+  <div id="scheduleGamesPanel">
+    <div id="scheduleListWrap" style="max-width:560px;margin:0 auto;">
+      <div id="scheduleList"></div>
+      <div id="scheduleAddWrap" style="display:none;">
+        <button class="navBtn" id="scheduleNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Game</button>
+      </div>
+      <div id="scheduleCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+
+    <div id="scheduleDetail" style="display:none;max-width:600px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="scheduleBackBtn">‹ All Games</button>
+      </div>
+      <div id="scheduleDetailBody"></div>
+      <div id="scheduleDetailEditControls" style="display:none;margin-top:16px;">
+        <div style="display:flex;gap:8px;">
+          <button class="navBtn" id="scheduleSaveBtn" style="flex:1;">Save Game</button>
+          <button class="navBtn secondary" id="scheduleDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+        </div>
+      </div>
+      <div id="scheduleDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Nathan: "They need date, time and location with map function. Once
+       season starts, there will be a film night instead of practice so we
+       need an option for that." One list, each entry tagged Practice or
+       Film Night via a chip toggle (same date/time/location/map shape
+       either way) -- see js/practices.js. -->
+  <div id="schedulePracticesPanel" style="display:none;">
+    <div id="practicesListWrap" style="max-width:560px;margin:0 auto;">
+      <div class="gameplanPickerGrid" id="practicesWeekToggleGrid" style="margin-bottom:10px;"></div>
+      <div id="practicesList"></div>
+      <div id="practicesAddWrap" style="display:none;">
+        <button class="navBtn" id="practicesNewBtn" style="display:block;width:100%;text-align:center;margin-top:10px;">+ Add Practice / Film Night / Walk Through</button>
+      </div>
+      <div id="practicesCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+
+    <div id="practicesDetail" style="display:none;max-width:600px;margin:20px auto 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <button class="lbLinkBtn" id="practicesBackBtn">‹ All Practices</button>
+      </div>
+      <div id="practicesDetailBody"></div>
+      <!-- Nathan: "Drone footage section at the bottom." Lives outside
+           #practicesDetailBody on purpose -- practices.js rebuilds that
+           div's innerHTML wholesale on every render (read-only vs coach
+           edit), which would wipe this out too if it were nested inside.
+           js/drone-footage.js owns everything in here. -->
+      <div id="practiceDroneFootageWrap"></div>
+      <div id="practicesDetailEditControls" style="display:none;margin-top:16px;">
+        <div style="display:flex;gap:8px;">
+          <button class="navBtn" id="practicesSaveBtn" style="flex:1;">Save</button>
+          <button class="navBtn secondary" id="practicesDeleteBtn" style="flex:0 0 auto;">🗑 Delete</button>
+        </div>
+      </div>
+      <div id="practicesDetailStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Nathan: "now that we have Games and Practice schedules, give me the
+       option for Full Schedule - Also give me the option of saving all the
+       events to your device or Google calendars or Apple calendars."
+       Read-only merged view + a one-tap .ics export of everything --
+       see js/schedule-full.js and js/calendar-export.js. -->
+  <div id="scheduleFullPanel" style="display:none;">
+    <div style="max-width:560px;margin:0 auto;">
+      <button class="navBtn" id="scheduleFullDownloadBtn" style="display:block;width:100%;text-align:center;margin-bottom:14px;">📥 Download Full Schedule (.ics)</button>
+      <div class="lbSub" style="text-align:center;margin:-8px 0 14px;">Opens in Apple Calendar, Google Calendar, Outlook, or any calendar app.</div>
+      <div id="scheduleFullList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Nathan: "did you add in the functionality where I can copy the standing
+     from the coaches app and drop it in so you can display standings on a
+     new tab?" Read-only league standings table, visible to everyone --
+     data comes from the paste box under Coach Tools > Standings
+     (js/standings.js owns both). -->
+<div id="standingsMode" class="modePanel">
+  <div id="standingsListPanel">
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏆</div>
+      <h3>League Standings</h3>
+      <div class="lbSub">Posted by a coach from the league's standings page -- updates as the season goes on. Teams on our own Schedule are tappable for footage &amp; notes.</div>
+    </div>
+    <div id="standingsTableWrap" style="max-width:640px;margin:0 auto;"></div>
+  </div>
+
+  <!-- Nathan: "I want to develop a opponent page where you click on their
+       logo or their name in the standings and you see game footage from
+       them, notes, key players and things like that." Only teams that are
+       actually on our own Schedule get one of these (reuses that game's
+       own opponentFilmUrl/opponentFilmNote/scouting fields -- see
+       js/standings.js's matchScheduleOpponent) -- everyone else in the
+       league stays plain text since there'd be nothing real to show. -->
+  <div id="standingsOpponentDetail" style="display:none;max-width:600px;margin:0 auto;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="lbLinkBtn" id="standingsOpponentBackBtn">‹ All Standings</button>
+    </div>
+    <div id="standingsOpponentBody"></div>
+  </div>
+</div>
+
+<div id="editPlaysMode" class="modePanel">
+<div class="editBuildVersion" id="editPlaysBuildVersion"></div>
+
+<!-- Nathan: "many of the toggles overlap on the screen and it's messy, the
+     toolbar needs to be revamped visually" -- then, after seeing Create a
+     Play's Build step: "that framework could be the same framework for the
+     edit play rebuild." Rebuilt on the same components: .diagramCard holds
+     only the diagram and the immediate Play/Speed preview controls, exactly
+     like Create a Play's own diagramCard footer; everything else lives in
+     one .coachToolsSubPanel below it, in labeled .build-panel sections
+     instead of several independently-styled/positioned boxes. This is a
+     visual and structural rebuild ONLY -- every id below is unchanged, so
+     js/edit-plays.js (the actual route/block/split editing logic) is not
+     touched at all. Nathan: "showing all the toggles on the bottom instead
+     of on the right of a two column with 70 weight on the left with the
+     play" -- .editPlaysLayout below is the two-column wrap, scoped to
+     just this screen (not a change to the shared .diagramCard/
+     .coachToolsSubPanel rules everything else uses), matching Formation
+     Builder's own side-by-side-on-wide/stacked-on-phone pattern. -->
+<div class="editPlaysLayout">
+<div class="diagramCard">
+  <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)">
+    <button class="navBtn" id="playBtn" style="width:auto;display:inline-block;margin:0;padding:9px 18px">&#9654; Play</button>
+    <div class="toggle-group toggle-black" id="speedToggle" style="margin-left:auto">
+      <span class="toggle-thumb"></span>
+      <button class="toggle-btn" data-value="normal" aria-pressed="true">1x</button>
+      <button class="toggle-btn" data-value="half" aria-pressed="false">&#189;x</button>
+    </div>
+  </div>
+</div>
+
+<div class="coachToolsSubPanel">
+  <div class="build-panel">
+    <div class="build-panel-label">Formation &amp; Play</div>
+    <div class="inline-control">
+      <label>Formation</label>
+      <div class="toggle-group toggle-green" id="editFormationToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Shotgun</button>
+        <button class="toggle-btn" data-value="split" aria-pressed="false">Split</button>
+      </div>
+    </div>
+    <div class="inline-control" id="splitSideWrap" style="display:none;">
+      <label>Split Side</label>
+      <div class="toggle-group toggle-orange" id="editSplitSideToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control" id="splitCallWrap" style="display:none;">
+      <label>Route Call</label>
+      <div class="toggle-group toggle-brown" id="editSplitCallToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="seattle" aria-pressed="true">Seattle</button>
+        <button class="toggle-btn" data-value="houston" aria-pressed="false">Houston</button>
+        <button class="toggle-btn" data-value="florida" aria-pressed="false">Florida</button>
+        <button class="toggle-btn" data-value="boston" aria-pressed="false">Boston</button>
+      </div>
+    </div>
+    <div class="inline-control" id="playWrap">
+      <label>Play</label>
+      <select id="playSelect"></select>
+    </div>
+  </div>
+
+  <!-- Nathan: "on play edits you should also be able to see and edit the
+       play signals." Calling a play flashes a SEQUENCE of hand-signal
+       cards, not one (js/signals.js's RECIPES) -- editSignalSelect picks
+       which card represents THIS play's identity within that sequence
+       (playType.signalCardId, the one part of the sequence a play
+       actually owns; the rest -- Wing/Direction/Motion/etc -- come from
+       whichever of this screen's own toggles are already set), and
+       editSignalPreview shows the resulting sequence live, built with
+       js/play-calls.js's own buildSignalSequence -- the exact function
+       Play Calls itself calls, so this is always what a coach would
+       really see, not a separate approximation. See js/edit-plays.js's
+       syncSignalUI/renderSignalPreview. -->
+  <div class="build-panel">
+    <div class="build-panel-label">Signal</div>
+    <div class="inline-control">
+      <label>Card</label>
+      <select id="editSignalSelect" style="flex:1 1 auto"></select>
+    </div>
+    <button class="standalone-btn tiny" id="editSignalResetBtn" type="button" style="margin-top:6px" title="Go back to this play's shipped default signal">Reset to default</button>
+    <div id="editSignalPreview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
+  </div>
+
+  <div class="build-panel">
+    <div class="build-panel-label">Look</div>
+    <div class="inline-control">
+      <label>Wing</label>
+      <div class="toggle-group toggle-orange" id="wingToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Dir</label>
+      <div class="toggle-group toggle-black" id="dirToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+        <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Motion</label>
+      <div class="toggle-group toggle-green" id="motionToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Boot</label>
+      <div class="toggle-group toggle-red" id="bootToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control">
+      <label>Blocking</label>
+      <div class="toggle-group toggle-black" id="blockingToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="false">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="true">On</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nathan: "Both Option and Outside Zone need a new toggle for
+       Counter... added to the end of the play call like boot." Unlike
+       Boot (a live ball-carrier swap, no new geometry), Counter needs a
+       real different route for #4's sweep, so it's authored here as its
+       own stored sub-variant (Normal/Counter) per direction. Pop Pass 2
+       is the same shape (Pop/Pop2), gated on hasPopVariant. These four
+       (Read/In-Out/Counter/Pop Pass 2) pick which STORED variant of the
+       current play you're looking at -- js/edit-plays.js's
+       updateReadPosVisibility shows only the ones this play actually has. -->
+  <div class="build-panel" id="variantPanel">
+    <div class="build-panel-label">Play variant</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="corner-control" id="readPosGroup" style="display:none;">
+        <label>Read</label>
+        <div class="toggle-group toggle-brown toggle-tiny" id="readPosToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="A" aria-pressed="true">A</button>
+          <button class="toggle-btn" data-value="B" aria-pressed="false">B</button>
+        </div>
+      </div>
+      <div class="corner-control" id="insideOutsideGroup" style="display:none;">
+        <label>In/Out</label>
+        <div class="toggle-group toggle-brown toggle-tiny" id="insideOutsideToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Inside" aria-pressed="false">In</button>
+          <button class="toggle-btn" data-value="Outside" aria-pressed="true">Out</button>
+        </div>
+        <button id="removeInOutBtn" class="standalone-btn tiny" style="margin-left:6px;" title="Keep only the currently-selected side and remove this toggle from the play">&#10005; Remove Toggle</button>
+      </div>
+      <div class="corner-control" id="counterGroup" style="display:none;">
+        <label>Counter</label>
+        <div class="toggle-group toggle-red toggle-tiny" id="counterToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Normal" aria-pressed="true">Normal</button>
+          <button class="toggle-btn" data-value="Counter" aria-pressed="false">Counter</button>
+        </div>
+      </div>
+      <div class="corner-control" id="popVariantGroup" style="display:none;">
+        <label>Pop Pass 2</label>
+        <div class="toggle-group toggle-red toggle-tiny" id="popVariantToggle">
+          <span class="toggle-thumb"></span>
+          <button class="toggle-btn" data-value="Pop" aria-pressed="true">Pop</button>
+          <button class="toggle-btn" data-value="Pop2" aria-pressed="false">Pop 2</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="build-panel">
+    <div class="build-panel-label">Edit mode</div>
+    <div class="inline-control">
+      <label>Edit</label>
+      <div class="toggle-group toggle-black" id="editToggle">
+        <span class="toggle-thumb"></span>
+        <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+        <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+      </div>
+    </div>
+    <div class="inline-control" id="ballCarrierWrap" style="display:none;">
+      <button class="standalone-btn" id="ballCarrierBtn" type="button">Ball Carrier</button>
+      <!-- Ball Starts With: sets p.ballStart (who the floating ball ICON
+           visually starts riding with) as a separate thing from Ball Carrier
+           (p.ball, who's credited as the actual carrier). These can be two
+           different players -- Shuffle Pass is the existing example: ball
+           starts with #1 (QB), Ball Carrier stays #4 (TE) throughout. Same
+           tap-a-player flow as Ball Carrier. See js/edit-plays.js. -->
+      <button class="standalone-btn" id="ballStartsWithBtn" type="button" title="Who the ball icon visually starts with, if different from who's credited as the carrier (Ball Carrier). Leave unset if the ball should just start with the Ball Carrier directly.">Ball Starts With</button>
+    </div>
+  </div>
+
+  <!-- Everything a coach reaches for once a point/path is actually selected
+       during editing. editToolbar/endTypePanel/delayPanel/assignPanel each
+       still toggle their own display:none/flex exactly as before (they can
+       show in any combination -- editToolbar and assignPanel really are
+       both visible together for a block assignment, see js/edit-plays.js's
+       setEditTargetEndType) -- this is just one flex-wrap row to hold
+       whichever of them are active, instead of each independently pinned
+       to a corner of the diagram. -->
+  <div class="build-panel" id="editingPointPanel">
+    <div class="build-panel-label">Editing this point</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div class="edit-toolbar" id="editToolbar" style="display:none;">
+        <button id="doneEditingBtn" style="background:#111; color:#fff;">&#10003; Done Editing</button>
+        <button id="addPointBtn">+ Add Point to End</button>
+        <!-- Nathan: "when the 4 goes by the red line, he needs to switch to
+             having the ball and his line changes to red." Pick a handle on
+             a route (tap one of the yellow dots, same as before adding/
+             removing points), then tap this to mark that spot as where the
+             carry switches -- the route draws blue up to there and red
+             after, and Play Calls' ▶ animation hands the moving ball off to
+             this player at that same point. Only shown for a real route
+             (not a block assignment), and only once a handle is actually
+             selected -- see edit-plays.js's updateEditUI/handoffIndex. -->
+        <button id="ballStartsHereBtn" style="display:none;">&#127944; Ball Starts Here</button>
+      </div>
+      <!-- Run/Block, for players 4/5/6, IS the single choice between a
+           real, freely-editable route and a fixed block assignment -- see
+           js/edit-plays.js's setEditTargetEndType for the full mechanism.
+           Nathan: "We already say whether the path is a run or block
+           path... so we should be able to click 'run' on player 5 or 6 and
+           make his path whatever we want" -- these two buttons do both. -->
+      <div class="end-type-panel" id="endTypePanel" style="display:none;">
+        <span class="assign-label">Ends with:</span>
+        <button id="endTypeRunBtn" class="end-type-btn" title="Player keeps running past this point">&#10148; Run</button>
+        <button id="endTypeBlockBtn" class="end-type-btn" title="Player plants and blocks right here">&#9473; Block</button>
+      </div>
+      <!-- Start Delay: sets p.delayMs on whichever path is currently
+           selected -- how long this player waits after the snap before he
+           starts moving. Shown for the same paths End Type shows for. -->
+      <div class="end-type-panel" id="delayPanel" style="display:none;">
+        <span class="assign-label">Start delay:</span>
+        <input type="number" id="delayInput" min="0" step="50" style="width:70px;padding:6px;border-radius:6px;border:2px solid #ccc;font-size:14px;">
+        <span class="assign-label">ms</span>
+      </div>
+      <div class="assign-panel" id="assignPanel" style="display:none;">
+        <span class="assign-label" id="assignLabel">Block assignment:</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+    <button class="navBtn secondary" id="exportBtn" style="width:auto;display:none;margin:0" type="button">Export Points</button>
+    <button class="navBtn" id="saveCloudBtn" style="width:auto;display:none;margin:0" type="button">Save to Cloud</button>
+  </div>
+  <!-- "Save to Cloud" only ever writes to playEdits.json -- a coach's own
+       edit overlay. It never touches dev2PlayData/plays.json, the separate
+       "shipped defaults" node index.html itself boots from (see
+       index.html's boot() and SHIPPED_PLAY_FLAGS in play-calls.js). That
+       node only changes when someone pushes the deployed data/plays.json
+       into it by hand -- there's no automatic sync from a code deploy.
+       Nathan: needed this after adding the Counter toggle (a real data
+       model change -- new hasCounter flag, new Normal/Counter structure)
+       since the toggle can't show at all until dev2PlayData/plays.json
+       itself has that shape. Small/separate from Save to Cloud on purpose
+       -- this is a rare, deliberate "push a data model change live"
+       action, not a routine save. -->
+  <div style="text-align:center; margin-top:10px;">
+    <button class="standalone-btn tiny" id="syncDefaultsBtn" title="Overwrites dev2PlayData/plays.json in the cloud with whatever data/plays.json is in the currently-deployed build. Use this after a code deploy changes the play data model (like adding a new toggle) -- never touches your Save to Cloud edits.">Admin: Sync Shipped Defaults to Cloud</button>
+  </div>
+</div>
+</div>
+
+<div id="exportModal" style="display:none;">
+  <div class="export-backdrop"></div>
+  <div class="export-panel">
+    <div class="export-header">
+      <span>Edited Points (JSON)</span>
+      <button id="exportCloseBtn" class="navBtn secondary" style="width:auto;margin:0">Close</button>
+    </div>
+    <textarea id="exportText" readonly></textarea>
+    <div class="export-footer">
+      <button id="exportCopyBtn" class="navBtn" style="width:auto;margin:0">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+<div class="hint" id="cloudStatus" style="font-weight:700; color:#999;">Checking for saved play edits\u2026</div>
+<div class="hint">Wing side and play direction are independent -- set them separately. Tap a player's circle in the diagram to highlight just his path; tap it again to show everyone.</div>
+<div class="hint" id="splitEditHint" style="display:none;">Editing Split's Houston/Seattle/Florida/Boston routes. Tap the wide or inside receiver's circle to edit his route for this call. Player 4's route on the open side is mirrored automatically from the inside route on the other side -- it isn't edited directly.</div>
+
+</div>
+
+<div id="playcallsMode" class="modePanel">
+  <div style="text-align:center;margin-bottom:8px;">
+    <button id="pcInfoBtn" class="pcInfoBtn">i</button>
+  </div>
+  <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
+  <div class="play-grid" id="playCallsGrid"></div>
+  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Shotgun or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
+</div>
+
+
+<div id="playCallsGate" class="pcInfoOverlay">
+  <div class="pcInfoCard" style="max-width:320px;">
+    <div class="pcInfoHeader">🔒 Coach Access</div>
+    <div class="pcInfoBody">
+      <p>This section is coach-only. Enter the password to continue.</p>
+    </div>
+    <input type="password" id="pcGateInput" placeholder="Password" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <div id="pcGateError" style="color:#e0201a;font-size:12px;font-weight:700;min-height:16px;margin-bottom:6px;"></div>
+    <button id="pcGateSubmitBtn" class="pcInfoCloseBtn">Unlock</button>
+  </div>
+</div>
+
+<div id="playCallsInfoOverlay" class="pcInfoOverlay">
+  <div class="pcInfoCard pcTutorialCard">
+    <div id="pcTutorialSteps">
+      <div class="pcTutorialStep active" data-step="0">
+        <div class="pcTutorialHeader">📋 Welcome to Play Calls!</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockFormationRow">
+            <div class="mockFormationChip active">Wing</div>
+            <div class="mockFormationChip">Split</div>
+            <div class="mockFormationChip">5 Guys</div>
+            <div class="mockFormationChip">I</div>
+            <div class="mockFormationChip">I Wing</div>
+          </div>
+          <div class="mockTapHint">👆 Tap a formation, then tap a play</div>
+        </div>
+        <p class="pcTutorialText">Pick a <strong>formation</strong> first — <strong>Wing</strong>, <strong>Split</strong>, <strong>5 Guys</strong>, <strong>I</strong>, or <strong>I Wing</strong> — then <strong>tap a play</strong> in that formation to open it up and see the diagram.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="1">
+        <div class="pcTutorialHeader">🔀 Try different looks</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockToggleRow">
+            <div class="toggle-group toggle-orange mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="true">Wing L</button>
+              <button class="toggle-btn" aria-pressed="false">Wing R</button>
+            </div>
+            <div class="toggle-group toggle-black mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="true">Dir L</button>
+              <button class="toggle-btn" aria-pressed="false">Dir R</button>
+            </div>
+          </div>
+          <div class="mockTapHint">👆 Tap to flip a toggle</div>
+        </div>
+        <p class="pcTutorialText">Every play can change. Flip <strong>Wing</strong> to move #4, flip <strong>Direction</strong> to run it the other way. Some plays also have <strong>Motion</strong> or <strong>Boot</strong> — try those too!</p>
+      </div>
+      <div class="pcTutorialStep" data-step="2">
+        <div class="pcTutorialHeader">🎛️ Every formation calls it different</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockToggleRow">
+            <div class="toggle-group toggle-green mockToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" aria-pressed="true">Heavy On</button>
+              <button class="toggle-btn" aria-pressed="false">Heavy Off</button>
+            </div>
+          </div>
+          <div class="mockToggleRow">
+            <div class="switch-control mockToggle">
+              <span class="switch-label">Pass</span>
+              <button class="switch-toggle" aria-pressed="false">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </button>
+            </div>
+          </div>
+          <div class="mockTapHint">👆 Look for that formation's own toggles</div>
+        </div>
+        <p class="pcTutorialText"><strong>Split</strong>: pick <strong>Split L</strong> or <strong>Split R</strong>, flip <strong>Pass</strong> on to fake the run and throw instead — each side calls <strong>Seattle</strong>, <strong>Houston</strong>, <strong>Florida</strong>, or <strong>Boston</strong>. <strong>I</strong> has its own <strong>Heavy</strong> toggle, and some plays add <strong>Overload</strong> — whatever's on the card is what that formation actually uses.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="3">
+        <div class="pcTutorialHeader">✅ Know your job</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockPlayerCircle">3</div>
+          <div class="mockTapHint">👆 Tap your number, then ▶ Play</div>
+        </div>
+        <p class="pcTutorialText"><strong>Tap your number</strong> on the diagram to give it an orange glow so it's easy to follow. Tap <strong>▶</strong> to watch the play run. Tap your number again to turn the glow off. Set your position from the name menu and this happens automatically — in Split too.</p>
+      </div>
+      <div class="pcTutorialStep" data-step="4">
+        <div class="pcTutorialHeader">🔄 Flip for the signal</div>
+        <div class="pcTutorialIllustration">
+          <div class="mockFlipBtn">&#8635;</div>
+          <div class="mockTapHint">👆 Tap the flip icon</div>
+        </div>
+        <p class="pcTutorialText">Every play has a hand signal from the sideline. <strong>Tap the flip icon</strong> to see each sign, one at a time. Tap it again to flip back.</p>
+      </div>
+    </div>
+    <div class="pcTutorialDots" id="pcTutorialDots"></div>
+    <div class="pcTutorialNav">
+      <button id="pcTutorialBackBtn" class="pcTutorialNavBtn secondary">Back</button>
+      <button id="pcTutorialNextBtn" class="pcTutorialNavBtn primary">Next</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="studyMode" class="modePanel show">
+  <div class="study-grid" id="studyGrid"></div>
+</div>
+
+<div id="quizMode" class="modePanel">
+  <div id="signalQuiz">
+    <div class="quizStats" id="sigStatsLine"></div>
+    <div class="sigHint">What does this signal mean?</div>
+    <div class="sigImgWrap" id="sigImgWrap"><img id="sigQImg" src="" alt="signal"></div>
+    <div class="seq-choices" id="sigChoices"></div>
+    <div class="seq-feedback" id="sigFeedback"></div>
+    <div class="sigNavRow" id="sigNavRow" style="display:none">
+      <button class="navBtn" id="sigNextBtn">Next ›</button>
+    </div>
+    <div class="doneScreen" id="sigRoundScreen" style="display:none">
+      <h2 id="sigRoundTitle"></h2>
+      <p id="sigRoundText"></p>
+      <button class="navBtn" id="sigRoundContinueBtn">Continue</button>
+    </div>
+    <div class="doneScreen" id="sigDoneScreen" style="display:none">
+      <div class="practiceTag" id="practiceModeTag" style="display:none">Practice Round</div>
+      <h2>🏈 Quiz Complete!</h2>
+      <p id="sigDoneText"></p>
+      <div class="reviewMissedBtnRow" id="reviewMissedRow" style="display:none">
+        <button class="reviewMissedBtn" id="reviewMissedBtn">📖 Review Missed</button>
+      </div>
+      <div class="lbSaveForm" id="lbSaveForm">
+        <div class="lbSaveHint">📢 Visible to the whole team. Tip: initials + jersey # (like "JD #24") helps everyone tell players apart</div>
+        <input id="lbNameInput" type="text" placeholder="e.g. JD #24" maxlength="20" autocomplete="off">
+        <button class="navBtn" id="lbSaveBtn">Save to Leaderboard</button>
+      </div>
+      <div class="lbEmpty" id="lbSaveConfirm" style="display:none;">✅ Score saved!</div>
+      <button class="navBtn secondary" id="sigRestartBtn">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<div id="timedMode" class="modePanel">
+  <div id="timedQuiz">
+    <div class="timedClockBig" id="timedClockBig">0:00.0</div>
+    <div class="quizStats" id="timedStatsLine"></div>
+    <div class="sigImgWrap" id="timedImgWrap">
+      <img id="timedQImg" src="" alt="signal">
+      <div class="startOverlay" id="timedStartOverlay">
+        <div class="startOverlayText">▶️<br>Tap to Start</div>
+      </div>
+    </div>
+    <div class="seq-choices" id="timedChoices" style="display:none"></div>
+    <div class="seq-feedback" id="timedFeedback"></div>
+    <div class="doneScreen" id="timedDoneScreen" style="display:none">
+      <h2>⏱️ Timed Challenge Complete!</h2>
+      <p id="timedDoneText"></p>
+      <div class="lbSaveForm" id="timedLbSaveForm">
+        <div class="lbSaveHint">📢 Visible to the whole team. Tip: initials + jersey # (like "JD #24") helps everyone tell players apart</div>
+        <input id="timedLbNameInput" type="text" placeholder="e.g. JD #24" maxlength="20" autocomplete="off">
+        <button class="navBtn" id="timedLbSaveBtn">Save to Leaderboard</button>
+      </div>
+      <button class="navBtn secondary" id="timedRestartBtn">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<div id="playcallsquizMode" class="modePanel">
+  <div style="max-width:460px;margin:20px auto;padding:0 16px;text-align:center;">
+    <h2>🧠 Play Calls Quiz</h2>
+    <p class="lbSub">Ten rounds, easiest to hardest. Watch the signals, then set up the call you saw.</p>
+    <p class="lbSub" id="pcqBestLine" style="display:none;font-weight:700;"></p>
+
+    <button class="navBtn" id="pcqStartBtn">🧠 Start Quiz</button>
+
+    <div id="pcqQuizArea" style="display:none;">
+        <div class="quizStats" id="pcqStatsLine"></div>
+        <p class="lbSub" style="margin-bottom:4px;">Watch the signals (plays twice), then set up the call you saw.</p>
+        <div class="sigImgWrap" id="pcqImgWrap"><img id="pcqImg" src="" alt="signal"><div class="pcqGetReady" id="pcqGetReady" style="display:none;">Get Ready…</div></div>
+        <div class="signal-progress" id="pcqProgress"></div>
+        <button class="replay-btn" id="pcqReplayBtn" style="display:none;margin:6px auto;">&#8635; Replay (half credit)</button>
+
+        <div id="pcqAnswerPanel" class="controls" style="display:none;justify-content:center;">
+          <div class="inline-control">
+            <label>Wing</label>
+            <div class="toggle-group toggle-orange" id="pcqWingToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Motion</label>
+            <div class="toggle-group toggle-green" id="pcqMotionToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Play</label>
+            <select id="pcqPlaySelect"></select>
+          </div>
+          <div class="inline-control" id="pcqIOWrap" style="display:none;">
+            <label>In/Out</label>
+            <div class="toggle-group toggle-black" id="pcqIOToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Inside" aria-pressed="true">In</button>
+              <button class="toggle-btn" data-value="Outside" aria-pressed="false">Out</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Dir</label>
+            <div class="toggle-group toggle-black" id="pcqDirToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="Left" aria-pressed="true">L</button>
+              <button class="toggle-btn" data-value="Right" aria-pressed="false">R</button>
+            </div>
+          </div>
+          <div class="inline-control">
+            <label>Boot</label>
+            <div class="toggle-group toggle-red" id="pcqBootToggle">
+              <span class="toggle-thumb"></span>
+              <button class="toggle-btn" data-value="off" aria-pressed="true">Off</button>
+              <button class="toggle-btn" data-value="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+        </div>
+        <button class="navBtn" id="pcqSubmitBtn" style="margin-top:10px;display:none;">Submit Answer</button>
+
+        <div class="seq-feedback" id="pcqFeedback"></div>
+        <button class="navBtn" id="pcqNextBtn" style="display:none;">Next ›</button>
+      </div>
+
+    <div class="doneScreen" id="pcqDoneScreen" style="display:none;">
+      <h2>🧠 Quiz Complete!</h2>
+      <p id="pcqDoneText"></p>
+      <button class="navBtn secondary" id="pcqRestartBtn">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<div class="lbOverlay" id="lbOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="lbCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏆</div>
+      <h3>Leaderboard</h3>
+      <div class="lbSub">Top 20 across the whole team</div>
+    </div>
+    <!-- Nathan: "Call out names of top performers to other teammates to
+         encourage them to be one of the leaders." Filled in by
+         js/study-quiz.js's renderSpotlight() every time this overlay opens
+         -- board leaders + the current streak leader, hidden entirely
+         (display:none) until there's actually something to call out. -->
+    <div class="lbSpotlightWrap" id="lbSpotlightWrap" style="display:none"></div>
+    <div class="lbTabRow">
+      <button class="lbTabBtn active" id="lbTabOverall" data-lbtab="overall">🏆 Overall</button>
+      <button class="lbTabBtn" id="lbTabTimed" data-lbtab="timed">⏱️ Timed</button>
+      <button class="lbTabBtn" id="lbTabQuiz" data-lbtab="quiz">📝 Quiz</button>
+      <button class="lbTabBtn" id="lbTabPCQ" data-lbtab="pcq">🧠 Play Quiz</button>
+      <!-- Nathan: "the 2 min drill should be another icon in the row with
+           overall, timed, quiz, play quiz, and then 2 min drill" -- its own
+           full standings tab here, same as the other three boards, separate
+           from the points it already contributes to the Overall tab above. -->
+      <button class="lbTabBtn" id="lbTabDrill" data-lbtab="drill">🏈 2 Min Drill</button>
+    </div>
+    <!-- Nathan: "I don't think we take away the all time leaderboard but
+         add a weekly leaderboard that resets." A second lens on the same
+         Overall tab (not a whole new tab) -- js/study-quiz.js's
+         renderOverallLeaderboard() switches between computeOverallStandings()
+         (unchanged, all-time) and computeWeeklyStandings() (new, rebuilt
+         from this Mon-Sun's raw attempt logs only) based on which pill is
+         active. -->
+    <div class="lbRangeToggle" id="overallLbRangeToggle">
+      <button type="button" class="lbRangeBtn active" data-range="alltime">All-Time</button>
+      <button type="button" class="lbRangeBtn" data-range="week">This Week</button>
+    </div>
+    <div class="lbSub" id="overallLbNote" style="margin:-4px 18px 8px;">Points: 20 for 1st place down to 1 for 20th, added up across the Quiz Scores, Timed Quiz, Play Calls Quiz, and 2 Minute Drill boards.</div>
+    <div class="lbList" id="overallLbList"></div>
+    <div class="lbList" id="timedLbList" style="display:none"></div>
+    <div class="lbList" id="lbList" style="display:none"></div>
+    <div class="lbList" id="pcqLbList" style="display:none"></div>
+    <div class="lbList" id="drillLbList" style="display:none"></div>
+    <button class="navBtn secondary" id="historyBtn" style="width:calc(100% - 36px);margin:0 18px 14px">📜 View History</button>
+  </div>
+</div>
+
+<!-- Rank-up celebration -- Nathan: "If a kid does good and moves up the
+     leaderboard rank, give them a popup notification congratulating them...
+     confetti animation. Show the leaderboard and they're name moving up
+     from where they were." Fired by js/study-quiz.js's
+     checkRankUpCelebration()/showRankUpCelebration() right after a Quiz
+     Scores, Timed Quiz, or Play Calls Quiz save actually improves that
+     player's own rank on that board -- see the big comment above
+     checkRankUpCelebration for how "improves" is tracked. #rankUpMiniLb
+     gets a few rows of that board re-rendered (same lbRowHtml the real
+     leaderboard tabs use) centered on this player's new position, with
+     their own row (#rankUpMeRow, tagged at render time) sliding up into
+     place from roughly where it used to sit. #rankUpConfettiHost is a
+     plain absolutely-positioned layer JS drops small colored divs into and
+     lets fall via CSS animation -- same "JS builds a few divs, CSS
+     animates them, JS cleans them up after" shape as
+     js/practice-cancel.js's lightning bolts. -->
+<div class="lbOverlay" id="rankUpOverlay">
+  <div class="lbCard lbCardCool">
+    <div class="rankUpConfettiHost" id="rankUpConfettiHost" aria-hidden="true"></div>
+    <button class="lbXClose" id="rankUpCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🎉</div>
+      <h3 id="rankUpHeadline">Way to go!</h3>
+      <div class="lbSub" id="rankUpSubtext"></div>
+    </div>
+    <div class="lbList" id="rankUpMiniLb"></div>
+    <button class="navBtn" id="rankUpNiceBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Nice! 🙌</button>
+  </div>
+</div>
+
+<!-- Nathan: "Add popup notifications to encourage the kids to keep doing
+     more tests... show them where they currently are." Fired by
+     js/study-quiz.js's maybeShowQuizNudge()/showQuizNudge() every few
+     completions on a board (not every one -- see the big comment above
+     maybeShowQuizNudge), skipped entirely on any completion that already
+     triggered the louder #rankUpOverlay celebration. #quizNudgeRankCard
+     reuses the exact same myStatRowHtml() row My Stats renders, so their
+     current standing looks identical everywhere it shows up. -->
+<div class="lbOverlay" id="quizNudgeOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="quizNudgeCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader nudgeHeroHeader">
+      <div class="lbHeroTrophy">💪</div>
+      <h3 id="quizNudgeHeadline">Keep it up!</h3>
+      <div class="lbSub" id="quizNudgeSubtext"></div>
+    </div>
+    <div class="msStatList" id="quizNudgeRankCard"></div>
+    <button class="navBtn" id="quizNudgeBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="myStatsOverlay">
+  <div class="lbCard">
+    <h3>📊 My Stats</h3>
+    <div class="lbSub">Just for you — not visible to teammates</div>
+    <div id="myStatsBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="myStatsCloseBtn">Close</button>
+  </div>
+</div>
+
+<!-- Nathan: "love the gamification stuff - make sure they are aware of the
+     badges when they log in." Fired by js/study-quiz.js's
+     maybeShowBadgesIntro() the first time this feature exists for a signed-
+     in player (once ever, per player, per device) -- celebrates any badges
+     they've already earned retroactively rather than crediting them with
+     something they never get to see themselves unlock. Reuses the exact
+     same badgeGridHtml() grid My Stats renders. -->
+<div class="lbOverlay" id="badgesIntroOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="badgesIntroCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🎖️</div>
+      <h3>New: Badges!</h3>
+      <div class="lbSub" id="badgesIntroSubtext"></div>
+    </div>
+    <div id="badgesIntroBody"></div>
+    <button class="navBtn" id="badgesIntroOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
+<!-- Nathan: "If a player logs in and doesn't use the app to it's fullest,
+     we should have a pop-up wizard saying something like 'New to the app?
+     Here's what to do.'" Fired by js/study-quiz.js's
+     maybeShowGettingStartedIntro() the first time a signed-in, non-coach,
+     non-parent player is found with NO activity at all on the combined
+     leaderboard (computeOverallStandings finds no rank for them) -- the
+     closest real signal this app has for "hasn't really used it yet,"
+     same rank lookup the old engagement-carousel slides used to use for
+     their "you're not on the leaderboard yet" message. Shows once ever per
+     device (localStorage), same pattern as badgesIntroOverlay above. Each
+     row is clickable and jumps straight to
+     that step (closing this overlay first) instead of just describing it. -->
+<div class="lbOverlay" id="gettingStartedOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="gettingStartedCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy">🏈</div>
+      <h3>New to the App?</h3>
+      <div class="lbSub">Here's what to do, step by step -- tap any step to jump right to it</div>
+    </div>
+    <div id="gettingStartedBody" class="nfList"></div>
+    <button class="navBtn" id="gettingStartedOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Let's Go! 🚀</button>
+  </div>
+</div>
+
+<!-- Nathan: "success sound can play when you have received an badge. It
+     should show the badge on the screen with the title, congrats! and
+     make the sound when it pops up." Different moment than
+     badgesIntroOverlay above (that's a one-time retrospective tour of
+     every badge already on file) -- this fires the instant a badge is
+     FRESHLY crossed, one at a time, right after a quiz/timed quiz/play
+     quiz result gets recorded. Reuses the same .lbCardCool/.lbHeroHeader
+     hero-card look the leaderboard rank-up card uses, just with its own
+     icon bounce (see .badgeCongratsIcon in css/styles.css) so the badge
+     itself feels like the moment. See js/study-quiz.js's
+     celebrateNewBadges()/showBadgeCongrats(). -->
+<div class="lbOverlay" id="badgeCongratsOverlay">
+  <div class="lbCard lbCardCool" style="max-width:340px;">
+    <div class="lbHeroHeader rankUpHeroHeader">
+      <div class="lbHeroTrophy badgeCongratsIcon" id="badgeCongratsIcon">🎖️</div>
+      <h3>Congrats!</h3>
+      <div class="lbSub" id="badgeCongratsLabel"></div>
+    </div>
+    <button class="navBtn" id="badgeCongratsOkBtn" style="width:calc(100% - 36px);margin:14px 18px 18px;">Awesome! 🎉</button>
+  </div>
+</div>
+
+<!-- Nathan: "Parents should get notifications of how many times their
+     player signed in and used the app... Give parents pop up notifications
+     of when the last time their player signed in." Combined into one
+     popup per his own follow-up answer. Fired by js/coachtools-dashboard.js's
+     maybeShowParentDigest() the first time a parent with a linked child
+     opens the app on a new calendar day -- same once-per-day gating as the
+     coach digest just above, see that function's comment for the shared
+     reasoning. -->
+<div class="lbOverlay" id="parentDigestOverlay">
+  <div class="lbCard lbCardCool">
+    <button class="lbXClose" id="parentDigestCloseBtn" aria-label="Close">&times;</button>
+    <div class="lbHeroHeader digestHeroHeader">
+      <div class="lbHeroTrophy">📱</div>
+      <h3>Your Player's Activity</h3>
+      <div class="lbSub">Parents only</div>
+    </div>
+    <div id="parentDigestBody"></div>
+    <button class="navBtn" id="parentDigestOkBtn" style="width:calc(100% - 36px);margin:0 18px 14px">Got it</button>
+  </div>
+</div>
+
+<!-- Nathan: "within the whats new, it would be good to show new plays added
+     to the playbook" -- and later, in-season: "hey this is what is new this
+     week for play calls, pay attention." A brand-new play (via Duplicate in
+     Edit Plays) always logs here automatically; a coach can also flag a
+     real edit to an EXISTING play's routes (the note prompt on Save to
+     Cloud) -- see pendingNewPlays/flushPendingNewPlaysToWhatsNew and the
+     Save to Cloud handler in edit-plays.js. Visible to everyone (players
+     included) -- this one's meant as a discovery feed for the team, unlike
+     This Week/Schedule/Coach Tools. Auto-opens on login when there's
+     something unseen (js/whats-new.js's maybeAutoShowWhatsNew), on top of
+     still being reachable from the profile menu any time. -->
+<div class="lbOverlay" id="whatsNewOverlay">
+  <div class="lbCard">
+    <h3>🆕 What's New in the Playbook</h3>
+    <div class="lbSub">New plays and play-call updates -- pay attention!</div>
+    <div id="whatsNewBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="whatsNewCloseBtn">Close</button>
+  </div>
+</div>
+
+<!-- Nathan: "With rosters we can also have player profiles just as the
+     attached - season stats - career stats though it starts now - then
+     recent games for passing and rushing or defense only depending on
+     positioning." Opened via window.showPlayerProfile(num) from a roster
+     row or a leaderboard name -- see js/player-profile.js. -->
+<div class="lbOverlay" id="playerProfileOverlay">
+  <div class="lbCard lbCardCool playerCardModal">
+    <div id="playerProfileBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="playerProfileCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="studyGuideOverlay">
+  <div class="lbCard">
+    <h3>📖 Study Guide</h3>
+    <div id="studyGuideBody"><div class="lbEmpty">Loading…</div></div>
+    <button class="navBtn secondary lbCloseBtn" id="studyGuideCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="posPromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3 id="posPromptTitle">🏈 What position do you play?</h3>
+    <div class="lbSub">Picking your number highlights your job automatically every time you open a play. You can change this anytime from your name menu.</div>
+    <div class="posPillGrid" id="posPillGrid">
+      <button class="posPill" data-position="1">QB<span class="posPillSub">#1</span></button>
+      <button class="posPill" data-position="2">RB<span class="posPillSub">#2</span></button>
+      <button class="posPill" data-position="3">RB<span class="posPillSub">#3</span></button>
+      <button class="posPill" data-position="4">Wing<span class="posPillSub">#4</span></button>
+      <button class="posPill" data-position="5">TE<span class="posPillSub">#5</span></button>
+      <button class="posPill" data-position="6">TE<span class="posPillSub">#6</span></button>
+      <button class="posPill" data-position="LT">LT</button>
+      <button class="posPill" data-position="LG">LG</button>
+      <button class="posPill" data-position="C">C</button>
+      <button class="posPill" data-position="RG">RG</button>
+      <button class="posPill" data-position="RT">RT</button>
+      <button class="posPill" data-position="COACH">Coach</button>
+    </div>
+    <button class="navBtn secondary lbCloseBtn" id="posPromptSkipBtn" style="width:100%;">Skip for now</button>
+  </div>
+</div>
+
+<!-- Nathan: "Just want them to log in, see how their child is doing, see
+     the schedule." A parent's whole app is Schedule (nav-gated in
+     study-quiz.js) plus their own child's player card -- this is the
+     one-time (skippable, reopenable from the name menu -- "My Child")
+     picker that links a parent's sign-in to a roster player, same
+     pattern as posPromptOverlay above. Built dynamically in
+     player-identity.js since the roster (unlike positions) isn't a fixed
+     list -- and supports picking more than one child for a family with
+     two players on the team. -->
+<div class="lbOverlay" id="childPromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3 id="childPromptTitle">👪 Which player is your child?</h3>
+    <div class="lbSub">Pick one (or more, if you've got more than one on the team) -- this just decides whose card shows up for you. You can change it anytime from your name menu. The schedule is the same for everyone.</div>
+    <input class="loginInput" id="childPromptSearch" type="text" placeholder="Search the roster…" autocomplete="off" style="margin:10px 0;width:100%;box-sizing:border-box;">
+    <div class="posPillGrid" id="childPillGrid" style="max-height:260px;overflow-y:auto;"></div>
+    <div class="lbEmpty" id="childPromptEmpty" style="display:none;">No players found.</div>
+    <button class="navBtn" id="childPromptDoneBtn" style="width:100%;margin-top:10px;">Done</button>
+  </div>
+</div>
+
+<!-- Nathan: "some people have two kids in the house on the team that may
+     need a way to swap between 2 users... click and hold the name plate.
+     it gives you the option to switch users. It will show you other
+     user names that have logged in or add another." Press-and-hold on
+     #playerMenuBtn (see player-identity.js) opens this instead of the
+     normal tap-menu. #switchProfileListWrap shows every profile that's
+     signed in on THIS device before (a local list, separate from the
+     team-wide dev2Players records); #switchProfileFormWrap is the shared
+     name+PIN form, reused for both "enter this known profile's PIN to
+     switch to it" (name locked) and "+ Add Another Profile" (name
+     editable, same create-or-verify logic as the very first sign-in). -->
+<!-- ---- Practice Cancellation notice -- Nathan: "Have a practice canceled
+     due to lightning popup ... Have a full screen panel that pops up to
+     say its canceled and they have to confirm before they move on. after
+     the canceled event end time the notice goes away." js/practice-
+     cancel.js drives this; shown to everyone (coaches included) whenever
+     Coach Tools > Settings has an active notice whose end time hasn't
+     passed. Deliberately its own highest-priority overlay (no backdrop-
+     click or Escape to dismiss) rather than reusing .lbOverlay, since this
+     one specifically must not be dismissable without the confirm tap.
+
+     Nathan (2nd pass): "looking for it to be full screen... instead of
+     being plain white, a cool graphic of a football field with lightning
+     in the distance, animated." So this isn't a centered card anymore --
+     the whole viewport is a night storm scene (sky, a perspective-tilted
+     field with yard lines, drifting clouds, rain) with the message sitting
+     directly on top of it.
+
+     Nathan (3rd pass): pointed at the LYBS Cards app's own card-reveal
+     lightning (natesteele888/lybs-cards) as "a better understanding of
+     lightning" and gave a thunderstorm loop to go with it. That app draws
+     each bolt as a randomized jagged SVG polyline (glow + mid + white-hot
+     core layers) fired by JS on a timer, not a fixed pre-drawn shape.
+     When the thunder loop (assets/audio/thunder-loop.mp3) is actually
+     playing, flashes fire synced to the real thunder hits in that file
+     (same "flash ~0.4s before the boom" idea LYBS uses for its own
+     ambient loop, timestamps in AMBIENT_FLASH_TIMES); if audio is blocked
+     by the browser's autoplay policy, it falls back to a random 2-6s
+     timer instead -- the effect still works with no sound. (The drawn
+     bolt shapes themselves are gone as of the 7th pass below -- see that
+     note for what replaced them; the sync-to-thunder-audio mechanics
+     described here are otherwise unchanged.)
+
+     Nathan (4th pass): "I really like this realistic image for the
+     background instead" -- .cancelSky now paints his own real night-storm
+     football-field photo (assets/images/cancel-storm-field.jpg) full-bleed
+     in place of the procedural sky-gradient/cloud/field layers from the
+     2nd pass. The thunder audio from the 3rd pass is unchanged and still
+     plays right alongside it.
+
+     Nathan (6th pass): moved from a Coach Tools > Settings form to a
+     "Cancel Due to Weather" button on the game/practice itself (see
+     js/practice-cancel.js, js/practices.js, js/schedule.js), and can now
+     cancel a GAME as well as a practice -- "use this photo for
+     cancellation of a GAME." js/practice-cancel.js's showPanel() toggles
+     the `.game` class on this overlay based on the active notice's
+     eventType, which swaps .cancelSky's background photo (see
+     css/styles.css) to assets/images/cancel-storm-game.jpg and swaps this
+     header's text to "Game Canceled" -- practices keep the original
+     field photo/copy from the 4th pass above unchanged.
+
+     Nathan (7th pass): "instead of the lightning bolts and the lines on
+     the screen, we use the rain drops from the LYBS card app and just
+     have the lightning in the background photo get super bright and dim
+     with the lightning." The #cancelBoltHost SVG-bolt layer and
+     #cancelFlash white screen-flash from the 3rd pass are both gone.
+     js/practice-cancel.js's flashSkyPhoto() now animates .cancelSky's own
+     filter:brightness() instead -- the photo's own baked-in bolt is what
+     visibly flashes, still on the same thunder-synced/fallback-timer
+     schedule the 3rd pass set up. #cancelRainHost is new -- a straight
+     port of LYBS's real .raindrop/spawnRain() individual-streak rain
+     (js/practice-cancel.js's spawnCancelRain()), replacing the single
+     scrolling repeating-gradient texture the 4th pass had been using. -->
+<div class="cancelNoticeOverlay" id="cancelNoticeOverlay">
+  <div class="cancelScene" aria-hidden="true">
+    <div class="cancelSky"></div>
+    <div class="cancelRainHost" id="cancelRainHost"></div>
+    <div class="cancelVignette"></div>
+  </div>
+  <audio id="cancelThunderAudio" loop preload="none" src="assets/audio/thunder-loop.mp3"></audio>
+  <div class="cancelNoticeContent">
+    <div class="cancelNoticeIcon">⛈️</div>
+    <div class="cancelNoticeHeader" id="cancelNoticeHeaderText">Practice Canceled</div>
+    <div class="cancelNoticeMessage" id="cancelNoticeMessageText"></div>
+    <div class="cancelNoticeMeta" id="cancelNoticeMetaText"></div>
+    <button type="button" class="cancelNoticeConfirmBtn" id="cancelNoticeConfirmBtn">Confirm</button>
+  </div>
+</div>
+
+<!-- Gameday splash -- Nathan: "with it being gameday, I also want to have
+     cool photos to feature of the team for gameday. The app will display a
+     full image background on Gamedays when you first open the app that
+     day... Big Let's Go Bengals CTA to get into the app." Shows once per
+     calendar day, the first time the app opens on a day that has a game on
+     the schedule -- opponent, logos, and arrive/warm-up/kickoff times are
+     all read live from whatever's already entered in Coach Tools > Schedule
+     for that game (see js/gameday.js), never hardcoded, so this keeps
+     working automatically every game week. z-index sits just under the
+     storm cancellation overlay above (1750 vs 1800) so a same-day practice
+     cancellation notice -- which is safety-relevant -- always wins if both
+     would otherwise fire. -->
+<div class="gameDaySplashOverlay" id="gameDaySplashOverlay">
+  <div class="gameDaySplashBg"></div>
+  <div class="gameDaySplashVignette"></div>
+  <div class="gameDaySplashContent">
+    <div class="gameDayMatchup">
+      <span class="gameDayTeamLogo hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>
+      <span class="gameDayVs" id="gameDayVsLabel">VS</span>
+      <span id="gameDayOpponentBadge"></span>
+    </div>
+    <div class="gameDayOpponentName" id="gameDayOpponentName"></div>
+    <div class="gameDayTimes" id="gameDayTimes"></div>
+    <button type="button" class="gameDayCtaBtn" id="gameDaySplashCtaBtn">🚀 LET'S GO BENGALS!</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="switchProfileOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3>🔀 Switch Profile</h3>
+    <div class="lbSub">Press and hold your name badge anytime to come back here.</div>
+    <div id="switchProfileListWrap">
+      <div class="lbSub" id="switchProfileListLabel" style="margin:-4px 0 8px;">Tap a name below to sign in, or add a profile that isn't listed yet.</div>
+      <div id="switchProfileList" style="margin:10px 0;"></div>
+      <button type="button" class="navBtn" id="switchProfileAddBtn" style="width:100%;">+ Sign In / Add a Profile</button>
+    </div>
+    <div id="switchProfileFormWrap" style="display:none;">
+      <div class="lbSub" id="switchProfileFormLabel" style="margin:-4px 0 8px;"></div>
+      <input class="loginInput" type="text" id="switchProfileNameInput" placeholder="Name" autocomplete="off" style="width:100%;box-sizing:border-box;margin:10px 0 8px;">
+      <input class="loginInput" type="text" inputmode="numeric" maxlength="4" id="switchProfilePinInput" placeholder="4-digit code" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:8px;letter-spacing:6px;text-align:center;">
+      <div class="lbSub" id="switchProfileError" style="display:none;color:#c0392b;"></div>
+      <button type="button" class="navBtn" id="switchProfileConfirmBtn" style="width:100%;margin:8px 0;">Continue</button>
+      <button type="button" class="lbLinkBtn" id="switchProfileBackBtn">‹ Back</button>
+    </div>
+    <button type="button" class="navBtn secondary lbCloseBtn" id="switchProfileCloseBtn" style="width:100%;margin-top:10px;">Close</button>
+  </div>
+</div>
+
+<!-- Duplicate-login merge prompt -- Nathan: "We also need to make sure
+     players are only using one sign in... We need a way of merging them.
+     Maybe ask them upon long if they those submissions belong to them, if
+     yes, they will be merged into the account they have their pin on."
+     Fires from player-identity.js's gate() onReady, the next time a player
+     opens the app -- checks this device's known-profiles list (the same
+     one #switchProfileList already shows) for any other name that hasn't
+     been merged yet, and asks about one at a time. "Yes" tags the other
+     account as an alias of the one just signed into (nothing destructive,
+     see mergeIntoPrimary); "No" remembers the decline; "Not now" just skips
+     asking for the rest of this visit. A coach can always undo a merge
+     from Coach Tools > Dashboard > Registered Players. -->
+<div class="lbOverlay" id="mergePromptOverlay">
+  <div class="lbCard" style="max-width:380px;">
+    <h3>👤 Is this you too?</h3>
+    <div class="lbSub">This device has also signed in as <strong id="mergePromptOtherName"></strong>. If that's another one of your own logins, we can combine it with <strong id="mergePromptCurrentName"></strong> so your stats and sign-ins all count together.</div>
+    <button type="button" class="navBtn" id="mergePromptYesBtn" style="width:100%;margin:10px 0 8px;">Yes, that's me -- combine them</button>
+    <button type="button" class="navBtn secondary" id="mergePromptNoBtn" style="width:100%;">No, that's someone else</button>
+    <button type="button" class="lbLinkBtn" id="mergePromptLaterBtn" style="display:block;margin:10px auto 0;">Not now</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="historyOverlay">
+  <div class="lbCard">
+    <h3>📜 Your History</h3>
+    <div class="lbSub">Everything you've done on this device</div>
+    <div class="lbSectionHeader">🥵 Toughest Signals</div>
+    <div class="missedList" id="toughestList"></div>
+    <div class="lbSectionHeader">😎 Easiest Signals</div>
+    <div class="missedList" id="easiestList"></div>
+    <div class="lbSectionHeader">🕓 Recent Quizzes</div>
+    <div class="lbList" id="historyList"></div>
+    <button class="navBtn secondary lbCloseBtn" id="historyCloseBtn">Close</button>
+  </div>
+</div>
+
+<div class="lbOverlay" id="tipsOverlay">
+  <div class="lbCard">
+    <h3>👋 Welcome!</h3>
+    <div class="lbSub">A few quick tips to get started</div>
+    <ul class="tipsList">
+      <li>🎓 <b>Study Signals</b> — tap a category to expand it and see every signal in it.</li>
+      <li>🏈 <b>Quiz</b> — pick the right meaning, several rounds of 6, and build your streak!</li>
+      <li>⏱️ <b>Timed Quiz</b> — race the clock through every signal in the book; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
+      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change. Tap any player's number to give him an orange glow so it's easy to track just his job — set your position from the name menu and this happens automatically every time you open a play.</li>
+      <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching Wing/Motion/Play/In-Out/Direction/Boot answer. Starts easy and gets tougher round by round.</li>
+      <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
+      <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Quiz, Timed, and Play Quiz boards.</li>
+      <li>🌙 Tap the moon/sun to switch between dark and light mode.</li>
+      <li>🔊 Tap the speaker to mute or unmute the music.</li>
+      <li>? Tap this icon anytime to see these tips again.</li>
+    </ul>
+    <button class="navBtn" id="tipsGotItBtn" style="width:100%">Got it!</button>
+    <div class="tipsBrand">A Steele Sports Product — Patent Pending</div>
+  </div>
+</div>
+
+<div class="lbOverlay" id="missedOverlay">
+  <div class="lbCard">
+    <h3>📖 Missed Signals</h3>
+    <div class="lbSub">Review these, then give them another shot</div>
+    <div class="missedList" id="missedList"></div>
+    <button class="navBtn" id="practiceMissedBtn" style="width:100%;margin-bottom:10px">Practice These Again</button>
+    <button class="navBtn secondary lbCloseBtn" id="missedCloseBtn">Close</button>
+  </div>
+</div>
+
+<!--
+  2 MINUTE DRILL -- in-app overlay (Nathan, 2026-08-23): "this will also
+  need a leaderboard. I am ready to add this into the live app as a test.
+  press and hold the logo for 3 seconds launches it." Ported from the
+  standalone two-minute-drill-test.html prototype into a real full-screen
+  overlay (same position:fixed;inset:0 pattern as .gameDaySplashOverlay/
+  .cancelNoticeOverlay) -- see js/two-minute-drill.js for all the game
+  logic plus the new leaderboard save/fetch/render functions, and the
+  press-and-hold gesture wiring in study-quiz.js's headerLogo block. The
+  old 5-tap "Coach Nate" PIN backdoor was removed per Nathan: "remove the
+  5 tap back door, make it 3 second hold for all logins" -- this opens for
+  every signed-in player now, no PIN, no account restriction.
+-->
+<!--
+  Nathan (2026-08-24): "every single page has 2 minute drill at the
+  bottom... it is awful. Remove it immediately." -- this is the same
+  overlay flowing un-hidden into whatever tab happens to be visible,
+  because its display:none rule has always lived in the separately
+  cache-busted css/styles.css (see that <link> tag's own comment above)
+  instead of here in index.html. A device that hasn't yet picked up the
+  latest css/styles.css?v= can render this markup as a plain inline block
+  no matter how many times the CSS file itself gets fixed.
+
+  Follow-up from Nathan the same day: "if I tap 5 times it adds it to the
+  bottom of the pages and not opened as its open experience like it
+  should" -- the first round of this fix only inlined display:none/block,
+  which stopped the un-hidden-block problem but a device still on stale
+  CSS would then open the drill as a plain in-flow block instead of the
+  full-screen modal it's supposed to be, because position:fixed/inset/
+  z-index/overflow/background all still lived ONLY in css/styles.css too.
+  Fix: every property that makes this render as a proper full-screen
+  overlay (not just whether it's visible) is now inlined here directly,
+  permanently -- not toggled, always present -- so the drill's entire
+  "open experience" no longer depends on css/styles.css loading, loading
+  in time, or being fresh at all. Only display: none/block still toggles
+  (see openTwoMinDrillOverlay() and the close-button handler in
+  js/two-minute-drill.js) to open/close it; #f4f2ee below is a literal
+  copy of the --paper CSS variable's current value, hardcoded rather than
+  referenced, so this doesn't even depend on :root's custom properties
+  being loaded.
+-->
+<div class="twoMinDrillOverlay" id="twoMinDrillOverlay" style="display:none; position:fixed; inset:0; z-index:1900; overflow-y:auto; background:#f4f2ee;">
+<div class="twoMinWrap">
+  <button class="lbXClose" id="twoMinDrillCloseBtn" aria-label="Close">&times;</button>
+  <div class="twoMinHeader">
+    <h1>🏈 2 Minute Drill</h1>
+  </div>
+  <div class="twoMinLoadingNote" id="loadingNote"></div>
+
+  <div class="twoMinPanel twoMinEntryPanel" id="startScreen">
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🏈</div>
+      <h3>Ready to run it back?</h3>
+      <div class="lbSub">Read the signal. Beat the clock. Drive for the score.</div>
+    </div>
+    <div class="twoMinEntryBody">
+      <p>You're shown a coach's hand signals for a play call. Pick the right call from 4 close options before the clock runs out. Get it right and watch the play develop -- get it wrong and it's a false start, 5 yards back. String correct calls together for bonus yardage, break one outside for extra yards <em>and</em> a clock stoppage, and drive 75 yards for a touchdown. New drive starts if you've still got time left.</p>
+      <div class="twoMinEntryBtnRow">
+        <button class="twoMinBigBtn" id="startBtn" disabled>▶ Play</button>
+        <button class="twoMinBigBtn twoMinBigBtnAlt" id="twoMinLbOpenBtn" type="button">🏆 Leaderboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="twoMinPanel" id="twoMinLbScreen" style="display:none;padding:0;">
+    <div class="lbCardCool" style="max-width:none;">
+      <div class="lbHeroHeader">
+        <div class="lbHeroTrophy">🏆</div>
+        <h3>2 Minute Drill Leaderboard</h3>
+        <div class="lbSub">Ranked by touchdowns, then total yards</div>
+      </div>
+      <div class="lbList" id="twoMinLbList"></div>
+      <button class="twoMinBigBtn" id="twoMinLbBackBtn" type="button">← Back</button>
+    </div>
+  </div>
+
+  <div id="gameScreen" style="display:none;">
+    <div class="twoMinHud">
+      <div id="hudClock">2:00</div>
+      <div id="hudFieldPos">Ball on your 25</div>
+      <div id="hudScore">TDs: 0</div>
+      <div id="hudStreak"></div>
+      <button class="twoMinTimeoutBtn" id="timeoutBtn" type="button">⏸️ Timeout <span id="timeoutCount">2</span></button>
+    </div>
+
+    <div class="twoMinFieldOuter" id="fieldOuter">
+      <div class="twoMinFieldMarker" id="fieldMarker"></div>
+      <div class="twoMinFieldMarkerLabel" id="fieldMarkerLabel"></div>
+    </div>
+
+    <!-- Nathan: "I would rather it overlays where the coaching signals are
+         so you don't need to scroll." #playDiagramWrap now lives INSIDE
+         .twoMinSignalStage (absolutely positioned, see styles.css) instead
+         of as its own block below the choices grid -- when a correct call
+         plays its diagram, it covers the same box the signal images/GET
+         READY text already occupy rather than adding height below the
+         fold. See playGainAnimation()/runRound() in js/two-minute-drill.js
+         for the show/hide toggle. -->
+    <div class="twoMinSignalStage">
+      <div id="getReadyEl">GET READY…</div>
+      <img id="signalImg" style="display:none;" alt="signal">
+      <div id="signalTextCard"></div>
+      <div class="twoMinProgress" id="signalProgress"></div>
+      <div id="playDiagramWrap">
+        <svg id="playDiagramSvg" viewBox="0 0 100 100"></svg>
+      </div>
+    </div>
+
+    <div class="twoMinChoices" id="choicesGrid"></div>
+  </div>
+
+  <div class="twoMinPanel" id="endScreen" style="display:none;">
+    <h2 style="margin-top:0;">⏱️ Time's Up!</h2>
+    <div id="endSummary"></div>
+    <div id="driveRecapWrap">
+      <div class="twoMinRecapTitle">Drive Recap</div>
+      <div id="driveRecap"></div>
+    </div>
+    <button class="twoMinBigBtn" id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+
+<div class="twoMinBanner" id="resultBanner"></div>
+
+<!--
+  Nathan: "have it do the police whistle with the crowd disappointed sound
+  right after it" (false start) + "have the crowd noise start playing and
+  after .6 seconds, play the Touchdown sound. Crowdnoise can be used in the
+  background throughout, then switch to the other crowd" (touchdown) --
+  scoped to this drill (separate from study-quiz.js's correct/wrong/
+  bgMusic sounds elsewhere in the app). Sequencing lives in
+  js/two-minute-drill.js's playFalseStartSfx()/playTouchdownSfx()/
+  startAmbientCrowd().
+-->
+<audio id="drillWhistleSound" preload="auto" src="assets/audio/false-start-whistle.mp3"></audio>
+<audio id="drillFalseStartCrowdSound" preload="auto" src="assets/audio/false-start-crowd.mp3"></audio>
+<audio id="drillTouchdownHornSound" preload="auto" src="assets/audio/touchdown-horn.mp3"></audio>
+<audio id="drillCrowdCheerSound" preload="auto" src="assets/audio/crowd-cheer.mp3"></audio>
+<audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
+</div>
+
+<!-- Game Plan Builder -- full-screen, opponent-scoped authoring flow.
+     Nathan: "Lets have it so it opens full screen like the 2-min drill
+     and you choose your opponent on the schedule to game plan
+     against." Copies .twoMinDrillOverlay's own convention exactly
+     (see that block's own comments above) -- a fixed, inset:0 overlay
+     stacked above the normal tab-panel system, with layout-critical
+     properties duplicated inline here as the same defense against
+     stale cached CSS. See js/gameplan-builder.js. -->
+<div class="gamePlanBuilderOverlay" id="gamePlanBuilderOverlay" style="display:none; position:fixed; inset:0; z-index:1910; overflow-y:auto; background:#f4f2ee;">
+<div class="gpbWrap">
+  <button class="lbXClose" id="gpbCloseBtn" aria-label="Close">&times;</button>
+  <div class="gpbHeader">
+    <h1>Create Your Game Plan</h1>
+    <div class="gpbSubtitle" id="gpbSubtitle"></div>
+  </div>
+
+  <div class="coachToolsModuleTabs" id="gpbStepTabs"></div>
+
+  <div class="gpbScreen" id="gpbOpponentScreen">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">Who are we building this game plan for?</div>
+    <div class="gpbOpponentList" id="gpbOpponentList"></div>
+  </div>
+
+  <!-- Nathan: "it just says create your game plan. You choose offense or
+       defense." -->
+  <div class="gpbScreen" id="gpbModeScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">What are you setting up?</div>
+    <div class="gpbModeChoice" id="gpbModeChoice"></div>
+  </div>
+
+  <div class="gpbScreen" id="gpbPlaysScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;" id="gpbPlaysCount"></div>
+    <div class="gpbPlayGrid" id="gpbPlayGrid"></div>
+  </div>
+
+  <div class="gpbScreen" id="gpbPlaylistScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:4px;">Your Game Plan -- reorder or remove</div>
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;font-size:11px;">For a specific direction, motion, or overload call: browse to that play and tap "+ Add to Game Plan" on the real card -- it'll show up here too.</div>
+    <div class="gpbPlaylist" id="gpbPlaylist"></div>
+    <button class="navBtn" id="gpbSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save Game Plan</button>
+    <div id="gpbStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
+  </div>
+
+  <!-- Nathan: "For defense, you can set your defensive alignments and set
+       your defensive starters." Alignment reuses the real, already-built
+       Defense Builder (js/playbuilder/defense-editor.js, Coach Tools ->
+       Play Design -> Play Builder -> Defense) rather than a second,
+       parallel instance in here -- that tool keys its own field/controls
+       off fixed element ids (db*), so a second live copy inside this
+       overlay would collide with Coach Tools' own if a coach had visited
+       both in the same session. Same reasoning for Depth Chart (Coach
+       Tools -> Team -> Depth Chart) -- "defensive starters" already lives
+       there (real players assigned to position groups like "Left CB",
+       real jersey numbers), it's just never been discoverable from here.
+       js/depth-chart.js's own getDefenseStarterNumbers() already shows a
+       starter's real number on a defender's circle automatically, on any
+       play card, once both are set -- no separate "assign to this play"
+       step needed. -->
+  <div class="gpbScreen" id="gpbDefenseScreen" style="display:none;">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">This week's defense</div>
+    <div id="gpbDefenseSummary" class="lbSub" style="text-align:center;margin-bottom:16px;"></div>
+    <button class="navBtn" id="gpbOpenDefenseBtn" style="display:block;width:100%;max-width:420px;margin:0 auto 8px;text-align:center;">🛡️ Open Defense Builder →</button>
+    <button class="navBtn secondary" id="gpbOpenDepthChartBtn" style="display:block;width:100%;max-width:420px;margin:0 auto;text-align:center;">🧑‍🤝‍🧑 Set Defensive Starters →</button>
+    <div class="lbSub" style="text-align:center;margin-top:10px;font-size:11px;">Alignment sets where everyone lines up. Starters (Depth Chart) are who's actually playing each spot -- once both are set, real jersey numbers show up on every play's defense automatically.</div>
+  </div>
+</div>
+</div>
+
+<audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
+<audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
+<audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
+<audio id="bgMusic" preload="auto" loop src="assets/audio/bg-music.mp3"></audio>
+<audio id="badgeSuccessSound" preload="auto" src="assets/audio/badge-success.mp3"></audio>
+
+
+<script>
+// Resolved by auth.js once a real (non-anonymous) gate session exists --
+// either immediately, if this device already had one saved, or once a
+// correct code is typed. Declared before anything else loads so auth.js
+// can resolve it whenever that happens, no matter how boot() below is
+// timed. Used below to know when it's safe to mirror the shipped play
+// data into the database (see cloud-auth.js's __seedBengalsPlayData).
+window.__bengalsAuthReady = new Promise(function(resolve){ window.__resolveBengalsAuth = resolve; });
+</script>
+<script>
+// Nathan: "toolbar is not staying with the toolbar, and stays over
+// everything, I don't want that" -- #topToolbar used to be position:fixed
+// (floating over the page, ignoring the header/scroll entirely). Fixed for
+// good by moving it into .headerRow as a normal flex child (see <header>
+// above), but that means the header's real height now varies (wraps to 2
+// lines on narrow screens, grows/shrinks as the pill row shows/hides
+// content) instead of being the fixed ~63px #topSections/.modeTabs used to
+// hardcode as their own sticky `top` offset in css/styles.css. This keeps
+// the --header-h/--subnav-h custom properties those two bars read in sync
+// with the header's ACTUAL rendered height at all times, so they always
+// stack directly beneath it with no gap and no overlap, however tall it
+// happens to be right now. Runs immediately (header/#topSections are
+// static markup, already in the DOM by the time this script tag runs) and
+// again on every resize/content-height change via ResizeObserver.
+function syncStickyOffsets(){
+  const header = document.querySelector('header');
+  const topSections = document.getElementById('topSections');
+  if (!header) return;
+  const headerH = header.offsetHeight;
+  document.documentElement.style.setProperty('--header-h', headerH + 'px');
+  document.documentElement.style.setProperty('--subnav-h', headerH + (topSections ? topSections.offsetHeight : 50) + 'px');
+}
+syncStickyOffsets();
+window.addEventListener('resize', syncStickyOffsets);
+if (window.ResizeObserver) {
+  const stickyOffsetObserver = new ResizeObserver(syncStickyOffsets);
+  const headerEl = document.querySelector('header');
+  const topSectionsEl = document.getElementById('topSections');
+  if (headerEl) stickyOffsetObserver.observe(headerEl);
+  if (topSectionsEl) stickyOffsetObserver.observe(topSectionsEl);
+}
+</script>
+<script>
+// Loads auth first, then the play/card data (now from the database, not
+// public static files -- see below), then the rest of the feature
+// scripts, in the same order they used to run as inline <script> blocks
+// in the old single file. Everything downstream (study-quiz.js,
+// play-calls.js, edit-plays.js) expects window.ALL_CARDS and window.DATA
+// to already be populated by the time it runs, exactly like the old
+// inline JSON blobs.
+(async function boot(){
+  // Nathan (follow-up): "have it show for a second or two before fading
+  // into the dashboard." Tracked from the very start of boot() so the
+  // minimum-display check below accounts for the whole load time, not
+  // just the script-loading loop specifically.
+  const bootStartTime = Date.now();
+  // Cache-busting query string: without this, browsers (and mobile Safari
+  // especially) can keep serving an old cached copy of a script/data file
+  // after a new one has been pushed, even though the freshly-served
+  // index.html now expects the new version -- e.g. an old cached
+  // play-calls.js still wiring up a button ID that the new HTML no longer
+  // has (or vice versa) throws partway through and silently breaks
+  // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
+  // force every client to fetch fresh copies.
+  const BUILD_V = '20260926aa';
+  const withV = (path) => `${path}?v=${BUILD_V}`;
+  // Nathan: "when you do the 5 clicks on the logo and see the coach
+  // dashboard, it should show an updated version number so I know it
+  // accepted the update" -- exposed globally so a coach can confirm their
+  // device actually picked up the latest push instead of guessing from a
+  // stale cache. Coach Tools > Dashboard reads window.BUILD_V directly
+  // (see coachtools-dashboard.js) since the old #adminBuildVersion element
+  // it used to write into moved along with everything else in that panel.
+  window.BUILD_V = BUILD_V;
+  // Nathan: also wants it visible on the login screen itself, faint and
+  // small, so he can check it before logging in -- 2 screens earlier than
+  // Coach Tools.
+  const loginBuildVEl = document.getElementById('loginBuildVersion');
+  if (loginBuildVEl) loginBuildVEl.textContent = `Build ${BUILD_V}`;
+  // Nathan: "add a rev number to the top corner of the edit screen ... so
+  // I know it's the right version" -- same idea as loginBuildVEl above,
+  // just visible on Edit Plays itself instead of only the login screen and
+  // Coach Tools > Dashboard, so a coach mid-edit-session doesn't have to
+  // navigate away just to confirm a push/sync actually landed.
+  const editBuildVEl = document.getElementById('editPlaysBuildVersion');
+  if (editBuildVEl) editBuildVEl.textContent = `Build ${BUILD_V}`;
+
+  // Nathan: "make sure it's all stable and loading quickly." These ~62
+  // files used to only start downloading one at a time, AFTER auth and
+  // the cards/plays data fetch had already fully finished -- so their
+  // combined network round-trip time was pure added wait on top of
+  // everything else, even though nothing about auth or the data fetch
+  // actually requires them to wait. <link rel=preload> fired this early
+  // tells the browser to start fetching all of them CONCURRENTLY, in the
+  // background, while auth/data are still in flight -- by the time the
+  // sequential loop far below actually needs each one, it's often already
+  // sitting in cache. Execution order is completely unchanged (still one
+  // at a time, awaited, further down) -- this only makes the network part
+  // faster, it doesn't touch correctness at all.
+  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-builder.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  scripts.forEach(src => {
+    const link = document.createElement('link');
+    link.rel = 'preload'; link.as = 'script'; link.href = withV(src);
+    document.head.appendChild(link);
+  });
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.body.appendChild(s);
+    });
+  }
+
+  // Auth has to be established before anything else -- the play/card data
+  // below now lives in the database behind a real login, not in public
+  // static files, so nothing past this point can load for someone who
+  // hasn't typed a correct code. Resolves immediately if this device
+  // already has a saved session; otherwise waits for the login screen.
+  //
+  // ORDER BUG (found while investigating "reload kicks me back to the
+  // login screen"): auth.js's top-level IIFE checks
+  // `window.hasGateSession && window.hasGateSession()` the INSTANT it
+  // finishes loading, to decide whether to skip straight past the login
+  // screen for a remembered device. That function is only DEFINED in
+  // cloud-auth.js. With auth.js loaded first, that check always ran
+  // before window.hasGateSession existed -- so it was always undefined,
+  // the fast-path always failed, and every full page reload (closing and
+  // reopening the PWA, a service-worker update forcing a refresh, etc.)
+  // fell through to the visible "enter your code" screen even though the
+  // real session was still saved. cloud-auth.js has no dependency on
+  // auth.js at load time (only inside functions called later, well after
+  // both scripts are in), so simply loading it first fixes this with no
+  // other changes needed.
+  // Must precede auth.js and player-identity.js -- both consult it at launch
+  // to decide whether they may interrupt the player. See js/launch-screen.js.
+  await loadScript(withV('js/launch-screen.js'));
+  await loadScript(withV('js/cloud-auth.js'));
+  await loadScript(withV('js/auth.js'));
+
+  // REAL DEADLOCK BUG (found investigating "new/incognito sessions hang on
+  // the loading screen forever"): both blocks below used to sit AFTER
+  // `await window.__bengalsAuthReady` -- but for a brand-new session, that
+  // promise ONLY resolves once login succeeds (see auth.js's two
+  // __resolveBengalsAuth() call sites), and succeeding requires clicking
+  // Log In, which #appLoadingOverlay (z-index 99998) was still sitting on
+  // top of #loginScreen (z-index 1000) to block until exactly this code
+  // ran. A brand-new device could never reach the login form at all -- not
+  // even the 20s force-hide safety net below helped, since it was never
+  // even armed yet either, waiting on the same stuck await. Moving both
+  // here, BEFORE the await, means a new session gets a real, clickable
+  // login form immediately, and the 20s timer actually starts counting
+  // down from page load instead of from a point that could never arrive.
+  const appLoadingOverlay = document.getElementById('appLoadingOverlay');
+  const loginScreenEl = document.getElementById('loginScreen');
+  const stillNeedsLogin = loginScreenEl && !loginScreenEl.classList.contains('hide');
+  if (stillNeedsLogin && appLoadingOverlay) appLoadingOverlay.style.display = 'none';
+  // Nathan (follow-up): "I am now stuck on the loading screen forever."
+  // Independent second safety net alongside the try/catch added around
+  // the script-loading loop below -- if ANYTHING else in boot() throws or
+  // hangs for a reason this file's own error handling doesn't anticipate,
+  // this fires regardless and gets the person into the app rather than
+  // leaving them stranded behind the overlay with no way in at all. 20s
+  // is generous enough to never fire on a normal load, even a slow one.
+  const forceHideOverlayTimer = setTimeout(() => {
+    if (appLoadingOverlay && appLoadingOverlay.style.display !== 'none') {
+      console.error('[boot] loading overlay force-hidden after 20s timeout -- something in boot() did not complete normally.');
+      appLoadingOverlay.style.opacity = '0';
+      setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
+    }
+  }, 20000);
+
+  await window.__bengalsAuthReady;
+
+  // Nathan: "make sure it's all stable and loading quickly - I noticed
+  // some features not popping up on load. Or loading as straight text."
+  // A NEW session's overlay was already hidden above, the moment the login
+  // form itself became interactive -- it doesn't depend on any of the ~62
+  // feature scripts below at all. A REMEMBERED session, though, already
+  // has #loginScreen hidden (by auth.js, before this point) and the raw
+  // app shell revealed underneath -- THAT case keeps the overlay up until
+  // every feature script below has actually finished loading.
+
+  // One-time leaderboard cleanup + Houston route What's New note (see
+  // cloud-auth.js) -- fire-and-forget so neither ever delays boot; both
+  // no-op instantly once already done.
+  if(window.__cleanupBadLeaderboardEntries) window.__cleanupBadLeaderboardEntries();
+  if(window.__cleanupParentDrillEntries) window.__cleanupParentDrillEntries();
+  if(window.__addHoustonRouteWhatsNewNote) window.__addHoustonRouteWhatsNewNote();
+  if(window.__addSept2026FeatureWhatsNewNotes) window.__addSept2026FeatureWhatsNewNotes();
+
+  const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
+  const [cardsRes, playsRes] = await Promise.all([
+    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`)),
+    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/plays.json`)),
+  ]);
+  window.ALL_CARDS = await cardsRes.json();
+  window.DATA = await playsRes.json();
+
+  const appLoadingBar = document.getElementById('appLoadingBar');
+  let loadedCount = 0;
+  // Nathan (follow-up): "I am now stuck on the loading screen forever."
+  // Root cause: this loop had no error handling at all -- if even ONE of
+  // the ~62 scripts fails to load (a dropped request, a momentary CDN
+  // issue, anything), loadScript's promise rejects, and since nothing
+  // here catches it, the whole async boot() function throws right there
+  // and never reaches the code that hides the overlay, below. One bad
+  // network request for one script permanently strands the entire page
+  // behind the loading screen. Logging the failure and continuing means a
+  // single script failing degrades that one feature instead of the whole
+  // app; the hard timeout a few lines down is the second, independent
+  // safety net in case something else entirely goes wrong.
+  for (const src of scripts) {
+    try {
+      await loadScript(withV(src));
+    } catch (err) {
+      console.error('[boot] failed to load script (continuing anyway):', src, err);
+    }
+    loadedCount++;
+    if (appLoadingBar) appLoadingBar.style.width = Math.round((loadedCount / scripts.length) * 100) + '%';
+  }
+  // A coach-built formation (Formation Builder, under Coach Tools) has to be
+  // registered before ANYTHING renders a play, not just before that one
+  // panel opens -- Play Calls' own formation picker and every other reader
+  // of window.Formations treat custom formations exactly like Wing/Split
+  // once they're in the registry (see js/formations.js's list()/get()), so
+  // this has to run here, app-wide, not lazily inside the panel. Same
+  // "one bad fetch degrades that one feature, not the whole boot" shape as
+  // the per-script loop just above.
+  try {
+    const customFormations = await window.AssignmentStore.loadFormations();
+    window.Formations.loadCustom(customFormations);
+  } catch (err) {
+    console.error('[boot] failed to load custom formations (continuing anyway):', err);
+  }
+  // Same "register before anything renders a play, app-wide, not lazily"
+  // reasoning as the block just above, for formations built the NEW way
+  // (Play Builder V2) instead of the old Formation Builder -- registers
+  // each into window.Formations and merges its plays into
+  // window.DATA.playTypes so every existing reader (renderCardDiagram,
+  // the quiz, PDFs, This Week) picks them up with zero changes of their
+  // own. Wing/Split's own cutover is separate, later work -- this only
+  // ever touches OTHER formations. See js/playbuilder/sync-custom-
+  // formations.js's own header for the full reasoning.
+  try {
+    await window.PlayBuilderSyncCustomFormations.syncCustomFormationsIntoData();
+  } catch (err) {
+    console.error('[boot] failed to sync Play Builder V2 formations (continuing anyway):', err);
+  }
+  // Nathan: "some features not popping up on load. Or loading as straight
+  // text." This is the actual fix for that -- the overlay (still up for a
+  // remembered session; a new session already hid it above, right when
+  // the login form itself became interactive) only comes down here, once
+  // every one of the ~62 feature scripts has genuinely finished loading
+  // and the app is actually ready to be touched, instead of the raw shell
+  // being visible and clickable for however long that loop used to take
+  // in the background.
+  // Nathan (follow-up): "loading screen looks sick, have it show for a
+  // second or two before fading into the dashboard." On a fast connection
+  // the whole loop above can finish in well under a second, which made the
+  // new artwork flash by almost instantly -- this waits out whatever's
+  // left of a 1.4s minimum before starting the fade, so it's never up
+  // LONGER than necessary on a slow connection (loading already took
+  // however long it took), just never SHORTER than enough to actually see
+  // it on a fast one. Fades via opacity (see the #appLoadingOverlay
+  // transition in the <style> block above) instead of an instant cut,
+  // then display:none once the fade's finished so it's not sitting there
+  // invisible-but-still-in-the-way.
+  if (appLoadingOverlay) {
+    clearTimeout(forceHideOverlayTimer); // boot() completed normally -- the 20s safety net isn't needed
+    const minDisplayMs = 1400;
+    const elapsed = Date.now() - bootStartTime;
+    if (elapsed < minDisplayMs) await new Promise(r => setTimeout(r, minDisplayMs - elapsed));
+    appLoadingOverlay.style.opacity = '0';
+    setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
+  }
+})();
+</script>
+
+</body>
+</html>

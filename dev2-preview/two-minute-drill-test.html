@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2 Minute Drill (test)</title>
+<!--
+  STANDALONE TEST PAGE -- not linked from the main app nav yet.
+  Nathan: "Create this in a standalone test environment that can be
+  added later." Open this file directly (or via GitHub Pages once
+  pushed) to try it: .../dev2/two-minute-drill-test.html
+
+  No login/auth required -- reads data/plays.json directly for play
+  data, and (best-effort, with a graceful text fallback) Firebase's
+  public dev2PlayData/cards.json for the real hand-signal photos. No
+  results are written anywhere except this browser's own localStorage
+  (personal-best TD count / streak), so testing this never touches
+  real player records. See js/two-minute-drill.js for the full design
+  notes and how this reuses play-calls.js's field-diagram renderer.
+-->
+<script>
+  // Same as index.html -- this app is dark-theme-only.
+  document.documentElement.setAttribute('data-theme', 'dark');
+</script>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+  body { background: var(--paper); }
+  .twoMinWrap { max-width: 640px; margin: 0 auto; padding: 16px 14px 40px; position: relative; }
+  .twoMinHeader { text-align: center; margin-bottom: 6px; }
+  .twoMinHeader h1 { font-size: 22px; margin: 6px 0 2px; }
+  .twoMinTestTag { display: inline-block; background: #444; color: #ddd; font-size: 10px; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; margin-bottom: 6px; }
+  .twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
+
+  /* ---- start / end screens ---- */
+  .twoMinPanel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 18px; text-align: center; }
+  .twoMinPanel p { font-size: 14px; line-height: 1.5; color: var(--ink); opacity: .85; }
+  .twoMinBigBtn { display: inline-block; margin-top: 10px; padding: 14px 28px; border: none; border-radius: 12px;
+    background: var(--bengal-orange); color: #fff; font-size: 17px; font-weight: 800; cursor: pointer; }
+  .twoMinBigBtn:disabled { opacity: .5; cursor: default; }
+  .twoMinBigBtn:active:not(:disabled) { transform: scale(.97); }
+  .twoMinEndStat { font-size: 15px; margin: 6px 0; }
+  /* Nathan: "At the end of the game, have a drive recap." -- a scrollable
+     play-by-play list under the summary stats, one row per resolved round
+     (gain/touchdown/false start/delay of game), oldest first. */
+  #driveRecapWrap { text-align: left; margin: 16px 0 6px; }
+  .twoMinRecapTitle { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 6px; }
+  #driveRecap { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); }
+  .twoMinRecapRow { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px;
+    font-size: 13px; border-bottom: 1px solid var(--line); }
+  .twoMinRecapRow:last-child { border-bottom: none; }
+  .twoMinRecapRow .recapPlay { color: var(--ink); flex: 1; }
+  .twoMinRecapRow .recapResult { font-weight: 800; white-space: nowrap; }
+  .twoMinRecapRow.gain .recapResult { color: #1e7c34; }
+  .twoMinRecapRow.touchdown .recapResult { color: var(--bengal-orange); }
+  .twoMinRecapRow.penalty .recapResult { color: #c62828; }
+
+  /* ---- HUD ---- */
+  .twoMinHud { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
+    font-weight: 800; font-size: 14px; flex-wrap: wrap; }
+  .twoMinHud > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+  #hudClock { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  #hudClock.urgent { color: #e0201a; animation: twoMinPulse 1s infinite; }
+  #hudStreak { color: var(--bengal-orange); min-width: 20px; text-align: center; }
+  @keyframes twoMinPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .twoMinTimeoutBtn { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px;
+    font-weight: 800; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .twoMinTimeoutBtn:active:not(:disabled) { transform: scale(.95); }
+  .twoMinTimeoutBtn:disabled { opacity: .4; cursor: default; }
+  .twoMinTimeoutBtn #timeoutCount { color: var(--bengal-orange); }
+
+  /* ---- field strip ---- */
+  .twoMinFieldOuter { position: relative; height: 36px; border-radius: 8px; overflow: hidden; margin-bottom: 8px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.32) 0 1px, transparent 1px 10%),
+      linear-gradient(90deg, #7a1f1f 0 4%, #245c2e 4% 96%, #7a1f1f 96% 100%);
+    border: 2px solid #111; }
+  .twoMinFieldMarker { position: absolute; top: 50%; width: 20px; height: 20px; margin-left: -10px; margin-top: -10px;
+    border-radius: 50%; background: #7a4a24; border: 2px solid #f4e9dc; transition: left .5s ease; z-index: 3; }
+  .twoMinFieldMarkerLabel { position: absolute; top: 50%; margin-top: -9px; transform: translateX(-50%);
+    font-size: 10px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none; z-index: 4; }
+
+  /* ---- signal display ----
+     Nathan: "Whole game should fit to one screen" -- min-height trimmed from
+     300 to 210 (with matching trims to the field strip/choice buttons/HUD
+     below, plus .gameActive further down) so the drill's HUD+field+signal+
+     choices stack comfortably inside one phone-portrait viewport without
+     needing a scroll fallback in normal use. Kept in sync manually with the
+     matching block in css/styles.css (see that file for the live-app copy
+     this standalone page mirrors) -- was previously out of sync (still had
+     the old 300px stage / non-overlay play diagram), which is what caused
+     the play animation to render as a giant, mispositioned full-page box
+     instead of overlaying the signal card. */
+  .twoMinSignalStage { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; margin-bottom: 8px; min-height: 210px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; overflow: hidden; }
+  #getReadyEl { display: none; align-items: center; justify-content: center; font-size: 20px; font-weight: 900;
+    color: var(--bengal-orange); letter-spacing: .04em; }
+  #signalImg { width: auto; max-width: 100%; height: auto; max-height: 190px; border-radius: 10px; }
+  #signalTextCard { display: none; font-size: 34px; font-weight: 900; text-align: center; color: var(--ink);
+    padding: 40px 16px; }
+  .twoMinProgress { display: flex; gap: 5px; margin-top: 10px; }
+  .twoMinProgress .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .twoMinProgress .dot.done { background: var(--bengal-orange); }
+
+  /* ---- multiple choice ---- */
+  .twoMinChoices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  @media (max-width: 480px) { .twoMinChoices { grid-template-columns: 1fr; } }
+  .twoMinChoiceBtn { padding: 10px 8px; font-size: 13px; font-weight: 700; border-radius: 10px; border: 2px solid var(--line);
+    background: var(--card); color: var(--ink); cursor: pointer; text-align: center; line-height: 1.25; }
+  .twoMinChoiceBtn:active:not(:disabled) { transform: scale(.97); }
+  .twoMinChoiceBtn:disabled { cursor: default; }
+  .twoMinChoiceBtn.picked-correct, .twoMinChoiceBtn.reveal-correct { background: #1e5c2a; border-color: #2e7d32; color: #fff; }
+  .twoMinChoiceBtn.picked-wrong { background: #6b1f1f; border-color: #c62828; color: #fff; }
+
+  /* ---- play diagram ----
+     Nathan: "I would rather it overlays where the coaching signals are so
+     you don't need to scroll." Absolutely positioned to fill
+     .twoMinSignalStage (its parent now, position:relative -- see the moved
+     markup below) instead of sitting in normal document flow below the
+     choices grid. Own opaque background means it fully occludes the GET
+     READY/signal image/progress dots underneath while it plays. */
+  #playDiagramWrap { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+    background: var(--card); border-radius: 14px; padding: 10px; z-index: 2; }
+  #playDiagramSvg { width: 100%; height: auto; display: block; }
+
+  /* Nathan: "Whole game should fit to one screen" -- toggled on .twoMinWrap
+     only while #gameScreen is the active screen (see startGame()/endGame()
+     in js/two-minute-drill.js); the start/leaderboard/end screens keep the
+     normal roomier padding. */
+  .twoMinWrap.gameActive { padding-top: 8px; padding-bottom: 6px; }
+  .twoMinWrap.gameActive .twoMinHeader { margin-bottom: 2px; }
+  .twoMinWrap.gameActive .twoMinLoadingNote { display: none; }
+
+  /* ---- big bold result banner ---- */
+  .twoMinBanner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%) scale(.7); z-index: 500;
+    font-size: 30px; font-weight: 900; text-align: center; padding: 18px 26px; border-radius: 16px;
+    color: #fff; opacity: 0; pointer-events: none; letter-spacing: .02em; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    transition: opacity .15s ease, transform .15s ease; max-width: 90vw; }
+  /* Radial "impact ring" that bursts out from behind the banner text --
+     see .show::before below for the animation that actually fires it. */
+  .twoMinBanner::before { content: ''; position: absolute; inset: -30px; border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0%, transparent 68%); opacity: 0; z-index: -1; }
+  .twoMinBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: twoMinBannerPunch .45s cubic-bezier(.2,1.7,.4,1); }
+  .twoMinBanner.show::before { animation: twoMinBannerRing .65s ease-out; }
+  .twoMinBanner.good { background: linear-gradient(135deg, #3fb454, #1b5e20 65%, #0d3d13); color: #eafff0; }
+  .twoMinBanner.good::before { color: #3fb454; }
+  .twoMinBanner.good.big { background: linear-gradient(135deg, #ffe082, #f9a825 45%, #e65100); color: #2a1400; font-size: 34px; }
+  .twoMinBanner.good.big::before { color: #f9a825; }
+  .twoMinBanner.show.good.big { animation: twoMinBannerPunch .5s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .5s ease .18s; }
+  .twoMinBanner.bad { background: linear-gradient(135deg, #e5433d, #c62828 55%, #7a1f1f); }
+  .twoMinBanner.bad::before { color: #c62828; }
+  .twoMinBanner.timeout { background: linear-gradient(135deg, #4fc3f7, #0288d1 55%, #01579b); font-size: 26px; }
+  .twoMinBanner.timeout::before { color: #4fc3f7; }
+  .twoMinBanner.touchdown { background: linear-gradient(135deg, #ffcb6b, var(--bengal-orange) 45%, #b3410a); font-size: 42px; }
+  .twoMinBanner.touchdown::before { color: var(--bengal-orange); }
+  .twoMinBanner.show.touchdown { animation: twoMinBannerPunch .55s cubic-bezier(.2,1.7,.4,1), twoMinBannerShake .6s ease .2s, twoMinBannerGlow 1.3s ease-in-out .5s infinite; }
+  @keyframes twoMinBannerPunch { 0% { transform: translate(-50%, -50%) scale(.5); } 60% { transform: translate(-50%, -50%) scale(1.12); } 100% { transform: translate(-50%, -50%) scale(1); } }
+  @keyframes twoMinBannerRing { 0% { opacity: .55; transform: scale(.25); } 100% { opacity: 0; transform: scale(1.6); } }
+  @keyframes twoMinBannerShake {
+    0%, 100% { margin-left: 0; }
+    20% { margin-left: -6px; } 40% { margin-left: 5px; } 60% { margin-left: -4px; } 80% { margin-left: 3px; }
+  }
+  @keyframes twoMinBannerGlow {
+    0%, 100% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 0 rgba(255,140,0,0); }
+    50% { box-shadow: 0 10px 40px rgba(0,0,0,.5), 0 0 34px 10px rgba(255,150,20,.55); }
+  }
+
+  /* Particle burst spawned by js/two-minute-drill.js's spawnBurst() on
+     every positive result (gain / big play / touchdown) -- fixed-position
+     elements animated purely via the Web Animations API, self-removing on
+     finish, so this rule only needs to cover their starting look. */
+  .twoMinSpark { position: fixed; z-index: 499; font-size: 18px; line-height: 1; pointer-events: none;
+    transform: translate(-50%, -50%); text-shadow: 0 0 6px currentColor; }
+</style>
+</head>
+<body>
+<div class="twoMinWrap">
+  <div class="twoMinHeader">
+    <span class="twoMinTestTag">Standalone Test</span>
+    <h1>🏈 2 Minute Drill</h1>
+  </div>
+  <div class="twoMinLoadingNote" id="loadingNote"></div>
+
+  <div class="twoMinPanel" id="startScreen">
+    <p>You're shown a coach's hand signals for a play call. Pick the right call from 4 close options before the clock runs out. Get it right and watch the play develop -- get it wrong and it's a false start, 5 yards back. String correct calls together for bonus yardage, break one outside for extra yards <em>and</em> a clock stoppage, and drive 75 yards for a touchdown. New drive starts if you've still got time left.</p>
+    <button class="twoMinBigBtn" id="startBtn" disabled>Start Drive</button>
+  </div>
+
+  <div id="gameScreen" style="display:none;">
+    <div class="twoMinHud">
+      <div id="hudClock">2:00</div>
+      <div id="hudFieldPos">Ball on your 25</div>
+      <div id="hudScore">TDs: 0</div>
+      <div id="hudStreak"></div>
+      <button class="twoMinTimeoutBtn" id="timeoutBtn" type="button">⏸️ Timeout <span id="timeoutCount">2</span></button>
+    </div>
+
+    <div class="twoMinFieldOuter" id="fieldOuter">
+      <div class="twoMinFieldMarker" id="fieldMarker"></div>
+      <div class="twoMinFieldMarkerLabel" id="fieldMarkerLabel"></div>
+    </div>
+
+    <div class="twoMinSignalStage">
+      <div id="getReadyEl">GET READY…</div>
+      <img id="signalImg" style="display:none;" alt="signal">
+      <div id="signalTextCard"></div>
+      <div class="twoMinProgress" id="signalProgress"></div>
+      <div id="playDiagramWrap">
+        <svg id="playDiagramSvg" viewBox="0 0 100 100"></svg>
+      </div>
+    </div>
+
+    <div class="twoMinChoices" id="choicesGrid"></div>
+  </div>
+
+  <div class="twoMinPanel" id="endScreen" style="display:none;">
+    <h2 style="margin-top:0;">⏱️ Time's Up!</h2>
+    <div id="endSummary"></div>
+    <div id="driveRecapWrap">
+      <div class="twoMinRecapTitle">Drive Recap</div>
+      <div id="driveRecap"></div>
+    </div>
+    <button class="twoMinBigBtn" id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+
+<div class="twoMinBanner" id="resultBanner"></div>
+
+<!--
+  Nathan: "have it do the police whistle with the crowd disappointed sound
+  right after it" (false start) + "have the crowd noise start playing and
+  after .6 seconds, play the Touchdown sound. Crowdnoise can be used in the
+  background throughout, then switch to the other crowd" (touchdown) --
+  scoped to this drill (separate from study-quiz.js's correct/wrong/
+  bgMusic sounds elsewhere in the app). Sequencing lives in
+  js/two-minute-drill.js's playFalseStartSfx()/playTouchdownSfx()/
+  startAmbientCrowd().
+-->
+<audio id="drillWhistleSound" preload="auto" src="assets/audio/false-start-whistle.mp3"></audio>
+<audio id="drillFalseStartCrowdSound" preload="auto" src="assets/audio/false-start-crowd.mp3"></audio>
+<audio id="drillTouchdownHornSound" preload="auto" src="assets/audio/touchdown-horn.mp3"></audio>
+<audio id="drillCrowdCheerSound" preload="auto" src="assets/audio/crowd-cheer.mp3"></audio>
+<audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
+
+<!--
+  Nathan: "it cant say the name, that gives it away, just the image of the
+  signal" -- the text-card fallback (js/two-minute-drill.js's playSignals)
+  was only ever a graceful degrade for when the real signal photos can't
+  load, but for THIS game showing the label in plain English defeats the
+  whole point (players would just read the answer instead of recognizing
+  the hand signal). The photos live behind Firebase, gated to real
+  (non-anonymous) logins -- loading cloud-auth.js here gives this page the
+  same window.firebaseAuthed() the rest of the app uses. Since this page
+  shares an origin with index.html, if you're already signed in there as a
+  coach, the same saved session carries over automatically -- no separate
+  login on this page. Purely additive: two-minute-drill.js already checks
+  for window.firebaseAuthed and only uses it if present, so nothing breaks
+  if this ever fails to load.
+-->
+<script src="js/cloud-auth.js"></script>
+<script src="js/two-minute-drill.js"></script>
+</body>
+</html>
