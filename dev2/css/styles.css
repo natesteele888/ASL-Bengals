@@ -1201,6 +1201,27 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   }
   .build-panel-lineup .build-panel-label { color: var(--bengal-orange-dark); }
   .build-panel-play .build-panel-label { color: #a8720a; }
+  /* Play Builder's route/blocking concept picker (js/playbuilder/
+     route-concepts.js) -- a compact grid of one-click preset buttons,
+     matching footballplaybook.com's own ROUTES/BLOCKING panel layout
+     (Nathan's own reference). */
+  .pbConceptGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .pbConceptBtn {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .pbConceptBtn:active { transform: scale(.96); }
+  .pbConceptBtn:hover { border-color: var(--bengal-orange); color: var(--bengal-orange-dark); }
   .play-tile svg {
     width: 100%;
     height: auto;
