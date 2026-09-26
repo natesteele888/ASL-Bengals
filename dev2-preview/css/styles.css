@@ -896,7 +896,9 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    the track tint and the inactive-label color so they aren't reading as
    near-black-on-near-black. */
 [data-theme="dark"] .toggle-group{background:rgba(255,255,255,.1)}
-[data-theme="dark"] .toggle-group .toggle-btn{color:rgba(255,255,255,.45)}
+/* Same low-contrast issue as the light-mode rule above, same fix
+   direction (bumped opacity) for the same reason. */
+[data-theme="dark"] .toggle-group .toggle-btn{color:rgba(255,255,255,.68)}
 
 /* ===== Play Calls (DEV) ===== */
 .play-grid {
@@ -1459,7 +1461,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     line-height: 26px;
     font-size: 11px;
     font-weight: 700;
-    color: rgba(0,0,0,.4);
+    /* Nathan: "you can't see the none-selected toggles" -- .4 opacity
+       black on this track's light tint measures ~2.9:1 contrast, well
+       under WCAG's 4.5:1 minimum for text this small. .65 lands close to
+       AA while still reading as visually "inactive" next to the
+       full-color pressed state. */
+    color: rgba(0,0,0,.65);
     border-radius: 999px;
     cursor: pointer;
     white-space: nowrap;
