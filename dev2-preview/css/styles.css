@@ -3075,22 +3075,34 @@ html.gameHudPreview #editPlaysMode .hint {
    Wing R toggle is set to Wing L, the pill is completely white with no
    visible text on the selected side") -- this rule's own claim that the
    pressed state "already reads fine" was wrong: `html.gameHudPreview
-   .toggle-group .toggle-btn` (1 element + 3 classes) is MORE specific
-   than the base stylesheet's own `.toggle-group .toggle-btn[aria-
-   pressed="true"]` (2 classes + 1 attribute, no element) despite that
-   base rule being the one written to target the pressed state
+   #editPlaysMode .toggle-group .toggle-btn` (1 element + 4 classes) is
+   MORE specific than the base stylesheet's own `.toggle-group .toggle-
+   btn[aria-pressed="true"]` (2 classes + 1 attribute, no element) despite
+   that base rule being the one written to target the pressed state
    specifically -- so this translucent-white color silently overrode it
    for EVERY button, selected or not, putting near-white text on the
    thumb's own solid white background. Only the resting track tint
    needed a bump: the light-mode tint values (e.g. rgba(0,0,0,.06)) are
-   nearly invisible against a dark card. */
-html.gameHudPreview .toggle-group {
+   nearly invisible against a dark card.
+
+   Scoped to #editPlaysMode specifically -- real bug, found live (Nathan:
+   "you can't see the none-selected toggles," on the real, live Play
+   tab's own card): this whole block used to apply UNSCOPED, to every
+   .toggle-group on the page while html.gameHudPreview is active. That's
+   correct for #editPlaysMode's own dark diagramCard (see its sibling
+   rules just above, all correctly scoped there already) but wrong
+   everywhere else -- the real Play tab's card (.card-face) and Play
+   Builder's own panels are NEVER darkened by this theme (confirmed: no
+   other html.gameHudPreview rule touches their backgrounds), so they
+   stay solid white regardless of this theme, and white-on-white text
+   doesn't become readable no matter how much its opacity is tuned. */
+html.gameHudPreview #editPlaysMode .toggle-group {
   background: var(--toggle-tint-dark, rgba(255,255,255,.1));
 }
-html.gameHudPreview .toggle-group .toggle-btn {
-  color: rgba(255,255,255,.4);
+html.gameHudPreview #editPlaysMode .toggle-group .toggle-btn {
+  color: rgba(255,255,255,.68);
 }
-html.gameHudPreview .toggle-group .toggle-btn[aria-pressed="true"] {
+html.gameHudPreview #editPlaysMode .toggle-group .toggle-btn[aria-pressed="true"] {
   color: var(--toggle-color, #17181a);
 }
 
