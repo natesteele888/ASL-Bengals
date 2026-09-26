@@ -165,6 +165,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .headerRow img{width:34px;height:34px;object-fit:contain;background:transparent}
 .headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
 .headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.headerRow .hudWordmark{display:none}
 /* Nathan: "on Mobile the name pills are too big and collide with the
    title and resizes the menu... make the title text on the left bigger
    so it all fits in the same size header." At full pill width (170px max
@@ -2934,31 +2935,17 @@ html.gameHudPreview header {
   border-bottom: none;
 }
 html.gameHudPreview .headerRow { position: relative; z-index: 1; }
-/* Jersey-style wordmark, round 2 -- Nathan sent a real "BENGALS" decal photo
-   (block letters, cut corners, black fill, thick orange outline) and asked
-   for that lettering in place of the plain Anton title. Big Shoulders Text is
-   Google's small-size-tuned cut of a bold condensed American signage family --
-   the closest free font to that decal weight/bluntness. No CSS property can
-   literally bevel a glyph's corners, so the "cut" feel comes from the shape
-   itself plus a hard outline, not true 45-degree chamfers. Colors are
-   inverted from the photo (orange fill / thin black stroke, not black fill /
-   thick orange outline) on purpose -- a literal black fill would vanish into
-   this header's own near-black background (#0c0d0f); the fill has to carry
-   the contrast, so orange leads and black is just the edge. */
-html.gameHudPreview .headerRow h1 {
-  font-family: 'Big Shoulders Text', 'Anton', sans-serif;
-  font-weight: 800; text-transform: uppercase; letter-spacing: -.01em;
-  color: var(--bengal-orange);
-  -webkit-text-stroke: 1px var(--bengal-black);
-  paint-order: stroke fill;
-  text-shadow:
-    1px 0 0 var(--bengal-black), -1px 0 0 var(--bengal-black),
-    0 1px 0 var(--bengal-black), 0 -1px 0 var(--bengal-black),
-    0 2px 3px rgba(0,0,0,.5);
-}
-html.gameHudPreview .headerRow p {
-  font-family: 'Barlow', sans-serif; font-weight: 700;
-  text-transform: uppercase; color: #ffb37a; letter-spacing: .14em;
+/* Jersey wordmark, round 3 -- rounds 1/2 tried to RECREATE the decal look
+   with fonts/CSS (a stroke+shadow fake on Big Shoulders Text). Nathan wants
+   the actual supplied art instead: "the exact PNG of BENGALS... not written
+   text." So the real h1/p text is hidden here (still what the default 99%
+   of users see -- untouched above) and assets/images/bengals-wordmark.png
+   (his own decal photo, cropped to its real bounding box, alpha-transparent
+   background) renders in their place at a height matching the logo. */
+html.gameHudPreview .headerRow h1,
+html.gameHudPreview .headerRow p { display: none; }
+html.gameHudPreview .headerRow .hudWordmark {
+  display: block; height: 32px; width: auto; object-fit: contain;
 }
 
 html.gameHudPreview .topSections {
