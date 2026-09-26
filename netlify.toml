@@ -1,0 +1,7 @@
+# Serves dev2/ (the real app -- no build step, plain static files) as the
+# site root. Lets Netlify preview this branch (formation-engine) at its own
+# URL, separate from the live GitHub Pages site (main's own dev2/, served
+# from https://natesteele888.github.io/ASL-Bengals/dev2/) -- nothing here
+# touches that site or changes until formation-engine is actually merged.
+[build]
+  publish = "dev2"
