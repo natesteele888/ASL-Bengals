@@ -1214,7 +1214,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 8px 4px;
+    /* min-height, not just padding -- a phone check found the padding-only
+       version landing at 32px tall, under this app's own established
+       ~40px touch-target convention (see This Week's Remove button/Drive
+       Scripts' row controls). */
+    padding: 10px 4px;
+    min-height: 40px;
     font-size: 12px;
     font-weight: 700;
     color: var(--ink);
