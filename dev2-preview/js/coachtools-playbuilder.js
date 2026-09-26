@@ -240,6 +240,26 @@
       '  <select id="pbEndTypeSelect" style="width:100%;padding:9px">' +
       '    <option value="run">Run (arrow)</option><option value="block">Block (bar)</option>' +
       '  </select>' +
+      // Live "Point N of M -- X yd downfield -- Y yd left/right of start"
+      // readout for whichever handle is currently selected -- built and
+      // synced entirely by editor.js's own updatePointInfo(), same
+      // "field-owns-the-data, this file just gives it a home" split every
+      // other panel piece here already follows.
+      '  <div class="hint" id="pbPointInfo" style="min-height:1.2em;margin-top:10px"></div>' +
+      // One-click preset routes/blocks (js/playbuilder/route-concepts.js) --
+      // Nathan, re: footballplaybook.com: "pick from the pre-determined
+      // routes... just so much easier." Built once by editor.js's own
+      // buildConceptButtons() (the list is static), styled via
+      // .pbConceptGrid/.pbConceptBtn (css/styles.css).
+      '  <div style="margin-top:14px">' +
+      '    <div class="build-panel-label" style="margin-bottom:6px">Routes</div>' +
+      '    <div class="hint" style="margin-bottom:8px">Applying a preset replaces this player\'s current route -- drag/add/remove points afterward same as always.</div>' +
+      '    <div id="pbRoutesGrid" class="pbConceptGrid"></div>' +
+      '  </div>' +
+      '  <div style="margin-top:14px">' +
+      '    <div class="build-panel-label" style="margin-bottom:6px">Blocking</div>' +
+      '    <div id="pbBlocksGrid" class="pbConceptGrid"></div>' +
+      '  </div>' +
       '  <div class="hint" style="margin-top:12px">' +
       '    Click the field to add a point to this player’s route. Click a point to select it, drag to move it. Click a selected point’s ✕ badge to remove it (min. 2 points).' +
       '  </div>' +

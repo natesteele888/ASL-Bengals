@@ -775,6 +775,7 @@ function render() {
     });
   }
 
+  fieldGroup.appendChild(drawYardGrid(vw));
   fieldGroup.appendChild(defenseLayer);
   fieldGroup.appendChild(pathsLayer);
   fieldGroup.appendChild(circlesLayer);
@@ -807,6 +808,34 @@ function render() {
   renderSidebar();
   renderBallPathPanel();
   syncSignalUI();
+}
+
+// Faint downfield yard-line reference, drawn first/behind everything else
+// (Nathan, re: footballplaybook.com: "Yardage on the field gives
+// reference"). Anchored at this app's own universal LOS convention
+// (every real formation's O-line sits at local y=204) rather than field
+// position, since a play here is authored independent of where it's
+// actually run on a real field -- "yards upfield of the snap," not
+// "the 30 yard line." Uses PB_VERTICAL_PX_PER_YARD (see its own comment
+// on updatePointInfo() for why this axis, not the horizontal one, is what
+// a downfield yard-line grid needs). Lines beyond the field's own visible
+// crop simply don't render -- harmless, not specially guarded against.
+const PB_LOS_Y = 204;
+function drawYardGrid(vw) {
+  const g = svgEl('g', {});
+  g.appendChild(svgEl('line', {
+    x1: 0, y1: PB_LOS_Y, x2: vw, y2: PB_LOS_Y, stroke: '#c9c4b8', 'stroke-width': 2,
+  }));
+  for (let yd = 5; yd <= 25; yd += 5) {
+    const y = PB_LOS_Y - yd * PB_VERTICAL_PX_PER_YARD;
+    g.appendChild(svgEl('line', {
+      x1: 0, y1: y, x2: vw, y2: y, stroke: '#e5e1d5', 'stroke-width': 1, 'stroke-dasharray': '10 8',
+    }));
+    const label = svgEl('text', { x: 8, y: y - 6, 'font-size': 18, 'font-weight': 700, fill: '#b8b2a2' });
+    label.textContent = `${yd} yd`;
+    g.appendChild(label);
+  }
+  return g;
 }
 
 function drawCircle(x, y, label, stroke, r, selected) {
@@ -974,6 +1003,7 @@ function renderSidebar() {
         : 'Editing the default (Direction: Right) -- switch the Direction toggle above to Left to edit that side independently.';
     }
   }
+  updatePointInfo();
 }
 
 // Rebuilds a toggle-group's buttons from an AlignmentToggle's own values
@@ -1390,6 +1420,85 @@ function populateVariantSelect() {
   els.pbVariantSelect.value = String(state.currentVariantIndex);
 }
 
+// One-click preset routes/blocks (js/playbuilder/route-concepts.js) --
+// see that file's own header comment for the design reasoning. Writes
+// into whatever editablePointsForSelected() currently returns -- the
+// SAME array Selected Player point-editing already reads/writes, so a
+// concept is just a fast way to fill that array, not a separate data path
+// (a coach can still drag/add/remove points on top of it afterward).
+function applyConcept(kind, conceptId) {
+  if (state.selectedPlayer === null || !window.PlayBuilderConcepts) return;
+  const list = kind === 'block' ? window.PlayBuilderConcepts.BLOCKS : window.PlayBuilderConcepts.ROUTES;
+  const concept = list.find((c) => c.id === conceptId);
+  const pts = editablePointsForSelected();
+  if (!concept || !pts || !pts.length) return;
+  const origin = { x: pts[0].x, y: pts[0].y };
+  // "Out" should always break toward the near sideline and "In"/crossers
+  // toward the ball, regardless of which side of the formation this
+  // player lines up on -- resolved from the player's own current x versus
+  // the formation's real center (the 'C' position's x, the same axis
+  // mirror.js's own getCenterX() uses internally), not hardcoded.
+  const centerPos = currentFormation().positions.find((p) => p.id === 'C');
+  const centerX = centerPos ? centerPos.x : 806;
+  const outwardSign = origin.x < centerX ? -1 : 1;
+  const newPoints = window.PlayBuilderConcepts.generate(concept, origin, outwardSign);
+  pts.length = 0;
+  newPoints.forEach((p) => pts.push(p));
+  assignmentFor(state.selectedPlayer).endType = kind === 'block' ? 'block' : 'run';
+  state.selectedPointIndex = null;
+  render();
+}
+
+// Built once (the concept list is static) rather than every render --
+// mirrors how pbWingRouteToggle/pbWingSideToggle are built once in
+// coachtools-playbuilder.js and only re-synced afterward.
+function buildConceptButtons() {
+  if (!window.PlayBuilderConcepts) return;
+  if (els.pbRoutesGrid) {
+    els.pbRoutesGrid.innerHTML = window.PlayBuilderConcepts.ROUTES.map((c) =>
+      `<button type="button" class="pbConceptBtn" data-id="${c.id}">${c.label}</button>`).join('');
+    els.pbRoutesGrid.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => applyConcept('route', b.dataset.id));
+    });
+  }
+  if (els.pbBlocksGrid) {
+    els.pbBlocksGrid.innerHTML = window.PlayBuilderConcepts.BLOCKS.map((c) =>
+      `<button type="button" class="pbConceptBtn" data-id="${c.id}">${c.label}</button>`).join('');
+    els.pbBlocksGrid.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => applyConcept('block', b.dataset.id));
+    });
+  }
+}
+
+// Live "Point N of M -- X yd downfield -- Y yd left/right of start"
+// readout for the currently-selected handle, matching footballplaybook.
+// com's own reference UI. Reports the two axes SEPARATELY rather than one
+// combined diagonal distance -- see route-concepts.js's own comment on
+// why (this field's horizontal and vertical axes are not drawn to the
+// same real-world scale, so a single Euclidean number would misrepresent
+// a diagonal route's real yardage).
+const PB_VERTICAL_PX_PER_YARD = 40;
+const PB_HORIZONTAL_PX_PER_YARD = 114.5;
+function updatePointInfo() {
+  if (!els.pbPointInfo) return;
+  if (state.selectedPlayer === null || state.selectedPointIndex === null) {
+    els.pbPointInfo.textContent = '';
+    return;
+  }
+  const pts = editablePointsForSelected();
+  const pt = pts && pts[state.selectedPointIndex];
+  if (!pt) { els.pbPointInfo.textContent = ''; return; }
+  const origin = pts[0];
+  const downfield = (origin.y - pt.y) / PB_VERTICAL_PX_PER_YARD;
+  const across = (pt.x - origin.x) / PB_HORIZONTAL_PX_PER_YARD;
+  const parts = [`Point ${state.selectedPointIndex + 1} of ${pts.length}`];
+  parts.push(`${Math.abs(downfield).toFixed(1)} yd ${downfield >= 0 ? 'downfield' : 'behind start'}`);
+  if (Math.abs(across) >= 0.3) {
+    parts.push(`${Math.abs(across).toFixed(1)} yd ${across < 0 ? 'left' : 'right'} of start`);
+  }
+  els.pbPointInfo.textContent = parts.join(' · ');
+}
+
 function bindSidebar() {
   els.pbHasBallCheckbox.addEventListener('change', () => {
     assignmentFor(state.selectedPlayer).hasBall = els.pbHasBallCheckbox.checked;
@@ -1762,7 +1871,11 @@ async function init() {
   els.pbBallPathModeToggle = q('pbBallPathModeToggle');
   els.pbBallPathSeq = q('pbBallPathSeq');
   els.pbBallPathClearBtn = q('pbBallPathClearBtn');
+  els.pbRoutesGrid = q('pbRoutesGrid');
+  els.pbBlocksGrid = q('pbBlocksGrid');
+  els.pbPointInfo = q('pbPointInfo');
   els.statusEl = q('pbStatus');
+  buildConceptButtons();
 
   // Reuses js/ball-path-editor.js's BallPathEditor completely unmodified --
   // renderPlay: render wires it into the SAME "coordinator re-renders,
