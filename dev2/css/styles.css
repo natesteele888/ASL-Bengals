@@ -1229,6 +1229,26 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   }
   .pbConceptBtn:active { transform: scale(.96); }
   .pbConceptBtn:hover { border-color: var(--bengal-orange); color: var(--bengal-orange-dark); }
+  /* Reused by the Ball Path panel's Pass/Hand off/Lateral disposition
+     buttons -- which one is currently armed, matching this app's own
+     established "active" look for a chosen option elsewhere. */
+  .pbConceptBtn.active { background: var(--bengal-orange); border-color: var(--bengal-orange); color: #fff; }
+  /* Selected Player's own recolor swatches (js/playbuilder/editor.js's
+     buildColorSwatches()) -- a plain filled circle per option, a thicker
+     ring on whichever one is currently active. */
+  .pbColorSwatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    padding: 0;
+    cursor: pointer;
+  }
+  .pbColorSwatch.active {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink);
+  }
+  .pbColorSwatch:active { transform: scale(.92); }
   .play-tile svg {
     width: 100%;
     height: auto;

@@ -69,15 +69,30 @@
     // even looking at" ended up buried under it. `flex:1 1 100%` forces
     // this onto its own full-width row above fieldCard/side regardless of
     // viewport, not just as an accident of mobile wrapping.
+    //
+    // Nathan, round 2: "The formation and play section should be moved
+    // to drop downs along the top bar above the play." Play joins
+    // Formation here as a second dropdown in the same bar -- its own
+    // "+ New Play" button/hint stay down in the sidebar (a less
+    // frequently reached action than switching which play is loaded),
+    // just the picker itself moves up.
     var formationBar = document.createElement('div');
     formationBar.className = 'coachToolsSubPanel';
     formationBar.style.cssText = 'flex:1 1 100%';
     formationBar.innerHTML =
-      '<label style="' + LBL + 'margin-top:0">Formation</label>' +
+      '<div style="display:flex;gap:14px;flex-wrap:wrap">' +
+      '  <div style="flex:1 1 200px">' +
+      '    <label style="' + LBL + 'margin-top:0">Formation</label>' +
       // Switches which formation's plays this screen is showing -- see
       // editor.js's own comment on its 'change' listener for why this is
       // safe (navigates, never reassigns the CURRENT play's own data).
-      '<select id="pbFormationSelect" style="width:100%;padding:9px"></select>';
+      '    <select id="pbFormationSelect" style="width:100%;padding:9px"></select>' +
+      '  </div>' +
+      '  <div style="flex:1 1 200px">' +
+      '    <label style="' + LBL + 'margin-top:0">Play</label>' +
+      '    <select id="pbPlaySelect" style="width:100%;padding:9px"></select>' +
+      '  </div>' +
+      '</div>';
     view.appendChild(formationBar);
 
     var fieldCard = document.createElement('div');
@@ -136,8 +151,93 @@
     side.className = 'coachToolsSubPanel';
     side.style.cssText = 'flex:3 1 0;min-width:280px';
     side.innerHTML =
-      '<label style="' + LBL + 'margin-top:0">Play</label>' +
-      '<select id="pbPlaySelect" style="width:100%;padding:9px"></select>' +
+      // Nathan: "those options are down at the very bottom on the right
+      // menu screen, if I wasn't looking for it, I wouldn't have seen
+      // it. ...the layout on the right should update based on what
+      // player you click on." Selected Player (Routes/Blocking included)
+      // now leads the sidebar instead of trailing every play-level
+      // control -- the moment a player is tapped, this is the first
+      // thing on screen, no scrolling past Play Name/Variant/Toggles/
+      // Signal/Ball Path to find it. Hidden (display:none) until a
+      // player is actually selected, so an untouched sidebar still opens
+      // straight on the play-level controls below.
+      '<div class="build-panel" id="pbPlayerPanel" style="display:none">' +
+      '  <div class="build-panel-label">Selected Player</div>' +
+      '  <h3 id="pbPlayerLabel" style="margin:0 0 8px">#4</h3>' +
+      // Nathan, re: footballplaybook.com: "Like that you can recolor the
+      // player." Built once by editor.js's own buildColorSwatches() (the
+      // palette is static), styled via .pbColorSwatch (css/styles.css).
+      // No name/label field next to it -- Nathan: "dont need to name
+      // them as players rotate" (this app identifies players by jersey
+      // NUMBER, which already rotates week to week; a fixed position
+      // name like footballplaybook.com's own "QB"/"X"/"Y" text field
+      // doesn't fit that).
+      '  <label style="' + LBL + 'margin-top:0">Color</label>' +
+      '  <div id="pbColorSwatches" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>' +
+      '  <div class="hint" id="pbPreviewLockNote" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px"></div>' +
+      '  <div id="pbWingRouteToggleWrap" style="margin-bottom:10px">' +
+      '    <label style="' + LBL + 'margin-top:0">Editing which shape?</label>' +
+      '  </div>' +
+      // Nathan: "not everything has to be displayed at once, selecting
+      // players can change what options they have." Real bug, found from
+      // his own screenshot: only the TOGGLE was hidden for a player whose
+      // position has no alignment toggle, not this whole label+control
+      // section -- wrapped as one unit (id="pbAlignmentEditWrap") so
+      // editor.js's renderSidebar() can hide both together.
+      '  <div id="pbAlignmentEditWrap" style="margin-bottom:10px">' +
+      '    <label style="' + LBL + '" id="pbAlignmentEditLabel">Editing which alignment?</label>' +
+      // Built and populated entirely by editor.js's own buildAlignmentToggleGroup()
+      // -- hidden for a player whose position has no alignment toggle.
+      '    <span id="pbAlignmentEditToggle" class="toggleGroup" style="display:none"></span>' +
+      '  </div>' +
+      '  <div style="margin-bottom:10px">' +
+      // Regular (non-wing) positions only -- editor.js hides this for a
+      // wing player (their own Same/Cross-side toggle above covers it).
+      // Plain status text, not a control -- the field-wide Wing/Direction
+      // toggles above the field ARE the editing-target selector now; this
+      // just confirms what that currently means for this player.
+      '    <div id="pbDirectionEditToggle" class="hint" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px"></div>' +
+      '  </div>' +
+      '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px">' +
+      '    <input type="checkbox" id="pbHasBallCheckbox"> Has the ball' +
+      '  </label>' +
+      '  <label style="' + LBL + '">Start delay (ms)</label>' +
+      '  <input type="number" id="pbDelayInput" value="0" step="50" style="width:100%;padding:9px">' +
+      '  <label style="' + LBL + '">Ends with</label>' +
+      '  <select id="pbEndTypeSelect" style="width:100%;padding:9px">' +
+      '    <option value="run">Run (arrow)</option><option value="block">Block (bar)</option>' +
+      '  </select>' +
+      // Live "Point N of M -- X yd downfield -- Y yd left/right of start"
+      // readout for whichever handle is currently selected -- built and
+      // synced entirely by editor.js's own updatePointInfo(), same
+      // "field-owns-the-data, this file just gives it a home" split every
+      // other panel piece here already follows.
+      '  <div class="hint" id="pbPointInfo" style="min-height:1.2em;margin-top:10px"></div>' +
+      // One-click preset routes/blocks (js/playbuilder/route-concepts.js) --
+      // Nathan, re: footballplaybook.com: "pick from the pre-determined
+      // routes... just so much easier." Built once by editor.js's own
+      // buildConceptButtons() (the list is static), styled via
+      // .pbConceptGrid/.pbConceptBtn (css/styles.css).
+      //
+      // Wrapped (id="pbRoutesWrap") so editor.js's renderSidebar() can
+      // hide the whole section for an O-line position -- they can't be
+      // thrown to in real football (ineligible receivers), same
+      // "not everything has to be displayed at once" principle as the
+      // alignment-wrap fix above, applied one step further.
+      '  <div id="pbRoutesWrap" style="margin-top:14px">' +
+      '    <div class="build-panel-label" style="margin-bottom:6px">Routes</div>' +
+      '    <div class="hint" style="margin-bottom:8px">Applying a preset replaces this player\'s current route -- drag/add/remove points afterward same as always.</div>' +
+      '    <div id="pbRoutesGrid" class="pbConceptGrid"></div>' +
+      '  </div>' +
+      '  <div style="margin-top:14px">' +
+      '    <div class="build-panel-label" style="margin-bottom:6px">Blocking</div>' +
+      '    <div id="pbBlocksGrid" class="pbConceptGrid"></div>' +
+      '  </div>' +
+      '  <div class="hint" style="margin-top:12px">' +
+      '    Click the field to add a point to this player’s route. Click a point to select it, drag to move it. Click a selected point’s ✕ badge to remove it (min. 2 points).' +
+      '  </div>' +
+      '</div>' +
+      '<div class="hint" id="pbNoPlayerHint" style="margin-top:0">Click a player to start building or editing their route.</div>' +
       '<button class="navBtn secondary" id="pbNewPlayBtn" style="' + BTN + '">+ New Play</button>' +
       // Nathan, live: "I want to add a play to the 5 guys formation...
       // it says it is set to 5 guys... but still shows I formation." Two
@@ -202,69 +302,24 @@
       '  <div class="hint" style="margin:10px 0 4px">Full sequence (preview)</div>' +
       '  <div id="pbSignalSequence"></div>' +
       '</div>' +
+      // Nathan: "ball path sucks on our current version. needs to be
+      // addressed and rethought out" -- rebuilt as a guided,
+      // disposition-first flow matching footballplaybook.com's own
+      // "BALL: Pass / Hand off / Lateral, then tap who receives it."
+      // Everything below the checkbox is built/synced entirely by
+      // editor.js's own buildBallPathDispositionButtons()/
+      // renderBallPathPanel() -- this file just gives it a home.
       '<div class="build-panel">' +
       '  <div class="build-panel-label">Ball Path</div>' +
       '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer">' +
-      '    <input type="checkbox" id="pbBallPathModeToggle"> Editing ball path -- tap players in order' +
+      '    <input type="checkbox" id="pbBallPathModeToggle"> Editing ball path' +
       '  </label>' +
+      '  <div class="hint" id="pbBallPathPrompt" style="margin-top:8px;font-weight:700"></div>' +
+      '  <div id="pbBallPathDispositions" style="display:none;gap:8px;margin-top:8px"></div>' +
+      '  <button class="navBtn secondary" id="pbBallPathCancelBtn" style="display:none;width:auto;margin-top:8px;padding:7px 14px">Cancel</button>' +
       '  <div id="pbBallPathSeq" style="font-size:12px;margin-top:8px"></div>' +
       '  <button class="navBtn secondary" id="pbBallPathClearBtn" style="width:auto;margin-top:8px;padding:7px 14px">Clear</button>' +
-      '</div>' +
-      '<div class="build-panel" id="pbPlayerPanel" style="display:none">' +
-      '  <div class="build-panel-label">Selected Player</div>' +
-      '  <h3 id="pbPlayerLabel" style="margin:0 0 8px">#4</h3>' +
-      '  <div class="hint" id="pbPreviewLockNote" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px"></div>' +
-      '  <div id="pbWingRouteToggleWrap" style="margin-bottom:10px">' +
-      '    <label style="' + LBL + '">Editing which shape?</label>' +
-      '  </div>' +
-      '  <div style="margin-bottom:10px">' +
-      '    <label style="' + LBL + '" id="pbAlignmentEditLabel">Editing which alignment?</label>' +
-      // Built and populated entirely by editor.js's own buildAlignmentToggleGroup()
-      // -- hidden for a player whose position has no alignment toggle.
-      '    <span id="pbAlignmentEditToggle" class="toggleGroup" style="display:none"></span>' +
-      '  </div>' +
-      '  <div style="margin-bottom:10px">' +
-      // Regular (non-wing) positions only -- editor.js hides this for a
-      // wing player (their own Same/Cross-side toggle above covers it).
-      // Plain status text, not a control -- the field-wide Wing/Direction
-      // toggles above the field ARE the editing-target selector now; this
-      // just confirms what that currently means for this player.
-      '    <div id="pbDirectionEditToggle" class="hint" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px"></div>' +
-      '  </div>' +
-      '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px">' +
-      '    <input type="checkbox" id="pbHasBallCheckbox"> Has the ball' +
-      '  </label>' +
-      '  <label style="' + LBL + '">Start delay (ms)</label>' +
-      '  <input type="number" id="pbDelayInput" value="0" step="50" style="width:100%;padding:9px">' +
-      '  <label style="' + LBL + '">Ends with</label>' +
-      '  <select id="pbEndTypeSelect" style="width:100%;padding:9px">' +
-      '    <option value="run">Run (arrow)</option><option value="block">Block (bar)</option>' +
-      '  </select>' +
-      // Live "Point N of M -- X yd downfield -- Y yd left/right of start"
-      // readout for whichever handle is currently selected -- built and
-      // synced entirely by editor.js's own updatePointInfo(), same
-      // "field-owns-the-data, this file just gives it a home" split every
-      // other panel piece here already follows.
-      '  <div class="hint" id="pbPointInfo" style="min-height:1.2em;margin-top:10px"></div>' +
-      // One-click preset routes/blocks (js/playbuilder/route-concepts.js) --
-      // Nathan, re: footballplaybook.com: "pick from the pre-determined
-      // routes... just so much easier." Built once by editor.js's own
-      // buildConceptButtons() (the list is static), styled via
-      // .pbConceptGrid/.pbConceptBtn (css/styles.css).
-      '  <div style="margin-top:14px">' +
-      '    <div class="build-panel-label" style="margin-bottom:6px">Routes</div>' +
-      '    <div class="hint" style="margin-bottom:8px">Applying a preset replaces this player\'s current route -- drag/add/remove points afterward same as always.</div>' +
-      '    <div id="pbRoutesGrid" class="pbConceptGrid"></div>' +
-      '  </div>' +
-      '  <div style="margin-top:14px">' +
-      '    <div class="build-panel-label" style="margin-bottom:6px">Blocking</div>' +
-      '    <div id="pbBlocksGrid" class="pbConceptGrid"></div>' +
-      '  </div>' +
-      '  <div class="hint" style="margin-top:12px">' +
-      '    Click the field to add a point to this player’s route. Click a point to select it, drag to move it. Click a selected point’s ✕ badge to remove it (min. 2 points).' +
-      '  </div>' +
-      '</div>' +
-      '<div class="hint" style="margin-top:14px">Click a player to start building or editing their route.</div>';
+      '</div>';
     view.appendChild(side);
 
     var wingRouteToggle = toggle('pbWingRouteToggle', 'black', [{ value: 'sameSide', label: 'Same Side' }, { value: 'crossSide', label: 'Cross Side' }], 'sameSide');
