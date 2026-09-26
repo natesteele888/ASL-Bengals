@@ -59,6 +59,26 @@
     var view = document.createElement('div');
     view.id = 'pbPlaysView';
     view.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap';
+    var LBL = 'display:block;font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 6px';
+    var BTN = 'display:block;width:100%;margin-top:8px';
+
+    // Nathan, mobile: "should also display Formation First, then the
+    // play." Formation used to live mid-sidebar, well below the field --
+    // fine on desktop's side-by-side layout, but on a narrow phone the
+    // whole sidebar stacks under the diagram, so "which formation am I
+    // even looking at" ended up buried under it. `flex:1 1 100%` forces
+    // this onto its own full-width row above fieldCard/side regardless of
+    // viewport, not just as an accident of mobile wrapping.
+    var formationBar = document.createElement('div');
+    formationBar.className = 'coachToolsSubPanel';
+    formationBar.style.cssText = 'flex:1 1 100%';
+    formationBar.innerHTML =
+      '<label style="' + LBL + 'margin-top:0">Formation</label>' +
+      // Switches which formation's plays this screen is showing -- see
+      // editor.js's own comment on its 'change' listener for why this is
+      // safe (navigates, never reassigns the CURRENT play's own data).
+      '<select id="pbFormationSelect" style="width:100%;padding:9px"></select>';
+    view.appendChild(formationBar);
 
     var fieldCard = document.createElement('div');
     fieldCard.className = 'diagramCard';
@@ -75,6 +95,20 @@
     fieldCard.appendChild(fieldTitle);
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.id = 'pbField';
+    // Nathan, mobile: "the play is at the top, with tons of room below
+    // it." The shared field coordinate system's viewBox is always 1430
+    // units tall (see editor.js's own render()), but every real play's
+    // actual content (defense through backfield) sits within roughly
+    // 210-860 of that -- confirmed by scanning every shipped play's real
+    // coordinates, p99 well under 860. .diagramCard svg{height:auto}
+    // mirrors the FULL 1430-tall viewBox 1:1, so ~40% of the rendered
+    // card was always blank canvas. `slice` + a shorter aspect-ratio
+    // (css#pbField) crops that blank margin off instead of just shrinking
+    // everything proportionally -- same "content decoupled from the raw
+    // viewBox ratio" idea the real Play tab's own .card-outer already
+    // uses (aspect-ratio there too, just a different value), not a new
+    // technique for this app.
+    svg.setAttribute('preserveAspectRatio', 'xMidYMin slice');
     fieldCard.appendChild(svg);
     var fieldFooter = document.createElement('div');
     fieldFooter.style.cssText = 'display:flex;align-items:center;gap:14px;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap';
@@ -101,10 +135,8 @@
     var side = document.createElement('div');
     side.className = 'coachToolsSubPanel';
     side.style.cssText = 'flex:3 1 0;min-width:280px';
-    var LBL = 'display:block;font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 6px';
-    var BTN = 'display:block;width:100%;margin-top:8px';
     side.innerHTML =
-      '<label style="' + LBL + '">Play</label>' +
+      '<label style="' + LBL + 'margin-top:0">Play</label>' +
       '<select id="pbPlaySelect" style="width:100%;padding:9px"></select>' +
       '<button class="navBtn secondary" id="pbNewPlayBtn" style="' + BTN + '">+ New Play</button>' +
       // Nathan, live: "I want to add a play to the 5 guys formation...
@@ -134,11 +166,6 @@
       '<label style="' + LBL + '">Play Name</label>' +
       '<input type="text" id="pbLabelInput" style="width:100%;padding:9px;box-sizing:border-box">' +
       '<div class="hint" style="margin-top:4px">Edit, then hit Save Play to rename.</div>' +
-      '<label style="' + LBL + '">Formation</label>' +
-      // Switches which formation's plays this screen is showing -- see
-      // editor.js's own comment on its 'change' listener for why this is
-      // safe (navigates, never reassigns the CURRENT play's own data).
-      '<select id="pbFormationSelect" style="width:100%;padding:9px"></select>' +
       '<label style="' + LBL + '">Variant</label>' +
       '<select id="pbVariantSelect" style="width:100%;padding:9px"></select>' +
       '<button class="navBtn secondary" id="pbNewVariantBtn" style="' + BTN + '">+ New Variant</button>' +
