@@ -991,6 +991,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     overflow: hidden;
   }
   .diagramCard svg { width: 100%; height: auto; display: block; }
+  /* Play Builder's Plays screen only -- crops the field's own blank lower
+     canvas instead of rendering the full 1430-tall viewBox 1:1 (see the
+     preserveAspectRatio="...slice" comment in coachtools-playbuilder.js
+     for the coordinate math). Scoped to #pbField specifically -- the
+     Formations/Defense screens' own fields aren't known to have this
+     problem and weren't touched. */
+  #pbField { aspect-ratio: 1600 / 1050; }
 
   .formation-picker {
     display: grid;
