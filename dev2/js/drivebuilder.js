@@ -99,23 +99,41 @@
   }
 
   // ---- Cloud load/save ----
+  // Real bug, found in review: `scripts` is fetched exactly once, at boot
+  // -- persistScripts() (below) never re-fetches, it always PUTs whatever
+  // is currently in this variable. A non-OK response used to fall through
+  // to `data: null` -> `scripts = []` on the SUCCESS path (no error shown
+  // at all, just a silently-empty list indistinguishable from "nothing's
+  // been saved yet"). The very next save -- most temptingly the prominent
+  // "Add Starter Scripts" one-tap button -- would then overwrite
+  // driveScripts.json with just the new content, permanently erasing
+  // every real script the coaches built for this weekend. scriptsLoaded
+  // only ever becomes true after a REAL, confirmed load succeeds;
+  // persistScripts() below refuses to write at all until it has.
+  let scriptsLoaded = false;
   function loadScripts() {
     const statusEl = document.getElementById('driveScriptCloudStatus');
     if (statusEl) statusEl.textContent = 'Loading drive scripts…';
-    return window.firebaseAuthed(SCRIPTS_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+    return window.firebaseAuthed(SCRIPTS_URL).then(url => fetch(url))
+      .then(r => { if (!r.ok) throw new Error(`load failed (HTTP ${r.status})`); return r.json(); })
       .then(data => {
         scripts = Array.isArray(data) ? data.filter(s => s && s.id) : [];
+        scriptsLoaded = true;
         if (statusEl) statusEl.textContent = '';
         renderList();
       })
       .catch(err => {
         console.error('Could not load drive scripts:', err);
-        if (statusEl) statusEl.textContent = 'Could not reach the cloud -- showing nothing saved yet.';
+        if (statusEl) statusEl.textContent = 'Could not reach the cloud -- reload before saving, or you could overwrite real scripts.';
       });
   }
 
   function persistScripts(afterOk) {
     const statusEl = document.getElementById('driveScriptCloudStatus');
+    if (!scriptsLoaded) {
+      if (statusEl) statusEl.textContent = "Couldn't confirm your current scripts loaded -- reload the page before saving.";
+      return;
+    }
     window.firebaseAuthed(SCRIPTS_URL).then(url => fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

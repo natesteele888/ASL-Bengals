@@ -187,7 +187,14 @@ function copyPlayHere(sourcePlayId, targetFormation) {
   if (state.plays.find((p) => p.id === newId)) { alert('A play with that key already exists -- pick another.'); return; }
   const newLabel = (prompt('Display label:', sourcePlay.label) || sourcePlay.label).trim() || sourcePlay.label;
 
-  const newPlay = window.PlayBuilderCopyAcrossFormations.copyPlayToFormation(sourcePlay, sourceFormation, targetFormation, newId, newLabel);
+  let newPlay;
+  try {
+    newPlay = window.PlayBuilderCopyAcrossFormations.copyPlayToFormation(sourcePlay, sourceFormation, targetFormation, newId, newLabel);
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+    return;
+  }
   q('fbStatus').textContent = 'Saving copy…';
   window.PlayBuilderStore.savePlay(newPlay).then(() => {
     if (window.PlayBuilderEditor) window.PlayBuilderEditor.onPlaySaved(newPlay);

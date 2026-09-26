@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260926b">
+<link rel="stylesheet" href="css/styles.css?v=20260926aa">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -117,7 +117,7 @@
   some features not popping up on load. Or loading as straight text."
   Real gap, not just perception: for a remembered device, auth.js hides
   #loginScreen the MOMENT login is confirmed -- which happens well before
-  the ~39 feature scripts below (study-quiz.js, schedule.js, etc.) have
+  the ~62 feature scripts below (study-quiz.js, schedule.js, etc.) have
   finished loading, since those load one at a time AFTER auth resolves.
   In that window the raw app shell is visible with none of the JS that
   populates/styles/wires it having run yet -- exactly "features not
@@ -588,6 +588,13 @@
        js/thisweek.js's renderEditor() (that section's own approved-coach
        gate doesn't apply to this element anymore since it's no longer
        inside it). -->
+  <!-- Nathan: "the Create Your Game Plan CTA is justified left, it should
+       be centered under the other section." A <button> defaults to
+       display:inline-block, and margin:auto only centers a block-level
+       element -- #thisweekAheadBox above centers correctly because it's a
+       plain <div> (block by default); this button never actually got
+       display:block set, so its own margin:0 auto silently did nothing
+       and it just sat at its normal inline-flow position instead. -->
   <button type="button" class="navBtn" id="thisweekBuildGamePlanBtn" style="display:none;width:100%;max-width:560px;margin:0 auto 16px;text-align:center;">🏈 Create Your Game Plan</button>
   <!-- Nathan: "We should be able to assign Weekly Goals and game plans to
        the upcoming games so players can check them out and be prepared."
@@ -844,45 +851,21 @@
     <div id="coachHowToList" style="max-width:600px;margin:0 auto;"></div>
   </div>
 
-  <!-- Formation Builder -- drag-and-drop tool to lay out a new formation
-       from an existing one and save it, real Firebase persistence (see
-       js/assignment-store.js's saveFormation/loadFormations). Ported from
-       dev-preview.html's own #step1 (js/coachtools-formationbuilder.js);
-       slim shell like every panel here -- everything else is built by
-       that script at init time, same as coachtools-stats.js does. -->
-  <div id="coachFormationBuilderPanel" class="coachToolsPanel" style="display:none;">
-    <div class="lbSectionHeader" style="text-align:center;">🧩 Formation Builder</div>
-    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Start from an existing formation, drag players into a new alignment, save it. Once saved, it shows up everywhere a formation can be picked -- Plays, Create a Play, everywhere.</div>
-    <div id="coachFormationBuilderBody"></div>
-  </div>
-
-  <!-- Create a Play -- pick a formation, choose which plays it can call,
-       then edit routes/blocks and the ball path for one play at a time.
-       Ported from dev-preview.html's #stepChooseFormation/#step2/#stepBuild
-       (js/coachtools-createplay.js). The 3 steps are built ONCE as
-       permanent sibling divs and shown/hidden, never rebuilt via
-       innerHTML -- step 3's editors hold a live reference to their own
-       svg node, so wiping it would orphan them. -->
-  <div id="coachCreatePlayPanel" class="coachToolsPanel" style="display:none;">
-    <div class="lbSectionHeader" style="text-align:center;">✏️ Create a Play</div>
-    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Pick a formation, choose which plays it can call, then fix any route or block and set the ball's path -- both together, one screen.</div>
-    <div id="coachCreatePlaySubNav" class="coachToolsModuleTabs"></div>
-    <div id="coachCreatePlayBody"></div>
-  </div>
-
   <!-- Play Builder -- formation creation, formation edits, play creation,
        and play edits, all in one place. Nathan: "we can't have two places
        - work to combine the i form and all formation creation, formation
        edits, play creation and play edits all in one. This needs to be
-       correct." Replaces the two panels just above (Formation Builder,
-       Create a Play -- left in the DOM, just unlinked from
-       coachtools-nav.js's TABS, for instant rollback) and, via retiring
-       the Play tab's own Edit entry point below, js/edit-plays.js too.
+       correct." Replaces the two panels this category used to hold
+       (Formation Builder, Create a Play -- unlinked, then actually
+       deleted -- js/coachtools-formationbuilder.js/js/coachtools-
+       createplay.js and their own panel divs here -- once Play Builder V2
+       had proven itself through a full session) and, via retiring the
+       Play tab's own Edit entry point below, js/edit-plays.js too.
        js/coachtools-playbuilder.js builds this panel's ENTIRE body at
-       init time (same pattern as coachFormationBuilderPanel above) --
-       reuses js/playbuilder/editor.js + formation-editor.js's interaction
-       logic completely unchanged, see the plan file for the full Phase
-       0-5 verification history behind it. -->
+       init time (same pattern coachtools-stats.js's own slim-shell panels
+       use) -- reuses js/playbuilder/editor.js + formation-editor.js's
+       interaction logic completely unchanged, see the plan file for the
+       full Phase 0-5 verification history behind it. -->
   <div id="coachPlayBuilderPanel" class="coachToolsPanel" style="display:none;">
     <div class="lbSectionHeader" style="text-align:center;">🧩 Play Builder</div>
     <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Build a formation (including a brand-new one, like I-Formation), pick which plays it runs, and edit every route, block, ball path, and signal -- all from one screen.</div>
@@ -2319,7 +2302,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260926b';
+  const BUILD_V = '20260926aa';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2342,7 +2325,7 @@ if (window.ResizeObserver) {
   const editBuildVEl = document.getElementById('editPlaysBuildVersion');
   if (editBuildVEl) editBuildVEl.textContent = `Build ${BUILD_V}`;
 
-  // Nathan: "make sure it's all stable and loading quickly." These ~39
+  // Nathan: "make sure it's all stable and loading quickly." These ~62
   // files used to only start downloading one at a time, AFTER auth and
   // the cards/plays data fetch had already fully finished -- so their
   // combined network round-trip time was pure added wait on top of
@@ -2354,7 +2337,7 @@ if (window.ResizeObserver) {
   // sitting in cache. Execution order is completely unchanged (still one
   // at a time, awaited, further down) -- this only makes the network part
   // faster, it doesn't touch correctness at all.
-  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-builder.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/coachtools-formationbuilder.js', 'js/coachtools-createplay.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
+  const scripts = ['js/formations.js', 'js/signals.js', 'js/assignment-store.js', 'js/ball-path.js', 'js/formation-builder.js', 'js/assignment-editor.js', 'js/ball-path-editor.js', 'js/study-quiz.js', 'js/player-identity.js', 'js/whats-new.js', 'js/play-calls.js', 'js/gameplan.js', 'js/gameplan-builder.js', 'js/gameplan-pdf.js', 'js/playbook-pdf.js', 'js/call-sheet-pdf.js', 'js/roster.js', 'js/coaching-staff.js', 'js/thisweek.js', 'js/gameday.js', 'js/drivebuilder.js', 'js/game-stats-editor.js', 'js/statkeeper-import.js', 'js/weather.js', 'js/schedule.js', 'js/schedule-import.js', 'js/practices.js', 'js/practice-cancel.js', 'js/drone-footage.js', 'js/calendar-export.js', 'js/schedule-full.js', 'js/schedule-nav.js', 'js/standings.js', 'js/film-views.js', 'js/game-stats-pdf.js', 'js/coachtools-print.js', 'js/coachtools-stats.js', 'js/coachtools-updates.js', 'js/coachtools-dashboard.js', 'js/coachtools-settings.js', 'js/coachtools-howto.js', 'js/player-profile.js', 'js/coachtools-nav.js', 'js/playbuilder/schema.js', 'js/playbuilder/mirror.js', 'js/playbuilder/seed-formations.js', 'js/playbuilder/store.js', 'js/playbuilder/copy-across-formations.js', 'js/playbuilder/legacy-import.js', 'js/playbuilder/legacy-adapter.js', 'js/playbuilder/editor.js', 'js/playbuilder/formation-editor.js', 'js/playbuilder/defense-editor.js', 'js/playbuilder/sync-custom-formations.js', 'js/coachtools-playbuilder.js', 'js/coachtools-signals-admin.js', 'js/depth-chart.js', 'js/study-guide.js', 'js/shipped-defaults.js', 'js/edit-plays.js', 'js/play-calls-quiz.js', 'js/two-minute-drill.js'];
   scripts.forEach(src => {
     const link = document.createElement('link');
     link.rel = 'preload'; link.as = 'script'; link.href = withV(src);
@@ -2434,7 +2417,7 @@ if (window.ResizeObserver) {
   // Nathan: "make sure it's all stable and loading quickly - I noticed
   // some features not popping up on load. Or loading as straight text."
   // A NEW session's overlay was already hidden above, the moment the login
-  // form itself became interactive -- it doesn't depend on any of the ~39
+  // form itself became interactive -- it doesn't depend on any of the ~62
   // feature scripts below at all. A REMEMBERED session, though, already
   // has #loginScreen hidden (by auth.js, before this point) and the raw
   // app shell revealed underneath -- THAT case keeps the overlay up until
@@ -2460,7 +2443,7 @@ if (window.ResizeObserver) {
   let loadedCount = 0;
   // Nathan (follow-up): "I am now stuck on the loading screen forever."
   // Root cause: this loop had no error handling at all -- if even ONE of
-  // the ~39 scripts fails to load (a dropped request, a momentary CDN
+  // the ~62 scripts fails to load (a dropped request, a momentary CDN
   // issue, anything), loadScript's promise rejects, and since nothing
   // here catches it, the whole async boot() function throws right there
   // and never reaches the code that hides the overlay, below. One bad
@@ -2510,7 +2493,7 @@ if (window.ResizeObserver) {
   // text." This is the actual fix for that -- the overlay (still up for a
   // remembered session; a new session already hid it above, right when
   // the login form itself became interactive) only comes down here, once
-  // every one of the ~39 feature scripts has genuinely finished loading
+  // every one of the ~62 feature scripts has genuinely finished loading
   // and the app is actually ready to be touched, instead of the raw shell
   // being visible and clickable for however long that loop used to take
   // in the background.

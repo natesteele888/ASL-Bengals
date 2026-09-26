@@ -216,7 +216,22 @@ function fbLegacyBuildAlignmentLevels(play, formation, defenseLook, dirKeyCapita
  */
 function toLegacyPlayType(play, formation, defenseLook, opts) {
   opts = opts || {};
-  const toggles = formation.alignmentToggles || [];
+  // play.excludeAlignmentToggles (schema.js) lets ONE play opt out of a
+  // toggle its formation otherwise applies to every play uniformly (e.g.
+  // Pop Pass doesn't need I Wing's Overload call). Real bug, found live:
+  // an earlier version of this fix filtered only the UI-facing
+  // result.alignmentToggles further down, AFTER `directions` had already
+  // been built by fbLegacyBuildAlignmentLevels nested one level deep for
+  // the excluded toggle -- getVariant() (js/play-calls.js) then walked
+  // using the FILTERED list, stopping one level too shallow, and handed
+  // buildCard the toggle's own wrapper object ({off:{...}}) instead of
+  // the actual leaf, crashing on variant.paths.forEach. Filtering here,
+  // before fbLegacyBuildAlignmentLevels ever runs, keeps the data's own
+  // nesting depth and the exposed metadata in agreement -- confirmed via
+  // a live render-card check, not just reasoning about it.
+  const toggles = play.excludeAlignmentToggles && play.excludeAlignmentToggles.length
+    ? (formation.alignmentToggles || []).filter((t) => !play.excludeAlignmentToggles.includes(t.id))
+    : (formation.alignmentToggles || []);
   const directions = {};
   ['Left', 'Right'].forEach((dirKeyCapitalized) => {
     directions[dirKeyCapitalized] = fbLegacyBuildAlignmentLevels(play, formation, defenseLook, dirKeyCapitalized, opts, toggles, 0, {});
@@ -291,7 +306,11 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // uses, not off the legacy PlayType this function builds.
   // Copied straight through (same shape js/play-calls.js's getVariant and
   // buildCard both expect) -- omitted entirely for a formation with none,
-  // matching every existing PlayType.
+  // matching every existing PlayType. `toggles` (above) is already
+  // filtered by play.excludeAlignmentToggles, so this agrees with
+  // `directions`'s own nesting depth by construction -- see that
+  // computation's own comment for why filtering has to happen there, not
+  // here.
   if (toggles.length) result.alignmentToggles = toggles;
   if (play.signalCardId != null) {
     result.signalCardId = play.signalCardId;

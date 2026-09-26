@@ -1910,10 +1910,49 @@
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-      const gameTime = to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field
-      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
-      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+      // Nathan: "the game cards once the game is complete could be
+      // updated... to give some visual difference" + "the other cards for
+      // upcoming games let's add an orange stroke around the box to show
+      // that is the current game for that week." Two real, separate
+      // conditions -- scheduleRowFinal (a result exists) tightens the
+      // card and drops the now-moot kickoff time; scheduleRowCurrentWeek
+      // (still upcoming, AND its date falls in the real Mon-Sun window
+      // window.isDateInCurrentWeek already computes for This Week's own
+      // Week Ahead box, js/thisweek.js -- reused here rather than a
+      // second, driftable copy of that date math) only ever applies to
+      // one game at a time in practice, the one the team's actually
+      // gearing up for.
+      const isCurrentWeek = !result && window.isDateInCurrentWeek && window.isDateInCurrentWeek(g.date);
+      row.className = 'scheduleRow' + (result ? ' scheduleRowFinal' : '') + (isCurrentWeek ? ' scheduleRowCurrentWeek' : '');
+      const gameTime = result ? '' : to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field -- final score already says everything a kickoff time would; drop it once the game's done
+      // Nathan: "the result pill needs to be dead center aligned between
+      // all cards... the left score is right justified and aligned,
+      // while the right score is left justified and aligned." Fixed-
+      // width slots (.home/.away, css/styles.css) so a 1-digit score next
+      // to a 2-digit score doesn't shift the pill off-center from one
+      // card to the next -- see that CSS rule's own comment for why.
+      const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
+      const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
+      // Nathan, with a reference screenshot: "instead of stacking score
+      // under the team, it should be next to the team allowing the card
+      // to be shorter. The date is moved up to the top line where it
+      // calls out the field." Completed games only -- the date joins the
+      // location line (matching the screenshot's "AWAY • WIRE VILLAGE
+      // SCHOOL • SUN, SEP 20"), freeing up the center column to hold just
+      // the W/L/T badge instead of date+time+badge stacked.
+      // Real bug, found in review: this used to append the date onto the
+      // END of one long, single-line-truncated string -- fine for a short
+      // location, but a real address (schedule-import.js stores
+      // "${fieldName}, ${address}", e.g. "Wire Village School, 100 Wire
+      // Village Rd, Spencer, MA 01562") or the game-type tag eating extra
+      // width meant the ellipsis usually landed BEFORE the date, so no
+      // date showed anywhere on the card at all -- confirmed, not just a
+      // narrow-phone edge case; it was cut on desktop too. Now built as
+      // two pieces: the location line still truncates, but the date gets
+      // its own non-shrinking span (see markup below) so it can't be the
+      // casualty of a long location.
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
+      const dateChip = result ? `<span class="scheduleRowDateChip">• ${escapeHtml(fmtDate(g.date))}</span>` : '';
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
       // Nathan (follow-up): "Teams on your schedule should also have their
@@ -1947,21 +1986,47 @@
         const name = session && session.name ? session.name.trim().toLowerCase() : '';
         return name === 'coach nate';
       })();
-      const keepStatsBtn = isCoachNate ? `<span class="scheduleKeepStatsBtn" data-keepstats="${g.id}">🎯 Keep Stats</span>` : '';
+      // Nathan: "If a game has stats added to it, change the keep stats to
+      // see game stats and it links to the stats view from the game."
+      // window.gameStatSheetHasAnything/normalizeGameStatSheet are the
+      // same real, already-established check coachtools-stats.js's own
+      // Team Stats table already uses to decide whether a game's
+      // statSheet is real data or just an unused blank one.
+      const normalizedSheet = g.statSheet && window.normalizeGameStatSheet ? window.normalizeGameStatSheet(g.statSheet) : null;
+      const hasStats = !!(normalizedSheet && window.gameStatSheetHasAnything && window.gameStatSheetHasAnything(normalizedSheet));
+      const keepStatsBtn = isCoachNate
+        ? (hasStats
+            ? `<span class="scheduleKeepStatsBtn scheduleSeeStatsBtn" data-seestats="${g.id}">👀 See Game Stats</span>`
+            : `<span class="scheduleKeepStatsBtn" data-keepstats="${g.id}">🎯 Keep Stats</span>`)
+        : '';
+      // Nathan, with a corrected reference screenshot: "close but the
+      // number is in the same block as the logo, needs to be more like
+      // this" -- the score is NOT grouped with the logo after all; it's
+      // its own column, sitting between the logo and the center result
+      // pill (Logo ... Score [Pill] Score ... Logo). Team side goes back
+      // to logo/name/record only (unchanged from before this whole round
+      // for upcoming games, which never render a score anyway); the two
+      // scores move into the center group, flanking the pill.
+      const homeSide = `<span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}</span>`;
+      const awaySide = `<span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span></span>`;
+      const centerHtml = result
+        ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>`
+        : `<span class="scheduleRowCenter">
+            <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
+            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
+            ${badge}
+          </span>`;
       row.innerHTML = `
         ${weekBadge}
         <div class="scheduleRowTop">
           ${gameTypeTag}
           <span class="scheduleRowDate">${locLine}</span>
+          ${dateChip}
         </div>
         <span class="scheduleRowMatchup">
-          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}${usScore}</span>
-          <span class="scheduleRowCenter">
-            <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
-            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
-            ${badge}
-          </span>
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span>${themScore}</span>
+          ${homeSide}
+          ${centerHtml}
+          ${awaySide}
         </span>
         <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>
         ${keepStatsBtn}`;
@@ -1972,7 +2037,11 @@
         if (ksBtn) {
           ksBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.location.href = 'game-wizard.html?game=' + encodeURIComponent(g.id);
+            if (hasStats) {
+              if (window.openCoachStatsForGame) window.openCoachStatsForGame(g.id);
+            } else {
+              window.location.href = 'game-wizard.html?game=' + encodeURIComponent(g.id);
+            }
           });
         }
       }

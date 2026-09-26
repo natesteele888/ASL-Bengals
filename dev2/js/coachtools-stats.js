@@ -1351,4 +1351,24 @@
       loadGames().then(renderAll); // cheap re-fetch so stats entered elsewhere show up
     }
   };
+
+  // Nathan: "If a game has stats added to it, change the keep stats to
+  // see game stats and it links to the stats view from the game." First
+  // build of this sent a coach to the "Enter Stats" tab's own manual-entry
+  // form (subTab='enter') -- the same raw roster/rushing/passing keying-in
+  // UI used to originally record the game via StatKeeper. Nathan, after
+  // seeing that live: "it should not show me like this which is the manual
+  // entry document... I should see the stats like I do in the Game stats
+  // in the game itself." That's the REAL, read-only box score already
+  // built into a game's own detail page (js/schedule.js's renderDetail ->
+  // renderGameBoxScore/renderGameLeaders/renderScoringPlaysTimeline, fed
+  // by the SAME window.computeGamePlayerStats this file already exposes)
+  // -- so this now hands off to that page instead of Coach Tools' Stats
+  // tab. window.openScheduleGame (js/schedule.js) is the already-
+  // established, already-reused (thisweek.js, schedule-full.js,
+  // standings.js) entry point for "open this exact game's detail page
+  // from outside schedule.js."
+  window.openCoachStatsForGame = function (gameId) {
+    if (window.openScheduleGame) window.openScheduleGame(gameId);
+  };
 })();

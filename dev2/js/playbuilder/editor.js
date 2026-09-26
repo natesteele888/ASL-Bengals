@@ -28,6 +28,11 @@
 const els = {};
 function q(id) { return document.getElementById(id); }
 
+// Which play id render() last synced into the Play Name box for -- see
+// render()'s own comment on why this exists (a coach's own in-progress
+// typing must survive any render triggered by clicking something else).
+let lastSyncedLabelPlayId = null;
+
 const state = {
   formations: [],
   defenseLooks: [],
@@ -181,6 +186,30 @@ function previewAlignmentFor(formation, positionId) {
 // non-default alignment for the first time starts from a real point on
 // the field, never nothing.
 function routeHolder(assignment, playerId) {
+  // Nathan: "the wing needs to come in off the LT since the TE is in
+  // overload to the Right" -- same relationship overloadOppositeRouteFor()
+  // checks for RENDERING, checked first here too so dragging #4's handles
+  // while that exact combination is previewed writes into
+  // overloadOppositeRoute (what the render is actually using), not
+  // sameSideRoute/crossSideRoute -- data the render isn't reading in this
+  // state at all. A single flat route (no same/cross split -- the
+  // relationship itself already fully determines the geometry), so it
+  // gets its own distinct holder shape rather than forcing it into the
+  // existing sameSideRoute/crossSideRoute pair.
+  if (isWing(playerId)) {
+    const overloadToggle = (currentFormation().alignmentToggles || []).find((t) => t.id === 'overload');
+    const overloadValue = overloadToggle ? (state.alignmentPreview[overloadToggle.id] || overloadToggle.values[0].id) : null;
+    if (overloadValue && overloadValue !== 'off' && overloadValue !== state.wingSide) {
+      if (!assignment.overloadOppositeRoute || !assignment.overloadOppositeRoute.length) {
+        const anchor = window.PlayBuilderMirror.resolveAnchor(currentFormation(), playerId, { wingSide: 'right', direction: 'right' });
+        assignment.overloadOppositeRoute = [{ x: anchor.x, y: anchor.y }];
+      }
+      if (assignment.overloadOppositeRoute.length < 2) {
+        assignment.overloadOppositeRoute.push({ x: assignment.overloadOppositeRoute[0].x, y: assignment.overloadOppositeRoute[0].y - 100 });
+      }
+      return { overloadOppositeRoute: assignment.overloadOppositeRoute };
+    }
+  }
   const toggle = alignmentToggleFor(currentFormation(), playerId);
   const value = state.editingAlignment;
   if (toggle && value && value !== toggle.values[0].id) {
@@ -434,6 +463,27 @@ function wingLeftRouteFor(formation, players, positionId) {
   return (assignment && assignment.wingLeftRoute) ? assignment.wingLeftRoute.map((pt) => ({ x: pt.x, y: pt.y })) : null;
 }
 
+// Nathan: "I Wing Left Overload Right Blast Left. The wing needs to come
+// in off the LT since the TE is in overload to the Right." Same
+// mechanism as js/play-calls.js's own real-card fix -- a RELATIONSHIP
+// between two toggles (this position's own wingSide vs. Overload's
+// current value), so checked by comparing them directly rather than a
+// fixed-value lookup like alignmentRouteFor above. See
+// PlayerAssignment.overloadOppositeRoute (schema.js) for the full
+// reasoning and the canonical-frame/reflection convention.
+function overloadOppositeRouteFor(formation, players, positionId) {
+  const overloadToggle = (formation.alignmentToggles || []).find((t) => t.id === 'overload');
+  if (!overloadToggle) return null;
+  const overloadValue = state.alignmentPreview[overloadToggle.id] || overloadToggle.values[0].id;
+  if (!overloadValue || overloadValue === 'off' || overloadValue === state.wingSide) return null;
+  const assignment = players.find((p) => p.player === positionId);
+  const route = assignment && assignment.overloadOppositeRoute;
+  if (!route) return null;
+  if (state.wingSide !== 'left') return route.map((pt) => ({ x: pt.x, y: pt.y }));
+  const centerX = formation.positions.find((p) => p.id === 'C')?.x ?? 0;
+  return route.map((pt) => ({ x: centerX + (centerX - pt.x), y: pt.y }));
+}
+
 // "5 Guys": WHO'S featured (has the ball) rotates to a DIFFERENT player
 // when Wing flips, not just where the same player is drawn. Nathan: "the
 // target refers to the 1st position going from receivers left to right...
@@ -502,6 +552,24 @@ function render() {
       ? `${currentFormation()?.label || ''} — ${state.currentPlay.label || '(untitled play)'}`
       : '';
   }
+  // Rename affordance -- Nathan: "I realized I messed up as this play is I
+  // Wing - Blast not Double Blast. I need to be able to edit it on that
+  // one place." Same "every render, can't drift" reasoning as
+  // pbFieldTitle just above -- but real bug, found in review: the ONLY
+  // guard was "does this box currently have focus," which only protects
+  // typed text WHILE the box is focused. Clicking a player, a Wing/
+  // Direction/Heavy toggle, the Variant select, or ▶ Play all blur the
+  // box and call render() -- the very next one silently overwrote
+  // whatever the coach had just typed back to the play's OLD saved label,
+  // with no way to recover it. Now only re-syncs when the LOADED PLAY
+  // itself actually changed (tracked below), matching how pbFieldTitle/
+  // the formation select are safe to sync unconditionally -- neither of
+  // those holds in-progress typing the way this input does.
+  if (els.pbLabelInput && document.activeElement !== els.pbLabelInput
+      && lastSyncedLabelPlayId !== (state.currentPlay ? state.currentPlay.id : null)) {
+    els.pbLabelInput.value = state.currentPlay ? (state.currentPlay.label || '') : '';
+    lastSyncedLabelPlayId = state.currentPlay ? state.currentPlay.id : null;
+  }
   // Same "every render, can't drift" reasoning as pbFieldTitle just above
   // -- real bug, found live: Nathan, on Coach Tools' own Play Builder:
   // "I want to add a play to the 5 guys formation. it says it is set to
@@ -543,17 +611,15 @@ function render() {
   const variant = currentVariant();
   const { resolveAnchor, resolveRoute } = window.PlayBuilderMirror;
 
-  // Defense. Same real-jersey-number substitution as js/play-calls.js's
-  // own renderCardDiagram/renderSplitDiagram (js/depth-chart.js's
-  // getDefenseStarterNumbers, our own team's Depth Chart -- see its
-  // comment for the matching rule) -- kept consistent here too, since a
+  // Defense -- plain position labels (DE/DT/LB/CB/S), matching
+  // js/play-calls.js's own renderCardDiagram/renderSplitDiagram: Nathan
+  // "shouldn't see our defensive depth chart guys on defense, it should
+  // just say the name of the position." Kept consistent here too, since a
   // coach previews plays against this exact defense right before they go
   // into the real card.
   const defensePositions = defenseLook?.positions || [];
-  const editorDefenderNumbers = window.getDefenseStarterNumbers ? window.getDefenseStarterNumbers(defensePositions) : {};
   defensePositions.forEach((d) => {
-    const label = editorDefenderNumbers[d.id] || d.label;
-    defenseLayer.appendChild(drawCircle(d.x, d.y, label, '#e8720c', 26));
+    defenseLayer.appendChild(drawCircle(d.x, d.y, d.label, '#e8720c', 26));
   });
 
   // Routes (behind circles, so a player's number stays readable). Iterates
@@ -575,6 +641,8 @@ function render() {
     if (!points) return;
     const wingLeftPoints = wingLeftRouteFor(formation, players, pos.id);
     if (wingLeftPoints) points = wingLeftPoints;
+    const overloadOppositePoints = overloadOppositeRouteFor(formation, players, pos.id);
+    if (overloadOppositePoints) points = overloadOppositePoints;
     const alignmentPoints = alignmentRouteFor(formation, players, pos.id);
     if (alignmentPoints) points = alignmentPoints;
     const assignment = resolveAssignment(formation, players, pos.id, state.direction, state.currentPlay);
@@ -814,6 +882,7 @@ function editablePointsForSelected() {
   if (state.selectedPlayer === null) return null;
   const assignment = assignmentFor(state.selectedPlayer);
   const holder = routeHolder(assignment, state.selectedPlayer);
+  if (holder.overloadOppositeRoute) return holder.overloadOppositeRoute;
   if (isWing(state.selectedPlayer)) {
     return state.wingRouteSide === 'sameSide' ? holder.sameSideRoute : holder.crossSideRoute;
   }
@@ -1165,6 +1234,22 @@ function syncToggleAvailabilityUI() {
   els.pbAllowMotionCheckbox.checked = !state.currentPlay.noMotion;
 }
 
+// Shared by the top "SIGNAL" dropdown AND the inline picker on the play's
+// own row in the "Full sequence (preview)" list below (renderSignal
+// SequencePreview) -- one function so the two controls can never write
+// this differently/drift, same discipline as every other "one place,
+// not two" fix this session.
+function applyPlaySignalId(id) {
+  if (id == null) {
+    delete state.currentPlay.signalCardId;
+    delete state.currentPlay.signalLabel;
+  } else {
+    const card = window.Signals && window.Signals.get(id);
+    state.currentPlay.signalCardId = id;
+    state.currentPlay.signalLabel = card ? card.meaning : undefined;
+  }
+}
+
 function syncSignalUI() {
   if (!state.currentPlay) return;
   syncToggleAvailabilityUI();
@@ -1252,7 +1337,7 @@ function buildSignalSequencePreview() {
   steps.push({ label: `${formation.label} touch`, src: touchId != null ? window.Signals.src(touchId) : null });
   const sideFingerId = window.randomFingerId(state.wingSide);
   steps.push({ label: `${formation.label}: ${state.wingSide}`, src: window.Signals.src(sideFingerId) });
-  steps.push({ label: play.signalLabel || play.label, src: play.signalCardId != null ? window.Signals.src(play.signalCardId) : null });
+  steps.push({ label: play.signalLabel || play.label, src: play.signalCardId != null ? window.Signals.src(play.signalCardId) : null, isPlayCard: true });
   const dirFingerId = window.randomFingerId(state.direction, sideFingerId);
   steps.push({ label: `Direction: ${state.direction}`, src: window.Signals.src(dirFingerId) });
   (formation.alignmentToggles || []).forEach((toggle) => {
@@ -1267,14 +1352,37 @@ function buildSignalSequencePreview() {
 function renderSignalSequencePreview() {
   if (!els.pbSignalSequence) return;
   const steps = buildSignalSequencePreview();
+  // Nathan: "if it is missing a card in the sequence... I need to be able
+  // to add the missing card there by clicking and choosing from the
+  // signal cards. If the sequence is wrong, I need a way of adding a
+  // missing card or changing it so it stays that way for the call." Every
+  // OTHER step's card comes from a fixed pool/id (touch, side/direction
+  // finger cards, Overload/Boot/etc.) and can't be individually wrong per
+  // play -- signals.js's own isPlayCard flag marks the one step that
+  // genuinely can be (the play's own identity card, playSignalId). That
+  // row gets a real, always-live picker instead of a static image+label,
+  // sharing applyPlaySignalId() with the top SIGNAL dropdown so the two
+  // controls can never write this differently.
+  const deckOptions = '<option value="">(none)</option>' + playCallSignalDeck().map((c) => `<option value="${c.id}">${c.meaning} (#${c.id})</option>`).join('');
+  const currentId = state.currentPlay.signalCardId;
   els.pbSignalSequence.innerHTML = steps.map((s, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:3px 0">
       <span style="font-size:11px;color:var(--muted);width:14px">${i + 1}.</span>
       ${s.src
         ? `<img src="${s.src}" style="width:30px;height:37px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:#fff">`
         : `<span style="width:30px;height:37px;border-radius:4px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted);text-align:center;line-height:1.1">no card set</span>`}
-      <span style="font-size:12px">${s.label}</span>
+      ${s.isPlayCard
+        ? `<select class="pbSignalRowSelect" style="flex:1 1 auto;min-width:0;font-size:12px;padding:3px 4px">${deckOptions}</select>`
+        : `<span style="font-size:12px">${s.label}</span>`}
     </div>`).join('');
+  const rowSelect = els.pbSignalSequence.querySelector('.pbSignalRowSelect');
+  if (rowSelect) {
+    rowSelect.value = currentId != null ? String(currentId) : '';
+    rowSelect.addEventListener('change', () => {
+      applyPlaySignalId(rowSelect.value ? Number(rowSelect.value) : null);
+      syncSignalUI();
+    });
+  }
 }
 
 function populateVariantSelect() {
@@ -1318,6 +1426,14 @@ function bindSidebar() {
 
   els.pbSaveBtn.addEventListener('click', async () => {
     els.pbSaveBtn.textContent = 'Saving…';
+    // Rename affordance -- same trim-and-guard pattern
+    // formation-editor.js's own fbNameInput save already uses: apply
+    // whatever's in the box, falling back to the play's own current label
+    // if the coach cleared it rather than saving something untitled.
+    if (els.pbLabelInput) {
+      const newLabel = (els.pbLabelInput.value || '').trim();
+      if (newLabel) state.currentPlay.label = newLabel;
+    }
     // Nathan: "That is what I originally wanted for the What's New section
     // which would show any new plays you create." Checked BEFORE saving --
     // state.plays is this screen's own already-loaded list, so "not in it
@@ -1337,6 +1453,22 @@ function bindSidebar() {
       const i = state.plays.findIndex((p) => p.id === state.currentPlay.id);
       if (i === -1) state.plays.push(state.currentPlay); else state.plays[i] = state.currentPlay;
       if (isNewPlay && window.logNewPlayToWhatsNew) window.logNewPlayToWhatsNew(state.currentPlay.id, state.currentPlay.label);
+      // Refresh the Play dropdown's own <option> TEXT -- previously a
+      // no-op (label was write-once, so a save could never change it),
+      // now a real gap the rename affordance above would otherwise leave
+      // stale until the next full populate (switching plays, reload).
+      populatePlaySelect();
+      // Real bug, found in review: pbFieldTitle (the "<formation> --
+      // <play>" header at the top of the field) is only ever re-synced
+      // inside render() -- a successful rename updated state.currentPlay.
+      // label and the dropdown's own option text (just above) immediately,
+      // but the header kept showing the OLD name until some unrelated
+      // later action happened to trigger a render(). Right after Save is
+      // exactly when a coach checks "did that rename take" -- render()
+      // is safe to call here (same state every adjacent handler already
+      // renders from) and simply re-syncs pbFieldTitle/everything else
+      // idempotently off the now-updated label.
+      render();
       els.pbSaveBtn.textContent = 'Saved!';
     } catch (err) {
       els.pbSaveBtn.textContent = 'Save failed';
@@ -1458,6 +1590,12 @@ function bindSidebar() {
     const formationId = els.pbFormationSelect.value;
     const existing = state.plays.find((p) => p.formationId === formationId);
     state.currentPlay = existing || newPlayDraft(formationId, window.PlayBuilderSeeds.viewBox, window.PlayBuilderSeeds.topPad);
+    // A fresh draft's id is always the literal 'new_play' -- switching
+    // between two DIFFERENT empty formations in a row would otherwise look
+    // like "no change" to the Play Name box's own id-based guard above,
+    // letting anything the coach had typed for the FIRST empty formation's
+    // draft silently carry over into the second's.
+    if (!existing) lastSyncedLabelPlayId = null;
     state.currentVariantIndex = 0;
     state.selectedPlayer = null;
     state.ballPathMode = false;
@@ -1528,20 +1666,11 @@ function bindSidebar() {
   });
 
   els.pbSignalSelect.addEventListener('change', () => {
-    const id = els.pbSignalSelect.value ? Number(els.pbSignalSelect.value) : null;
-    if (id == null) {
-      delete state.currentPlay.signalCardId;
-      delete state.currentPlay.signalLabel;
-    } else {
-      const card = window.Signals && window.Signals.get(id);
-      state.currentPlay.signalCardId = id;
-      state.currentPlay.signalLabel = card ? card.meaning : undefined;
-    }
+    applyPlaySignalId(els.pbSignalSelect.value ? Number(els.pbSignalSelect.value) : null);
     syncSignalUI();
   });
   els.pbSignalResetBtn.addEventListener('click', () => {
-    delete state.currentPlay.signalCardId;
-    delete state.currentPlay.signalLabel;
+    applyPlaySignalId(null);
     syncSignalUI();
   });
 
@@ -1559,8 +1688,40 @@ function bindSidebar() {
 }
 
 function populatePlaySelect() {
-  els.pbPlaySelect.innerHTML = state.plays.map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
-  if (state.currentPlay) els.pbPlaySelect.value = state.currentPlay.id;
+  // Nathan, live: "I go to plays, choose the Shotgun formation, then
+  // click Pop Pass as the play, it shoots me into I formation Pop Pass."
+  // Real bug, confirmed against live data -- this dropdown used to list
+  // EVERY Play Builder V2 play across EVERY formation in one flat list,
+  // unfiltered. Wing/Split's own real plays (Pop Pass, Inside Zone, etc.)
+  // were never migrated INTO Play Builder V2's store at all (that cutover
+  // was scoped as its own later phase and never completed) -- so the only
+  // "Pop Pass" that actually exists here is a real, in-progress WIP play
+  // under "I Wing" (id `pop_pass_i-wing`). Picking "Pop Pass" from the
+  // unfiltered list always landed there, regardless of which formation
+  // was showing, silently overwriting the correct (blank-for-Wing) state
+  // the Formation switcher had just set up. Filtering to the CURRENTLY
+  // LOADED formation means Wing/Split honestly show an empty list (there
+  // is nothing there to edit yet) instead of a same-named but unrelated
+  // play from a different formation.
+  const formationId = state.currentPlay ? state.currentPlay.formationId : null;
+  const plays = formationId ? state.plays.filter((p) => p.formationId === formationId) : state.plays;
+  els.pbPlaySelect.innerHTML = plays.length
+    ? plays.map((p) => `<option value="${p.id}">${p.label}</option>`).join('')
+    : '<option value="" disabled selected>(no Play Builder plays for this formation yet)</option>';
+  // Real bug, found in review: for a brand-new, unsaved draft (state.
+  // currentPlay.id not yet in `plays` -- "+ New Play," "+ Add a play," or
+  // switching to a formation with no plays yet), the branch below never
+  // ran, and a non-empty select just falls back to the browser's own
+  // default of showing its FIRST option "selected" -- an unrelated, real,
+  // already-saved play, with nothing on screen to say the coach is
+  // actually mid-edit on a fresh draft. A disabled placeholder option
+  // makes that state visible instead of silently misleading.
+  if (state.currentPlay && !plays.some((p) => p.id === state.currentPlay.id)) {
+    els.pbPlaySelect.insertAdjacentHTML('afterbegin',
+      `<option value="${state.currentPlay.id}" disabled selected>${state.currentPlay.label || '(untitled)'} (unsaved)</option>`);
+  } else if (state.currentPlay) {
+    els.pbPlaySelect.value = state.currentPlay.id;
+  }
 }
 function populateFormationSelect() {
   els.pbFormationSelect.innerHTML = state.formations.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
@@ -1569,6 +1730,7 @@ function populateFormationSelect() {
 async function init() {
   els.svg = q('pbField');
   els.pbFieldTitle = q('pbFieldTitle');
+  els.pbLabelInput = q('pbLabelInput');
   els.pbPlayerPanel = q('pbPlayerPanel');
   els.pbPlayerLabel = q('pbPlayerLabel');
   els.pbHasBallCheckbox = q('pbHasBallCheckbox');
@@ -1716,9 +1878,83 @@ async function init() {
   } else {
     state.currentPlay = newPlayDraft(state.formations[0]?.id, data.viewBox, data.topPad);
   }
+  // Real bug, found live: the Modify screen's own new pencil-edit handoff
+  // ("Dive" loaded on the field/title/Play Name input) left the Play
+  // dropdown itself showing the WRONG play, still selected, from whatever
+  // the earlier populatePlaySelect() call above (right after
+  // populateFormationSelect()) loaded -- that call ran before pendingPlay
+  // was known, so it filtered/selected against the stale pre-handoff
+  // state.currentPlay (or none at all). Re-populate now that
+  // state.currentPlay is actually final, same "can't drift" fix as
+  // pbFieldTitle/pbFormationSelect's own per-render sync elsewhere in
+  // this file, applied to this one-time boot path instead.
+  populatePlaySelect();
   populateVariantSelect();
   els.statusEl.textContent = '';
   els.ballPathEditor.set(effectiveBallPath(currentVariant())); // triggers render() via renderPlay
+}
+
+// Real bug, found live: the Play tab's "Modify -> pencil" (and "+ Add a
+// play" -> Copy) handoff globals below were ONLY ever consumed inside
+// init() -- but init() only runs ONCE per page load (coachtools-
+// playbuilder.js's own `built` guard skips re-running it on every later
+// tab activation, since re-running init() would also re-fetch/rebuild
+// everything and detach the live SVG). So a SECOND pencil click (on any
+// play, any formation) in the same session left the pending id set with
+// nothing left to read it -- Play Builder kept showing whatever was
+// already loaded, silently. Worst case: a coach believes they're editing
+// the play they just tapped, edits/saves the WRONG one instead, and
+// ensureCuratedForFormation() re-adds that wrong play to a formation's
+// list the coach may have just removed it from via the same Modify screen.
+// Exported (see window.PlayBuilderEditor below) so coachtools-
+// playbuilder.js's window.initCoachPlayBuilder can call this on every
+// SUBSEQUENT activation, not just the first (init() already handles the
+// first activation's own copy of this exact logic inline, further below --
+// left untouched here to avoid any risk to that already-verified path).
+async function consumePendingHandoff() {
+  const pendingFormationId = window.__pbPendingNewPlayFormationId;
+  window.__pbPendingNewPlayFormationId = null;
+  const pendingPlayId = window.__pbPendingLoadPlayId;
+  window.__pbPendingLoadPlayId = null;
+  if (!pendingFormationId && !pendingPlayId) return false;
+
+  // A pending play id may reference something the Play tab's own Copy
+  // action (js/playbuilder/legacy-import.js) JUST saved straight to the
+  // store, bypassing this screen's in-memory state.plays -- refetch only
+  // when it's not already known. Formations are deliberately NOT
+  // refetched here: state.formations already carries the real-custom-
+  // formation "(import)" stubs init() builds once at boot, which a bare
+  // store refetch has no idea about and would silently drop.
+  let pendingPlay = pendingPlayId && state.plays.find((p) => p.id === pendingPlayId);
+  if (pendingPlayId && !pendingPlay) {
+    try {
+      const data = await window.PlayBuilderStore.loadAll();
+      state.plays = data.plays;
+      pendingPlay = state.plays.find((p) => p.id === pendingPlayId);
+    } catch (err) {
+      console.error('[playbuilder] failed to refresh plays before consuming pending handoff:', err);
+    }
+  }
+  const pendingFormation = pendingFormationId && state.formations.find((f) => f.id === pendingFormationId);
+  if (!pendingPlay && !pendingFormation) return false;
+
+  state.currentPlay = pendingPlay || newPlayDraft(pendingFormation.id, window.PlayBuilderSeeds.viewBox, window.PlayBuilderSeeds.topPad);
+  state.currentVariantIndex = 0;
+  state.selectedPlayer = null;
+  state.selectedPointIndex = null;
+  state.ballPathMode = false;
+  populateFormationSelect();
+  populatePlaySelect();
+  populateVariantSelect();
+  els.ballPathEditor.set(effectiveBallPath(currentVariant())); // triggers render() via renderPlay
+
+  // Land on the Plays sub-view specifically -- a coach tapping the pencil
+  // from the real Play tab expects to see the play they picked, not
+  // whichever of Plays/Formations/Defense happened to be showing last.
+  const playsTabBtn = document.querySelector('#pbTopModeToggle button[data-mode="plays"]');
+  if (playsTabBtn && !playsTabBtn.classList.contains('active')) playsTabBtn.click();
+
+  return true;
 }
 
 // Exposed explicitly rather than only self-booting on DOMContentLoaded --
@@ -1729,8 +1965,13 @@ async function init() {
 // DOMContentLoaded. playbuilder.html's markup, by contrast, is already
 // fully present in the page source by the time this script (the last one
 // on the page) runs, so it can safely still self-boot immediately.
+// Returns the init() promise (additive -- every existing fire-and-forget
+// caller ignores the return value unchanged) so js/coachtools-
+// playbuilder.js can know when the FIRST activation's own async load has
+// actually finished, closing a real double-click race found in review:
+// see that file's own `initializing` guard for the full story.
 window.initPlayBuilderEditor = function () {
-  init().catch((err) => {
+  return init().catch((err) => {
     console.error(err);
     q('pbStatus').textContent = `Failed to load: ${err.message}`;
   });
@@ -1790,6 +2031,7 @@ window.PlayBuilderEditor = {
   anySignalDeck,
   svgEl,
   drawCircle,
+  consumePendingHandoff,
 };
 
 })();

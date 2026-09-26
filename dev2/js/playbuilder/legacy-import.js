@@ -182,6 +182,23 @@ function importLegacyPlayToFormation(playType, targetFormation, newId, newLabel,
     topPad: 400,
     variants: [{ id: 'base', label: 'Base', players, ballPath: [] }],
   };
+  // Real bug, found live: Nathan, on the real Play tab -- "Option Pass,
+  // Shuffle Pass and Pop Pass are all passes not runs" (showing the
+  // orange RUN badge instead of blue PASS). This function built a
+  // brand-new play object from scratch and never carried ANY of the
+  // source playType's own top-level flags over -- isPass included, so
+  // every legacy-imported copy of a real Wing pass play silently reverted
+  // to "run" the instant it was copied into a new formation. noBoot is
+  // the same class of gap, confirmed on the same 2 of these 3 real source
+  // plays (option_pass, pop_pass both have noBoot:true -- Boot doesn't
+  // make sense on a play that's already a pass) -- without it, Boot was
+  // being offered as a toggle on the imported copy even though the
+  // source explicitly turned it off. noMotion carried the same way for
+  // consistency, even though none of today's real source plays happen to
+  // set it.
+  if (playType.isPass) play.isPass = true;
+  if (playType.noBoot) play.noBoot = true;
+  if (playType.noMotion) play.noMotion = true;
   return { play, needsRemake };
 }
 

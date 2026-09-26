@@ -939,21 +939,6 @@ function tweenPoint(fromPt, toPt, durationMs, onFrame) {
   });
 }
 
-function animateBallAlongPath(pathEl, durationMs, onFrame) {
-  return new Promise(resolve => {
-    const totalLen = pathEl.getTotalLength();
-    const start = Date.now();
-    function step() {
-      const t = Math.min(1, (Date.now() - start) / durationMs);
-      const pt = pathEl.getPointAtLength(t * totalLen);
-      onFrame(pt);
-      if (t < 1) requestAnimationFrame(step);
-      else resolve();
-    }
-    requestAnimationFrame(step);
-  });
-}
-
 // Draws a path on progressively (stroke-dashoffset) while sliding its
 // arrowhead along the growing tip, instead of a static SVG marker that
 // would just sit at the endpoint from the very start.
@@ -1431,11 +1416,6 @@ let editTarget = null;
 let settingBallCarrier = false;
 let settingBallStart = false;
 
-const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
-const DEFENDER_IDS_4x4 = ['DE_L','DT_L','DT_R','DE_R','LB1','LB2','LB3','LB4','CB_L','CB_R','FS'];
-function getDefenderIds() {
-  return defenseMode === '4x4' ? DEFENDER_IDS_4x4 : DEFENDER_IDS_4x3;
-}
 function getActiveDefenseArr(variant) {
   return (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
 }

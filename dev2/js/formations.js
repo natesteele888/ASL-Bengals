@@ -97,7 +97,14 @@
   var BUILT_IN = {
     wing: {
       id: 'wing',
-      name: 'Wing',
+      // Nathan: "This formation is called shotgun - it's our base
+      // formation." Real, coach-facing display name only -- the internal
+      // id stays 'wing' (keyed everywhere: Firebase paths, DATA.playTypes'
+      // own implicit formation, the 'shotgun' alias below, this session's
+      // own Play Builder V2 schema id) and the Wing L/R TOGGLE (a
+      // different, formation-agnostic axis -- which side #4 lines up on,
+      // not this formation's own name) is deliberately untouched.
+      name: 'Shotgun',
       // What the existing code calls this formation internally. play-calls.js
       // uses 'shotgun' as its string for the Wing look; keeping the alias here
       // means callers can pass either and the registry resolves it, which is
@@ -165,22 +172,57 @@
   // tight end already there, and the flanker keeps the same gap from the end
   // man that he had before. So a formation with a wider or tighter split
   // overloads at ITS spacing, not at Wing's.
-  function applyOverload(pos, f, side) {
+  // Nathan: "you don't have to have the overload on the same side as the
+  // wing, you can use it as misdirection." `overloadSide` (which side the
+  // extra TE goes to) and `wingSide` (where the flanker/#4 already
+  // stands) used to always be the same value implicitly -- now genuinely
+  // independent. The back-side TE always moves to `overloadSide` (his own
+  // math never depended on the flanker anyway); the flanker only gets
+  // pushed further out when overload targets HIS OWN side (a real
+  // collision risk, the new TE lines up right where he already is) --
+  // when overload is called to the OPPOSITE side, he isn't anywhere near
+  // it and stays exactly where he normally does. Same collision-avoidance
+  // distinction Play Builder V2's own p4OverloadCollisionAnchor already
+  // makes for I/I-Wing (js/play-calls.js), ported here for Wing's own,
+  // older mechanism.
+  function applyOverload(pos, f, overloadSide, wingSide) {
     var o = f.overload;
     if (!o) return pos; // formation has no wing side; nothing to overload
-    var frontTE = o.tightEnds[side];
-    var backTE = o.tightEnds[side === 'Right' ? 'Left' : 'Right'];
-    var tackle = o.edgeTackle[side];
+    var frontTE = o.tightEnds[overloadSide];
+    var backTE = o.tightEnds[overloadSide === 'Right' ? 'Left' : 'Right'];
+    var tackle = o.edgeTackle[overloadSide];
     var flanker = o.flanker;
     if (!pos[frontTE] || !pos[backTE] || !pos[tackle]) return pos;
 
-    var sign = side === 'Right' ? 1 : -1;
+    // Whenever overloadSide differs from wingSide, backTE (the guy who's
+    // leaving) is necessarily the flanker's OWN near-side TE -- there are
+    // only two sides, so "opposite of overloadSide" and "wingSide" are the
+    // same side in that case. Captured before he moves, since pos[backTE]
+    // gets overwritten two lines down.
+    var departedNearSideTE = pos[backTE].slice();
+
+    var sign = overloadSide === 'Right' ? 1 : -1;
     var teSplit = Math.abs(pos[frontTE][0] - pos[tackle][0]);
     pos[backTE] = [Math.round(pos[frontTE][0] + sign * teSplit), pos[frontTE][1]];
 
     if (pos[flanker]) {
-      var gap = Math.abs(pos[flanker][0] - pos[frontTE][0]);
-      pos[flanker] = [Math.round(pos[backTE][0] + sign * gap), pos[flanker][1]];
+      if (overloadSide === wingSide) {
+        // Same side as wing: a real collision risk (the new TE lines up
+        // right where the flanker already is) -- push him further out.
+        var gap = Math.abs(pos[flanker][0] - pos[frontTE][0]);
+        pos[flanker] = [Math.round(pos[backTE][0] + sign * gap), pos[flanker][1]];
+      } else {
+        // Nathan: "if the overload is to the opposite side of the wing,
+        // then the wing needs to scoot in closer to be off the end of
+        // the T instead of down 1 spot past the TE." His own near-side
+        // TE just left to join the overload -- floating at his normal
+        // spot would leave a real gap where that TE used to stand.
+        // Tightens up to fill it, taking over the exact spot the
+        // departed TE was already standing in ("off the end of the
+        // tackle," the same real, spacing-derived anchor a TE always
+        // lines up at there -- not a new, separately-authored number).
+        pos[flanker] = departedNearSideTE;
+      }
     }
     return pos;
   }
@@ -204,7 +246,21 @@
     } else {
       pos = f.positions && f.positions[s] ? clone(f.positions[s]) : null;
     }
-    if (pos && opts && opts.overload) pos = applyOverload(pos, f, s);
+    // opts.overloadSide (new, explicit -- 'Left'/'Right', may differ from
+    // `s`) takes priority when given; opts.overload (old, plain boolean)
+    // stays exactly as it always worked for every caller that still uses
+    // it (Assignment Editor, Coach Tools Create Play) -- overload the
+    // SAME side positions() was already asked for, unchanged behavior.
+    // opts.wingSide is the TRUE formation wing side (for the
+    // flanker-adjustment comparison inside applyOverload) -- distinct
+    // from `s`, which is just whichever side THIS call happens to be
+    // asking for positions on (e.g. js/play-calls.js's own p4AnchorOn
+    // can query a MOTIONED side that differs from the real wing side).
+    // Falls back to `s` when not given, matching every caller that never
+    // needed the distinction (asking for wingSide's own positions IS
+    // asking on the wing side).
+    if (pos && opts && opts.overloadSide) pos = applyOverload(pos, f, opts.overloadSide, opts.wingSide || s);
+    else if (pos && opts && opts.overload) pos = applyOverload(pos, f, s, s);
     return pos;
   }
 

@@ -210,10 +210,17 @@
   function pickFrom(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
 
   var RECIPES = {
-    // The Wing/Shotgun call: touch, where the wing is, then the play, then
-    // which way it goes, then any modifiers.
+    // The Shotgun call: no touch/identity card at all, unlike every other
+    // formation's recipe -- Nathan: "This formation is called shotgun -
+    // it's our base formation. It doesn't have a formation call, it just
+    // starts with Wing and the side the wing is on." The team's default
+    // look needs no announcing; the call goes straight to where the wing
+    // is, then the play, then which way it goes, then any modifiers.
+    // WING_TOUCH (card 7) itself is untouched -- still a real, valid card,
+    // still referenced by TOUCH_CARD_BY_FORMATION below (Play Builder
+    // V2's own authoring preview for a formation with no dedicated
+    // recipe) -- just no longer forced into this ONE, live, real recipe.
     wing: [
-      { card: WING_TOUCH, label: 'Wing' },
       { card: function (c) { return (c.wingFinger = pickFinger(c.wingSide)); },
         label: function (c) { return 'Wing Location: ' + c.wingSide; } },
       // Overload is an alignment call, so it comes while the pre-snap picture
@@ -221,6 +228,18 @@
       // it decides where the tight end lines up and Motion moves someone from
       // wherever they ended up.
       { when: function (c) { return c.overloadOn; }, card: OVERLOAD, label: 'Overload' },
+      // Nathan: "you don't have to have the overload on the same side as
+      // the wing, you can use it as misdirection... it needs to show
+      // Overload > direction in the signal sequence." Same rule as
+      // RECIPES.i's own Overload side card: only independently callable
+      // when it DIFFERS from wingSide (the natural default -- the extra
+      // tight end goes to the side already heavier from the wing); when
+      // it matches, the wing-location card just above already carries
+      // that same side, so a second, redundant card is skipped.
+      { when: function (c) { return c.alignmentValues && c.alignmentValues.overload && c.alignmentValues.overload !== 'off'
+          && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
+        card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
+        label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
       // Motion is called right after the wing spot is set: it is part of the
       // pre-snap picture, and that is where the toggle sits in the UI too.
       { when: function (c) { return c.motionOn; },
@@ -230,7 +249,7 @@
       // example: "Wing, Right, Outside, Double Blast, Right".
       { when: function (c) { return isBlast(c.playKey) && c.insideOutside === 'Outside'; },
         card: OUTSIDE_ZONE, label: 'Outside Zone' },
-      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       // Pop Pass never calls a direction -- its own Pop 2 modifier takes
       // that slot instead.
       { when: function (c) { return c.playKey !== 'pop_pass'; },
@@ -254,7 +273,7 @@
         label: function (c) { return 'Split: ' + c.splitSide; } },
       { when: function (c) { return isBlast(c.playKey) && c.insideOutside === 'Outside'; },
         card: OUTSIDE_ZONE, label: 'Outside Zone' },
-      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       { card: function (c) { return pickFinger(c.splitSide, c.splitFinger); },
         label: function (c) { return 'Direction: ' + c.splitSide; } },
       // Pass negates the run call. Which of Pass 1/2/3 shows is random --
@@ -308,7 +327,7 @@
           && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
-      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       // I's Sweep: Nathan: "There is no sweep left handing off to the 4,
       // with the wing in heavy on the left side" -- direction is never
       // independently callable for a directionOpposesWing play (it's
@@ -344,7 +363,7 @@
           && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
-      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       { card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
     ],
@@ -386,10 +405,22 @@
       // not just the photo/text a coach reads off the app's own flip-card
       // UI. Purely additive -- every existing consumer only ever reads
       // .src/.label off this shape.
-      out.push({ id: id, src: src(id), label: resolve(step.label, ctx) });
+      out.push({ id: id, src: src(id), label: resolve(step.label, ctx), isPlayCard: !!step.isPlayCard });
     });
     return out;
   }
+
+  // Nathan: "if it is missing a card in the sequence... I need to be able
+  // to add the missing card there by clicking and choosing from the
+  // signal cards." Every step's own card is chosen from a fixed pool/id
+  // EXCEPT the play's own identity card (playSignalId) -- that's the one
+  // step whose resolved id can genuinely be null (no signalCardId set
+  // yet), and the one thing per-play authoring can actually change. Each
+  // recipe above tags that one step `isPlayCard: true`; threaded through
+  // both walkers here (not just runRecipePreview) so it's available
+  // wherever a consumer wants it, though only js/playbuilder/editor.js's
+  // own preview list actually reads it today -- the real app's
+  // buildSignalSequence has no use for it, this is purely additive.
 
   // Same walk, for Play Builder V2's own authoring-time preview
   // (js/playbuilder/editor.js's buildSignalSequencePreview) ONLY -- a coach
@@ -402,7 +433,7 @@
     recipe.forEach(function (step) {
       if (step.when && !step.when(ctx)) return;
       var id = resolve(step.card, ctx);
-      out.push({ src: id != null ? src(id) : null, label: resolve(step.label, ctx) });
+      out.push({ src: id != null ? src(id) : null, label: resolve(step.label, ctx), isPlayCard: !!step.isPlayCard });
     });
     return out;
   }

@@ -92,7 +92,14 @@
     if (!hasCloud()) return Promise.resolve(readLocal());
     return window.firebaseAuthed(DB + '/' + PATH + '.json')
       .then(function (url) { return fetch(url); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Real bug, found in review: this comment already said the point was
+      // "a read that can't reach the cloud must check [local] too" -- but a
+      // non-OK response resolved straight to null/{} here without ever
+      // reaching the .catch below, so that intent only actually applied to
+      // a genuine network exception, not an HTTP-level failure (expired
+      // session, server error). Throwing here routes both failure modes
+      // through the same local fallback.
+      .then(function (r) { if (!r.ok) throw new Error('assignmentOverrides load failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) { return raw || {}; })
       // Mirrors save()'s own fallback: a save that couldn't reach the cloud
       // still wrote to THIS device, so a read that also can't reach the
@@ -205,7 +212,9 @@
     if (!hasCloud()) return Promise.resolve(readLocalBallPaths());
     return window.firebaseAuthed(DB + '/' + BALL_PATH + '.json')
       .then(function (url) { return fetch(url); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Same fix as loadFormationPlays() above -- a non-OK response used to
+      // silently become {} rather than falling back to the local cache.
+      .then(function (r) { if (!r.ok) throw new Error('ballPaths load failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) { return raw || {}; })
       .catch(readLocalBallPaths); // see loadAll()'s own comment on this fallback
   }
@@ -306,7 +315,21 @@
     // still missing. This node changes live and is never safe to cache.
     return window.firebaseAuthed(DB + '/' + FORMATION_PLAYS + '.json')
       .then(function (url) { return fetch(url, { cache: 'no-store' }); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Real bug, found in review: a non-OK response used to resolve to
+      // `null` here, which the block below then quietly turned into an
+      // EMPTY {} -- indistinguishable from "every formation genuinely has
+      // zero curated plays." Several real callers (js/playbuilder/
+      // editor.js's ensureCuratedForFormation, run on every single Play
+      // Builder save; js/play-calls.js's Modify screen) do
+      // `current.concat([x])`/`.push(x)` on whatever this returns and
+      // write the WHOLE result back -- so a transient HTTP hiccup could
+      // silently wipe every other formation's real curation the moment a
+      // coach saved or curated anything. Throwing here instead routes a
+      // non-OK response through the SAME .catch(readLocalFormationPlays)
+      // fallback a genuine network exception already used -- a real,
+      // possibly-stale local cache is still a far safer answer than a
+      // hardcoded empty object.
+      .then(function (r) { if (!r.ok) throw new Error('formationPlays load failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) {
         var out = {};
         Object.keys(raw || {}).forEach(function (fid) { out[fid] = toKeyList(raw[fid]); });
@@ -379,7 +402,8 @@
     if (!hasCloud()) return Promise.resolve(readLocalWeeklyCallSheet(weekLabel));
     return window.firebaseAuthed(DB + '/' + WEEKLY + '/' + encodeURIComponent(weekLabel) + '.json')
       .then(function (url) { return fetch(url); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Same fix as loadFormationPlays() above.
+      .then(function (r) { if (!r.ok) throw new Error('weeklyCallSheet load failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) {
         if (!raw) return null;
         var out = {};
@@ -428,7 +452,8 @@
     if (!hasCloud()) return Promise.resolve(readLocalWeeklyList());
     return window.firebaseAuthed(DB + '/' + WEEKLY + '.json?shallow=true')
       .then(function (url) { return fetch(url); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Same fix as loadFormationPlays() above.
+      .then(function (r) { if (!r.ok) throw new Error('weeklyCallSheets list failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) { return raw ? Object.keys(raw) : []; })
       .catch(readLocalWeeklyList); // see loadAll()'s own comment on this fallback
   }
@@ -469,7 +494,8 @@
     if (!hasCloud()) return Promise.resolve(readLocalCustomFormations());
     return window.firebaseAuthed(DB + '/' + CUSTOM_FORMATIONS + '.json')
       .then(function (url) { return fetch(url); })
-      .then(function (r) { return r.ok ? r.json() : null; })
+      // Same fix as loadFormationPlays() above.
+      .then(function (r) { if (!r.ok) throw new Error('customFormations load failed (' + r.status + ')'); return r.json(); })
       .then(function (raw) {
         var out = {};
         Object.keys(raw || {}).forEach(function (id) { out[id] = normalizeFormation(raw[id]); });

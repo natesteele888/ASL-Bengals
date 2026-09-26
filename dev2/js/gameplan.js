@@ -28,12 +28,15 @@
   // Same 8-family list window.playbookLiveFamilies() (js/playbook-pdf.js)
   // already encodes, matched against whatever's actually in
   // window.DATA.playTypes right now, plus custom-formation plays appended
-  // after (never interleaved, so no existing number ever shifts) -- this is
-  // the SAME pattern js/thisweek.js and js/drivebuilder.js each already keep
-  // their own small copy of (drivebuilder.js's own header comment already
-  // defends the duplication), not a new one. Kept here so every consumer of
-  // a legacy (v1) entry -- This Week, Drive Scripts, the Call Sheet PDF --
-  // resolves its label/color identically, through this one function.
+  // after (never interleaved, so no existing number ever shifts) -- THE one
+  // real implementation. js/thisweek.js's own numberedRows() is now just a
+  // one-line delegate to this (window.GamePlan.numberedRows()), not a
+  // separate copy; js/drivebuilder.js no longer calls numberedRows() at all
+  // (it sources its picker straight from thisWeek.json's own plays via its
+  // own gamePlanEntries/loadGamePlanForPicker() instead). Kept here so every
+  // consumer of a legacy (v1) entry -- This Week, Drive Scripts, the Call
+  // Sheet PDF -- resolves its label/color identically, through this one
+  // function.
   function numberedRows() {
     if (!window.playbookLiveFamilies || !window.DATA || !window.DATA.playTypes) return [];
     const families = window.playbookLiveFamilies();
@@ -76,17 +79,34 @@
   // toggle when it's at a non-default value), so this can't drift from what
   // the toggle pills on the real card actually say.
   function alignmentSummary(entry) {
-    if (!entry.alignmentValues || !window.PlayBuilderFormationsById) return '';
-    const formation = window.PlayBuilderFormationsById[entry.formation];
-    if (!formation || !formation.alignmentToggles) return '';
     const parts = [];
-    formation.alignmentToggles.forEach((toggle) => {
-      const value = entry.alignmentValues[toggle.id] || toggle.values[0].id;
-      if (value !== toggle.values[0].id) {
-        const valueDef = toggle.values.find((v) => v.id === value);
-        parts.push(`${toggle.label} ${valueDef ? valueDef.label : value}`);
-      }
-    });
+    const formation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[entry.formation];
+    if (entry.alignmentValues && formation && formation.alignmentToggles) {
+      formation.alignmentToggles.forEach((toggle) => {
+        const value = entry.alignmentValues[toggle.id] || toggle.values[0].id;
+        if (value !== toggle.values[0].id) {
+          const valueDef = toggle.values.find((v) => v.id === value);
+          parts.push(`${toggle.label} ${valueDef ? valueDef.label : value}`);
+        }
+      });
+    }
+    // Wing's own Overload (js/formations.js's older mechanism -- no real
+    // Play Builder V2 formation record, so the loop above never covers
+    // it). Guarded against double-adding for a formation whose own
+    // alignmentToggles already named it (I/I-Wing), same as js/play-
+    // calls.js's own title-bar fix.
+    // Real bug, found in review: alignmentValues is captured wholesale off
+    // the card's live state (buildCard's own "+ Add to Game Plan"), which
+    // doesn't get cleared when a coach flips the SAME card to Split via
+    // its Shotgun/Split toggle before adding it -- Split has no Overload
+    // concept at all (js/formations.js's mechanism is Wing-only), so a
+    // stale `alignmentValues.overload` from a moment ago as Shotgun would
+    // otherwise show a fabricated "Split Left -- Overload Right -- ..."
+    // label nobody set.
+    const overload = entry.formation !== 'split' && entry.alignmentValues && entry.alignmentValues.overload;
+    if (overload && overload !== 'off' && !(formation && formation.alignmentToggles && formation.alignmentToggles.some((t) => t.id === 'overload'))) {
+      parts.push(`Overload ${overload.charAt(0).toUpperCase()}${overload.slice(1)}`);
+    }
     return parts.join(', ');
   }
 
@@ -95,8 +115,11 @@
     if (entry.formation === 'split') {
       bits.push(`Split ${entry.splitSide}`);
     } else {
+      // Same 'Shotgun' rename as js/play-calls.js's own formationLabel --
+      // Nathan: "This formation is called shotgun - it's our base
+      // formation."
       const formationName = (entry.formation && entry.formation !== 'shotgun' && window.Formations && window.Formations.get(entry.formation))
-        ? window.Formations.get(entry.formation).name : 'Wing';
+        ? window.Formations.get(entry.formation).name : 'Shotgun';
       bits.push(`${formationName} ${entry.wingSide}`);
     }
     const align = alignmentSummary(entry);
@@ -161,15 +184,40 @@
   // time This Week's editor happens to (re)load, if this hadn't already
   // saved it for real first.
   function thisWeekUrl() { return `${FIREBASE_DB_URL}/thisWeek.json`; }
+  // Real bug, found in review: two "+ Add to Game Plan" taps on DIFFERENT
+  // play cards close together raced this exact read-modify-write -- each
+  // card's own button only disables ITSELF, nothing serialized across
+  // cards -- so whichever PUT landed last silently dropped the other
+  // tap's entry. Worse: a failed/non-OK GET used to fall through to
+  // `data: null`, and `Object.assign({}, null, {...})` then produced an
+  // object with ONLY the new fields -- a single bad load could replace
+  // the ENTIRE thisWeek.json document (wiping gameId AND coachKeys, not
+  // just other plays) with just the one newly-added entry. This is the
+  // single most game-day-critical write in the app (This Week's Featured
+  // Plays and the Call Sheet PDF both read straight off this document),
+  // so both gaps get the same treatment already proven out in
+  // play-calls.js's modifyRemovalChain: one promise chain so no two adds
+  // can interleave, and a hard refusal (no write at all) instead of
+  // guessing at an empty base on a bad read. The chain link itself always
+  // resolves (`.catch(() => {})`, swallowing a failed attempt's own
+  // rejection ONLY for the internal chain) so one coach's connection
+  // hiccup can't leave every LATER add permanently broken -- the real
+  // success/failure still reaches the caller via the `attempt` promise
+  // returned below, unswallowed (its own .catch, in play-calls.js's
+  // gamePlanBtn handler, is what shows the error on the button).
+  let addEntryChain = Promise.resolve();
   function addEntry(state) {
     const entry = Object.assign({}, state, {
       v: 2,
       id: 'gp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       addedAt: new Date().toISOString(),
     });
-    return window.firebaseAuthed(thisWeekUrl())
-      .then((url) => fetch(url))
-      .then((r) => (r.ok ? r.json() : null))
+    const attempt = addEntryChain.then(() => window.firebaseAuthed(thisWeekUrl())
+      .then((url) => fetch(url, { cache: 'no-store' }))
+      .then((r) => {
+        if (!r.ok) throw new Error('Could not load the current Game Plan (possible connection issue) -- nothing was added. Try again.');
+        return r.json();
+      })
       .then((data) => {
         const current = (data && Array.isArray(data.plays)) ? data.plays : [];
         if (current.length >= MAX_PLAYS) {
@@ -186,7 +234,9 @@
         if (!r.ok) throw new Error(`Save failed (HTTP ${r.status})`);
         if (window.ThisWeekGamePlan) window.ThisWeekGamePlan.onExternalAdd(entry);
         return entry;
-      });
+      }));
+    addEntryChain = attempt.catch(() => {});
+    return attempt;
   }
 
   // ---------------------------------------------------------------------
@@ -228,8 +278,18 @@
   // be open (mirrors onExternalAdd's own two-way-sync reasoning).
   function saveDraftAsGamePlan(gameId, plays) {
     return window.firebaseAuthed(thisWeekUrl())
-      .then((url) => fetch(url))
-      .then((r) => (r.ok ? r.json() : null))
+      .then((url) => fetch(url, { cache: 'no-store' }))
+      .then((r) => {
+        // Same gap as addEntry() above, narrower blast radius here (plays
+        // comes from the Builder's own already-loaded draft, not from this
+        // read) but still real: a failed/non-OK GET used to fall through to
+        // data:null, and Object.assign({}, null, {...}) below would have
+        // silently dropped coachKeys (and anything else this file doesn't
+        // know about) from thisWeek.json on save. Refuse instead of
+        // guessing.
+        if (!r.ok) throw new Error('Could not load the current Game Plan (possible connection issue) -- nothing was saved. Try again.');
+        return r.json();
+      })
       .then((data) => {
         const payload = Object.assign({}, data, {
           plays: plays.slice(),

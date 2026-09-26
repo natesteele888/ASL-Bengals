@@ -284,6 +284,28 @@
  *   it's a plain data lookup keyed by player id, independent of the
  *   anchor/route mechanism. Falls back to `hasBall` when unset -- a
  *   no-op for every position/play that's never touched by this.
+ * @property {RoutePoint[]} [overloadOppositeRoute] - explicit, absolute
+ *   route for a WING position (like #4), used INSTEAD of the normal
+ *   sameSideRoute/crossSideRoute selection whenever the formation's
+ *   `overload` alignment toggle is set to the side OPPOSITE this
+ *   position's OWN current wingSide (e.g. Wing Left + Overload Right).
+ *   Nathan: "I Wing Left Overload Right Blast Left. The wing needs to
+ *   come in off the LT since the TE is in overload to the Right" -- a
+ *   real technique change (release inside off the tackle instead of
+ *   outside toward the corner), driven by a RELATIONSHIP between two
+ *   toggles (wingSide vs. overload's value), not a fixed value either
+ *   toggle can reach alone -- `alignmentOverrides` (above) can't express
+ *   this, since it's keyed by one toggle's own absolute value, not a
+ *   comparison between two. Authored in the SAME canonical frame as
+ *   sameSideRoute/crossSideRoute (wingSide='right'); reflected around
+ *   field center at render time when this position's actual wingSide is
+ *   'left' -- same reflection js/play-calls.js already does for #4's
+ *   older "plain points" convention, reused rather than reinvented. Read
+ *   live off the real Play Builder V2 Play object (window.
+ *   PlayBuilderPlaysById), same reasoning as wingLeftRoute above, since
+ *   it depends on the LIVE overload toggle value a formation-agnostic
+ *   bake can't anticipate. Omit for a position/play where Overload
+ *   opposite-side doesn't change technique (the common case).
  */
 
 /**
@@ -504,6 +526,21 @@
  *   every play that predates this field.
  * @property {boolean} [noMotion] - true to hide the Motion toggle for
  *   this play. Default false/omitted = Motion shows.
+ * @property {string[]} [excludeAlignmentToggles] - ids of the
+ *   FORMATION's own alignmentToggles (e.g. 'overload') to hide for this
+ *   one play specifically. A Formation's alignmentToggles otherwise
+ *   apply to every play built for it uniformly (js/playbuilder/
+ *   legacy-adapter.js copies them straight through) -- same shape gap
+ *   noBoot/noMotion already exist to close for the universal Boot/Motion
+ *   toggles, generalized to any formation-level toggle. Nathan, on I
+ *   Wing's Pop Pass: "doesn't need the overload toggle" -- a pass play
+ *   with no run-blocking scheme has no use for a call about where the
+ *   extra tight end lines up. Default omitted/empty = every one of the
+ *   formation's own toggles shows, same as every play that predates this
+ *   field. Hiding a toggle here only omits its UI control -- the coach
+ *   can never set alignmentValues[toggleId] away from its own default for
+ *   this play, so getVariant() (js/play-calls.js) never walks into an
+ *   "on" leaf for it either; no baked route data needs removing.
  * @property {boolean} [isPass] - true to tag this play as a pass, not a
  *   run, everywhere the real app shows that distinction (the "PASS"/"RUN"
  *   badge on its browse tile, buildPlayList()'s own run-plays-first sort).

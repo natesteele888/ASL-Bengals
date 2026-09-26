@@ -197,32 +197,47 @@
   // look (with real opponent logos) and js/practices.js's .practiceRow
   // look, rather than inventing new components, so this actually matches
   // the rest of the app instead of introducing a third visual style.
-  function buildWeekAheadData(games, practices) {
+  // Nathan: "Football typically has Sunday as part of the prior weekdays
+  // as prep. Monday through Sunday is the typical week." A plain
+  // "today through today+6" rolling window doesn't match that -- viewed
+  // on, say, a Wednesday, it spills a game on the following Tuesday into
+  // "this week" while still correctly catching Sunday; but viewed later
+  // in the week it can just as easily miss a Sunday game that's clearly
+  // still part of the current football week. Anchor explicitly to the
+  // most recent Monday through the following Sunday instead, so Sunday
+  // always counts as the close of *this* week no matter what day of the
+  // week this renders on. Exposed on window (not just used internally by
+  // buildWeekAheadData below) so js/schedule.js's own game list can mark
+  // "the current game for this week" with the same Mon-Sun math, rather
+  // than growing a second, driftable copy of this exact date logic --
+  // that's the precise class of bug the 2026-09-26 codebase audit just
+  // found and fixed twice elsewhere in this app.
+  function toDateOnly(dateStr) {
+    const parts = (dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  function currentWeekWindow() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    // Nathan: "Football typically has Sunday as part of the prior weekdays
-    // as prep. Monday through Sunday is the typical week." A plain
-    // "today through today+6" rolling window doesn't match that -- viewed
-    // on, say, a Wednesday, it spills a game on the following Tuesday into
-    // "this week" while still correctly catching Sunday; but viewed later
-    // in the week it can just as easily miss a Sunday game that's clearly
-    // still part of the current football week. Anchor explicitly to the
-    // most recent Monday through the following Sunday instead, so Sunday
-    // always counts as the close of *this* week no matter what day of the
-    // week this renders on.
     const dow = today.getDay(); // 0=Sun..6=Sat
     const mondayOffset = (dow + 6) % 7; // days since most recent Monday
     const start = new Date(today);
     start.setDate(start.getDate() - mondayOffset);
     const end = new Date(start);
     end.setDate(end.getDate() + 6); // Sunday
-    const toDateOnly = (dateStr) => {
-      const parts = (dateStr || '').split('-').map(Number);
-      if (parts.length !== 3 || parts.some(isNaN)) return null;
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    };
-    const inWindow = (d) => d && d >= start && d <= end;
+    return { start, end };
+  }
+  window.isDateInCurrentWeek = function (dateStr) {
+    const d = toDateOnly(dateStr);
+    if (!d) return false;
+    const { start, end } = currentWeekWindow();
+    return d >= start && d <= end;
+  };
 
+  function buildWeekAheadData(games, practices) {
+    const { start, end } = currentWeekWindow();
+    const inWindow = (d) => d && d >= start && d <= end;
     const gameEntries = [];
     const practiceEntries = [];
     (games || []).forEach(g => {
@@ -535,14 +550,14 @@
     }
   }
 
-  // js/gameplan.js (new, loads earlier in index.html's scripts array) now
-  // owns this numbering -- was a private copy here, byte-identical to the
-  // one that file needs anyway for describe()'s own v1 label/color lookup;
-  // delegating avoids maintaining two copies of the same logic that only
-  // this same change would ever have introduced (this codebase's existing,
-  // separately-owned copies in js/drivebuilder.js/js/call-sheet-pdf.js stay
-  // untouched -- a real, pre-existing convention, not something to chase
-  // down and consolidate under time pressure).
+  // js/gameplan.js (loads earlier in index.html's scripts array) now owns
+  // this numbering -- was a private copy here, byte-identical to the one
+  // that file needs anyway for describe()'s own v1 label/color lookup;
+  // delegating avoids maintaining two copies of the same logic. (js/
+  // call-sheet-pdf.js never had a copy of this at all -- it builds its own
+  // rows straight off window.DATA.playTypes; js/drivebuilder.js's own
+  // picker also no longer calls this, having since moved to sourcing
+  // straight from thisWeek.json's own plays via gamePlanEntries.)
   function numberedRows() {
     return window.GamePlan ? window.GamePlan.numberedRows() : [];
   }
@@ -943,7 +958,13 @@
     // set before the early return below so a non-coach session (which
     // returns early) still correctly hides it.
     const buildBtnEl = document.getElementById('thisweekBuildGamePlanBtn');
-    if (buildBtnEl) buildBtnEl.style.display = approved ? '' : 'none';
+    // Nathan: "the Create Your Game Plan CTA is justified left, it should
+    // be centered under the other section." Setting display back to ''
+    // dropped the inline display:block a <button> needs for its own
+    // margin:0 auto centering to actually take effect (a <button>
+    // defaults to inline-block, which margin:auto doesn't center) --
+    // 'block' here is what index.html's own inline style already assumes.
+    if (buildBtnEl) buildBtnEl.style.display = approved ? 'block' : 'none';
     section.style.display = approved ? '' : 'none';
     if (!approved) return;
 

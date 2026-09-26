@@ -95,10 +95,12 @@
     // none of the old tools had. Doesn't get minAccess:'coach' -- this
     // rewrites the team's actual plays and formations, so it stays
     // approvedCoach-only like Roster/Depth Chart/Settings, not broadened
-    // like Stats. js/coachtools-formationbuilder.js and
-    // js/coachtools-createplay.js are left in place, just unlinked here
-    // (no TABS entry routes to them anymore) -- instant rollback if
-    // anything's wrong with the new panel, not a deletion.
+    // like Stats. The two old tools this replaced (formerly
+    // js/coachtools-formationbuilder.js, js/coachtools-createplay.js) were
+    // kept unlinked-but-loaded for a while as an instant-rollback safety
+    // net, then actually deleted once Play Builder V2 had proven itself
+    // through this whole session -- gone from the scripts array too, not
+    // just unrouted.
     { key: 'playbuilder', label: '🧩 Play Builder', category: 'plays', panel: 'coachPlayBuilderPanel', init: () => window.initCoachPlayBuilder && window.initCoachPlayBuilder() },
     // Self-serve "add a signal card" tool -- Nathan: "in the future, if I
     // need to add more signals, is there a path to do that?" Stores the

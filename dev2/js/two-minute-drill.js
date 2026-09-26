@@ -198,6 +198,15 @@
   // Copied from play-calls.js's renderCardDiagram (same name kept for
   // easy diffing against the original). DATA is the module-level
   // object populated in SECTION 4 below.
+  // Known, disclosed drift (found in a code-cleanup review, not fixed):
+  // play-calls.js's own renderCardDiagram/playCardAnimation have since
+  // gained 5 more trailing params (popVariantOn, formationId, overloadOn,
+  // alignmentValues, qbSneakOn) that this copy never picked up -- none of
+  // those concepts (custom formations, Overload, QB Sneak) exist in this
+  // standalone drill's own data/UI today, so the gap isn't reachable
+  // through the drill as it stands, but "kept in sync" is no longer
+  // literally true. Re-check this comment if the drill ever needs one of
+  // those toggles.
   let DATA = null;
   function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, twSweepOn) {
     stage.innerHTML = '';

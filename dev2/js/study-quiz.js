@@ -1298,7 +1298,6 @@ function hideGlobalCallout(){
   if(host){ host.style.display = 'none'; host.innerHTML = ''; }
 }
 window.hideGlobalCallout = hideGlobalCallout;
-function goToThisWeek(){ if(typeof setSection === 'function') setSection('thisweek'); }
 function openLeaderboardOverlay(){ const btn = document.getElementById('openLeaderboardBtn'); if(btn) btn.click(); }
 
 function gcEscapeHtml(s){ const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }

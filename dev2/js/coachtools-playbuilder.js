@@ -24,6 +24,21 @@
   'use strict';
 
   var built = false;
+  // True from the moment the FIRST-ever activation starts building the DOM
+  // until editor.js's own init() (awaited via the promise
+  // initPlayBuilderEditor() now returns) has actually finished loading and
+  // consumed the Play tab's own pencil/Copy handoff globals. Real bug,
+  // found in review: init() suspends at its own first real network await
+  // (PlayBuilderStore.isEmpty()), and `built` was set true SYNCHRONOUSLY
+  // before that -- so a coach double-tapping the pencil fast enough (real
+  // on a slow connection) could have their SECOND tap's own
+  // initCoachPlayBuilder() call see `built===true` and reach for
+  // consumePendingHandoff() instead, which reads-and-clears the SAME
+  // window.__pbPendingLoadPlayId global the still-in-flight FIRST init()
+  // hadn't gotten to yet -- a real race between two independent consumers
+  // of one global, decided by whichever finishes last, not by which click
+  // was more recent.
+  var initializing = false;
 
   // A small, styled toggle-group container matching the app's own
   // buildToggleGroup/placeToggleThumb component (js/play-calls.js) --
@@ -109,6 +124,16 @@
       // exists so a coach finds that path before hitting the same
       // confusion again.
       '<div class="hint" style="margin-top:4px">Asks which formation the new play is for. To move an EXISTING play to a different formation instead, use Formations → "Copy a play from another formation," which correctly shifts every route.</div>' +
+      // Nathan: "I realized I messed up as this play is I Wing - Blast not
+      // Double Blast. I need to be able to edit it on that one place." A
+      // play's label was previously write-once (set only at "+ New Play"/
+      // "Copy a play"'s own prompt) -- this is the rename affordance,
+      // matching the Formations screen's own fbNameInput convention
+      // exactly: a persistent text field, edited freely, actually applied
+      // on the next Save Play (not a separate prompt/button).
+      '<label style="' + LBL + '">Play Name</label>' +
+      '<input type="text" id="pbLabelInput" style="width:100%;padding:9px;box-sizing:border-box">' +
+      '<div class="hint" style="margin-top:4px">Edit, then hit Save Play to rename.</div>' +
       '<label style="' + LBL + '">Formation</label>' +
       // Switches which formation's plays this screen is showing -- see
       // editor.js's own comment on its 'change' listener for why this is
@@ -490,17 +515,67 @@
     // other and to the playbuilder/*.js files themselves (already
     // enforced by the scripts array order).
     window.initPlayBuilderFormationEditor();
-    window.initPlayBuilderEditor();
+    var editorReady = window.initPlayBuilderEditor();
 
     // After initPlayBuilderFormationEditor() -- wireTouchCardPicker()'s
     // watchTouchCardLabel() needs fbPopulateTouchCardSelect()'s options
     // already in the (hidden) select to read an initial label off it.
     wireTouchCardPicker();
+
+    return editorReady;
   }
 
   window.initCoachPlayBuilder = function () {
-    if (built) return;
+    if (built) {
+      // Still mid-FIRST-activation (see `initializing`'s own comment
+      // above) -- do NOT touch window.__pbPendingLoadPlayId here. It was
+      // already correctly overwritten with this click's own play id
+      // before play-calls.js called openCoachToolsTab('playbuilder'); the
+      // still-in-flight init() will read whatever's there once it
+      // actually gets to it, so leaving it alone is enough for the most
+      // recent click to win instead of racing a second consumer.
+      if (initializing) return;
+      // DOM/editors already exist from a previous activation -- editor.js's
+      // own init() (called from build(), below) only ever runs ONCE per
+      // page load, so it's not what consumes a LATER Play-tab "Modify ->
+      // pencil"/Copy handoff. Real bug, found live: without this, a second
+      // pencil click anywhere in the same session silently did nothing --
+      // window.PlayBuilderEditor.consumePendingHandoff() is the fix,
+      // exported by editor.js specifically for this re-activation case.
+      if (window.PlayBuilderEditor && window.PlayBuilderEditor.consumePendingHandoff) {
+        window.PlayBuilderEditor.consumePendingHandoff();
+      }
+      return;
+    }
     built = true;
-    build();
+    initializing = true;
+    // Real gap, found in review: neither a synchronous throw inside
+    // build() (a missing DOM element, a broken wiring call somewhere in
+    // formation-editor.js's own bind()) nor a Play Builder Firebase fetch
+    // that hangs instead of cleanly failing (no AbortController/timeout
+    // anywhere in that chain -- realistic on bad sideline wifi, exactly
+    // this app's real environment) ever reached the plain
+    // `ready.then(...)` this used to be -- either one left `initializing`
+    // stuck true forever, silently no-op'ing every later tap on this tab
+    // for the rest of the page session with only a full reload as the
+    // fix. A timeout racing the returned promise, a second (rejection)
+    // handler alongside the fulfillment one, and a try/catch around the
+    // synchronous call all guarantee this flag always eventually clears.
+    var cleared = false;
+    var clearInitializing = function () {
+      if (cleared) return;
+      cleared = true;
+      clearTimeout(timeoutId);
+      initializing = false;
+    };
+    var timeoutId = setTimeout(clearInitializing, 20000);
+    try {
+      var ready = build();
+      if (ready && ready.then) ready.then(clearInitializing, clearInitializing);
+      else clearInitializing();
+    } catch (err) {
+      console.error('[playbuilder] build() failed:', err);
+      clearInitializing();
+    }
   };
 })();

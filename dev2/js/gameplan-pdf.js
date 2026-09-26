@@ -51,7 +51,10 @@
     return entry.formation;
   }
   function formationName(key) {
-    if (key === 'wing') return 'Wing';
+    // Same 'Shotgun' rename as js/play-calls.js's own formationLabel --
+    // Nathan: "This formation is called shotgun - it's our base
+    // formation."
+    if (key === 'wing') return 'Shotgun';
     if (key === 'split') return 'Split';
     const f = window.Formations && window.Formations.get(key);
     return f ? f.name : key;
