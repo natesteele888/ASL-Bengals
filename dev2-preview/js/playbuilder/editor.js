@@ -59,6 +59,15 @@ const state = {
    *  (js/ball-path-editor.js's BallPathEditor) instead of selecting them
    *  for route editing -- the two share one click, so only one is live. */
   ballPathMode: false,
+  /** Nathan: "ball path sucks... needs to be addressed and rethought
+   *  out." Guided disposition-first flow, matching footballplaybook.com's
+   *  own "BALL: Pass / Hand off / Lateral, then tap who receives it"
+   *  pattern -- which of BALL_DISPOSITIONS is armed for the NEXT leg (not
+   *  relevant for leg 0, the snap, which has no `how` at all). null means
+   *  no disposition chosen yet -- taps are refused (see
+   *  ballPathTapAllowed()) rather than silently defaulting to handoff the
+   *  way this used to work. */
+  ballPathPendingHow: null,
   /** True while playPreview() (the "Play" button) is animating. */
   isPlaying: false,
   /** Populated fresh by every render() -- {posId: {pathEl, circleEl,
@@ -68,6 +77,39 @@ const state = {
 
 const PLAYER_R = 34;
 const HANDLE_R = 14;
+
+// Optional per-player recolor (Nathan, re: footballplaybook.com's own
+// COLOR swatch row) -- same 7-color palette, referenced by id from
+// PlayerAssignment.color. Ball-carrier red always wins regardless (see
+// its own call site) -- this only ever replaces the default blue.
+const PB_PLAYER_COLORS = {
+  black: '#111111', red: '#c62828', blue: '#1565c0', green: '#2e7d32',
+  orange: '#e8720c', purple: '#6a1b9a', yellow: '#f9a825',
+};
+
+// Guided ball-path flow (Nathan, re: footballplaybook.com: "ball path
+// sucks... needs to be addressed and rethought out") -- a coach picks HOW
+// the next exchange happens BEFORE tapping WHO receives it, matching the
+// reference's own "BALL: Pass / Hand off / Lateral" choice. Collapses the
+// schema's real `pitch`/`reverse` distinction (js/ball-path.js's own
+// EXCHANGES) into one "Lateral" button, defaulting to the more common
+// same-direction pitch -- a coach who specifically meant a reverse can
+// still switch that one leg's exact `how` via the per-leg dropdown this
+// file's own renderBallPathPanel() already has.
+const BALL_DISPOSITIONS = [
+  { how: 'pass', label: 'Pass' },
+  { how: 'handoff', label: 'Hand off' },
+  { how: 'pitch', label: 'Lateral' },
+];
+
+// Whether the field's own player circles should currently accept a
+// ball-path tap: always true for leg 0 (the snap has no disposition to
+// choose), otherwise only once a disposition has actually been armed --
+// no more silent "every tap defaults to handoff" the old flow had.
+function ballPathTapAllowed() {
+  if (!els.ballPathEditor) return false;
+  return els.ballPathEditor.ballPath.length === 0 || !!state.ballPathPendingHow;
+}
 
 // A brand-new, unsaved play draft for the given formation -- the shape
 // both "+ New Play" and the real Play tab's "Modify -> +" handoff (see
@@ -647,12 +689,18 @@ function render() {
     if (alignmentPoints) points = alignmentPoints;
     const assignment = resolveAssignment(formation, players, pos.id, state.direction, state.currentPlay);
     const hasBall = alignmentHasBall(formation, pos.id, assignment, wingLeftHasBall(assignment, !!(assignment && assignment.hasBall)));
-    const color = hasBall ? '#e0201a' : '#123a8c';
+    // Nathan, re: footballplaybook.com: "you can recolor the player."
+    // Ball-carrier red still wins unconditionally (the app-wide "red =
+    // has the ball" convention every real card/PDF/etc. already relies
+    // on) -- a custom color only replaces the default blue for a player
+    // who ISN'T currently carrying.
+    const customColor = assignment && assignment.color ? PB_PLAYER_COLORS[assignment.color] : null;
+    const color = hasBall ? '#e0201a' : (customColor || '#123a8c');
     const pathEl = svgEl('path', {
       d: curvedPathD(points), fill: 'none', stroke: color, 'stroke-width': 7, 'stroke-linecap': 'round',
     });
     pathsLayer.appendChild(pathEl);
-    state.lastRendered[pos.id] = { pathEl, points, hasBall };
+    state.lastRendered[pos.id] = { pathEl, points, hasBall, customColor };
   });
 
   // Player circles
@@ -660,7 +708,21 @@ function render() {
     const anchor = overloadCollisionAnchorFor(formation, pos.id, state.wingSide)
       || wingLeftAnchorFor(formation, pos.id, resolveAnchor(formation, pos.id, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, pos.id) }));
     const isSelected = state.selectedPlayer === pos.id;
-    const c = drawCircle(anchor.x, anchor.y, String(pos.label ?? pos.id), '#111111', PLAYER_R, isSelected);
+    const customColor = state.lastRendered[pos.id] && state.lastRendered[pos.id].customColor;
+    // Nathan: "ball path sucks... needs to be rethought out." The old
+    // flow only told you a tap was wrong AFTER tapping (a status-line
+    // error for a lineman). A dashed ring, matching footballplaybook.
+    // com's own "every eligible receiver highlighted at once" pattern,
+    // shows every valid tap target up front instead -- real ball
+    // carriers (1-6) only, and only while a tap would actually do
+    // something (ballPathTapAllowed()).
+    if (state.ballPathMode && typeof pos.id === 'number' && ballPathTapAllowed()) {
+      circlesLayer.appendChild(svgEl('circle', {
+        cx: anchor.x, cy: anchor.y, r: PLAYER_R + 8, fill: 'none',
+        stroke: '#1a8c3a', 'stroke-width': 3, 'stroke-dasharray': '5 5',
+      }));
+    }
+    const c = drawCircle(anchor.x, anchor.y, String(pos.label ?? pos.id), customColor || '#111111', PLAYER_R, isSelected);
     c.style.cursor = 'pointer';
     c.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -694,7 +756,25 @@ function render() {
           if (els.statusEl) els.statusEl.textContent = `#${pos.id} can't touch the ball -- only real ball carriers (1-6) can be tapped into the sequence.`;
           return;
         }
+        // Guided disposition-first flow (see ballPathTapAllowed()'s own
+        // comment) -- past the first leg, a tap does nothing until Pass/
+        // Hand off/Lateral has actually been picked, instead of silently
+        // defaulting to a handoff the way this used to.
+        if (!ballPathTapAllowed()) {
+          if (els.statusEl) els.statusEl.textContent = 'Pick Pass, Hand off, or Lateral above before tapping who receives it.';
+          return;
+        }
+        const bp = els.ballPathEditor.ballPath;
+        const lenBefore = bp.length;
         els.svg.dispatchEvent(new CustomEvent('playerclick', { detail: pos.id }));
+        // Only apply the armed disposition when a NEW leg actually landed
+        // -- tapping the same player again is the existing undo (pops the
+        // last leg instead), which must not get a `how` written onto it.
+        if (state.ballPathPendingHow && bp.length > lenBefore) {
+          els.ballPathEditor.setHow(bp.length - 1, state.ballPathPendingHow);
+        }
+        state.ballPathPendingHow = null;
+        render();
       } else {
         selectPlayer(pos.id);
       }
@@ -831,9 +911,27 @@ function drawYardGrid(vw) {
     g.appendChild(svgEl('line', {
       x1: 0, y1: y, x2: vw, y2: y, stroke: '#e5e1d5', 'stroke-width': 1, 'stroke-dasharray': '10 8',
     }));
+    // Nathan, re: footballplaybook.com: "like the field markers with
+    // hash marks and yardage." Short perpendicular ticks crossing each
+    // yard line, matching a real field diagram's look -- purely a visual
+    // rhythm (this axis's own real scale is PB_VERTICAL_PX_PER_YARD, not
+    // a second one along x), same as the reference's own field markers
+    // read as texture more than a precise ruler.
+    for (let x = 100; x < vw; x += 100) {
+      g.appendChild(svgEl('line', {
+        x1: x, y1: y - 8, x2: x, y2: y + 8, stroke: '#e5e1d5', 'stroke-width': 1,
+      }));
+    }
     const label = svgEl('text', { x: 8, y: y - 6, 'font-size': 18, 'font-weight': 700, fill: '#b8b2a2' });
     label.textContent = `${yd} yd`;
     g.appendChild(label);
+    // Mirrored on the right edge too, matching a real field's own both-
+    // sides numbering instead of only ever reading it from one edge.
+    const labelRight = svgEl('text', {
+      x: vw - 8, y: y - 6, 'text-anchor': 'end', 'font-size': 18, 'font-weight': 700, fill: '#b8b2a2',
+    });
+    labelRight.textContent = `${yd} yd`;
+    g.appendChild(labelRight);
   }
   return g;
 }
@@ -948,12 +1046,38 @@ function initEvents() {
 function renderSidebar() {
   const assignment = state.selectedPlayer !== null ? assignmentFor(state.selectedPlayer) : null;
   els.pbPlayerPanel.style.display = assignment ? '' : 'none';
+  if (els.pbNoPlayerHint) els.pbNoPlayerHint.style.display = assignment ? 'none' : '';
   if (!assignment) return;
 
   els.pbPlayerLabel.textContent = `#${state.selectedPlayer}`;
   els.pbHasBallCheckbox.checked = !!assignment.hasBall;
   els.pbDelayInput.value = assignment.delayMs || 0;
   els.pbEndTypeSelect.value = assignment.endType || 'run';
+
+  // Nathan: "you can recolor the player." Synced every render, same
+  // reasoning as every other selected-player control here (selectPlayer()
+  // can change which assignment is being edited without a swatch click).
+  if (els.pbColorSwatches) {
+    els.pbColorSwatches.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.color === (assignment.color || ''));
+    });
+  }
+
+  // O-line positions can't be thrown to in real football (ineligible
+  // receivers) -- same "not everything has to be displayed at once"
+  // principle applied one step further: Routes hides for them, Blocking
+  // (their own real job) stays.
+  if (els.pbRoutesWrap) {
+    const isOLine = ['LT', 'LG', 'C', 'RG', 'RT'].indexOf(String(state.selectedPlayer)) !== -1;
+    els.pbRoutesWrap.style.display = isOLine ? 'none' : '';
+  }
+  // Nathan: "not everything has to be displayed at once, selecting
+  // players can change what options they have" -- real bug, found from
+  // his own screenshot: only the TOGGLE was ever hidden for a non-wing
+  // player, not its "Editing which shape?" label, so a regular position
+  // showed an orphaned heading over nothing. Hide the whole wrap (label
+  // included) as one unit instead.
+  if (els.pbWingRouteToggleWrap) els.pbWingRouteToggleWrap.style.display = isWing(state.selectedPlayer) ? '' : 'none';
   els.pbWingRouteToggle.style.display = isWing(state.selectedPlayer) ? '' : 'none';
   // Unlike the other toggles here, wingRouteSide can change WITHOUT a
   // click on this toggle (selectPlayer() always resets it to 'sameSide'
@@ -975,6 +1099,11 @@ function renderSidebar() {
   // alongside wingRouteSide above, same "always re-sync, not just on
   // click" reasoning (selectPlayer() resets editingAlignment too).
   const editToggle = alignmentToggleFor(currentFormation(), state.selectedPlayer);
+  // Same "hide the whole labeled section, not just its control" fix as
+  // the wing-shape wrap just above -- "Editing which alignment?" used to
+  // show with nothing under it for any player whose position has no
+  // alignment toggle at all (most of them).
+  if (els.pbAlignmentEditWrap) els.pbAlignmentEditWrap.style.display = editToggle ? '' : 'none';
   if (els.pbAlignmentEditToggle) {
     els.pbAlignmentEditToggle.style.display = editToggle ? '' : 'none';
     if (editToggle) {
@@ -1164,33 +1293,55 @@ function renderBallPathPanel() {
   if (!els.ballPathEditor || !state.currentPlay) return;
   els.pbBallPathModeToggle.checked = state.ballPathMode;
   const bp = els.ballPathEditor.ballPath;
-  if (!bp.length) {
-    els.pbBallPathSeq.innerHTML = '<div style="color:#999">Tap players 1-6 on the field, in order, to build the sequence. Tap the same player again to remove that step, or Clear to start over.</div>';
-    return;
+
+  // Guided prompt + disposition buttons -- Nathan: "ball path sucks...
+  // needs to be addressed and rethought out," matching footballplaybook.
+  // com's own "BALL: Pass / Hand off / Lateral, then tap who receives
+  // it" flow instead of the old silent-default-to-handoff one.
+  if (els.pbBallPathPrompt) {
+    if (!state.ballPathMode) {
+      els.pbBallPathPrompt.textContent = '';
+    } else if (!bp.length) {
+      els.pbBallPathPrompt.textContent = 'Tap the player who takes the snap.';
+    } else if (state.ballPathPendingHow) {
+      const disp = BALL_DISPOSITIONS.find((d) => d.how === state.ballPathPendingHow);
+      els.pbBallPathPrompt.textContent = `Tap the player who receives the ${(disp ? disp.label : 'exchange').toLowerCase()}.`;
+    } else {
+      els.pbBallPathPrompt.textContent = 'Pick how the ball moves next.';
+    }
   }
-  // Nathan: "there is no way to remove a ball path" -- BallPathEditor's
-  // own addPlayer() already supports tap-the-last-player-again-to-undo
-  // (verified earlier this session), it just had no visible hint or
-  // button anywhere, so it wasn't discoverable. Both fixed here: the
-  // hint above, and this explicit ✕ on the LAST step specifically (undo
-  // only ever removes from the end, matching what addPlayer() itself
-  // does -- a middle step can't be removed without also removing
-  // everything after it, same as tapping that same player again would).
-  const HOW_OPTIONS = Object.keys(window.BallPath.EXCHANGES).filter((k) => k !== 'snap');
-  els.pbBallPathSeq.innerHTML = bp.map((leg, i) => {
-    const isLast = i === bp.length - 1;
-    const removeBtn = `<button type="button" class="ballPathRemoveLast" style="margin-left:auto;border:none;background:none;color:#b00;font-weight:800;cursor:pointer;padding:0 4px" title="Remove this step">✕</button>`;
-    if (i === 0) return `<div style="display:flex;align-items:center;padding:3px 0">1. Snap to #${leg.player}${isLast ? removeBtn : ''}</div>`;
-    const options = HOW_OPTIONS.map((k) => `<option value="${k}"${leg.how === k ? ' selected' : ''}>${window.BallPath.EXCHANGES[k].label}</option>`).join('');
-    return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">${i + 1}. #${leg.player}
-      <select data-leg="${i}" class="ballPathHowSelect">${options}</select>${isLast ? removeBtn : ''}</div>`;
-  }).join('');
-  const removeLastBtn = els.pbBallPathSeq.querySelector('.ballPathRemoveLast');
-  if (removeLastBtn) {
-    removeLastBtn.addEventListener('click', () => {
-      els.ballPathEditor.addPlayer(bp[bp.length - 1].player); // tap-again-to-undo, same mechanic as the field itself
+  if (els.pbBallPathDispositions) {
+    els.pbBallPathDispositions.style.display = (state.ballPathMode && bp.length > 0) ? 'flex' : 'none';
+    els.pbBallPathDispositions.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.how === state.ballPathPendingHow);
     });
   }
+  if (els.pbBallPathCancelBtn) {
+    els.pbBallPathCancelBtn.style.display = state.ballPathPendingHow ? '' : 'none';
+  }
+
+  if (!bp.length) {
+    els.pbBallPathSeq.innerHTML = '';
+    return;
+  }
+  // Nathan: "there is no way to remove a ball path." BallPathEditor's own
+  // removeAt(index) already supported removing ANY leg (verified earlier
+  // this session), Play Builder's UI just never exposed it -- only the
+  // tap-again-to-undo mechanic reached the LAST leg. Every leg gets a
+  // real ✕ now, uniformly via removeAt.
+  const HOW_OPTIONS = Object.keys(window.BallPath.EXCHANGES).filter((k) => k !== 'snap');
+  els.pbBallPathSeq.innerHTML = bp.map((leg, i) => {
+    const removeBtn = `<button type="button" class="ballPathRemove" data-leg="${i}" style="margin-left:auto;border:none;background:none;color:#b00;font-weight:800;cursor:pointer;padding:0 4px" title="Remove this step">✕</button>`;
+    if (i === 0) return `<div style="display:flex;align-items:center;padding:3px 0">1. Snap to #${leg.player}${removeBtn}</div>`;
+    const options = HOW_OPTIONS.map((k) => `<option value="${k}"${leg.how === k ? ' selected' : ''}>${window.BallPath.EXCHANGES[k].label}</option>`).join('');
+    return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">${i + 1}. #${leg.player}
+      <select data-leg="${i}" class="ballPathHowSelect">${options}</select>${removeBtn}</div>`;
+  }).join('');
+  els.pbBallPathSeq.querySelectorAll('.ballPathRemove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      els.ballPathEditor.removeAt(Number(btn.dataset.leg));
+    });
+  });
   els.pbBallPathSeq.querySelectorAll('.ballPathHowSelect').forEach((sel) => {
     sel.addEventListener('change', () => {
       els.ballPathEditor.setHow(Number(sel.dataset.leg), sel.value);
@@ -1470,6 +1621,57 @@ function buildConceptButtons() {
   }
 }
 
+// Built once, same reasoning as buildConceptButtons() -- the palette is
+// static. "" (the default/blue swatch) clears assignment.color entirely
+// rather than storing a redundant explicit default.
+function buildColorSwatches() {
+  if (!els.pbColorSwatches) return;
+  const swatches = [{ id: '', hex: '#123a8c' }].concat(
+    Object.keys(PB_PLAYER_COLORS).map((id) => ({ id, hex: PB_PLAYER_COLORS[id] }))
+  );
+  els.pbColorSwatches.innerHTML = swatches.map((s) =>
+    `<button type="button" class="pbColorSwatch" data-color="${s.id}" style="background:${s.hex}" aria-label="${s.id || 'default'}"></button>`
+  ).join('');
+  els.pbColorSwatches.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (state.selectedPlayer === null) return;
+      const a = assignmentFor(state.selectedPlayer);
+      if (b.dataset.color) a.color = b.dataset.color;
+      else delete a.color;
+      render();
+    });
+  });
+}
+
+// Built once, same reasoning as buildConceptButtons()/buildColorSwatches()
+// -- the 3 dispositions are static. A click just ARMS state.
+// ballPathPendingHow; the actual leg only gets created once the coach
+// taps a real receiver on the field (see the circle click handler).
+function buildBallPathDispositionButtons() {
+  if (!els.pbBallPathDispositions) return;
+  els.pbBallPathDispositions.innerHTML = BALL_DISPOSITIONS.map((d) =>
+    `<button type="button" class="pbConceptBtn" data-how="${d.how}" style="flex:1 1 80px">${d.label}</button>`
+  ).join('');
+  els.pbBallPathDispositions.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => {
+      state.ballPathPendingHow = b.dataset.how;
+      // Full render(), not just renderBallPathPanel() -- the eligible-
+      // receiver dashed rings live in render()'s own circle-drawing loop
+      // (they key off ballPathTapAllowed(), which now depends on this
+      // same state), not in the panel. A panel-only refresh left the
+      // prompt text correct but the field showing zero rings -- caught
+      // live, not assumed fixed.
+      render();
+    });
+  });
+  if (els.pbBallPathCancelBtn) {
+    els.pbBallPathCancelBtn.addEventListener('click', () => {
+      state.ballPathPendingHow = null;
+      render();
+    });
+  }
+}
+
 // Live "Point N of M -- X yd downfield -- Y yd left/right of start"
 // readout for the currently-selected handle, matching footballplaybook.
 // com's own reference UI. Reports the two axes SEPARATELY rather than one
@@ -1655,6 +1857,7 @@ function bindSidebar() {
     state.currentVariantIndex = 0;
     state.selectedPlayer = null;
     state.ballPathMode = false;
+    state.ballPathPendingHow = null;
     populatePlaySelect();
     populateVariantSelect();
     els.ballPathEditor.set(effectiveBallPath(currentVariant())); // triggers render() via renderPlay
@@ -1667,6 +1870,7 @@ function bindSidebar() {
     state.currentVariantIndex = 0;
     state.selectedPlayer = null;
     state.ballPathMode = false;
+    state.ballPathPendingHow = null;
     populateVariantSelect();
     els.ballPathEditor.set(effectiveBallPath(currentVariant())); // triggers render() via renderPlay
   });
@@ -1708,6 +1912,7 @@ function bindSidebar() {
     state.currentVariantIndex = 0;
     state.selectedPlayer = null;
     state.ballPathMode = false;
+    state.ballPathPendingHow = null;
     populatePlaySelect();
     populateVariantSelect();
     els.ballPathEditor.set(effectiveBallPath(currentVariant())); // triggers render() via renderPlay
@@ -1785,6 +1990,7 @@ function bindSidebar() {
 
   els.pbBallPathModeToggle.addEventListener('change', () => {
     state.ballPathMode = els.pbBallPathModeToggle.checked;
+    state.ballPathPendingHow = null;
     if (state.ballPathMode) {
       state.selectedPlayer = null;
       state.selectedPointIndex = null;
@@ -1841,15 +2047,20 @@ async function init() {
   els.pbFieldTitle = q('pbFieldTitle');
   els.pbLabelInput = q('pbLabelInput');
   els.pbPlayerPanel = q('pbPlayerPanel');
+  els.pbNoPlayerHint = q('pbNoPlayerHint');
   els.pbPlayerLabel = q('pbPlayerLabel');
   els.pbHasBallCheckbox = q('pbHasBallCheckbox');
   els.pbDelayInput = q('pbDelayInput');
   els.pbEndTypeSelect = q('pbEndTypeSelect');
   els.pbWingRouteToggle = q('pbWingRouteToggle');
+  els.pbWingRouteToggleWrap = q('pbWingRouteToggleWrap');
   els.pbWingSideToggle = q('pbWingSideToggle');
   els.pbDirectionToggle = q('pbDirectionToggle');
   els.pbPreviewLockNote = q('pbPreviewLockNote');
+  els.pbAlignmentEditWrap = q('pbAlignmentEditWrap');
   els.pbAlignmentEditToggle = q('pbAlignmentEditToggle');
+  els.pbRoutesWrap = q('pbRoutesWrap');
+  els.pbColorSwatches = q('pbColorSwatches');
   els.pbDirectionEditToggle = q('pbDirectionEditToggle');
   els.pbAlignmentPreviewToggles = q('pbAlignmentPreviewToggles');
   els.pbSaveBtn = q('pbSaveBtn');
@@ -1869,13 +2080,18 @@ async function init() {
   els.pbSignalResetBtn = q('pbSignalResetBtn');
   els.pbSignalSequence = q('pbSignalSequence');
   els.pbBallPathModeToggle = q('pbBallPathModeToggle');
+  els.pbBallPathPrompt = q('pbBallPathPrompt');
+  els.pbBallPathDispositions = q('pbBallPathDispositions');
+  els.pbBallPathCancelBtn = q('pbBallPathCancelBtn');
   els.pbBallPathSeq = q('pbBallPathSeq');
   els.pbBallPathClearBtn = q('pbBallPathClearBtn');
+  buildBallPathDispositionButtons();
   els.pbRoutesGrid = q('pbRoutesGrid');
   els.pbBlocksGrid = q('pbBlocksGrid');
   els.pbPointInfo = q('pbPointInfo');
   els.statusEl = q('pbStatus');
   buildConceptButtons();
+  buildColorSwatches();
 
   // Reuses js/ball-path-editor.js's BallPathEditor completely unmodified --
   // renderPlay: render wires it into the SAME "coordinator re-renders,
