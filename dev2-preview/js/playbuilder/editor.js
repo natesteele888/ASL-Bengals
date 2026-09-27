@@ -1397,7 +1397,10 @@ async function playPreview() {
   if (align && window.BallPath.isValid(ballPath)) {
     const lookup = (player) => {
       const entry = state.lastRendered[player];
-      return (entry && entry.circleEl) ? { circleEl: entry.circleEl, points: entry.points.map((p) => [p.x, p.y]) } : null;
+      // Carries stopMs through (not just [x,y]) -- BallPath.schedule()'s
+      // own exchange-timing math now checks for a Timed Stop on the
+      // receiver's route before this point, and needs it here to do that.
+      return (entry && entry.circleEl) ? { circleEl: entry.circleEl, points: entry.points.map((p) => (p.stopMs ? [p.x, p.y, p.stopMs] : [p.x, p.y])) } : null;
     };
     const pairedLegs = ballPath.filter((leg) => lookup(leg.player));
     const schedule = window.BallPath.schedule(ballPath, lookup, animMs);
