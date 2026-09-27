@@ -101,7 +101,12 @@
     // net, then actually deleted once Play Builder V2 had proven itself
     // through this whole session -- gone from the scripts array too, not
     // just unrouted.
-    { key: 'playbuilder', label: '🧩 Play Builder', category: 'plays', panel: 'coachPlayBuilderPanel', init: () => window.initCoachPlayBuilder && window.initCoachPlayBuilder() },
+    // Nathan: "I honestly think the other coaches aren't going to use the
+    // formation builder and play builder, that will likely be for me... I
+    // can be the only one currently allowed to do it." adminOnly is a
+    // second, narrower gate on top of the approvedCoach default above --
+    // filtered in visibleTabs() via window.isPlayBuilderAdmin() (auth.js).
+    { key: 'playbuilder', label: '🧩 Play Builder', category: 'plays', panel: 'coachPlayBuilderPanel', init: () => window.initCoachPlayBuilder && window.initCoachPlayBuilder(), adminOnly: true },
     // Self-serve "add a signal card" tool -- Nathan: "in the future, if I
     // need to add more signals, is there a path to do that?" Stores the
     // photo directly in the card's own Firebase record (a data: URI, not
@@ -167,8 +172,12 @@
     // own comments above) stay in TABS itself -- their panels/init still
     // exist and openCoachToolsTab(key) would still find them -- just
     // filtered out of every real UI surface (category browsing AND the
-    // search box) here in this one shared place.
-    return base.filter(t => !t.hidden);
+    // search box) here in this one shared place. adminOnly:true (Play
+    // Builder, 2026-09-27) is the same idea, narrower: still filtered from
+    // every UI surface, but the gate is per-session (isPlayBuilderAdmin)
+    // instead of a blanket hide.
+    const playBuilderAdmin = window.isPlayBuilderAdmin ? window.isPlayBuilderAdmin() : false;
+    return base.filter(t => !t.hidden && (!t.adminOnly || playBuilderAdmin));
   }
 
   function tabsForCategory(catKey) { return visibleTabs().filter(t => t.category === catKey); }

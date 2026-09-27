@@ -172,6 +172,26 @@ window.isApprovedCoachProfile = function(){
   return window.COACH_PROFILE_NAMES.indexOf(name) !== -1;
 };
 
+// Nathan: "I honestly think the other coaches aren't going to use the
+// formation builder and play builder, that will likely be for me. I am
+// fine with you adding a toggle to enable those things for different
+// coaches so I can be the only one currently allowed to do it." A second,
+// narrower allowlist on top of COACH_PROFILE_NAMES above -- same
+// trimmed/lowercased-name-match convention, kept here for the same
+// "every coach-only feature needs the exact same check" reason, so
+// nav.js (which tab shows) and coachtools-playbuilder.js (what actually
+// builds if reached another way, e.g. the Play tab's "+ Add a play"/
+// "Modify" handoff) can't drift out of sync with each other. Granting
+// Play Builder access to another coach later is a one-line edit to this
+// array, not a rebuild.
+window.PLAYBUILDER_ADMIN_NAMES = ['coach nate'];
+window.isPlayBuilderAdmin = function(){
+  if (!window.isApprovedCoachProfile || !window.isApprovedCoachProfile()) return false;
+  var session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+  var name = session && session.name ? session.name.trim().toLowerCase() : '';
+  return window.PLAYBUILDER_ADMIN_NAMES.indexOf(name) !== -1;
+};
+
 // Nathan: "Need a way on Coach Nate account to see the kids account view.
 // See how it looks to them. Maybe a press and hold on the logo." Reloads
 // the page with a sessionStorage flag set, which the boot-time role
