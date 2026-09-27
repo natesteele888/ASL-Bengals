@@ -600,6 +600,13 @@
 
   function build() {
     var body = document.getElementById('coachPlayBuilderBody');
+    // build() only ever runs once (guarded by `built` in initCoachPlayBuilder
+    // above), so body is normally already empty -- except a non-admin coach
+    // may have already populated it with showLockedNotice() this same page
+    // session (e.g. the Play tab's own handoff, before this session's role
+    // was actually admin). Clear it so that notice can't sit stranded
+    // underneath the real editor once an admin session actually builds.
+    body.innerHTML = '';
 
     var modeTabs = document.createElement('div');
     modeTabs.id = 'pbTopModeToggle';
@@ -644,7 +651,31 @@
     return editorReady;
   }
 
+  // Defense in depth alongside coachtools-nav.js's own tab filtering (which
+  // normally keeps a non-admin coach from ever reaching this tab at all) --
+  // the Play tab's own "+ Add a play"/"Modify" tiles hand off here directly
+  // via openCoachToolsTab('playbuilder'), bypassing that nav filter. Kept
+  // completely outside the built/initializing state machine below (checked
+  // fresh on every call, never flips `built`) so a locked visit from a
+  // non-admin coach can never leave a later, real admin visit in the same
+  // page session stuck on a half-initialized `built=true` with no editor
+  // actually constructed. See auth.js's isPlayBuilderAdmin() for the real
+  // allowlist.
+  function showLockedNotice() {
+    var body = document.getElementById('coachPlayBuilderBody');
+    if (!body || body.querySelector('.pbLockedNotice')) return;
+    var locked = document.createElement('div');
+    locked.className = 'hint pbLockedNotice';
+    locked.style.padding = '24px 4px';
+    locked.textContent = 'Play Builder is currently limited to Coach Nate. Ask him if you need a formation or play added or edited.';
+    body.appendChild(locked);
+  }
+
   window.initCoachPlayBuilder = function () {
+    if (!window.isPlayBuilderAdmin || !window.isPlayBuilderAdmin()) {
+      showLockedNotice();
+      return;
+    }
     if (built) {
       // Still mid-FIRST-activation (see `initializing`'s own comment
       // above) -- do NOT touch window.__pbPendingLoadPlayId here. It was
