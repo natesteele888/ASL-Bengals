@@ -213,6 +213,23 @@
       // "field-owns-the-data, this file just gives it a home" split every
       // other panel piece here already follows.
       '  <div class="hint" id="pbPointInfo" style="min-height:1.2em;margin-top:10px"></div>' +
+      // Timed Stop -- Nathan, re: footballplaybook.com's own reference UI
+      // (screenshot: "Stops for 0.55s" preset buttons + "Remove the stop"):
+      // "stop and go route has a couple nodes but it doesnt delay." A
+      // route's SHAPE alone never made the player actually pause during
+      // animation -- this is the real, timed hold (RoutePoint.stopMs,
+      // schema.js), distinct from Start Delay above (a wait before the
+      // WHOLE route starts, not a pause partway through it). Built and
+      // synced entirely by editor.js's own buildTimedStopButtons()/
+      // updatePointInfo() -- hidden until a real ON-CURVE point (not a
+      // bezier control point) is selected, same "not everything has to be
+      // displayed at once" principle as pbRoutesWrap below.
+      '  <div id="pbTimedStopWrap" style="margin-top:10px;display:none">' +
+      '    <label style="' + LBL + '">Timed stop</label>' +
+      '    <div class="hint" id="pbTimedStopStatus" style="margin-bottom:6px"></div>' +
+      '    <div id="pbTimedStopGrid" class="pbConceptGrid"></div>' +
+      '    <button type="button" id="pbTimedStopRemoveBtn" class="navBtn secondary" style="margin-top:6px;width:100%;display:none">Remove the stop</button>' +
+      '  </div>' +
       // One-click preset routes/blocks (js/playbuilder/route-concepts.js) --
       // Nathan, re: footballplaybook.com: "pick from the pre-determined
       // routes... just so much easier." Built once by editor.js's own

@@ -84,6 +84,17 @@
     return [{ x: origin.x, y: origin.y }];
   }
 
+  // Tags an on-curve point with a real Timed Stop (RoutePoint.stopMs,
+  // schema.js) -- Nathan: "stop and go route has a couple nodes but it
+  // doesn't delay." The shape alone was never enough; a route needs to
+  // actually pause at the hitch-dip point during animation for a real
+  // Stop & Go route to read as one. 550ms matches footballplaybook.com's
+  // own default Timed Stop duration (the reference this was modeled on).
+  function withStop(pts, idx, ms) {
+    pts[idx] = Object.assign({}, pts[idx], { stopMs: ms });
+    return pts;
+  }
+
   const ROUTES = [
     // Straight -- a 2-point route needs no curve mechanics at all.
     { id: 'go', label: 'Go', build: (o) => [{ x: o.x, y: o.y }, { x: o.x, y: o.y - 480 }] },
@@ -121,8 +132,9 @@
     // Stem, sharp out-fake, sharp break back upfield.
     { id: 'outup', label: 'Out & Up', build: (o, s) => corner(corner(corner(start(o), { dx: 0, dy: -220 }), { dx: s * 140, dy: -20 }), { dx: s * 60, dy: -240 }) },
 
-    // Stem, sharp hitch dip, sharp continue deep.
-    { id: 'stopgo', label: 'Stop & Go', build: (o) => corner(corner(corner(start(o), { dx: 0, dy: -200 }), { dx: 0, dy: 30 }), { dx: 0, dy: -300 }) },
+    // Stem, sharp hitch dip (a real, timed pause there -- see withStop),
+    // sharp continue deep.
+    { id: 'stopgo', label: 'Stop & Go', build: (o) => withStop(corner(corner(corner(start(o), { dx: 0, dy: -200 }), { dx: 0, dy: 30 }), { dx: 0, dy: -300 }), 4, 550) },
 
     // Stem, sharp post-fake break, sharp break back out to the corner.
     { id: 'postcorner', label: 'Post-Corner', build: (o, s) => corner(corner(corner(start(o), { dx: 0, dy: -300 }), { dx: -s * 120, dy: -100 }), { dx: s * 260, dy: -80 }) },
@@ -135,7 +147,9 @@
   ];
 
   function generate(concept, origin, outwardSign) {
-    return concept.build(origin, outwardSign).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+    return concept.build(origin, outwardSign).map((p) => (
+      p.stopMs ? { x: Math.round(p.x), y: Math.round(p.y), stopMs: p.stopMs } : { x: Math.round(p.x), y: Math.round(p.y) }
+    ));
   }
 
   window.PlayBuilderConcepts = { ROUTES, BLOCKS, generate };

@@ -423,6 +423,20 @@ function curvedPathD(points) {
   return d;
 }
 
+// Whether `points[idx]` is a real, on-curve position a player's body
+// actually passes through, per curvedPathD's own alternating convention
+// just above -- point 0 and every even index after it are on-curve; odd
+// indices are bezier CONTROL points (a pure curve-shaping artifact, never
+// a real spot on the field), EXCEPT the special 2-point straight-line case,
+// where both points are on-curve. A Timed Stop only ever makes sense on a
+// real, on-curve point -- offering one on a control point would pause the
+// reveal at a coordinate the route never actually visits.
+function isOnCurveIndex(points, idx) {
+  if (!points || idx == null || idx < 0 || idx >= points.length) return false;
+  if (points.length === 2) return true;
+  return idx % 2 === 0;
+}
+
 // Nearest-segment lookup for "grab the middle of the line and pull" --
 // projects `pt` onto every consecutive pair of points and returns the
 // index i such that inserting a new point between points[i]/points[i+1]
@@ -789,7 +803,12 @@ function render() {
       d: curvedPathD(points), fill: 'none', stroke: color, 'stroke-width': 7, 'stroke-linecap': 'round',
     });
     pathsLayer.appendChild(pathEl);
-    state.lastRendered[pos.id] = { pathEl, points, hasBall, customColor };
+    // delayMs read here (not looked up again inside playPreview()) since
+    // `assignment` -- the real, correctly-typed player record -- is only
+    // in scope during this loop; Object.keys(state.lastRendered) later
+    // hands back STRING keys even for a numeric position id, which would
+    // silently fail assignmentFor()'s strict `p.player === playerId` match.
+    state.lastRendered[pos.id] = { pathEl, points, hasBall, customColor, delayMs: (assignment && assignment.delayMs) || 0 };
   });
 
   // Player circles
@@ -1134,7 +1153,13 @@ function initEvents() {
   els.svg.addEventListener('pointermove', (ev) => {
     if (state.dragging && state.selectedPointIndex !== null) {
       const pts = editablePointsForSelected();
+      // Preserve stopMs (if this point has a Timed Stop) -- a bare
+      // {x,y} replacement would otherwise silently drop it every time
+      // this handle gets dragged, since svgPointFromEvent never carries
+      // one.
+      const prevStopMs = pts[state.selectedPointIndex] && pts[state.selectedPointIndex].stopMs;
       pts[state.selectedPointIndex] = svgPointFromEvent(ev);
+      if (prevStopMs) pts[state.selectedPointIndex].stopMs = prevStopMs;
       render();
       return;
     }
@@ -1349,9 +1374,16 @@ async function playPreview() {
   const centerEntry = state.lastRendered['C'];
   const align = centerEntry ? { C: [centerEntry.anchor.x, centerEntry.anchor.y] } : null;
 
+  // Real bug, found investigating Timed Stops: this hardcoded delayMs to 0
+  // for every player regardless of what was actually authored -- the
+  // sidebar's own "Start Delay (ms)" field has always been silently inert
+  // in this preview, even though the exact same shared animatePathDraw
+  // primitive honors it correctly on the real card. Now reads the real
+  // value cached on state.lastRendered above.
   const revealPromises = Object.keys(state.lastRendered).map((posId) => {
     const entry = state.lastRendered[posId];
-    return window.animatePathDraw(entry.pathEl, null, animMs, 0, entry.circleEl, entry.textEl);
+    const stopTimeline = entry.points && window.buildStopTimeline ? window.buildStopTimeline(entry.points, animMs) : null;
+    return window.animatePathDraw(entry.pathEl, null, animMs, entry.delayMs || 0, entry.circleEl, entry.textEl, stopTimeline);
   });
 
   // The ball, hopping exchange point to exchange point, timed off when
@@ -1763,6 +1795,39 @@ function buildConceptButtons() {
   }
 }
 
+// Timed Stop preset durations -- matches footballplaybook.com's own
+// reference UI exactly (0.35s / 0.55s / 0.90s).
+const PB_TIMED_STOP_PRESETS_MS = [350, 550, 900];
+
+// Built once, same reasoning as buildConceptButtons() -- the preset list
+// is static. Reads/writes state.selectedPointIndex directly (not a
+// concept id) since a stop belongs to ONE specific point, not a whole
+// route shape.
+function buildTimedStopButtons() {
+  if (els.pbTimedStopGrid) {
+    els.pbTimedStopGrid.innerHTML = PB_TIMED_STOP_PRESETS_MS.map((ms) =>
+      `<button type="button" class="pbConceptBtn" data-ms="${ms}">${(ms / 1000).toFixed(2)}s</button>`).join('');
+    els.pbTimedStopGrid.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        const pts = editablePointsForSelected();
+        const pt = pts && state.selectedPointIndex !== null && pts[state.selectedPointIndex];
+        if (!pt || !isOnCurveIndex(pts, state.selectedPointIndex)) return;
+        pt.stopMs = Number(b.dataset.ms);
+        updatePointInfo();
+      });
+    });
+  }
+  if (els.pbTimedStopRemoveBtn) {
+    els.pbTimedStopRemoveBtn.addEventListener('click', () => {
+      const pts = editablePointsForSelected();
+      const pt = pts && state.selectedPointIndex !== null && pts[state.selectedPointIndex];
+      if (!pt) return;
+      delete pt.stopMs;
+      updatePointInfo();
+    });
+  }
+}
+
 // Built once, same reasoning as buildConceptButtons() -- the palette is
 // static. "" (the default/blue swatch) clears assignment.color entirely
 // rather than storing a redundant explicit default.
@@ -1823,15 +1888,41 @@ function buildBallPathDispositionButtons() {
 // a diagonal route's real yardage).
 const PB_VERTICAL_PX_PER_YARD = 40;
 const PB_HORIZONTAL_PX_PER_YARD = 114.5;
+// Shows/hides/syncs the Timed Stop controls for whichever point is
+// currently selected -- hidden entirely unless a real ON-CURVE point (see
+// isOnCurveIndex) is picked, since a bezier control point is never a real
+// position a player passes through and a stop there would be meaningless.
+function syncTimedStopUI(pts) {
+  if (!els.pbTimedStopWrap) return;
+  const idx = state.selectedPointIndex;
+  const pt = pts && idx !== null ? pts[idx] : null;
+  const eligible = !!pt && isOnCurveIndex(pts, idx);
+  els.pbTimedStopWrap.style.display = eligible ? '' : 'none';
+  if (!eligible) return;
+  const ms = pt.stopMs || 0;
+  if (els.pbTimedStopStatus) {
+    els.pbTimedStopStatus.textContent = ms > 0
+      ? `Stops for ${(ms / 1000).toFixed(2)}s here, then continues.`
+      : 'No stop here -- the route runs straight through this point.';
+  }
+  if (els.pbTimedStopGrid) {
+    els.pbTimedStopGrid.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.ms) === ms);
+    });
+  }
+  if (els.pbTimedStopRemoveBtn) els.pbTimedStopRemoveBtn.style.display = ms > 0 ? '' : 'none';
+}
+
 function updatePointInfo() {
   if (!els.pbPointInfo) return;
   if (state.selectedPlayer === null || state.selectedPointIndex === null) {
     els.pbPointInfo.textContent = '';
+    syncTimedStopUI(null);
     return;
   }
   const pts = editablePointsForSelected();
   const pt = pts && pts[state.selectedPointIndex];
-  if (!pt) { els.pbPointInfo.textContent = ''; return; }
+  if (!pt) { els.pbPointInfo.textContent = ''; syncTimedStopUI(null); return; }
   const origin = pts[0];
   const downfield = (origin.y - pt.y) / PB_VERTICAL_PX_PER_YARD;
   const across = (pt.x - origin.x) / PB_HORIZONTAL_PX_PER_YARD;
@@ -1841,6 +1932,7 @@ function updatePointInfo() {
     parts.push(`${Math.abs(across).toFixed(1)} yd ${across < 0 ? 'left' : 'right'} of start`);
   }
   els.pbPointInfo.textContent = parts.join(' · ');
+  syncTimedStopUI(pts);
 }
 
 function bindSidebar() {
@@ -2231,9 +2323,14 @@ async function init() {
   els.pbRoutesGrid = q('pbRoutesGrid');
   els.pbBlocksGrid = q('pbBlocksGrid');
   els.pbPointInfo = q('pbPointInfo');
+  els.pbTimedStopWrap = q('pbTimedStopWrap');
+  els.pbTimedStopStatus = q('pbTimedStopStatus');
+  els.pbTimedStopGrid = q('pbTimedStopGrid');
+  els.pbTimedStopRemoveBtn = q('pbTimedStopRemoveBtn');
   els.statusEl = q('pbStatus');
   buildConceptButtons();
   buildColorSwatches();
+  buildTimedStopButtons();
 
   // Reuses js/ball-path-editor.js's BallPathEditor completely unmodified --
   // renderPlay: render wires it into the SAME "coordinator re-renders,

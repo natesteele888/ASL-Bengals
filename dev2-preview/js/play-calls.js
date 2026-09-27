@@ -677,7 +677,75 @@ function buildEndCapEl(endType, color, width) {
   }
   return svgEl('polygon', { points: '-2,-11 20,0 -2,11', fill: color });
 }
-function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl) {
+// A genuine mid-route pause -- "Y stands still at the stop, then releases,"
+// the reference footballplaybook.com behavior Nathan asked to match ("stop
+// and go route has a couple nodes but it doesn't delay"). Distinct from
+// delayMs (a fixed wait BEFORE the reveal starts at all, already handled
+// below): a RoutePoint carrying `stopMs` (schema.js) pauses the reveal once
+// it reaches THAT point, mid-route, for real time, before continuing.
+//
+// Reads stopMs off either point shape this app uses -- a Play Builder V2
+// {x,y,stopMs} object, or one of play-calls.js's own legacy [x,y] tuples
+// with stopMs appended as a 3rd element (js/playbuilder/legacy-adapter.js
+// -- a named property would be silently dropped by JSON.stringify, a
+// trailing array element survives it).
+function pointStopMs(p) { return !p ? 0 : (Array.isArray(p) ? (p[2] || 0) : (p.stopMs || 0)); }
+function pointXY(p) { return Array.isArray(p) ? { x: p[0], y: p[1] } : { x: p.x, y: p.y }; }
+
+// Builds the real elapsed-ms -> reveal-fraction timeline for one player's
+// route. Running segments keep the SAME constant rate a stop-free route
+// already has (fraction-per-ms = 1/durationMs) -- a stop only ADDS real
+// time on top, it never compresses the motion around it. Returns null
+// (meaning "no stops here, use durationMs unchanged") the moment `points`
+// carries no stopMs data at all, so this is a provable no-op for every
+// route that doesn't use the feature -- which is every route today except
+// ones a coach has explicitly set a Timed Stop on.
+function buildStopTimeline(points, durationMs, speedMultiplier) {
+  if (!points || points.length < 2) return null;
+  const speed = speedMultiplier || 1;
+  const stops = [];
+  points.forEach((p, idx) => { const ms = pointStopMs(p); if (ms > 0) stops.push({ idx, ms: ms * speed }); });
+  if (!stops.length) return null;
+
+  let total = 0;
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    const a = pointXY(points[i - 1]), b = pointXY(points[i]);
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+    cum.push(total);
+  }
+  if (!total) return null;
+
+  const withFrac = stops.map((s) => ({ ms: s.ms, frac: cum[s.idx] / total })).sort((a, b) => a.frac - b.frac);
+  const segments = [];
+  let elapsed = 0;
+  let prevFrac = 0;
+  withFrac.forEach((s) => {
+    const runMs = Math.max(0, (s.frac - prevFrac) * durationMs);
+    if (runMs > 0) segments.push({ hold: false, startMs: elapsed, endMs: elapsed + runMs, fromFrac: prevFrac, toFrac: s.frac });
+    elapsed += runMs;
+    segments.push({ hold: true, startMs: elapsed, endMs: elapsed + s.ms, frac: s.frac });
+    elapsed += s.ms;
+    prevFrac = s.frac;
+  });
+  const tailMs = Math.max(0, (1 - prevFrac) * durationMs);
+  segments.push({ hold: false, startMs: elapsed, endMs: elapsed + tailMs, fromFrac: prevFrac, toFrac: 1 });
+  elapsed += tailMs;
+
+  return {
+    totalMs: elapsed,
+    fracAt(elapsedMs) {
+      const t = Math.max(0, Math.min(elapsedMs, elapsed));
+      let seg = segments[segments.length - 1];
+      for (let i = 0; i < segments.length; i++) { if (t <= segments[i].endMs) { seg = segments[i]; break; } }
+      if (seg.hold) return seg.frac;
+      const span = seg.endMs - seg.startMs;
+      return span ? seg.fromFrac + (seg.toFrac - seg.fromFrac) * (t - seg.startMs) / span : seg.toFrac;
+    },
+  };
+}
+
+function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl, stopTimeline) {
   return new Promise(async resolve => {
     // Hide immediately, BEFORE the delay -- not after. renderCardDiagram
     // just drew every path fully solid (that's the static, non-animated
@@ -695,9 +763,15 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
     if (arrowEl) arrowEl.style.opacity = '0';
     if (delayMs) await wait(delayMs);
     if (arrowEl) arrowEl.style.opacity = '1';
+    // stopTimeline (built by buildStopTimeline, above) is undefined/null for
+    // every path without a Timed Stop -- frac/effectiveDuration then reduce
+    // to the exact original linear math, byte-identical to before this was
+    // added.
+    const effectiveDuration = stopTimeline ? stopTimeline.totalMs : durationMs;
     const start = performance.now();
     function frame(now) {
-      const t = Math.min(1, (now - start) / durationMs);
+      const elapsedMs = now - start;
+      const t = stopTimeline ? stopTimeline.fracAt(elapsedMs) : Math.min(1, elapsedMs / durationMs);
       pathEl.style.strokeDashoffset = `${len * (1 - t)}`;
       if (arrowEl) placeArrowAtFraction(arrowEl, pathEl, t);
       if (circleEl) {
@@ -705,7 +779,7 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
         circleEl.setAttribute('cx', pt.x); circleEl.setAttribute('cy', pt.y);
         if (textEl) { textEl.setAttribute('x', pt.x); textEl.setAttribute('y', pt.y + 12); }
       }
-      if (t < 1) requestAnimationFrame(frame); else resolve();
+      if (elapsedMs < effectiveDuration) requestAnimationFrame(frame); else resolve();
     }
     requestAnimationFrame(frame);
   });
@@ -997,6 +1071,7 @@ window.renderSplitDiagram = renderSplitDiagram;
 // reimplementation of "reveal a path while dragging a circle along it."
 window.animatePathDraw = animatePathDraw;
 window.tweenPoint = tweenPoint;
+window.buildStopTimeline = buildStopTimeline;
 
 // ---- Render a card's diagram into its SVG stage ----
 // Where the eleven players line up, from the formation registry
@@ -1962,7 +2037,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       pathsLayer.appendChild(wrap);
 
       lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
-        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null, points });
     }
 
     if (readNoteToShow) {
@@ -2698,9 +2773,21 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // segment's share, so the two segments draw back-to-back at a matching
   // pace instead of each taking the full animMs (which would make a split
   // route draw twice as slow as every other path).
-  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac }) =>
-    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
-      (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
+  // A Timed Stop can genuinely extend how long ONE path takes to fully
+  // reveal past the play's normal animMs -- trackFinishMs (below) is the
+  // real max across every path, so the ball-tracking loop doesn't stop
+  // updating early while a paused receiver is still finishing his route.
+  let trackFinishMs = animMs;
+  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac, points }) => {
+    const segDurationMs = (lenFrac != null ? lenFrac : 1) * animMs;
+    // points is undefined for a handoff-split segment (see renderCardDiagram's
+    // own two-lastRenderedPaths-entries branch just above) -- buildStopTimeline
+    // already returns null for that, same as for any stop-free route.
+    const stopTimeline = points ? buildStopTimeline(points, segDurationMs, speedMultiplier) : null;
+    const delayOffset = (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs;
+    trackFinishMs = Math.max(trackFinishMs, delayOffset + (stopTimeline ? stopTimeline.totalMs : segDurationMs));
+    return animatePathDraw(el, arrowEl, segDurationMs, delayOffset, circleEl, textEl, stopTimeline);
+  });
 
   // isBallStart (p.ballStart in the data) marks "who the floating ball icon
   // visually starts with," which can be a DIFFERENT path than isBall/p.ball
@@ -2865,10 +2952,10 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     }
     tracking = true;
     catchUpFrame();
-    await wait(animMs);
+    await wait(trackFinishMs);
     tracking = false;
   } else {
-    await wait(animMs);
+    await wait(trackFinishMs);
   }
   await Promise.all(pathPromises);
   await wait(300 * speedMultiplier);
@@ -2927,6 +3014,13 @@ function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
     const dur = (entry.lenFrac != null ? entry.lenFrac : 1) * animMs;
     const delay = (entry.delayMs || 0) * speedMultiplier + (entry.startFrac || 0) * animMs;
     if (dur <= 0) return 1;
+    // Mirrors playCardAnimation's pathPromises exactly (must stay pixel-
+    // identical to Play, per this function's own header comment) -- a
+    // Timed Stop pins the fraction at the stop point for real elapsed time
+    // instead of the plain linear ratio below. Falls straight through to
+    // the original formula for any entry with no stop data.
+    const stopTimeline = entry.points ? window.buildStopTimeline(entry.points, dur, speedMultiplier) : null;
+    if (stopTimeline) return stopTimeline.fracAt(elapsedMs - delay);
     return Math.max(0, Math.min(1, (elapsedMs - delay) / dur));
   }
 

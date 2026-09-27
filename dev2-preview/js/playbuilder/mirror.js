@@ -195,7 +195,7 @@ function resolveRoute(formation, players, playerId, { wingSide, direction, align
     }
     if (wingSide !== 'left') return points;
     const centerX = getCenterX(formation);
-    return points.map((pt) => ({ x: reflect(pt.x, centerX), y: pt.y }));
+    return points.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, centerX), y: pt.y }));
   }
 
   // Most specific wins: an explicit, independently-authored route for
@@ -249,11 +249,11 @@ function resolveRoute(formation, players, playerId, { wingSide, direction, align
       const partnerAssignment = players.find((p) => p.player === partnerId);
       if (partnerAssignment && partnerAssignment.points) {
         const centerX = getCenterX(formation);
-        return partnerAssignment.points.map((pt) => ({ x: reflect(pt.x, centerX), y: pt.y }));
+        return partnerAssignment.points.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, centerX), y: pt.y }));
       }
     } else if (usesCenterMirror(formation, playerId) && assignment.points) {
       const centerX = getCenterX(formation);
-      return assignment.points.map((pt) => ({ x: reflect(pt.x, centerX), y: pt.y }));
+      return assignment.points.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, centerX), y: pt.y }));
     }
   }
 
@@ -270,7 +270,7 @@ function resolveRoute(formation, players, playerId, { wingSide, direction, align
   const points = (alignmentData && alignmentData.points) || assignment.points;
   if (direction !== 'left' || assignment.directionIndependent) return points;
   const anchor = getFixedAnchor(formation, playerId, alignment);
-  return points.map((pt) => ({ x: reflect(pt.x, anchor.x), y: pt.y }));
+  return points.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, anchor.x), y: pt.y }));
 }
 
 window.PlayBuilderMirror = { resolveRoute, resolveAnchor, getFixedAnchor, getCenterX, reflect, findSwapPartner, reflectDefensePositions };
