@@ -2856,7 +2856,18 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     ? window.BallPath.schedule(wingAwareBallPath, (player) => {
         const entry = lastRenderedPaths.find(p => String(p.player) === String(player) && p.circleEl);
         if (!entry) return null;
-        const points = pointsFromRenderedPath(entry.el) || (() => {
+        // entry.points (set at render time, right where `points` builds the
+        // path's own `d` attribute) reflects every live render-time
+        // correction exactly like pointsFromRenderedPath's own DOM sample
+        // does (verified: matches to sub-pixel precision even on a play
+        // with wingLeftRouteFor/alignment corrections applied) -- and,
+        // unlike a geometry resample, it can actually carry a RoutePoint's
+        // stopMs (js/play-calls.js's buildStopTimeline), which
+        // BallPath.schedule()'s own exchange-timing math now checks for.
+        // Falls through to the resampled/stale-alias chain exactly as
+        // before for the one case entry.points is absent (a "Ball Starts
+        // Here" handoff-split segment).
+        const points = entry.points || pointsFromRenderedPath(entry.el) || (() => {
           const src = (stage._resolvedPaths || []).find(p => String(p.player) === String(player) && p.points);
           return src && src.points;
         })();
@@ -3108,7 +3119,12 @@ function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
     ? window.BallPath.schedule(wingAwareBallPath, (player) => {
         const entry = lastRenderedPaths.find((p) => String(p.player) === String(player) && p.circleEl);
         if (!entry) return null;
-        const points = pointsFromRenderedPath(entry.el) || (() => {
+        // Same preference as playCardAnimation's own identical lookup above
+        // -- entry.points over a geometry resample, so a Timed Stop is
+        // visible to seekCardAnimation's exchange timing too (this
+        // function's whole job is staying pixel-identical to what Play
+        // actually shows at a given instant, so the two must agree).
+        const points = entry.points || pointsFromRenderedPath(entry.el) || (() => {
           const src = resolvedPaths.find((p) => String(p.player) === String(player) && p.points);
           return src && src.points;
         })();
