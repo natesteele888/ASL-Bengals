@@ -185,7 +185,7 @@
   //
   // Card ids referenced by name so the recipes stay readable.
   var WING_TOUCH = 7, SPLIT_TOUCH = 31, I_TOUCH = 33, FIVE_GUYS_TOUCH = 34, BOOT = 26, COUNTER = 18, POP2 = 29,
-      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35;
+      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29;
   // "WING LOCATION" already exists as a real, photographed 2-photo pool (7,
   // 8, data/cards.json -- Nathan: "Wing (signal 7 or 8)") from Wing's own
   // deck. I's "Wing" modifier call (moving #4 out from Heavy's tucked
@@ -276,16 +276,21 @@
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       { card: function (c) { return pickFinger(c.splitSide, c.splitFinger); },
         label: function (c) { return 'Direction: ' + c.splitSide; } },
-      // Pass negates the run call. Which of Pass 1/2/3 shows is random --
-      // Nathan: "it's just any of those signals means it is pass".
+      // Pass negates the run call -- and, per Nathan, Pass 1 and Pass 2 are
+      // real, DISTINCT backfield protection calls, not interchangeable:
+      // "On pass 1 the backs go out slightly to their own sides to protect
+      // pressure coming from the edge. On Pass 2, the backs do the exact
+      // same thing as they do on Option Pass right... [#2] fakes a handoff
+      // to the left and [#3] goes around the back of the QB to protect
+      // against the DE coming in." Supersedes an earlier, wrong assumption
+      // that any of Pass 1/2/3 meant the same thing at random (that used to
+      // be paired with two separate, never-photographed placeholder Pocket/
+      // Straight cards, 103/104 -- both replaced by this one, real,
+      // deterministic step). Pass 3 stays unused for now -- "it's just
+      // pass #1 or #2" -- a real, free card, not a third scheme.
       { when: function (c) { return c.passOn; },
-        card: function () { return pickFrom(PASS_IDS); }, label: 'Pass' },
-      // The line's protection call. Only meaningful once it IS a pass, and
-      // only when a scheme has actually been chosen for the play.
-      { when: function (c) { return c.passOn && c.protection === 'pocket'; },
-        card: 103, label: 'Pass Pocket' },
-      { when: function (c) { return c.passOn && c.protection === 'straight'; },
-        card: 104, label: 'Straight Pass Block' },
+        card: function (c) { return c.protection === 'straight' ? PASS_2 : PASS_1; },
+        label: function (c) { return c.protection === 'straight' ? 'Straight Pass Block' : 'Pass Pocket'; } },
     ],
 
     // I formation. Nathan's own spec, verbatim:
