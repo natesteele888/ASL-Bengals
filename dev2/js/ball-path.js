@@ -278,10 +278,26 @@
       var at = 0;
       if (i > 0) {
         var frac = fractionAlongPath(found.points, bp[i].at);
-        // No usable route for the receiver (a blocker taking a handoff, say)
-        // -- fall back to spacing the exchange evenly through the play rather
-        // than dropping it.
-        at = (frac == null ? (i / bp.length) : frac) * animMs;
+        if (frac == null) {
+          // No usable route for the receiver (a blocker taking a handoff,
+          // say) -- fall back to spacing the exchange evenly through the
+          // play rather than dropping it.
+          at = (i / bp.length) * animMs;
+        } else if (window.elapsedMsForFraction) {
+          // A genuine Timed Stop (RoutePoint.stopMs, js/play-calls.js's
+          // buildStopTimeline) earlier on the receiver's OWN route means he
+          // genuinely takes longer, real time, to reach the exchange point
+          // than a constant-rate fraction*animMs would say -- he's still
+          // standing at the stop. Ask the same stop-aware timing
+          // animatePathDraw itself uses (elapsedMsForFraction, the inverse
+          // of buildStopTimeline's fracAt) so the ball arrives exactly when
+          // he's actually there. Reduces to the exact plain formula below
+          // for any route with no stop data -- provably unchanged for
+          // every play that doesn't use this.
+          at = window.elapsedMsForFraction(found.points, animMs, frac);
+        } else {
+          at = frac * animMs;
+        }
       }
       out.push({ player: bp[i].player, circleEl: found.circleEl, atMs: at, how: i === 0 ? 'snap' : (bp[i].how || 'handoff') });
     }

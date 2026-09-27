@@ -734,6 +734,7 @@ function buildStopTimeline(points, durationMs, speedMultiplier) {
 
   return {
     totalMs: elapsed,
+    segments, // exposed for elapsedMsForFraction below -- the inverse lookup
     fracAt(elapsedMs) {
       const t = Math.max(0, Math.min(elapsedMs, elapsed));
       let seg = segments[segments.length - 1];
@@ -743,6 +744,34 @@ function buildStopTimeline(points, durationMs, speedMultiplier) {
       return span ? seg.fromFrac + (seg.toFrac - seg.fromFrac) * (t - seg.startMs) / span : seg.toFrac;
     },
   };
+}
+
+// The inverse of buildStopTimeline's own fracAt() -- given a target
+// fraction along the route (not a time), how much real elapsed time does
+// it take to actually get there, INCLUDING any stop(s) strictly before it.
+// This is what js/ball-path.js's schedule() needs: an exchange point's
+// timing is derived from "how far along his own route is the receiver
+// when he reaches it" (fractionAlongPath), and if a Timed Stop sits
+// earlier on that same route, the real answer is later than a plain
+// fraction*durationMs would say -- the receiver isn't there yet, he's
+// still standing at the stop. A stop sitting AT OR AFTER the target
+// fraction doesn't matter (the exchange already happened before he'd
+// even reach it) and is correctly ignored by only walking non-hold
+// segments below. No stops at all (points has no stopMs data) returns
+// the exact original linear formula, so every route without a Timed
+// Stop is unaffected.
+function elapsedMsForFraction(points, durationMs, targetFrac) {
+  const timeline = buildStopTimeline(points, durationMs);
+  if (!timeline) return targetFrac * durationMs;
+  for (const seg of timeline.segments) {
+    if (seg.hold) continue;
+    if (targetFrac <= seg.toFrac) {
+      const span = seg.toFrac - seg.fromFrac;
+      const localT = span ? (targetFrac - seg.fromFrac) / span : 0;
+      return seg.startMs + localT * (seg.endMs - seg.startMs);
+    }
+  }
+  return timeline.totalMs;
 }
 
 function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl, stopTimeline) {
@@ -1072,6 +1101,7 @@ window.renderSplitDiagram = renderSplitDiagram;
 window.animatePathDraw = animatePathDraw;
 window.tweenPoint = tweenPoint;
 window.buildStopTimeline = buildStopTimeline;
+window.elapsedMsForFraction = elapsedMsForFraction;
 
 // ---- Render a card's diagram into its SVG stage ----
 // Where the eleven players line up, from the formation registry
