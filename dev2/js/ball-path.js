@@ -269,7 +269,17 @@
   // `lookup(player)` hands back that player's rendered circle and the points
   // actually drawn for him. A leg whose man was never drawn is dropped rather
   // than stalling the ball on a carrier that does not exist.
-  function schedule(bp, lookup, animMs) {
+  //
+  // speedMultiplier (optional, defaults to 1) is ONLY needed to scale a
+  // Timed Stop's own duration correctly -- animMs is already speed-scaled
+  // by every caller (1400*speedMultiplier), so the plain frac*animMs branch
+  // below needs nothing extra. Without threading it into
+  // elapsedMsForFraction too, a stop's contribution to atMs would stay at
+  // its raw, un-scaled value at any speed other than 1x, scheduling the
+  // ball up to a full stopMs early relative to the receiver's own (real,
+  // correctly slowed) hold -- found live, checking 1/2x playback
+  // specifically.
+  function schedule(bp, lookup, animMs, speedMultiplier) {
     if (!isValid(bp)) return [];
     var out = [];
     for (var i = 0; i < bp.length; i++) {
@@ -294,7 +304,7 @@
           // he's actually there. Reduces to the exact plain formula below
           // for any route with no stop data -- provably unchanged for
           // every play that doesn't use this.
-          at = window.elapsedMsForFraction(found.points, animMs, frac);
+          at = window.elapsedMsForFraction(found.points, animMs, frac, speedMultiplier);
         } else {
           at = frac * animMs;
         }
