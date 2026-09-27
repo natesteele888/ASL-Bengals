@@ -459,6 +459,95 @@ function svgPointFromEvent(ev) {
   return { x: Math.round(local.x), y: Math.round(local.y) };
 }
 
+// Freehand "draw the route with your finger" -- Nathan: "I need to be
+// able to open this up on the field at practice and add plays. I would
+// love what they have which is you draw a path with your finger for the
+// route and it recreates it in a few points to mimic that route"
+// (footballplaybook.com). A drag across empty field space (as opposed to
+// a plain tap, still handled the old way -- see initEvents()) is captured
+// as a dense raw stroke, then reduced to a small number of clean
+// waypoints via Ramer-Douglas-Peucker, the standard shape-preserving
+// polyline-simplification algorithm.
+const FREEHAND_MIN_DRAG = 30; // total raw-stroke length below this = a plain tap, not a drawn route
+const FREEHAND_EPSILON = 18; // RDP tolerance, field SVG units
+const FREEHAND_MAX_POINTS = 9; // safety cap for an unusually jittery stroke
+
+function polylineLength(points) {
+  let d = 0;
+  for (let i = 1; i < points.length; i++) d += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  return d;
+}
+
+function perpendicularDistance(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (!lenSq) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+function rdpSimplify(points, epsilon) {
+  if (points.length < 3) return points.slice();
+  let maxDist = 0;
+  let index = 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpendicularDistance(points[i], first, last);
+    if (d > maxDist) { maxDist = d; index = i; }
+  }
+  if (maxDist > epsilon) {
+    const left = rdpSimplify(points.slice(0, index + 1), epsilon);
+    const right = rdpSimplify(points.slice(index), epsilon);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
+}
+
+// Converts a plain waypoint list (every point actually passed through)
+// into curvedPathD's own alternating control/on-curve convention -- each
+// new waypoint gets the exact midpoint of the previous on-curve point and
+// itself as its control, which is mathematically a straight line (see
+// route-concepts.js's own corner() for the same math/reasoning). This is
+// what makes the drawn route actually pass through every simplified
+// point instead of treating some of them as bezier controls that only
+// pull the curve toward them -- the exact rendering bug already found
+// and fixed for the preset route-concept library this session.
+function waypointsToCurvePoints(waypoints) {
+  // A plain 2-waypoint result (a straight drag) stays a clean 2-point
+  // route with no control point at all -- matching curvedPathD's own
+  // 2-point special case AND route-concepts.js's own "Go" route (a raw
+  // 2-element array, never built through corner()). Inserting a
+  // mathematically-redundant midpoint control here would still RENDER
+  // as a straight line, but it would also add an extra, pointless
+  // draggable handle a coach could accidentally bend.
+  if (waypoints.length <= 2) return waypoints.map((p) => ({ x: p.x, y: p.y }));
+  const out = [{ x: waypoints[0].x, y: waypoints[0].y }];
+  for (let i = 1; i < waypoints.length; i++) {
+    const from = out[out.length - 1];
+    const to = waypoints[i];
+    out.push({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, { x: to.x, y: to.y });
+  }
+  return out;
+}
+
+function simplifyFreehandStroke(raw, snapStart) {
+  let epsilon = FREEHAND_EPSILON;
+  let waypoints = rdpSimplify(raw, epsilon);
+  while (waypoints.length > FREEHAND_MAX_POINTS) {
+    epsilon *= 1.6;
+    waypoints = rdpSimplify(raw, epsilon);
+  }
+  // Snap the drawn shape's start to the player's own real current anchor
+  // (same convention applyConcept() already uses for its own origin) --
+  // a real touchscreen finger is imprecise, so this keeps the route
+  // visually connected to the player's circle regardless of exactly
+  // where the drag began.
+  if (snapStart) waypoints = [{ x: snapStart.x, y: snapStart.y }, ...waypoints.slice(1)];
+  return waypointsToCurvePoints(waypoints).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+}
+
 // "5 Guys"-style formations: a REGULAR (non-wing) position can carry an
 // explicit, literal alternate anchor for wingSide='left' -- redistributing
 // around wherever the true wing position ends up, never crossing sides
@@ -724,6 +813,12 @@ function render() {
     }
     const c = drawCircle(anchor.x, anchor.y, String(pos.label ?? pos.id), customColor || '#111111', PLAYER_R, isSelected);
     c.style.cursor = 'pointer';
+    // Without this, a plain tap on a player circle still bubbles a
+    // pointerdown up to the field's own freehand-stroke tracker below
+    // (only the later 'click' event is stopped here) -- selecting a
+    // different player would also spuriously add/move a point on
+    // whichever player's route was already being edited.
+    c.addEventListener('pointerdown', (ev) => ev.stopPropagation());
     c.addEventListener('click', (ev) => {
       ev.stopPropagation();
       // Preview-locked (previewing a mirrored Wing/Direction) means
@@ -844,6 +939,7 @@ function render() {
         const x = svgEl('text', { x: pt.x + 26, y: pt.y - 21, 'text-anchor': 'middle', fill: '#fff', 'font-size': 16, 'font-weight': 900 });
         x.textContent = '✕';
         badge.appendChild(x);
+        badge.addEventListener('pointerdown', (ev) => ev.stopPropagation());
         badge.addEventListener('click', (ev) => {
           ev.stopPropagation();
           editPoints.splice(idx, 1);
@@ -1017,28 +1113,74 @@ function editablePointsForSelected() {
 }
 
 function initEvents() {
-  els.svg.addEventListener('pointermove', (ev) => {
-    if (!state.dragging || state.selectedPointIndex === null) return;
-    const pts = editablePointsForSelected();
-    const local = svgPointFromEvent(ev);
-    pts[state.selectedPointIndex] = local;
-    render();
-  });
-  window.addEventListener('pointerup', () => { state.dragging = false; });
+  // Raw freehand-stroke capture, tracked only while pressing down on
+  // EMPTY field background -- every other draggable thing (an existing
+  // point handle, the dashed guide-line's own wide hit-path) already
+  // stopPropagation()s its own pointerdown, so this never fires on top
+  // of those interactions. The one exception: js/ball-path-editor.js's own
+  // exchange badges register their OWN pointerdown listener on this SAME
+  // <svg> element (not a child it could stopPropagation() from) and mark
+  // their target with `__ballStep` -- checked explicitly here, since two
+  // listeners on the identical element both always fire regardless of
+  // either one's own stopPropagation().
+  let strokeRaw = null;
 
-  // Click empty field space: with a point picked, clicking away just
-  // deselects it (dragging is how you move a point, not clicking). With a
-  // player selected but no point picked, clicking adds a new point at the
-  // end of their route -- the actual "build the route" interaction.
-  els.svg.addEventListener('click', (ev) => {
-    if (state.selectedPlayer === null || isEditingPreviewLocked()) return;
-    if (state.selectedPointIndex !== null) {
-      state.selectedPointIndex = null;
+  els.svg.addEventListener('pointerdown', (ev) => {
+    if (ev.target && ev.target.__ballStep != null) return;
+    if (state.selectedPlayer === null || isEditingPreviewLocked() || state.dragging) return;
+    strokeRaw = [svgPointFromEvent(ev)];
+  });
+
+  els.svg.addEventListener('pointermove', (ev) => {
+    if (state.dragging && state.selectedPointIndex !== null) {
+      const pts = editablePointsForSelected();
+      pts[state.selectedPointIndex] = svgPointFromEvent(ev);
       render();
       return;
     }
+    if (strokeRaw) {
+      const p = svgPointFromEvent(ev);
+      const last = strokeRaw[strokeRaw.length - 1];
+      // Only record a new sample once it's moved a real distance -- keeps
+      // the raw stroke a manageable size regardless of how many
+      // pointermove events the browser/OS fires for one real drag.
+      if (Math.hypot(p.x - last.x, p.y - last.y) >= 8) strokeRaw.push(p);
+    }
+  });
+
+  window.addEventListener('pointerup', () => {
+    state.dragging = false;
+    if (!strokeRaw) return;
+    const raw = strokeRaw;
+    strokeRaw = null;
+    if (state.selectedPlayer === null || isEditingPreviewLocked()) return;
+
+    if (polylineLength(raw) < FREEHAND_MIN_DRAG) {
+      // A plain tap, not a drag -- same behavior this used to be a plain
+      // 'click' listener for: with a point picked, tapping away just
+      // deselects it; otherwise, adds a new point at the end of the route.
+      if (state.selectedPointIndex !== null) {
+        state.selectedPointIndex = null;
+      } else {
+        const pts = editablePointsForSelected();
+        if (pts) pts.push(raw[raw.length - 1]);
+      }
+      render();
+      return;
+    }
+
+    // A real drag: freehand-draw the WHOLE route in one gesture, matching
+    // footballplaybook.com's own "draw with your finger" UX. Replaces the
+    // route completely -- same "applying this replaces the current
+    // route" convention the concept-library presets already established
+    // (applyConcept()), not appended to.
     const pts = editablePointsForSelected();
-    pts.push(svgPointFromEvent(ev));
+    if (pts && pts.length) {
+      const simplified = simplifyFreehandStroke(raw, pts[0]);
+      pts.length = 0;
+      simplified.forEach((p) => pts.push(p));
+    }
+    state.selectedPointIndex = null;
     render();
   });
 }

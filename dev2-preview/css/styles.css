@@ -999,7 +999,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
      for the coordinate math). Scoped to #pbField specifically -- the
      Formations/Defense screens' own fields aren't known to have this
      problem and weren't touched. */
-  #pbField { aspect-ratio: 1600 / 1050; }
+  #pbField { aspect-ratio: 1600 / 1050; touch-action: none; }
 
   .formation-picker {
     display: grid;
