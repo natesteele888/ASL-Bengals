@@ -1233,6 +1233,32 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
      buttons -- which one is currently armed, matching this app's own
      established "active" look for a chosen option elsewhere. */
   .pbConceptBtn.active { background: var(--bengal-orange); border-color: var(--bengal-orange); color: #fff; }
+  /* Route/Blocking concept buttons only (js/playbuilder/editor.js's
+     buildConceptButtons()) -- a small shape preview above the name.
+     Nathan: "lots of people don't know what its called but know what
+     they want it to look like." A modifier, not a change to .pbConceptBtn
+     itself, so the Ball Path/Timed Stop buttons above (plain text, no
+     icon) are completely unaffected. */
+  .pbConceptBtnIcon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px 7px;
+  }
+  .pbConceptPreview {
+    width: 34px;
+    height: 26px;
+    /* No explicit color here on purpose -- inherits the BUTTON's own live
+       color (var(--ink) normally, orange on :hover, white on .active, all
+       already set on .pbConceptBtn above), so currentColor in the SVG's
+       stroke/fill rides it for free with zero extra state to keep in
+       sync. */
+    opacity: .8;
+  }
+  .pbConceptBtnIcon:hover .pbConceptPreview,
+  .pbConceptBtnIcon.active .pbConceptPreview { opacity: 1; }
   /* Selected Player's own recolor swatches (js/playbuilder/editor.js's
      buildColorSwatches()) -- a plain filled circle per option, a thicker
      ring on whichever one is currently active. */

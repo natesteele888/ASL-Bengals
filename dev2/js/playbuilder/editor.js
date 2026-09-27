@@ -1777,6 +1777,40 @@ function applyConcept(kind, conceptId) {
   render();
 }
 
+// Nathan: "preset routes and blocking needs to show a little sample of
+// what it looks like next to the name. lots of people don't know what
+// its called but know what they want it to look like." Generates the
+// icon DIRECTLY from the concept's own build() -- the exact same
+// point-generation function applyConcept() calls for real -- rather than
+// a hand-drawn glyph, so the preview can never silently drift out of
+// sync with what clicking the button actually draws. outwardSign is
+// fixed at +1 (breaks right) purely for a consistent preview; the real
+// applied route still resolves its own break direction from the
+// player's actual side, same as always.
+function conceptPreviewSvg(concept) {
+  const raw = concept.build({ x: 0, y: 0 }, 1).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+  const xs = raw.map((p) => p.x);
+  const ys = raw.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const padX = Math.max(24, spanX * 0.18);
+  const padY = Math.max(24, spanY * 0.18);
+  const vbX = minX - padX;
+  const vbY = minY - padY;
+  const vbW = spanX + padX * 2;
+  const vbH = spanY + padY * 2;
+  const strokeW = Math.max(vbW, vbH) * 0.07;
+  const start = raw[0];
+  return `<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" class="pbConceptPreview" aria-hidden="true">` +
+    `<path d="${curvedPathD(raw)}" fill="none" stroke="currentColor" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" />` +
+    `<circle cx="${start.x}" cy="${start.y}" r="${strokeW * 0.85}" fill="currentColor" />` +
+    `</svg>`;
+}
+
 // Built once (the concept list is static) rather than every render --
 // mirrors how pbWingRouteToggle/pbWingSideToggle are built once in
 // coachtools-playbuilder.js and only re-synced afterward.
@@ -1784,14 +1818,14 @@ function buildConceptButtons() {
   if (!window.PlayBuilderConcepts) return;
   if (els.pbRoutesGrid) {
     els.pbRoutesGrid.innerHTML = window.PlayBuilderConcepts.ROUTES.map((c) =>
-      `<button type="button" class="pbConceptBtn" data-id="${c.id}">${c.label}</button>`).join('');
+      `<button type="button" class="pbConceptBtn pbConceptBtnIcon" data-id="${c.id}">${conceptPreviewSvg(c)}<span>${c.label}</span></button>`).join('');
     els.pbRoutesGrid.querySelectorAll('button').forEach((b) => {
       b.addEventListener('click', () => applyConcept('route', b.dataset.id));
     });
   }
   if (els.pbBlocksGrid) {
     els.pbBlocksGrid.innerHTML = window.PlayBuilderConcepts.BLOCKS.map((c) =>
-      `<button type="button" class="pbConceptBtn" data-id="${c.id}">${c.label}</button>`).join('');
+      `<button type="button" class="pbConceptBtn pbConceptBtnIcon" data-id="${c.id}">${conceptPreviewSvg(c)}<span>${c.label}</span></button>`).join('');
     els.pbBlocksGrid.querySelectorAll('button').forEach((b) => {
       b.addEventListener('click', () => applyConcept('block', b.dataset.id));
     });
