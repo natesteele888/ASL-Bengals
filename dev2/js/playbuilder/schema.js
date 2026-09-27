@@ -175,6 +175,23 @@
  * @typedef {Object} RoutePoint
  * @property {number} x
  * @property {number} y
+ * @property {number} [stopMs] - a genuine mid-route pause: once the reveal
+ *   animation reaches THIS point, it holds here for stopMs real milliseconds
+ *   before continuing to the rest of the route -- "Y stands still at the
+ *   stop, then releases," matching footballplaybook.com's own Timed Stop
+ *   (the reference this was modeled on). Only meaningful on an ON-CURVE
+ *   point (index 0, or an even index thereafter, per curvedPathD's own
+ *   alternating control/on-curve convention in editor.js -- a control point
+ *   is never a real position a player passes through). Distinct from
+ *   PlayerAssignment.delayMs, which is a single wait BEFORE the reveal
+ *   starts at all, not a pause partway through. Read by js/play-calls.js's
+ *   buildStopTimeline() (the shared animation engine both the real card and
+ *   Play Builder's own preview use) -- absent/0 on every point today, so
+ *   this is additive and changes nothing until a coach actually sets one.
+ *   Carried through js/playbuilder/mirror.js's route-reflection functions
+ *   and js/playbuilder/legacy-adapter.js's {x,y}->[x,y] tuple conversion
+ *   (appended as a 3rd array element there, not a named property -- a
+ *   plain array's named properties are silently dropped by JSON.stringify).
  */
 
 /**
@@ -205,6 +222,10 @@
  * @property {'run'|'block'} endType - visual end-cap only; does not gate
  *   which editing features are available the way isBlocking implicitly did
  *   before
+ * @property {string} [color] - per-player recolor id from editor.js's fixed
+ *   PB_PLAYER_COLORS palette (black/red/blue/green/orange/purple/yellow);
+ *   was previously used in code but undocumented here -- flagged and fixed
+ *   as a drive-by while adding RoutePoint.stopMs
  * @property {boolean} [directionIndependent] - for a REGULAR (non-wing,
  *   non-swap, non-center-mirror) position's `points` only: when true, this
  *   exact route applies for BOTH directions, skipping the usual local

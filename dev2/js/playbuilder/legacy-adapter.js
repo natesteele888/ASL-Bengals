@@ -128,7 +128,19 @@ function fbLegacyBuildLeaf(play, variant, formation, defenseLook, dirKeyCapitali
     const alignment = toggle ? ((alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id) : undefined;
     const points = mirrorApi.resolveRoute(routeFormation, players, pos.id, { wingSide: 'left', direction: directionLower, alignment });
     if (!points) return;
-    const rawPoints = points.map((pt) => [pt.x, pt.y]);
+    // A genuine mid-route timed stop (RoutePoint.stopMs, schema.js) has no
+    // room in the legacy [x,y] tuple shape play-calls.js's own animation
+    // engine reads -- appended as a 3rd array element (pt[2]) rather than a
+    // named property: a plain array's own named properties are silently
+    // DROPPED by JSON.stringify (confirmed directly -- `JSON.stringify(
+    // Object.assign([1,2],{stopMs:500}))` gives back just `[1,2]`), which
+    // would have made a stop vanish the instant this data was ever
+    // serialized anywhere, even though nothing does that today. A trailing
+    // 3rd element survives JSON fine and is invisible to every existing
+    // `[x,y] = pt`/`pt[0]`/`pt[1]` consumer, which never reads past index 1.
+    // Only appended when actually present, so a stop-free route still
+    // serializes to the exact same 2-element tuples as before.
+    const rawPoints = points.map((pt) => (pt.stopMs ? [pt.x, pt.y, pt.stopMs] : [pt.x, pt.y]));
     const path = {
       ball: !!assignment.hasBall,
       width: assignment.endType === 'block' ? 7 : 9,
