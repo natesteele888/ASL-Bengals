@@ -618,6 +618,10 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   font-size:11px;font-weight:700;color:#fff}
 .gcTickerIcon{font-size:13px;line-height:1}
 .gcTickerSep{padding:0 4px;opacity:.4;color:#fff}
+/* This week's game line only (js/study-quiz.js's gcTickerItemClickableHtml)
+   -- a plain underline signals it's tappable without needing a whole
+   separate visual treatment; cursor:pointer for anyone on a mouse. */
+.gcTickerItemClickable{cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,.4);text-underline-offset:2px}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with
