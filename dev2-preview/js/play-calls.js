@@ -760,8 +760,19 @@ function buildStopTimeline(points, durationMs, speedMultiplier) {
 // segments below. No stops at all (points has no stopMs data) returns
 // the exact original linear formula, so every route without a Timed
 // Stop is unaffected.
-function elapsedMsForFraction(points, durationMs, targetFrac) {
-  const timeline = buildStopTimeline(points, durationMs);
+//
+// speedMultiplier must be threaded through to buildStopTimeline exactly
+// like animatePathDraw's own stop-aware call already does -- found live,
+// at 1/2x playback specifically: the receiver's own circle correctly
+// holds for stopMs*speedMultiplier (animatePathDraw gets speedMultiplier
+// right), but without passing it here too, this function would compute
+// the exchange as if the stop were still its raw, un-scaled duration --
+// scheduling the ball to arrive up to a full stopMs EARLY relative to
+// where the receiver's own (correctly slowed-down) circle actually is.
+// Invisible at the default 1x speed (scaled and unscaled are identical),
+// which is why the first pass of this fix didn't catch it.
+function elapsedMsForFraction(points, durationMs, targetFrac, speedMultiplier) {
+  const timeline = buildStopTimeline(points, durationMs, speedMultiplier);
   if (!timeline) return targetFrac * durationMs;
   for (const seg of timeline.segments) {
     if (seg.hold) continue;
@@ -2872,7 +2883,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
           return src && src.points;
         })();
         return { circleEl: entry.circleEl, points };
-      }, animMs)
+      }, animMs, speedMultiplier)
     : null;
 
   const initialEntry = authoredBallPath && authoredBallPath.length
@@ -3129,7 +3140,7 @@ function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
           return src && src.points;
         })();
         return { circleEl: entry.circleEl, points };
-      }, animMs)
+      }, animMs, speedMultiplier)
     : null;
 
   if (authoredBallPath && authoredBallPath.length) {
