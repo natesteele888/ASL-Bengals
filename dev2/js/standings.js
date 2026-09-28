@@ -106,6 +106,55 @@
     return { teams, rawText, divisionKey: ourRow.divisionKey };
   }
 
+  // Nathan (follow-up): "Can we also utilize the CMYFCC website to also
+  // pull in team game history for the other teams?" Same real API as
+  // fetchCmyfccStandings above -- its own .games array already has every
+  // completed game for every team in the league, home and away, so this
+  // needs no separate lookup, just a different filter/reshape of the same
+  // payload. Matched by fuzzy token overlap (teamTokens/matchScheduleOpponent's
+  // own convention, defined below) rather than an exact string, since a
+  // Schedule game's typed opponent name ("North Middlesex") and CMYFCC's
+  // own associationName aren't guaranteed to match exactly either. Scoped
+  // to CMYFCC_OUR_DIVISION_KEY specifically -- same real reason as
+  // fetchCmyfccStandings's own division pin: a town can field a
+  // same-named program in several age divisions, and every real opponent
+  // on OUR schedule only ever plays us within our own division anyway.
+  async function fetchCmyfccRecentGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.games)) {
+      throw new Error('CMYFCC response missing games data');
+    }
+    const tTokens = teamTokens(teamName);
+    if (!tTokens.length) return [];
+    const isMatch = (assocName) => {
+      const gTokens = teamTokens(assocName);
+      return gTokens.length && tTokens.some(t => gTokens.includes(t));
+    };
+    return payload.games
+      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY && g.result && g.result.status === 'final')
+      .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
+      .map(g => {
+        const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
+        return {
+          id: g.id,
+          date: g.logistics ? g.logistics.date : null,
+          opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
+          ourScore: isHome ? g.result.homeScore : g.result.awayScore,
+          oppScore: isHome ? g.result.awayScore : g.result.homeScore,
+        };
+      })
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, limit);
+  }
+
   function escapeHtml(s) {
     const d = document.createElement('div');
     d.textContent = s || '';
@@ -429,6 +478,12 @@
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
         ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
+    // Nathan: "utilize the CMYFCC website to also pull in team game
+    // history for the other teams" -- filled in asynchronously by
+    // showOpponentPage right below (real network call, shouldn't block
+    // this page's own first render), same progressive-render pattern
+    // js/schedule.js's own Game Recap narrative already uses.
+    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Form</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     if (hasFootage) {
       html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
       if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
@@ -458,6 +513,36 @@
     detailPanel.style.display = '';
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(gameId); });
+    loadOpponentRecentForm(game.opponent);
+  }
+
+  async function loadOpponentRecentForm(opponentName) {
+    const wrap = document.getElementById('standingsOpponentRecentForm');
+    if (!wrap) return;
+    if (!window.compactGameRowHtml || !window.opponentBadgeHtml) {
+      wrap.innerHTML = '';
+      return;
+    }
+    try {
+      const rows = await fetchCmyfccRecentGamesFor(opponentName, 5);
+      // A stale response landing after the coach has already navigated
+      // to a DIFFERENT opponent (or back to the list) shouldn't clobber
+      // whatever's on screen now -- re-check the container's still
+      // showing a loading state for the SAME opponent before writing.
+      const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
+      if (!stillOnThisOpponent) return;
+      if (!rows.length) {
+        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
+        return;
+      }
+      const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
+        teamName: opponentName,
+        teamBadgeHtml: window.opponentBadgeHtml(opponentName),
+      })).join('');
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="last5List">${rowsHtml}</div>`;
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
   function showStandingsList() {
