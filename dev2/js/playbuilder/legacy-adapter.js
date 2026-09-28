@@ -329,6 +329,10 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
     result.signalLabel = play.signalLabel;
   }
   if (play.signalRecipe) result.signalRecipe = play.signalRecipe;
+  if (play.altCallCardId != null) {
+    result.altCallCardId = play.altCallCardId;
+    result.altCallLabel = play.altCallLabel;
+  }
   // js/play-calls.js's real card already knows how to draw and animate a
   // ballPath (window.BallPath.isValid/drawOverlay/schedule, gated purely
   // on playType.ballPath being present) -- confirmed no shipped Wing/

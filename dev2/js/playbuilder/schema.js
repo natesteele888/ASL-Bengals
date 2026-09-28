@@ -483,6 +483,17 @@
  *   the legacy PlayType, falling back to the formation's own default
  *   ('wing') when unset. Copied straight through by js/playbuilder/
  *   legacy-adapter.js.
+ * @property {number} [altCallCardId] - an alternate, shorter signal
+ *   (e.g. "Jumbo" for I's own Double Blast, card 36) that means the
+ *   EXACT same play/assignments as this play's own normal signalRecipe
+ *   sequence -- a coach's choice of which cadence to flash, not a
+ *   second play. A coach-facing toggle on the real card (gated on this
+ *   field being set) fully bypasses the normal recipe when on, returning
+ *   just [altCallCardId, Direction] -- see js/play-calls.js's
+ *   buildSignalSequence. Copied straight through by js/playbuilder/
+ *   legacy-adapter.js.
+ * @property {string} [altCallLabel] - the alt call's own label, same
+ *   reasoning as signalLabel above.
  * @property {(number|string)[][]} [directionSwapPairs] - pairs of REGULAR
  *   position ids whose ROUTE (not standing spot -- see Formation's own
  *   mirrorSwapPairs for that, a different axis) swaps by direction, for
