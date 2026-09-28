@@ -22,6 +22,90 @@
   let standingsData = null;
   let loaded = false;
 
+  // Nathan: "I just learned that the CMYFCC.app that the coaches use also
+  // has a public facing site with results and standings... it would be
+  // great if this could check for updates." This IS "the league site" the
+  // paste box above already expects text copied from (same "Team ·
+  // Division" / record shape) -- turns out it has a real, public,
+  // unauthenticated JSON API behind its own Standings/Results pages
+  // (confirmed live: no login, no API key, just a POST with an empty
+  // body), so this reads it directly instead of a coach copy-pasting.
+  // Chose the "Sync Now" button over a fully-unattended weekly job on
+  // Nathan's own call -- a truly unattended job needs its own stored
+  // Firebase credential (Firebase requires a real signed-in session for
+  // every write, same as this app's own saveStandings below), which is a
+  // real, separate decision; this reuses the coach's own already-logged-in
+  // session, so no new credentials anywhere.
+  const CMYFCC_API_URL = 'https://us-central1-project-f95863ee-dc3b-4ada-964.cloudfunctions.net/getPublicSeasonSchedule';
+  // CMYFCC's own name for our program -- confirmed live against the real
+  // API, not guessed. Matched case-insensitively in case they ever
+  // re-case it; there is no more stable id to key off of from outside
+  // their system (associationId is real but undocumented/could change).
+  const CMYFCC_OUR_ASSOCIATION_NAME = 'Ayer/Shirley/Lunenburg';
+  // Real, live bug found testing this live: Ayer/Shirley/Lunenburg fields
+  // a team in EVERY age division (9U through 13U, confirmed against the
+  // real API), not just ours -- matching on associationName alone grabbed
+  // whichever one happened to sort first (Tackle 10U), not this app's own
+  // 11U team. This app is (and has only ever been) the 11U team -- see
+  // index.html's own "11U Bengals" header -- so the division is pinned
+  // here too, not derived.
+  const CMYFCC_OUR_DIVISION_KEY = 'Tackle 11U';
+
+  async function fetchCmyfccStandings() {
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.standings)) {
+      throw new Error('CMYFCC response missing standings data');
+    }
+    const ourRow = payload.standings.find(s =>
+      (s.associationName || '').toLowerCase() === CMYFCC_OUR_ASSOCIATION_NAME.toLowerCase() &&
+      s.divisionKey === CMYFCC_OUR_DIVISION_KEY);
+    if (!ourRow) throw new Error(`Couldn't find "${CMYFCC_OUR_ASSOCIATION_NAME}" · "${CMYFCC_OUR_DIVISION_KEY}" in CMYFCC's standings -- their site may have renamed us or the division.`);
+    const divisionRows = payload.standings.filter(s => s.divisionKey === ourRow.divisionKey);
+    // CMYFCC's standings rows don't carry PF/PA -- summed straight from
+    // every COMPLETED game (result present) in the same division, home and
+    // away, rather than leaving pf/pa blank. This is actually MORE than
+    // the paste box's own current best case (see parseStandingsText's own
+    // comment: the league site's newer copy-paste shape dropped real PF/PA
+    // in favor of Win%/Diff only).
+    const pfpa = {};
+    (payload.games || []).forEach(g => {
+      if (g.divisionKey !== ourRow.divisionKey || !g.result || g.result.status !== 'final') return;
+      const h = g.homeTeamId, a = g.awayTeamId;
+      pfpa[h] = pfpa[h] || { pf: 0, pa: 0 };
+      pfpa[a] = pfpa[a] || { pf: 0, pa: 0 };
+      pfpa[h].pf += g.result.homeScore; pfpa[h].pa += g.result.awayScore;
+      pfpa[a].pf += g.result.awayScore; pfpa[a].pa += g.result.homeScore;
+    });
+    const teams = divisionRows.map(s => {
+      const isUs = s.associationId === ourRow.associationId;
+      const totals = pfpa[s.teamId] || { pf: null, pa: null };
+      return {
+        // Relabeled ONLY for our own row -- isBengalsRow() (below) matches
+        // on the word "Bengal" to highlight our row in the table, same as
+        // it already would for a coach's own manual paste; CMYFCC's raw
+        // name ("Ayer/Shirley/Lunenburg") never contained that word, so
+        // this was never actually highlighting before either.
+        team: isUs ? `${s.associationName} (Bengals)` : s.associationName,
+        division: s.divisionKey,
+        wins: s.wins, losses: s.losses, ties: s.ties,
+        pf: totals.pf, pa: totals.pa,
+        diff: totals.pf != null ? totals.pf - totals.pa : null,
+      };
+    });
+    const rawText = [
+      'Team\tRecord\tPF\tPA',
+      ...teams.map(t => `${t.team} · ${t.division}\t${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''}\t${t.pf ?? ''}\t${t.pa ?? ''}`),
+    ].join('\n');
+    return { teams, rawText, divisionKey: ourRow.divisionKey };
+  }
+
   function escapeHtml(s) {
     const d = document.createElement('div');
     d.textContent = s || '';
@@ -408,6 +492,8 @@
     if (!wrap) return;
     const data = await loadStandings();
     wrap.innerHTML =
+      '<button type="button" class="navBtn" id="standingsSyncBtn" style="display:block;width:100%;margin-bottom:8px;">🔄 Sync from CMYFCC</button>' +
+      '<div id="standingsSyncStatus" class="hint" style="text-align:center;margin-bottom:12px;"></div>' +
       '<textarea id="standingsPasteBox" placeholder="Paste the standings table here -- Team, Record, and either PF/PA or Win%/Diff columns" style="width:100%;min-height:220px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:monospace;white-space:pre;margin-bottom:8px;">' +
       escapeHtml((data && data.rawText) || '') +
       '</textarea>' +
@@ -416,6 +502,29 @@
       '<div id="standingsPreviewWrap" style="margin-top:16px;"></div>';
     const previewWrap = document.getElementById('standingsPreviewWrap');
     if (data && Array.isArray(data.teams) && data.teams.length) renderTable(previewWrap, data);
+    document.getElementById('standingsSyncBtn').addEventListener('click', async () => {
+      const syncBtn = document.getElementById('standingsSyncBtn');
+      const syncStatusEl = document.getElementById('standingsSyncStatus');
+      const pasteBox = document.getElementById('standingsPasteBox');
+      syncBtn.disabled = true;
+      syncStatusEl.textContent = 'Checking CMYFCC…';
+      try {
+        const { teams, rawText } = await fetchCmyfccStandings();
+        pasteBox.value = rawText;
+        const saveStatusEl = document.getElementById('standingsSaveStatus');
+        const result = await saveStandings(teams, rawText, saveStatusEl);
+        if (result.ok) {
+          syncStatusEl.textContent = `Synced -- ${teams.length} team${teams.length === 1 ? '' : 's'} pulled live from CMYFCC and saved.`;
+          renderTable(previewWrap, standingsData);
+        } else {
+          syncStatusEl.textContent = 'Pulled from CMYFCC, but the save failed -- see the message below the paste box.';
+        }
+      } catch (e) {
+        syncStatusEl.textContent = `Couldn't sync: ${e.message}`;
+      } finally {
+        syncBtn.disabled = false;
+      }
+    });
     document.getElementById('standingsSaveBtn').addEventListener('click', async () => {
       const text = document.getElementById('standingsPasteBox').value;
       const statusEl = document.getElementById('standingsSaveStatus');
