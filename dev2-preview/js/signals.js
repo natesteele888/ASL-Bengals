@@ -83,6 +83,13 @@
     // over you.
     { id: 103, group: 'Blocking', meaning: 'PASS POCKET' },
     { id: 104, group: 'Blocking', meaning: 'STRAIGHT PASS BLOCK' },
+    // Nathan: "we are adding a Jumbo package. It's only out the I formation
+    // with a new signal I just added to the cards 36.png." Real photo
+    // already dropped at assets/cards/36.png (same "Nathan uploads it
+    // himself" split as 33/34/35) -- this PENDING entry is a harmless
+    // no-op the moment Firebase's own cards.json actually has 36, same
+    // fallback pattern as those three.
+    { id: 36, group: 'Formation', meaning: 'JUMBO' },
   ];
 
   var byId = {};

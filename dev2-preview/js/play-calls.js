@@ -898,7 +898,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1026,12 +1026,30 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, pro
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn) {
   // protection/overloadOn appended last for the same reason formation/
   // splitSide/passOn were: play-calls-quiz.js and the PDF exporters pass
-  // these positionally and stop short.
+  // these positionally and stop short. altCallOn is the newest, same
+  // convention -- undefined/falsy for every existing caller that doesn't
+  // know about it, which is exactly "alt call off" (the correct default).
   if (formation === 'split') {
     return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, protection, overloadOn);
+  }
+  // A play may declare an alternate, shorter call (Play.altCallCardId/
+  // altCallLabel) that means the EXACT same play as its own normal signal
+  // -- e.g. I's own Double Blast can also be called "Jumbo" (card 36).
+  // Nathan: "For Jumbo, it's just Jumbo > Direction." Bypasses the
+  // formation's own recipe entirely -- routes/blocking/ball-carrier are
+  // completely unaffected by this, it's purely which cadence gets flashed.
+  // Checked before qb_sneak's own special case below since the two are
+  // mutually exclusive by construction (qb_sneak never sets altCallCardId).
+  const altCallPlayType = DATA.playTypes.find(p => p.key === playKey);
+  if (altCallOn && altCallPlayType && altCallPlayType.altCallCardId != null) {
+    const dirFingerId = randomFingerId(direction);
+    return [
+      { id: altCallPlayType.altCallCardId, src: SIGNAL_CARDS[altCallPlayType.altCallCardId], label: altCallPlayType.altCallLabel || altCallPlayType.label },
+      { id: dirFingerId, src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` },
+    ];
   }
   // QB Sneak's own card is Split formation only (see buildSplitSignalSequence's
   // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
@@ -3310,6 +3328,9 @@ function buildCard(combo, opts) {
   // play as authored, not a state most cards should start in.
   let motionOn = false;
   let bootOn = false;
+  // Alt call (e.g. "Jumbo"): only reachable when combo.altCallCardId is
+  // set. See the ioSlot toggle above for the full explanation.
+  let altCallOn = false;
   // "QB Sneak" (5 Guys): mutually exclusive with Boot -- see
   // combo.hasQbSneak's own doc (schema.js) for why they're two different
   // concepts, not the same toggle renamed. Defaults off, same reasoning
@@ -3549,6 +3570,16 @@ function buildCard(combo, opts) {
       { value: 'Inside', label: 'In' },
     ], insideOutside, (v) => { if (isPlayingRef.value) return; insideOutside = v; onComboChanged(); });
     ioSlot.appendChild(ioToggle);
+  } else if (combo.altCallCardId != null) {
+    // A play may name an alternate, shorter call (e.g. Jumbo for I's own
+    // Double Blast) that means the EXACT same assignments/routes as its
+    // normal call -- a coach's choice of which cadence to flash this
+    // series, not a second play. Nathan: "For Jumbo, it's just Jumbo >
+    // Direction." Reuses this slot the same way Counter/Pop Pass 2/a 2nd
+    // alignment toggle already do -- free here whenever hasInsideOutside
+    // isn't set, which is true for every play that has this today.
+    const altCallToggle = buildSwitchToggle(combo.altCallLabel || 'Alt Call', altCallOn, (v) => { if (isPlayingRef.value) return; altCallOn = v; onComboChanged(); });
+    ioSlot.appendChild(altCallToggle);
   }
   extrasRow.appendChild(ioSlot);
 
@@ -3864,7 +3895,7 @@ function buildCard(combo, opts) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
