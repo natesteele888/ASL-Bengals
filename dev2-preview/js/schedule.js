@@ -1348,20 +1348,38 @@
   // past-meetings filter buildGamePreviewText already computes for the
   // series-record sentence, just rendered as real rows instead of a line
   // of text. ----
-  function compactGameRowHtml(g) {
+  // opts.teamName/teamBadgeHtml let this same compact row render a game
+  // from any TEAM's own perspective, not just ours -- js/standings.js's
+  // Opponent Page reuses this (exposed on window just below) to show an
+  // opponent's own recent form, pulled live from CMYFCC, in the exact
+  // same compact style rather than a second, drifting copy of this row.
+  function compactGameRowHtml(g, opts) {
+    opts = opts || {};
+    const teamName = opts.teamName || 'Bengals';
+    const teamBadgeHtml = opts.teamBadgeHtml || bengalsBadgeHtml();
     const result = resultFor(g);
     const badge = result
       ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
       : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-    const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
-    const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+    // Nathan: "move the score to the left and right of the result pill" --
+    // same correction already made to the main Schedule list's own final-
+    // game row (see centerHtml there, and its own comment): the score is
+    // NOT grouped with the logo/name, it's its own column in the CENTER,
+    // flanking the pill (Logo ... Score [Pill] Score ... Logo). This row
+    // never got that same fix when it shipped, which is the real reason
+    // it rendered so much taller than the main list's own compact rows --
+    // .scheduleRowFinal's own tighter padding/gap never applied either,
+    // since the class itself was missing.
+    const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
+    const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
+    const centerHtml = result ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>` : `<span class="scheduleRowCenter">${badge}</span>`;
     return `
-      <button type="button" class="scheduleRow last5Row" data-game-id="${escapeHtml(g.id)}">
+      <button type="button" class="scheduleRow last5Row${result ? ' scheduleRowFinal' : ''}" data-game-id="${escapeHtml(g.id)}">
         <span class="scheduleRowDate">${fmtDate(g.date)}</span>
         <span class="scheduleRowMatchup">
-          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
-          <span class="scheduleRowCenter">${badge}</span>
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
+          <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
+          ${centerHtml}
+          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
         </span>
       </button>`;
   }
@@ -1709,6 +1727,8 @@
   // [data-embed-target] button on the page regardless of which file
   // rendered it, so exposing this one function is enough.
   window.filmButtonHtml = filmButtonHtml;
+  window.compactGameRowHtml = compactGameRowHtml;
+  window.opponentBadgeHtml = opponentBadgeHtml;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;
