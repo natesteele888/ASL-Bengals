@@ -675,7 +675,15 @@ function buildEndCapEl(endType, color, width) {
       stroke: color, 'stroke-width': Math.max(6, width + 2), 'stroke-linecap': 'round',
     });
   }
-  return svgEl('polygon', { points: '-2,-11 20,0 -2,11', fill: color });
+  // Nathan: "very thin lines. Needs to be more bold, like the Madden
+  // cards." The arrowhead used to be a fixed size regardless of the
+  // route's own stroke width, so simply bolding ROUTE_STROKE_WIDTH left
+  // a bold line ending in the same small, thin-looking arrow it always
+  // had. Scaled off the polygon's original design width (9, the most
+  // common authored p.width before ROUTE_STROKE_WIDTH replaced it) so a
+  // caller still passing the old default gets the exact original arrow.
+  const s = width / 9;
+  return svgEl('polygon', { points: `${-2 * s},${-11 * s} ${20 * s},0 ${-2 * s},${11 * s}`, fill: color });
 }
 // A genuine mid-route pause -- "Y stands still at the stop, then releases,"
 // the reference footballplaybook.com behavior Nathan asked to match ("stop
@@ -836,6 +844,32 @@ const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
 const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
 const BALLSTART_COLOR = '#d99000'; // gold -- matches js/edit-plays.js's same constant/meaning
 const CIRCLE_R = 36;
+// Nathan, comparing against real Madden-style play cards: "very thin
+// lines. Needs to be more bold." Real route data (data/plays.json,
+// js/shipped-defaults.js) only ever authors p.width as 7 or 9 -- no
+// per-play football meaning behind the exact number, confirmed by
+// checking the actual distribution before touching this -- so every
+// REAL route/block line renders at one bold, consistent width instead
+// of whatever was authored, rather than migrating thousands of stored
+// values. Deliberately NOT applied to the thin, dashed, gray "option
+// decision line" (p.optionLine, always width:4) -- that's a reference
+// indicator, not a player's own path, and staying visibly thinner/
+// dashed/gray is what tells the two apart at a glance.
+const ROUTE_STROKE_WIDTH = 16;
+const CIRCLE_STROKE_WIDTH = 11;
+// Nathan: "5 guys players are directly to the edge of the card. There
+// needs to be more padding around the play diagram on the card to make
+// it easier to see." Pure viewBox canvas margin (see the two
+// stage.setAttribute('viewBox', ...) call sites below) -- adds visual
+// breathing room around the real content without moving a single
+// player/route coordinate. DATA.topPad (400, shipped-defaults.js)
+// already handles most of the top margin by shifting content down; a
+// small extra DIAGRAM_PAD_TOP tops that up since it left only ~10 units
+// of headroom above the highest real point (a defender clamped to
+// y=-390).
+const DIAGRAM_PAD_X = 70;
+const DIAGRAM_PAD_TOP = 30;
+const DIAGRAM_PAD_BOTTOM = 40;
 
 function getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn, alignmentValues) {
   // Defensive fallback for any play missing one side's data (a brand-new
@@ -1566,7 +1600,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
     if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
   }
-  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  // Nathan: "5 guys players are directly to the edge of the card. There
+  // needs to be more padding around the play diagram." A wide formation
+  // like 5 Guys authors real receivers close enough to the sidelines
+  // (mirror.js's own MARGIN_X=20 clamp allows as little as 20 of 1600
+  // units) that they rendered flush against the tile's own border.
+  // Expands the viewBox itself on every side -- pure canvas breathing
+  // room, no player/route coordinate moves at all, so nothing about an
+  // already-correct diagram's real positions changes.
+  stage.setAttribute('viewBox', `${-DIAGRAM_PAD_X} ${-DIAGRAM_PAD_TOP} ${vw + DIAGRAM_PAD_X * 2} ${vh + DIAGRAM_PAD_TOP + DIAGRAM_PAD_BOTTOM}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
@@ -1616,7 +1658,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   function drawCircle(x, y, label, stroke, fontSize, isSelected, r, playerNum) {
     r = r || CIRCLE_R;
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
-    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: '#fff', stroke, 'stroke-width': 8 }));
+    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: '#fff', stroke, 'stroke-width': CIRCLE_STROKE_WIDTH }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
@@ -2030,7 +2072,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     if (hasHandoffSplit) {
       const leftPts = points.slice(0, handoffIdx + 1);
       const rightPts = points.slice(handoffIdx);
-      const leftPath = svgEl('path', { d: routeDForRange(leftPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+      const leftPath = svgEl('path', { d: routeDForRange(leftPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' });
       wrap.appendChild(leftPath);
       let rightPath = null;
       if (rightPts.length >= 2) {
@@ -2042,7 +2084,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         // separate path from that single-path branch and was never wired
         // to read it, so the diagram kept showing him going red/"gets the
         // ball" past the handoff mark even with Boot on.
-        rightPath = svgEl('path', { d: routeDForRange(rightPts), fill: 'none', stroke: effectiveBall ? BALL_COLOR : NOBALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+        rightPath = svgEl('path', { d: routeDForRange(rightPts), fill: 'none', stroke: effectiveBall ? BALL_COLOR : NOBALL_COLOR, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' });
         wrap.appendChild(rightPath);
       }
       pathsLayer.appendChild(wrap);
@@ -2053,7 +2095,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       const totalLen = leftLen + rightLen;
       const startFracRight = totalLen > 0 ? leftLen / totalLen : 1;
 
-      arrowEl = buildEndCapEl(endTypeFor(p), effectiveBall ? BALL_COLOR : NOBALL_COLOR, p.width);
+      arrowEl = buildEndCapEl(endTypeFor(p), effectiveBall ? BALL_COLOR : NOBALL_COLOR, ROUTE_STROKE_WIDTH);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, rightPath || leftPath, 1);
 
@@ -2083,13 +2125,13 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         : points.length === 2 ? straightPathD(points)
         : points.length === 3 ? quadPathD(points)
         : chainedCurvePathD(points);
-      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' };
       if (p.fake) attrs['stroke-dasharray'] = '10 8';
       const path = svgEl('path', attrs);
       wrap.appendChild(path);
 
       if (!p.fake) {
-        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        arrowEl = buildEndCapEl(endTypeFor(p), color, ROUTE_STROKE_WIDTH);
         wrap.appendChild(arrowEl);
         placeArrowAtFraction(arrowEl, path, 1);
       }
@@ -2448,7 +2490,15 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   // 2-minute drill -- both of which pass these positionally -- are unchanged.
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
-  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  // Nathan: "5 guys players are directly to the edge of the card. There
+  // needs to be more padding around the play diagram." A wide formation
+  // like 5 Guys authors real receivers close enough to the sidelines
+  // (mirror.js's own MARGIN_X=20 clamp allows as little as 20 of 1600
+  // units) that they rendered flush against the tile's own border.
+  // Expands the viewBox itself on every side -- pure canvas breathing
+  // room, no player/route coordinate moves at all, so nothing about an
+  // already-correct diagram's real positions changes.
+  stage.setAttribute('viewBox', `${-DIAGRAM_PAD_X} ${-DIAGRAM_PAD_TOP} ${vw + DIAGRAM_PAD_X * 2} ${vh + DIAGRAM_PAD_TOP + DIAGRAM_PAD_BOTTOM}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
@@ -2465,7 +2515,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   function drawCircle(x, y, label, fontSize, r, stroke, isSelected, playerNum) {
     stroke = stroke || '#111';
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
-    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': 8 }));
+    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': CIRCLE_STROKE_WIDTH }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
@@ -2524,7 +2574,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     wrap.appendChild(pathEl);
     let arrowEl = null;
     if (!p.fake) {
-      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+      arrowEl = buildEndCapEl(endTypeFor(p), color, ROUTE_STROKE_WIDTH);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, pathEl, 1);
     }
