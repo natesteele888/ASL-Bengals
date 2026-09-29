@@ -451,11 +451,20 @@
       const diff = teamDiff(t);
       const diffStr = (diff > 0 ? '+' : '') + diff;
       const pctStr = (winPct(t) * 100).toFixed(1) + '%';
+      // Nathan: "Now that we have stats for all games played, we should be
+      // able to have team pages for all teams now" -- every real division
+      // team gets a clickable team page (real logo, record, CMYFCC recent
+      // form), not just the ones on our own Schedule. A team we've
+      // actually played ALSO gets film/scouting/a "View on Schedule" link,
+      // via its matched Schedule game -- showOpponentPage/opponentPageHtml
+      // already render correctly either way. Our own row stays plain text
+      // -- there's no "opponent" page for ourselves.
       const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
-      const nameCell = matchedGame
-        ? `<button type="button" class="standingsTeamLink" data-open-opponent="${escapeHtml(matchedGame.id)}">${escapeHtml(t.team)} ›</button>`
-        : escapeHtml(t.team);
-      html += `<tr class="${isBengalsRow(t) ? 'standingsRowUs' : ''}">` +
+      const isUs = isBengalsRow(t);
+      const nameCell = isUs
+        ? escapeHtml(t.team)
+        : `<button type="button" class="standingsTeamLink" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${escapeHtml(t.team)} ›</button>`;
+      html += `<tr class="${isUs ? 'standingsRowUs' : ''}">` +
         `<td class="standingsPowerCell">${powerRankCellHtml(t, i + 1)}</td>` +
         `<td>${nameCell}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +
         `<td>${escapeHtml(recordStr(t))}</td>` +
@@ -463,18 +472,120 @@
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
-    if (games) {
-      container.querySelectorAll('[data-open-opponent]').forEach(btn => {
-        btn.addEventListener('click', () => showOpponentPage(btn.dataset.openOpponent, data.teams, games));
-      });
-    }
+    container.querySelectorAll('[data-open-team]').forEach(btn => {
+      btn.addEventListener('click', () => showOpponentPage(btn.dataset.openOpponent || null, btn.dataset.openTeam, data.teams, games || []));
+    });
+  }
+
+  // Nathan: "The team logo can be used in place of the football in the
+  // team page header. Instead of the Orange header background for team
+  // pages, it should match the team logo color." hashHue is the exact
+  // same hash/mod computation js/schedule.js's own hashColor uses for its
+  // no-logo initials-badge fallback (duplicated locally, same convention
+  // as every other small cross-file helper in this app) -- using it here
+  // too means a team's header gradient and its initials-badge color (when
+  // it has no real logo) always agree. It's also what opponentPageHtml
+  // uses to color the header SYNCHRONOUSLY (name-hash, instant, no
+  // network/image dependency) so the page never flashes orange while a
+  // real logo's own dominant color is still being sampled -- see
+  // applyOpponentHeroColor below, which upgrades to the logo's real hue
+  // once that resolves.
+  function hashHue(str) {
+    let hash = 0;
+    for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    return Math.abs(hash) % 360;
+  }
+  function heroGradient(hue) {
+    return `linear-gradient(160deg, hsl(${hue}, 60%, 42%) 0%, hsl(${hue}, 66%, 24%) 100%)`;
+  }
+  function rgbToHue(r, g, b) {
+    const rf = r / 255, gf = g / 255, bf = b / 255;
+    const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
+    const d = max - min;
+    if (d === 0) return 0;
+    let h;
+    if (max === rf) h = ((gf - bf) / d) % 6;
+    else if (max === gf) h = (bf - rf) / d + 2;
+    else h = (rf - gf) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+    return Math.round(h);
+  }
+  // Samples a small offscreen render of the team's real logo and picks
+  // its most common non-white/non-black/non-gray color, converted down
+  // to just a hue -- everything else in this app's color system
+  // (hashColor/hashHue) only ever varies by hue at a fixed saturation/
+  // lightness, so a logo's real brand hue slots into that same,
+  // already-readable-for-white-text scheme rather than using the logo's
+  // own (often much lighter or unevenly-saturated) raw color directly.
+  // Bundled logos are same-origin static assets and Firebase-uploaded
+  // ones are already data: URLs, so neither taints the canvas.
+  function extractDominantHue(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 48;
+          const canvas = document.createElement('canvas');
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, size, size);
+          const data = ctx.getImageData(0, 0, size, size).data;
+          const buckets = {};
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+            if (a < 128) continue; // transparent -- not part of the logo art
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            const lightness = (max + min) / 2 / 255;
+            const sat = max === min ? 0 : (max - min) / (255 - Math.abs(max + min - 255));
+            // Skip near-white/near-black outline & background pixels and
+            // near-gray ones -- without this, white logo backgrounds
+            // dominate the count and every team ends up beige.
+            if (lightness > 0.9 || lightness < 0.08 || sat < 0.18) continue;
+            const qr = Math.round(r / 24) * 24, qg = Math.round(g / 24) * 24, qb = Math.round(b / 24) * 24;
+            const key = qr + ',' + qg + ',' + qb;
+            if (!buckets[key]) buckets[key] = { count: 0, r: qr, g: qg, b: qb };
+            buckets[key].count++;
+          }
+          let best = null;
+          Object.keys(buckets).forEach(k => { if (!best || buckets[k].count > best.count) best = buckets[k]; });
+          resolve(best ? rgbToHue(best.r, best.g, best.b) : null);
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+  // Upgrades the header from its instant name-hash color to the real
+  // logo's own dominant color, once a real logo exists and a confident
+  // dominant hue can be sampled from it -- silently keeps the name-hash
+  // color otherwise (no real logo on file yet, or a logo that's too
+  // white/black/gray to yield one). data-opponent guards against a coach
+  // tapping into a DIFFERENT opponent before this async work resolves.
+  async function applyOpponentHeroColor(opponentName) {
+    if (!window.getOpponentLogoSrc) return;
+    const src = window.getOpponentLogoSrc(opponentName);
+    if (!src) return;
+    const hue = await extractDominantHue(src);
+    if (hue == null) return;
+    const hero = document.getElementById('standingsOpponentHero');
+    if (!hero || hero.dataset.opponent !== opponentName) return;
+    hero.style.background = heroGradient(hue);
   }
 
   function opponentPageHtml(game, teamRow) {
     const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
     const hasFootage = !!game.opponentFilmUrl;
-    let html = `<div class="lbHeroHeader">
-        <div class="lbHeroTrophy">🏈</div>
+    // A real Schedule record exists for this team (we've actually played
+    // or are scheduled to play them) vs. a division-only team pulled
+    // straight from Standings with no Schedule game to pull film/
+    // scouting/a schedule-link from -- see showOpponentPage, which builds
+    // a plain {opponent: teamName} stand-in for that second case.
+    const hasGame = !!game.id;
+    const hue = hashHue(game.opponent);
+    const badgeHtml = window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '';
+    let html = `<div class="lbHeroHeader" id="standingsOpponentHero" data-opponent="${escapeHtml(game.opponent || '')}" style="background:${heroGradient(hue)};">
+        <div class="lbHeroTeamBadgeWrap">${badgeHtml}</div>
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
         ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
@@ -493,27 +604,41 @@
         <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
     }
     if (!hasFootage && !game.scouting) {
-      html += '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>';
+      html += hasGame
+        ? '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
+        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season -- once they're on the Schedule, footage and scouting notes can be added there.</div>`;
     }
-    html += `<div style="text-align:center;margin-top:16px;">
-        <button type="button" class="lbLinkBtn" id="standingsOpponentScheduleLink">View this game on Schedule ›</button>
-      </div>`;
+    if (hasGame) {
+      html += `<div style="text-align:center;margin-top:16px;">
+          <button type="button" class="lbLinkBtn" id="standingsOpponentScheduleLink">View this game on Schedule ›</button>
+        </div>`;
+    }
     return html;
   }
 
-  function showOpponentPage(gameId, teams, games) {
+  function showOpponentPage(gameId, teamName, teams, games) {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
     const body = document.getElementById('standingsOpponentBody');
-    const game = (games || []).find(g => g.id === gameId);
-    if (!game || !listPanel || !detailPanel || !body) return;
-    const teamRow = (teams || []).find(t => matchScheduleOpponent(t.team, [game]));
+    if (!listPanel || !detailPanel || !body) return;
+    const realGame = gameId ? (games || []).find(g => g.id === gameId) : null;
+    // A team on our own Schedule gets its real game record (film link,
+    // scouting notes, "View this game on Schedule"); a division-only team
+    // we haven't played still gets a real page -- just without those
+    // sections, since there's no Schedule record to pull them from.
+    // opponentPageHtml's own hasGame check (and the empty-state text
+    // above) already render either case correctly.
+    const game = realGame || { opponent: teamName };
+    if (!game.opponent) return;
+    const teamRow = (teams || []).find(t => matchScheduleOpponent(t.team, [game]))
+      || (teams || []).find(t => t.team === teamName) || null;
     body.innerHTML = opponentPageHtml(game, teamRow);
     listPanel.style.display = 'none';
     detailPanel.style.display = '';
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
-    if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(gameId); });
+    if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent);
+    applyOpponentHeroColor(game.opponent);
   }
 
   async function loadOpponentRecentForm(opponentName) {

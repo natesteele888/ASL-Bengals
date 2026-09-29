@@ -1747,6 +1747,10 @@
   window.filmButtonHtml = filmButtonHtml;
   window.compactGameRowHtml = compactGameRowHtml;
   window.opponentBadgeHtml = opponentBadgeHtml;
+  // Raw logo URL (not the wrapped badge <span>) -- js/standings.js's team
+  // page header needs the bare src to run it through canvas color
+  // extraction, not markup.
+  window.getOpponentLogoSrc = opponentLogoSrc;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;
