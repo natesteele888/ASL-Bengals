@@ -154,6 +154,18 @@
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, limit);
   }
+  // Nathan: "recent games for our opponents are not showing" -- flagged
+  // against a Schedule game's own "Recent Form" section, which only ever
+  // showed OUR OWN past games (last 5, or head-to-head vs this opponent --
+  // see js/schedule.js's renderLast5Panel), never the opponent's OWN
+  // season, which is exactly what CMYFCC has real data for and is what a
+  // coach actually wants for an opponent they've never played yet.
+  // Exposed here (not duplicated) since js/schedule.js loads before this
+  // file but only ever CALLS this at real interaction time, by which
+  // point the whole app -- this file included -- has already parsed, same
+  // convention window.opponentBadgeHtml/window.getOpponentLogoSrc already
+  // establish in the other direction.
+  window.fetchCmyfccRecentGamesFor = fetchCmyfccRecentGamesFor;
 
   function escapeHtml(s) {
     const d = document.createElement('div');
