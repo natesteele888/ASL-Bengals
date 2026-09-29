@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20260928i">
+<link rel="stylesheet" href="css/styles.css?v=20260929c">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -512,8 +512,8 @@
      .modeTabs/.modeBtn in styles.css). Same data-mode/ids/click-to-setMode()
      wiring as before. -->
 <div class="modeTabs" id="modeTabs">
-  <button class="modeBtn active" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Signals</span></button>
-  <button class="modeBtn" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Plays</span></button>
+  <button class="modeBtn" data-mode="study"><span class="modeIcon">🎓</span><span class="modeLabel">Signals</span></button>
+  <button class="modeBtn active" data-mode="playcalls" id="playCallsTabBtn"><span class="modeIcon">📋</span><span class="modeLabel">Plays</span></button>
   <button class="modeBtn" data-mode="quiz"><span class="modeIcon">🏈</span><span class="modeLabel">Quiz</span></button>
   <button class="modeBtn" data-mode="timed"><span class="modeIcon">⏱️</span><span class="modeLabel">Timed</span></button>
   <button class="modeBtn" data-mode="playcallsquiz" id="playCallsQuizTabBtn"><span class="modeIcon">🧠</span><span class="modeLabel">Play Quiz</span></button>
@@ -1304,7 +1304,7 @@
 
 </div>
 
-<div id="playcallsMode" class="modePanel">
+<div id="playcallsMode" class="modePanel show">
   <div style="text-align:center;margin-bottom:8px;">
     <button id="pcInfoBtn" class="pcInfoBtn">i</button>
   </div>
@@ -1410,7 +1410,7 @@
 </div>
 
 
-<div id="studyMode" class="modePanel show">
+<div id="studyMode" class="modePanel">
   <div class="study-grid" id="studyGrid"></div>
 </div>
 
@@ -2307,7 +2307,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260929b';
+  const BUILD_V = '20260929c';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2493,6 +2493,24 @@ if (window.ResizeObserver) {
     await window.PlayBuilderSyncCustomFormations.syncCustomFormationsIntoData();
   } catch (err) {
     console.error('[boot] failed to sync Play Builder V2 formations (continuing anyway):', err);
+  }
+  // Nathan: "it should open to the new formations view instead of play
+  // signals" -- the Play tab's own Plays sub-tab is now the default-shown
+  // one (index.html's #modeTabs/#playcallsMode markup, swapped from
+  // Signals), but its content has only ever been BUILT by
+  // window.initPlayCalls(), itself only ever called from setMode()'s own
+  // click handler (js/study-quiz.js) -- a real click, which the default
+  // tab obviously never gets. Signals' own equivalent (renderStudyGrid())
+  // needs no such call since it's a plain top-level statement in
+  // study-quiz.js, which itself loads too early in the scripts array
+  // (above) for window.initPlayCalls to even exist yet if called from
+  // there -- has to happen here instead, after every real play data
+  // source (shipped defaults, both custom-formation syncs above) is
+  // actually ready, same reasoning as those two calls themselves.
+  try {
+    if (window.initPlayCalls) window.initPlayCalls();
+  } catch (err) {
+    console.error('[boot] failed to build the default Plays view (continuing anyway):', err);
   }
   // Nathan: "some features not popping up on load. Or loading as straight
   // text." This is the actual fix for that -- the overlay (still up for a
