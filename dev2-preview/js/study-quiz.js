@@ -100,7 +100,15 @@ function dismissTwoMinuteNewBadge(){
    already knows how to show.
    ============================================================ */
 const topSectionsEl = document.getElementById('topSections');
-let lastPlaySubMode = 'study';
+// Nathan: "it should open to the new formations view instead of play
+// signals" -- index.html's own default active/show classes were swapped
+// from Signals to Plays, but this was still hardcoded to 'study': fine
+// for the very first render (nothing reads it before a real section
+// switch happens), but the moment a coach taps away to This Week/
+// Schedule/etc. and back to Play, setSection('play')'s else-branch below
+// calls setMode(lastPlaySubMode) -- silently reverting back to Signals
+// on the very first round trip. Matches the real default now.
+let lastPlaySubMode = 'playcalls';
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
   if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {

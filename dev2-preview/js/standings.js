@@ -319,8 +319,31 @@
     return t.wins + '-' + t.losses + (t.ties ? '-' + t.ties : '');
   }
 
+  // The /bengal/i check alone only catches OUR row after a "Sync from
+  // CMYFCC" save, which relabels it "<real name> (Bengals)" (see
+  // fetchCmyfccStandings above). A coach using the still-fully-supported
+  // manual paste box instead gets our row exactly as the league site
+  // names it -- e.g. "Ayer/Shirley/Lunenburg", no "bengal" substring at
+  // all -- which isBengalsRow would then wrongly say is NOT us, making
+  // our own row a clickable "opponent" link into a self-referential team
+  // page. Same fuzzy token-overlap match teamTokens/matchScheduleOpponent
+  // already use elsewhere in this file for exactly this "names aren't
+  // guaranteed to match exactly" reason, rather than a brittle exact
+  // string compare.
+  // teamTokens/IGNORED_TEAM_WORDS aren't declared until further down this
+  // file (both hoist as far as JS scoping goes, but IGNORED_TEAM_WORDS is
+  // a `const` -- calling teamTokens() up here at module-parse time would
+  // hit its temporal dead zone). Computed lazily inside the function
+  // instead, which also means it's always computed against the real,
+  // current CMYFCC_OUR_ASSOCIATION_NAME rather than a value snapshotted
+  // once at load time.
   function isBengalsRow(t) {
-    return /bengal/i.test(t.team || '');
+    const name = t.team || '';
+    if (/bengal/i.test(name)) return true;
+    const tTokens = teamTokens(name);
+    if (!tTokens.length) return false;
+    const ourTokens = teamTokens(CMYFCC_OUR_ASSOCIATION_NAME);
+    return ourTokens.some(tok => tTokens.includes(tok));
   }
 
   // ---- Opponent Page (Nathan: "I want to develop a opponent page where
@@ -473,7 +496,16 @@
       // -- there's no "opponent" page for ourselves.
       const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
       const isUs = isBengalsRow(t);
-      const nameCell = isUs
+      // Coach Tools' own paste-preview (initCoachToolsStandings) calls
+      // this with NO games arg at all -- it has no #standingsOpponentDetail/
+      // #standingsListPanel of its own for showOpponentPage to write into
+      // (those live in the separate, public #standingsMode panel), so a
+      // team-name link there would silently write into a hidden panel the
+      // coach can't see. `games` being genuinely absent (not just an
+      // empty array -- the real read-only tab always passes one, even
+      // empty) is exactly that call site; keep it plain text there.
+      const hasGamesContext = games !== undefined && games !== null;
+      const nameCell = (isUs || !hasGamesContext)
         ? escapeHtml(t.team)
         : `<button type="button" class="standingsTeamLink" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${escapeHtml(t.team)} ›</button>`;
       html += `<tr class="${isUs ? 'standingsRowUs' : ''}">` +
