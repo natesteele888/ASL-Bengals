@@ -138,6 +138,20 @@
     // normalizeOpponentKey("Oxford/Webster") -- same no-space-before-the-
     // slash reasoning as leicesterspencer above.
     oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+    // normalizeOpponentKey("Merrimack Valley") -- first word only.
+    merrimack: 'assets/images/opponents/merrimack.png',
+    milford: 'assets/images/opponents/milford.png',
+    tewksbury: 'assets/images/opponents/tewksbury.png',
+    wachusett: 'assets/images/opponents/wachusett.png',
+    // normalizeOpponentKey("Westford/Acton/Boxborough/Littleton") -- no
+    // space before the first slash, so the whole thing is one "word";
+    // this is the "Knights" logo/mascot.
+    westfordactonboxboroughlittleton: 'assets/images/opponents/westfordactonboxboroughlittleton.png',
+    hudson: 'assets/images/opponents/hudson.png',
+    worcester: 'assets/images/opponents/worcester.png',
+    // normalizeOpponentKey("Northboro/Southboro") -- same no-space-
+    // before-the-slash reasoning as leicesterspencer/oxfordwebster above.
+    northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
