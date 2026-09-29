@@ -242,7 +242,15 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .vaCount{font-weight:600;opacity:.85;font-size:11px;text-transform:none;letter-spacing:0}
 .study-grid-inner{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px;padding:2px 0 6px}
 .study-card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
-  display:flex;flex-direction:column}
+  display:flex;flex-direction:column;position:relative}
+/* Nathan: "For any recently added play signals, there should be a NEW
+   badge in the top right corner of the card that stays there for a
+   week." Same red/bold pill language as .modeNewBadge, sized up for a
+   full card instead of a small tab icon. js/study-quiz.js's
+   isRecentlyAddedSignal decides whether this renders at all. */
+.studyCardNewBadge{position:absolute;top:6px;right:6px;z-index:1;background:#e0201a;color:#fff;
+  font-size:10px;font-weight:800;letter-spacing:.04em;padding:3px 7px;border-radius:6px;
+  box-shadow:0 2px 4px rgba(0,0,0,.3)}
 .study-card img{width:100%;aspect-ratio:9/11;object-fit:cover;object-position:top;display:block}
 .study-card .info{padding:8px 8px 10px;text-align:center}
 .study-card .num{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}

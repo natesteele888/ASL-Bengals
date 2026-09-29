@@ -331,6 +331,22 @@ function wireCollapsibles(root){
   });
 }
 
+// Nathan: "For any recently added play signals, there should be a NEW
+// badge in the top right corner of the card that stays there for a
+// week." Date-based, not the tap-to-dismiss-forever shape the 2-Minute
+// Drill tab's own badge uses (dismissTwoMinuteNewBadge, above) -- this one
+// is meant to fade out on its own after 7 real days, same for every
+// coach/player, not per-device. A card saved before js/
+// coachtools-signals-admin.js started stamping addedAt has none, so it
+// never shows one -- correct, since there's no real way to know when an
+// existing card actually went up.
+const NEW_SIGNAL_BADGE_DAYS = 7;
+function isRecentlyAddedSignal(c){
+  if (!c || !c.addedAt) return false;
+  const addedMs = Date.parse(c.addedAt);
+  if (Number.isNaN(addedMs)) return false;
+  return (Date.now() - addedMs) < NEW_SIGNAL_BADGE_DAYS * 24 * 60 * 60 * 1000;
+}
 function renderStudyGrid(){
   const groups = {};
   ALL_CARDS.forEach(c=>{
@@ -347,6 +363,7 @@ function renderStudyGrid(){
     const bodyId = 'study-'+slug(g);
     const cardsHtml = cards.map(c=>`
       <div class="study-card">
+        ${isRecentlyAddedSignal(c) ? '<span class="studyCardNewBadge">NEW</span>' : ''}
         <img src="${c.img}" alt="signal ${c.id}">
         <div class="info">
           <div class="num">Signal #${c.id}</div>

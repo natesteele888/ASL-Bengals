@@ -145,7 +145,12 @@
       // live right now, not stale-by-however-long-the-coach-was-typing.
       var cards = await fetchLiveCards();
       var nextId = cards.reduce(function (max, c) { return c && typeof c.id === 'number' ? Math.max(max, c.id) : max; }, 0) + 1;
-      var newCard = { id: nextId, group: category, cat: category, meaning: meaning, img: photoDataUri };
+      // Nathan: "For any recently added play signals, there should be a NEW
+      // badge... that stays there for a week." js/study-quiz.js's
+      // renderStudyGrid reads this to show/hide the badge -- an existing
+      // card saved before this field existed simply has none, and the
+      // badge stays off for it (never retroactively "new").
+      var newCard = { id: nextId, group: category, cat: category, meaning: meaning, img: photoDataUri, addedAt: new Date().toISOString() };
       var updated = cards.concat([newCard]);
 
       var url = await window.firebaseAuthed(CARDS_URL);
