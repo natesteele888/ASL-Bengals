@@ -412,6 +412,59 @@
     return statsText ? `${base} ${statsText}` : base;
   }
 
+  // Nathan: "since you have game stats and history on all teams, we should
+  // be able to make the AI generated game previews more dynamic since you
+  // have points scored and allowed, opponents, and understand strengths."
+  // buildGamePreviewText above only ever draws on OUR OWN schedule/stats
+  // (head-to-head history, our own leaders/averages) -- it has no idea
+  // what the OPPONENT themselves has actually been doing this season.
+  // This pulls that from the same real, live CMYFCC data source already
+  // proved out for Standings' Team Pages and this page's own "[Opponent]'s
+  // Last 5" tab (window.fetchCmyfccRecentGamesFor) -- their real record,
+  // their own points scored/allowed, and a plain-language read on whether
+  // they've been a high-scoring team, a tough defense, or fairly even,
+  // plus who they've actually been playing. Async (a real network call),
+  // so renderGamePreview below shows the fast, local text immediately and
+  // appends this once it resolves, same progressive-enhancement pattern
+  // this file already uses for the completed-game recap
+  // (computeGameNarrativeSummary/buildGameContextRecap).
+  //
+  // The "strength" read is a plain, disclosed heuristic off their own
+  // scoring margin (avg points scored minus allowed per game), not a real
+  // scouting analysis -- there's no play-by-play/style data behind it,
+  // only box scores, so it stays limited to what those numbers can
+  // honestly support. The real PF/PA numbers are always shown alongside
+  // it, so a coach can judge for themselves rather than take the
+  // adjective on faith.
+  async function buildOpponentScoutingText(opponentName) {
+    if (!window.fetchCmyfccRecentGamesFor || !opponentName) return '';
+    let rows;
+    try {
+      rows = await window.fetchCmyfccRecentGamesFor(opponentName, 10);
+    } catch (e) {
+      return '';
+    }
+    if (!rows.length) return '';
+    let w = 0, l = 0, t = 0, pf = 0, pa = 0;
+    rows.forEach(g => {
+      pf += g.ourScore; pa += g.oppScore;
+      if (g.ourScore > g.oppScore) w++; else if (g.ourScore < g.oppScore) l++; else t++;
+    });
+    const gp = rows.length;
+    const avgPf = (pf / gp).toFixed(1);
+    const avgPa = (pa / gp).toFixed(1);
+    const recordStr = t ? `${w}-${l}-${t}` : `${w}-${l}`;
+    const avgMargin = (pf - pa) / gp;
+    let strengthPart;
+    if (avgMargin >= 8) strengthPart = 'a strong, high-scoring team';
+    else if (avgMargin <= -8) strengthPart = "a team that's struggled to find points";
+    else if (Number(avgPa) < 8) strengthPart = "a defense that's been tough to score on";
+    else strengthPart = "a team that's been fairly even with opponents";
+    const recentOpponents = rows.slice(0, 3).map(g => g.opponent).filter(Boolean);
+    const oppPart = recentOpponents.length ? ` Recent opponents include ${recentOpponents.join(', ')}.` : '';
+    return `${opponentName} enters at ${recordStr} this season, averaging ${avgPf} points scored and ${avgPa} allowed per game -- ${strengthPart}.${oppPart}`;
+  }
+
   // Nathan: "Game previews should have team leaders and team stat averages
   // that we have available." Reuses the exact same aggregation Coach
   // Tools > Stats' leaderboard uses (window.computeGamePlayerStats, plus
@@ -1401,27 +1454,76 @@
         </span>
       </button>`;
   }
-  function renderLast5Panel(tab) {
+  // Nathan, after seeing the first version of the "Vs [Opponent]" tab
+  // below (which showed OUR OWN head-to-head history against them):
+  // "It shouldn't show the last 5 games against that team, it should show
+  // your opponents last 5 games." Real correction, not a preference --
+  // head-to-head reads as "No games yet" for any opponent we haven't
+  // played before (the common case, since most Schedule games are a
+  // FIRST meeting), even though THEY'VE been playing a real season
+  // against everyone else. The 2nd tab now pulls exactly that -- the
+  // opponent's own real recent games, straight from CMYFCC (same real
+  // function js/standings.js already built/proved out for the Standings
+  // Team Page, exposed there as window.fetchCmyfccRecentGamesFor rather
+  // than a second, drifting copy of the same API-shape knowledge here).
+  // "Last 5 Games" (our own) is untouched -- a different, still-useful
+  // question ("how have WE been playing") Nathan never asked to change.
+  async function renderLast5Panel(tab) {
     const wrap = document.getElementById('schedLast5Wrap');
     if (!wrap || !current) return;
-    const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    const oppKey = normalizeOpponentKey(current.opponent);
-    const vsOpp = played.filter(g => normalizeOpponentKey(g.opponent) === oppKey);
-    const list = tab === 'vsopp' ? vsOpp : played.slice(0, 5);
-    const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
-    wrap.innerHTML = `
-      <div class="lbSectionHeader">📊 Recent Form</div>
+    const forOpponent = current.opponent;
+    const tabsHtml = `
       <div class="gameplanPickerGrid" style="margin-bottom:10px;">
         <button type="button" class="gameplanChip${tab === 'last5' ? ' active' : ''}" data-last5tab="last5">Last 5 Games</button>
-        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${current.opponent ? 'Vs ' + escapeHtml(current.opponent) : 'Vs This Opponent'}</button>
-      </div>
-      <div class="last5List">${rowsHtml}</div>`;
-    wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
-      btn.addEventListener('click', () => renderLast5Panel(btn.dataset.last5tab));
-    });
-    wrap.querySelectorAll('.last5Row').forEach(row => {
-      row.addEventListener('click', () => openDetail(row.dataset.gameId));
-    });
+        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${forOpponent ? escapeHtml(forOpponent) + "'s Last 5" : 'Opponent Last 5'}</button>
+      </div>`;
+    const wireUp = () => {
+      wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
+        btn.addEventListener('click', () => renderLast5Panel(btn.dataset.last5tab));
+      });
+      wrap.querySelectorAll('.last5Row').forEach(row => {
+        row.addEventListener('click', () => openDetail(row.dataset.gameId));
+      });
+    };
+    if (tab !== 'vsopp') {
+      const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const list = played.slice(0, 5);
+      const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div>${tabsHtml}<div class="last5List">${rowsHtml}</div>`;
+      wireUp();
+      return;
+    }
+    wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div>${tabsHtml}<div class="last5List"><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
+    wireUp();
+    if (!window.fetchCmyfccRecentGamesFor || !forOpponent) {
+      const listEl = wrap.querySelector('.last5List');
+      if (listEl) listEl.innerHTML = '<div class="lbEmpty">No games yet.</div>';
+      return;
+    }
+    // Same stale-response guard as standings.js's own loadOpponentRecentForm
+    // -- a slow response landing after the coach has already navigated to
+    // a DIFFERENT game (or switched back to the "Last 5 Games" tab)
+    // shouldn't clobber whatever's on screen now.
+    try {
+      const rows = await window.fetchCmyfccRecentGamesFor(forOpponent, 5);
+      const stillRelevant = document.getElementById('schedLast5Wrap') === wrap && wrap.isConnected && current && current.opponent === forOpponent && wrap.querySelector('[data-last5tab="vsopp"]').classList.contains('active');
+      if (!stillRelevant) return;
+      const listEl = wrap.querySelector('.last5List');
+      if (!listEl) return;
+      if (!rows.length) {
+        listEl.innerHTML = `<div class="lbEmpty">No completed games found for ${escapeHtml(forOpponent)} on CMYFCC yet.</div>`;
+        return;
+      }
+      // No click-wiring here, matching js/standings.js's own
+      // loadOpponentRecentForm -- these rows carry CMYFCC's own game ids,
+      // not one of OUR local Schedule game ids, and openDetail() silently
+      // opens a blank "new game" draft for any id it can't find, which
+      // would be a real, confusing bug here, not a graceful no-op.
+      listEl.innerHTML = rows.map(g => compactGameRowHtml(g, { teamName: forOpponent, teamBadgeHtml: opponentBadgeHtml(forOpponent) })).join('');
+    } catch (e) {
+      const listEl = wrap.querySelector('.last5List');
+      if (listEl) listEl.innerHTML = `<div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
   function renderGamePreview() {
@@ -1458,6 +1560,21 @@
         const narrative = buildGameContextRecap(summary, current);
         if (narrative) textEl.textContent = narrative;
       }).catch(err => console.error('[narrativeRecap] failed for', current.id, err));
+    } else if (!isFinal && current.opponent && current.gameType !== 'Bye') {
+      const forOpponent = current.opponent;
+      buildOpponentScoutingText(forOpponent).then(scouting => {
+        if (!scouting) return;
+        // Same stale-response guard as this file's own loadOppSeasonRecentForm/
+        // standings.js's loadOpponentRecentForm -- a slow CMYFCC response
+        // landing after the coach has navigated to a DIFFERENT game (or
+        // this one went final in the meantime) shouldn't clobber whatever
+        // text is on screen now.
+        const stillRelevant = document.getElementById('schedGamePreviewWrap') === wrap && wrap.isConnected
+          && current && current.opponent === forOpponent && !resultFor(current);
+        if (!stillRelevant) return;
+        const freshTextEl = document.getElementById('schedGamePreviewText');
+        if (freshTextEl) freshTextEl.textContent = `${text} ${scouting}`;
+      }).catch(err => console.error('[opponentScouting] failed for', forOpponent, err));
     }
   }
 
