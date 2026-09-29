@@ -134,6 +134,10 @@
     // normalizeOpponentKey("Leicester/Spencer") -- no space in the name, so
     // the whole thing counts as one "word", then the slash gets stripped.
     leicesterspencer: 'assets/images/opponents/leicesterspencer.png',
+    grafton: 'assets/images/opponents/grafton.png',
+    // normalizeOpponentKey("Oxford/Webster") -- same no-space-before-the-
+    // slash reasoning as leicesterspencer above.
+    oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 

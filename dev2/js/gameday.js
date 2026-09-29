@@ -25,7 +25,11 @@
 (function () {
   const SCHEDULE_URL = `${FIREBASE_DB_URL}/schedule.json`;
   const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
-  const BUNDLED_LOGOS = { clinton: 'assets/images/opponents/clinton.png' };
+  const BUNDLED_LOGOS = {
+    clinton: 'assets/images/opponents/clinton.png',
+    grafton: 'assets/images/opponents/grafton.png',
+    oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+  };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit
   // as the badges-intro/coach-digest/parent-digest once-per-day guards

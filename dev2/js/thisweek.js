@@ -35,7 +35,11 @@
   // own-read-only-copy pattern already used here for upcomingGames/
   // upcomingPractices below.
   const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
-  const BUNDLED_LOGOS = { clinton: 'assets/images/opponents/clinton.png' };
+  const BUNDLED_LOGOS = {
+    clinton: 'assets/images/opponents/clinton.png',
+    grafton: 'assets/images/opponents/grafton.png',
+    oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+  };
   let opponentLogos = {};
   const MAX_PLAYS = 15;
   const MIN_RECOMMENDED = 5;
