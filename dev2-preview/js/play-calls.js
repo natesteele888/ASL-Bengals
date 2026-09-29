@@ -4244,7 +4244,13 @@ function buildFormationThumbnail(formationId, sharedBox) {
   slotList.forEach(slot => {
     const p = pos[slot];
     if (!p) return;
-    svg.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: R, fill: '#fff', stroke: '#111', 'stroke-width': 4 }));
+    // Nathan: "the formations are still not [bold] - it needs to be bold
+    // on the formations like the plays." This tile grid (buildFormationThumbnail)
+    // is a completely separate, simpler renderer from the real play
+    // diagrams (renderCardDiagram) -- it never picked up the same bold
+    // treatment when that one did. Same CIRCLE_STROKE_WIDTH constant for
+    // real consistency between the two, not a separately-tuned number.
+    svg.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: R, fill: '#fff', stroke: '#111', 'stroke-width': CIRCLE_STROKE_WIDTH }));
     const t = svgEl('text', { x: p[0], y: p[1] + 7, 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 800, fill: '#111' });
     t.textContent = slot;
     svg.appendChild(t);
