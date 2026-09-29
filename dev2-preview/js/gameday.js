@@ -29,6 +29,14 @@
     clinton: 'assets/images/opponents/clinton.png',
     grafton: 'assets/images/opponents/grafton.png',
     oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+    merrimack: 'assets/images/opponents/merrimack.png',
+    milford: 'assets/images/opponents/milford.png',
+    tewksbury: 'assets/images/opponents/tewksbury.png',
+    wachusett: 'assets/images/opponents/wachusett.png',
+    westfordactonboxboroughlittleton: 'assets/images/opponents/westfordactonboxboroughlittleton.png',
+    hudson: 'assets/images/opponents/hudson.png',
+    worcester: 'assets/images/opponents/worcester.png',
+    northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
   };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit
