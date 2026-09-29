@@ -268,9 +268,64 @@ function resolveRoute(formation, players, playerId, { wingSide, direction, align
   // not a locally-mirrored one. Unset/false for every assignment nothing
   // has ever opted in for, so this changes nothing already relied on.
   const points = (alignmentData && alignmentData.points) || assignment.points;
-  if (direction !== 'left' || assignment.directionIndependent) return points;
-  const anchor = getFixedAnchor(formation, playerId, alignment);
-  return points.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, anchor.x), y: pt.y }));
+  const usingFallbackPoints = !hasAlignmentPoints;
+  // 2026-09-29, real bug found and fixed after Option Pass/Shuffle Pass's
+  // #5 rendered hundreds of units off the 1600-wide field under Overload:
+  // `points` is authored relative to this position's DEFAULT anchor, but
+  // when `alignment` moves this position's OWN anchor (e.g. a TE stacked
+  // out for Overload, or #4 tucked/untucked for Heavy) with no explicit
+  // alignmentOverrides route to use instead, the route needs to move
+  // along with him -- same "same shape, new starting point" default
+  // shiftPathsToFormation already uses for a whole FORMATION change, now
+  // applied here for an ALIGNMENT change within one formation. Shifting
+  // first (rather than only mirroring around the new anchor, the old
+  // behavior) also fixes a second, previously-invisible bug: the
+  // canonical (direction='right') render never shifted at all, leaving
+  // the route visibly disconnected from the player's own already-
+  // alignment-aware circle even before Direction ever entered into it.
+  // Algebraically, shift-then-mirror-around-the-SAME-(now-shifted)-anchor
+  // equals (mirror around the DEFAULT anchor) + that same shift delta --
+  // the route's shape and reach are fully preserved, just correctly
+  // repositioned, not doubled. Skipped when an alignmentOverride route is
+  // already in use (`usingFallbackPoints` false) -- that route is
+  // authored AT its own real anchor already and must not be shifted
+  // again -- and when this alignment didn't actually move the anchor
+  // (dx/dy both 0, the overwhelmingly common case), so every position
+  // untouched by an alignment toggle renders byte-identical to before.
+  let shiftedPoints = points;
+  if (usingFallbackPoints && alignment) {
+    const defaultAnchor = getFixedAnchor(formation, playerId);
+    const alignedAnchor = getFixedAnchor(formation, playerId, alignment);
+    const dx = alignedAnchor.x - defaultAnchor.x, dy = alignedAnchor.y - defaultAnchor.y;
+    if (dx !== 0 || dy !== 0) {
+      shiftedPoints = points.map((pt) => Object.assign({}, pt, { x: pt.x + dx, y: pt.y + dy }));
+    }
+  }
+  const result = (direction !== 'left' || assignment.directionIndependent)
+    ? shiftedPoints
+    : (() => {
+        const anchor = getFixedAnchor(formation, playerId, alignment);
+        return shiftedPoints.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, anchor.x), y: pt.y }));
+      })();
+  // Hard safety net on top of the correct-positioning fix above, matching
+  // the exact clamp js/play-calls.js's own reanchorRoute() already uses
+  // ("sliding the whole shape over can push the far end past the canvas
+  // edge -- clamp to a safe margin"). Repositioning a route correctly can
+  // still run it off the field if the route's own reach is long relative
+  // to how far an alignment toggle moved the anchor -- confirmed real,
+  // not hypothetical, for Option Pass/Shuffle Pass's own routes even
+  // after the shift fix above. A no-op for every point already inside
+  // the margin, which today is every existing, already-verified route on
+  // every real play -- this only ever clamps a point that would
+  // otherwise land out of bounds. DATA.viewBox is the app's real field
+  // width (1600) when loaded; falls back to that same value in a
+  // standalone/test context with no DATA global.
+  const fieldWidth = (typeof window !== 'undefined' && window.DATA && window.DATA.viewBox && window.DATA.viewBox[0]) || 1600;
+  const MARGIN_X = 20, MIN_Y = -390, MAX_Y = 600;
+  return result.map((pt) => Object.assign({}, pt, {
+    x: Math.max(MARGIN_X, Math.min(fieldWidth - MARGIN_X, pt.x)),
+    y: Math.max(MIN_Y, Math.min(MAX_Y, pt.y)),
+  }));
 }
 
 window.PlayBuilderMirror = { resolveRoute, resolveAnchor, getFixedAnchor, getCenterX, reflect, findSwapPartner, reflectDefensePositions };

@@ -1472,10 +1472,17 @@
     const wrap = document.getElementById('schedLast5Wrap');
     if (!wrap || !current) return;
     const forOpponent = current.opponent;
+    // A Bye week stores the literal string 'Bye' as its own opponent
+    // field (see buildGamePreviewText's own comment above) -- truthy, so
+    // it would otherwise sail past the `!forOpponent` guard below and
+    // fire a real, pointless CMYFCC fetch for a team named "Bye", with a
+    // tab literally labeled "Bye's Last 5". Same exclusion
+    // renderGamePreview's own opponent-scouting fetch already has.
+    const isByeWeek = current.gameType === 'Bye';
     const tabsHtml = `
       <div class="gameplanPickerGrid" style="margin-bottom:10px;">
         <button type="button" class="gameplanChip${tab === 'last5' ? ' active' : ''}" data-last5tab="last5">Last 5 Games</button>
-        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${forOpponent ? escapeHtml(forOpponent) + "'s Last 5" : 'Opponent Last 5'}</button>
+        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${(forOpponent && !isByeWeek) ? escapeHtml(forOpponent) + "'s Last 5" : 'Opponent Last 5'}</button>
       </div>`;
     const wireUp = () => {
       wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
@@ -1495,7 +1502,7 @@
     }
     wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div>${tabsHtml}<div class="last5List"><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     wireUp();
-    if (!window.fetchCmyfccRecentGamesFor || !forOpponent) {
+    if (!window.fetchCmyfccRecentGamesFor || !forOpponent || isByeWeek) {
       const listEl = wrap.querySelector('.last5List');
       if (listEl) listEl.innerHTML = '<div class="lbEmpty">No games yet.</div>';
       return;
