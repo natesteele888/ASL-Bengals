@@ -894,6 +894,12 @@ function render() {
       || wingLeftAnchorFor(formation, pos.id, resolveAnchor(formation, pos.id, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, pos.id) }));
     const isSelected = state.selectedPlayer === pos.id;
     const customColor = state.lastRendered[pos.id] && state.lastRendered[pos.id].customColor;
+    // Nathan: "I need to be able to click on the 4 and have that be
+    // editable. So if I want it to say 92 or 65 for a player - I can."
+    // Purely a label swap -- pos.id (the real slot id, used everywhere
+    // else: routing, overrides, signal recipes) is completely untouched.
+    const assignmentForLabel = resolveAssignment(formation, players, pos.id, state.direction, state.currentPlay);
+    const circleLabel = (assignmentForLabel && assignmentForLabel.displayNumber) || String(pos.label ?? pos.id);
     // Nathan: "ball path sucks... needs to be rethought out." The old
     // flow only told you a tap was wrong AFTER tapping (a status-line
     // error for a lineman). A dashed ring, matching footballplaybook.
@@ -907,7 +913,7 @@ function render() {
         stroke: '#1a8c3a', 'stroke-width': 3, 'stroke-dasharray': '5 5',
       }));
     }
-    const c = drawCircle(anchor.x, anchor.y, String(pos.label ?? pos.id), customColor || '#111111', PLAYER_R, isSelected);
+    const c = drawCircle(anchor.x, anchor.y, circleLabel, customColor || '#111111', PLAYER_R, isSelected);
     c.style.cursor = 'pointer';
     // Without this, a plain tap on a player circle still bubbles a
     // pointerdown up to the field's own freehand-stroke tracker below
@@ -1330,6 +1336,13 @@ function renderSidebar() {
       b.classList.toggle('active', b.dataset.color === (assignment.color || ''));
     });
   }
+
+  // Nathan: "I need to be able to click on the 4 and have that be
+  // editable. So if I want it to say 92 or 65 for a player - I can." Same
+  // "always re-sync, not just on click" reasoning as Color just above --
+  // selecting a different player can change what this box should show
+  // without the box itself ever being touched.
+  if (els.pbDisplayNumberInput) els.pbDisplayNumberInput.value = assignment.displayNumber || '';
 
   // O-line positions can't be thrown to in real football (ineligible
   // receivers) -- same "not everything has to be displayed at once"
@@ -2119,6 +2132,14 @@ function bindSidebar() {
   els.pbHasBallCheckbox.addEventListener('change', () => {
     assignmentFor(state.selectedPlayer).hasBall = els.pbHasBallCheckbox.checked;
   });
+  if (els.pbDisplayNumberInput) {
+    els.pbDisplayNumberInput.addEventListener('input', () => {
+      const value = els.pbDisplayNumberInput.value.trim();
+      const assignment = assignmentFor(state.selectedPlayer);
+      if (value) assignment.displayNumber = value; else delete assignment.displayNumber;
+      render();
+    });
+  }
   els.pbDelayInput.addEventListener('input', () => {
     assignmentFor(state.selectedPlayer).delayMs = Number(els.pbDelayInput.value) || 0;
   });
@@ -2474,6 +2495,7 @@ async function init() {
   els.pbAlignmentEditToggle = q('pbAlignmentEditToggle');
   els.pbRoutesWrap = q('pbRoutesWrap');
   els.pbColorSwatches = q('pbColorSwatches');
+  els.pbDisplayNumberInput = q('pbDisplayNumberInput');
   els.pbDirectionEditToggle = q('pbDirectionEditToggle');
   els.pbCaseActionBtn = q('pbCaseActionBtn');
   els.pbAlignmentPreviewToggles = q('pbAlignmentPreviewToggles');

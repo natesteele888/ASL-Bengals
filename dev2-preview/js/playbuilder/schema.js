@@ -226,6 +226,16 @@
  *   PB_PLAYER_COLORS palette (black/red/blue/green/orange/purple/yellow);
  *   was previously used in code but undocumented here -- flagged and fixed
  *   as a drive-by while adding RoutePoint.stopMs
+ * @property {string} [displayNumber] - a real jersey number to show inside
+ *   this player's circle on Play Builder's own authoring canvas, instead of
+ *   the slot's own id/label (e.g. "4"). Nathan: "I need to be able to click
+ *   on the 4 and have that be editable. So if I want it to say 92 or 65 for
+ *   a player - I can." Purely cosmetic and per-play by design (his own
+ *   choice, over a per-formation default) -- never read by mirror.js,
+ *   legacy-adapter.js, or the real coach-facing card (play-calls.js), which
+ *   still shows the generic slot id, matching the earlier, deliberate
+ *   revert of jersey numbers on defense there ("a defender... is a generic
+ *   alignment spot... not literally one of our own kids").
  * @property {boolean} [directionIndependent] - for a REGULAR (non-wing,
  *   non-swap, non-center-mirror) position's `points` only: when true, this
  *   exact route applies for BOTH directions, skipping the usual local
