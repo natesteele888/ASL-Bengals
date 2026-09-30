@@ -2370,7 +2370,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    give some visual difference." One less line (no kickoff time -- see
    gameTime in js/schedule.js) once a game's final, so the card can sit
    tighter too. */
-.scheduleRow.scheduleRowFinal { padding: 8px 14px; gap: 4px; }
+/* Nathan, with a before/after reference screenshot: "pulled the logos and
+   record down to be centered between the bottom stats pill and the top
+   header." The matchup row's own margin:auto (below) is what actually
+   centers it whenever this card has slack to center within (e.g. a longer
+   location wraps the header taller, or the weather chip shows) -- gap
+   alone can't do that, it only sets a FIXED distance regardless of how
+   much room is left over. Bumped a little past the old 4px on its own too
+   so the card doesn't read as edge-to-edge cramped even with zero slack,
+   without undoing Nathan's own earlier "make it shorter" pass (still far
+   below the pre-compacting 6px+ card gap every other row style uses). */
+.scheduleRow.scheduleRowFinal { padding: 8px 14px; gap: 6px; }
+.scheduleRow.scheduleRowFinal .scheduleRowMatchup { margin: auto 0; }
 /* Nathan: "the other cards for upcoming games let's add an orange stroke
    around the box to show that is the current game for that week." */
 .scheduleRow.scheduleRowCurrentWeek { border: 2px solid var(--bengal-orange); }
@@ -2397,7 +2408,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    reserves space on the right so long location text truncates instead of
    running under the Week badge (see .scheduleWeekBadge below). */
 .scheduleRowTop { display: flex; align-items: center; gap: 8px; padding-right: 76px; }
-.scheduleRowDate { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Nathan, with a before/after reference screenshot: "Moved the date of the
+   header over next to the location." Real bug, found by measuring the live
+   card directly, not just eyeballed: flex:1 1 auto's flex-GROW stretched
+   this box to fill the row's entire remaining width regardless of how
+   short the location text actually was, so .scheduleRowDateChip (which
+   sits right after this box, not after the visible text) could land over
+   100px away from where the location text actually ended -- confirmed
+   116.5px on a real card at desktop width. flex:0 1 auto keeps the
+   shrink-to-truncate behavior the comment below still needs, it just drops
+   the grow that was pushing the chip away. */
+.scheduleRowDate { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Real bug, found in review: the completed-game date used to be appended
    onto the END of .scheduleRowDate's own truncated string, so a real
    location (an imported address can run 50+ characters) or the game-type
@@ -2508,7 +2529,11 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    .scheduleResultBadge class is also shared by the upcoming-game card's
    own date/time stack and the detail hero page, neither of which this
    ask was about. */
-.scheduleRowCenter.final { flex-direction: row; align-items: center; gap: 28px; min-width: 0; padding: 0 4px; }
+/* Nathan, with a before/after reference screenshot: "moved the score
+   numbers away from the pill." A further bump past the already-doubled
+   28px above -- same scoped-to-completed-card reasoning, still doesn't
+   touch .scheduleResultBadge's own upcoming-card/detail-hero uses. */
+.scheduleRowCenter.final { flex-direction: row; align-items: center; gap: 40px; min-width: 0; padding: 0 4px; }
 .scheduleRowCenter.final .scheduleTeamScore.home { flex: 0 0 40px; min-width: 40px; text-align: right; }
 .scheduleRowCenter.final .scheduleTeamScore.away { flex: 0 0 40px; min-width: 40px; text-align: left; }
 .scheduleRowCenter.final .scheduleResultBadge { font-size: 13px; padding: 4px 13px; }
