@@ -617,18 +617,23 @@ function logQuizStart(kind){
     if (holdFired) { holdFired = false; return; }
     if (typeof window.setSection === 'function') window.setSection('play');
   });
-  // Nathan: "...or BENGALS wordmark..." -- the h1 sitting right next to
-  // the logo (the "ASL Bengals" title text every user actually sees; the
-  // real BENGALS decal image is a preview-theme-only easter egg, see its
-  // own comment in index.html). Same handler, no hold gesture on this one
-  // -- that's the logo image's own secret, not the title text's.
-  const wordmark = logo.closest('.headerRow') && logo.closest('.headerRow').querySelector('h1');
-  if (wordmark) {
-    wordmark.style.cursor = 'pointer';
-    wordmark.addEventListener('click', function(){
+  // Nathan: "...or BENGALS wordmark..." -- with a screenshot of the real
+  // decal art (.hudWordmark, index.html's own <img>), confirming it's the
+  // one actually on screen for him, not the plain "ASL Bengals" h1 text
+  // this comment originally (and wrongly) assumed was "what every user
+  // actually sees" -- html.gameHudPreview (a real, per-device theme, see
+  // its own CSS block) hides the h1/p and shows this image INSTEAD, so
+  // wiring only the h1 left exactly this element unclickable for anyone
+  // on that theme. Both wired the same way, same handler, no hold gesture
+  // on either -- that's the logo image's own secret alone.
+  const headerRow = logo.closest('.headerRow');
+  [headerRow && headerRow.querySelector('h1'), headerRow && headerRow.querySelector('.hudWordmark')].forEach(function(el){
+    if (!el) return;
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', function(){
       if (typeof window.setSection === 'function') window.setSection('play');
     });
-  }
+  });
 })();
 
 function getLeaderboard(){
