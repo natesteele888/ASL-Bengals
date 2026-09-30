@@ -1416,6 +1416,11 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   }
   .card-btn.play-btn { background: var(--bengal-orange); color: #fff; border-color: var(--bengal-orange); }
   .card-btn svg { width: 16px; height: 16px; }
+  /* Nathan: "save the play to your device as a gif." Same circular
+     .card-btn shape as Play/Flip, just a text label instead of a glyph --
+     shrunk down so "GIF" actually fits the same 34px circle. */
+  .card-btn.gif-btn { font-size: 9px; font-weight: 800; letter-spacing: 0.2px; }
+  .card-btn.gif-btn:disabled { opacity: 0.6; cursor: default; }
 
   .speed-toggle {
     display: flex;

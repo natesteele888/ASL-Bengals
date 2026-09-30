@@ -3089,6 +3089,134 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
 // ball path be exercised from outside this file.
 window.playCardAnimation = playCardAnimation;
 
+// ---- Save as GIF -- Nathan: "If I am a player or coach and have a play
+// up in the Play section, give me an option next to the Play button to
+// save the play to your device as a gif. It will save an animation of
+// the play to your phone."
+//
+// Captures the SAME live SVG the real ▶ button already animates (not a
+// second, separately-computed render) -- runs the real playCardAnimation/
+// playSplitAnimation while sampling the live <svg> on an interval, so
+// whatever a coach or kid just watched IS what gets saved, byte for byte.
+// Each sample rasterizes the current DOM state via the browser's own SVG
+// renderer -- the exact "serialize -> data URI -> <img> -> canvas" method
+// call-sheet-pdf.js/playbook-pdf.js already proved out for PDF export
+// (can't misinterpret a curve the way a vector-conversion library could,
+// since it's the same engine already drawing this correctly on screen).
+const GIF_WORKER_SCRIPT = 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js';
+// ~9fps -- plenty smooth for a route diagram (nothing here moves fast
+// enough to need more), keeps both the file size and the encode time down.
+const GIF_FRAME_DELAY_MS = 110;
+const GIF_EXPORT_WIDTH = 640; // downscaled from the real ~1600-wide field viewBox
+
+function svgToCanvas(stage, width, height) {
+  return new Promise((resolve, reject) => {
+    const xml = new XMLSerializer().serializeToString(stage);
+    const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    const img = new Image();
+    img.onload = () => {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = width;
+      canvasEl.height = height;
+      // gif.js reads pixels back out of this same canvas on every single
+      // frame (getImageData, inside addFrame) -- willReadFrequently tells
+      // the browser to optimize for exactly that access pattern instead of
+      // the usual "draw once, display" one.
+      const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvasEl);
+    };
+    img.onerror = reject;
+    img.src = dataUri;
+  });
+}
+
+// Confirmed live: `new Worker('https://cdnjs...')` throws SecurityError --
+// a cross-origin script URL can't be handed to the Worker constructor
+// directly (unlike a plain <script src>, which cdnjs is fine with). gif.js
+// passes its own `workerScript` option straight into `new Worker(...)`
+// internally, so the fix has to happen out here: fetch the real script's
+// SOURCE TEXT once, wrap it in a same-origin blob: URL, and hand gif.js
+// that instead -- a Worker constructed from a blob: URL is always
+// same-origin, regardless of where the text inside it actually came from.
+// Cached (not re-fetched per export) since the file never changes at a
+// pinned version.
+let gifWorkerBlobUrlPromise = null;
+function getGifWorkerBlobUrl() {
+  if (!gifWorkerBlobUrlPromise) {
+    gifWorkerBlobUrlPromise = fetch(GIF_WORKER_SCRIPT)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Couldn't load the GIF encoder (status ${res.status}).`);
+        return res.text();
+      })
+      .then((text) => URL.createObjectURL(new Blob([text], { type: 'application/javascript' })));
+  }
+  return gifWorkerBlobUrlPromise;
+}
+
+// runAnimation is a () => Promise -- the exact same playCardAnimation/
+// playSplitAnimation call the ▶ button already makes, handed in by the
+// caller so this function never has to know which one applies. Frames are
+// sampled on a plain interval running ALONGSIDE that real animation, not a
+// reimplementation of its timing -- when the animation finishes (however
+// long that actually took on this device), capture just stops.
+async function exportPlayGif(stage, runAnimation, filename) {
+  if (!window.GIF) throw new Error('GIF export isn\'t available right now -- try reloading the page.');
+  const vb = stage.viewBox && stage.viewBox.baseVal;
+  const vw = (vb && vb.width) || 1600;
+  const vh = (vb && vb.height) || 1000;
+  const width = GIF_EXPORT_WIDTH;
+  const height = Math.round(width * (vh / vw));
+
+  const workerBlobUrl = await getGifWorkerBlobUrl();
+  const gif = new window.GIF({
+    workers: 2, quality: 10, width, height,
+    workerScript: workerBlobUrl, background: '#ffffff',
+  });
+
+  let capturing = true, busy = false, frameCount = 0;
+  const captureLoop = async () => {
+    while (capturing) {
+      if (!busy) {
+        busy = true;
+        try {
+          const canvasEl = await svgToCanvas(stage, width, height);
+          gif.addFrame(canvasEl, { copy: true, delay: GIF_FRAME_DELAY_MS });
+          frameCount++;
+        } catch (e) { /* a single missed frame isn't worth aborting the export over */ }
+        busy = false;
+      }
+      await wait(GIF_FRAME_DELAY_MS);
+    }
+  };
+  const loopPromise = captureLoop();
+  try {
+    await runAnimation();
+  } finally {
+    capturing = false;
+    await loopPromise;
+  }
+  if (frameCount === 0) throw new Error('Nothing was captured -- try again.');
+
+  return new Promise((resolve, reject) => {
+    gif.on('finished', (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      resolve();
+    });
+    gif.on('abort', () => reject(new Error('GIF export was aborted.')));
+    gif.render();
+  });
+}
+
 // ---- Scrub: the same animation, evaluated at one instant instead of played
 // forward ----
 //
@@ -3848,6 +3976,38 @@ function buildCard(combo, opts) {
     playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn);
   });
 
+  // Nathan: "give me an option next to the Play button to save the play
+  // to your device as a gif." Everyone (player or coach) gets this, not
+  // gated like "+ Add to Game Plan" above -- it's just a save/share
+  // action, not a roster-affecting one. Runs the exact same animation
+  // playBtn does (same branch for Split vs. everything else) while
+  // exportPlayGif captures it.
+  const gifBtn = document.createElement('button');
+  gifBtn.className = 'card-btn gif-btn';
+  gifBtn.title = 'Save as GIF';
+  gifBtn.textContent = 'GIF';
+  gifBtn.addEventListener('click', async () => {
+    if (isPlayingRef.value) return;
+    const prevHtml = gifBtn.innerHTML;
+    gifBtn.disabled = true;
+    gifBtn.textContent = '…';
+    const safeName = (titleBar.textContent || combo.label || 'play').trim().replace(/[^a-z0-9]+/gi, '_') || 'play';
+    try {
+      await exportPlayGif(stage, () => {
+        if (formation === 'split') return playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
+        return playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn);
+      }, `${safeName}.gif`);
+    } catch (e) {
+      console.error('GIF export failed:', e);
+      gifBtn.textContent = '!';
+      setTimeout(() => { gifBtn.innerHTML = prevHtml; }, 1800);
+      gifBtn.disabled = false;
+      return;
+    }
+    gifBtn.innerHTML = prevHtml;
+    gifBtn.disabled = false;
+  });
+
   const speedToggle = document.createElement('div');
   speedToggle.className = 'speed-toggle';
   const b1 = document.createElement('button'); b1.textContent = '1x'; b1.className = 'active';
@@ -3857,6 +4017,7 @@ function buildCard(combo, opts) {
   speedToggle.appendChild(b1); speedToggle.appendChild(b2);
 
   controls.appendChild(playBtn);
+  controls.appendChild(gifBtn);
   controls.appendChild(speedToggle);
   stageWrap.appendChild(controls);
 
