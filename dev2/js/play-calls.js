@@ -1670,6 +1670,27 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     }
     return wrap;
   }
+  // Nathan: "on Jumbo Beast, it isn't showing the custom numbers I added
+  // to the 2 and 4. It should show 92 and 65." Play Builder V2's own
+  // editing canvas already reads/writes PlayerAssignment.displayNumber
+  // and shows it on its own circles -- this real, coach-facing card never
+  // did, because it always draws each numbered/line position's circle
+  // with its raw position number/id as a hardcoded label, never looking
+  // at the play's own data at all. legacy-adapter.js now carries
+  // displayNumber through onto each leaf's own path entry (only when
+  // actually set), so it's already sitting on variant.paths by the time
+  // this renders -- just needed to be looked up and preferred over the
+  // raw fallback, the same way every OTHER per-path field here already
+  // is. Checked against variant.paths (the final, already shifted/
+  // overridden array everything else in this function reads), not the
+  // playType's own raw authored data, so a custom number correctly
+  // follows its player through Overload/formation-shift/etc. the exact
+  // same way his route already does.
+  function displayLabelFor(playerNumOrId, fallback) {
+    if (!variant || !Array.isArray(variant.paths)) return fallback;
+    const p = variant.paths.find((pp) => (pp.player != null ? pp.player === playerNumOrId : pp.id === playerNumOrId));
+    return (p && p.displayNumber) || fallback;
+  }
   const playerCircles = {};
 
   // Short on-diagram callout for a play/path that has a conditional,
@@ -1743,7 +1764,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
   const p5Pos = wingLeftAnchor(5, splitPositions ? splitPositions[5] : (pbLiveAnchor(5, wingSide) || wingAlign['5']));
   const c5Selected = selectedPlayer === 5;
-  const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111', 34, c5Selected, null, 5);
+  const c5 = drawCircle(p5Pos[0], p5Pos[1], displayLabelFor(5, '5'), '#111', 34, c5Selected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
   // O-line circles were never selectable/highlightable at all originally
   // (no playerNum -> no click listener) -- added so a player whose
@@ -1754,12 +1775,12 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   ['LT','LG','C','RG','RT'].forEach(k => {
     const isSelected = isLineSelectedForCircles && selectedPlayer === k;
     const kPos = pbLiveAnchor(k, wingSide) || wingAlign[k];
-    const c = drawCircle(kPos[0], kPos[1], k, '#111', 22, isSelected, null, k);
+    const c = drawCircle(kPos[0], kPos[1], displayLabelFor(k, k), '#111', 22, isSelected, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   const p6Pos = wingLeftAnchor(6, splitPositions ? splitPositions[6] : (pbLiveAnchor(6, wingSide) || wingAlign['6']));
   const c6Selected = selectedPlayer === 6;
-  const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111', 34, c6Selected, null, 6);
+  const c6 = drawCircle(p6Pos[0], p6Pos[1], displayLabelFor(6, '6'), '#111', 34, c6Selected, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   // Motion is now a pure playback choice, exactly like Wing L/R and Dir L/R
@@ -1788,7 +1809,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const p4Side = motionOn ? p4MotionedSide : p4HomeSide;
 
   const wingSelected = selectedPlayer === 4;
-  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingSelected, null, 4);
+  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], displayLabelFor(4, '4'), '#111', 34, wingSelected, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
   if (motionOn) {
@@ -1811,7 +1832,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // the backfield (see splitPositions above) -- 1 and 2 sit in the same
     // spot either way, so only 3 needs the override.
     const pos = (splitPositions && num === '3') ? splitPositions[3] : wingLeftAnchor(Number(num), pbLiveAnchor(Number(num), wingSide) || wingAlign[num]);
-    const c = drawCircle(pos[0], pos[1], num, '#111', 34, isSelected, null, Number(num));
+    const c = drawCircle(pos[0], pos[1], displayLabelFor(Number(num), num), '#111', 34, isSelected, null, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 

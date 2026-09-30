@@ -160,6 +160,14 @@ function fbLegacyBuildLeaf(play, variant, formation, defenseLook, dirKeyCapitali
       path.points4x4 = rawPoints;
     }
     if (typeof pos.id === 'number') path.player = pos.id; else { path.player = null; path.id = pos.id; }
+    // Nathan: "on Jumbo Beast, it isn't showing the custom numbers I
+    // added to the 2 and 4." Play Builder V2's own editing canvas already
+    // reads/writes PlayerAssignment.displayNumber (schema.js) -- it was
+    // just never carried through this adapter at all, so the real,
+    // coach-facing card (which only ever reads this legacy paths[] shape)
+    // had no way to know a custom number had been set. Only added when
+    // actually present, matching every other optional field here.
+    if (assignment.displayNumber) path.displayNumber = assignment.displayNumber;
     paths.push(path);
   });
 
