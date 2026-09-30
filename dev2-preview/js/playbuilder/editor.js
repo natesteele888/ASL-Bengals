@@ -2196,6 +2196,18 @@ function bindSidebar() {
     const isNewPlay = !state.plays.some((p) => p.id === state.currentPlay.id);
     try {
       await window.PlayBuilderStore.savePlay(state.currentPlay);
+      // Nathan: "despite updating the play on play editor and saving it.
+      // It won't update the play cards... Need to be able to edit and save
+      // and the changes show up." store.js's own refreshLiveData() (called
+      // inside savePlay above) deliberately skips Wing/Split -- see
+      // js/playbuilder/sync-custom-formations.js's own big comment on
+      // mergeWingSplitPlayIntoData for exactly why a blanket sync isn't
+      // safe yet. This is the narrow, per-play, explicitly-vetted door for
+      // it instead -- a safe no-op for any play that isn't in that file's
+      // own WING_SPLIT_BASE_VARIANT_KEY map yet.
+      if (window.PlayBuilderSyncCustomFormations && window.PlayBuilderSyncCustomFormations.mergeWingSplitPlayIntoData) {
+        await window.PlayBuilderSyncCustomFormations.mergeWingSplitPlayIntoData(state.currentPlay);
+      }
       await ensureCuratedForFormation(state.currentPlay);
       // Real, separate gap found alongside this: this local list never
       // added a play this screen's OWN Save button just created (only
