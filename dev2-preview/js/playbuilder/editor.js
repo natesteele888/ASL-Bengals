@@ -1,13 +1,18 @@
 // ============================================================
 // Play Builder v2 -- interactive editor.
 //
-// Editing always happens in the CANONICAL frame (wing-right, direction-
-// right) -- the Wing/Direction toggles in this page are PREVIEW-only,
-// disabled while a player's route is actively selected for editing. That
-// sidesteps an entire class of write-back/un-mirror math (figuring out
-// what a drag in a mirrored view means for the underlying canonical data)
-// that was a real source of bugs in the old editor. A coach previews the
-// mirrored result, then goes back to Right/Right to keep editing.
+// A play is authored once in the CANONICAL frame (wing-right, direction-
+// right); the Wing/Direction/alignment toggles mirror it live everywhere
+// else, same as the real app. Selecting a player while previewing a
+// "reverse" case (Direction: Left, a non-default alignment, etc.) shows
+// that exact mirrored shape as a plain, read-only preview -- editing it
+// requires an explicit "Refine independently" tap first (currentCaseFor/
+// needsRefine/routeHolder, below), which snapshots the current mirror
+// into its own independent data. A "Reset to mirrored" button undoes
+// that. Nathan: "I like the idea of quickly mirroring the play but
+// having the ability to refine the paths." An earlier version of this
+// forked that data SILENTLY the instant a point was dragged, with no
+// visible sign it had happened and no way back -- this replaces that.
 //
 // IIFE-wrapped so none of these names (render, selectPlayer, svgEl,
 // syncSignalUI, playCallSignalDeck, svgPointFromEvent, state, els, q, ...)
@@ -217,50 +222,145 @@ function previewAlignmentFor(formation, positionId) {
   if (!toggle) return undefined;
   return state.alignmentPreview[toggle.id] || toggle.values[0].id;
 }
-// The object to read/write route data (points/sameSideRoute/crossSideRoute)
-// on for the CURRENTLY SELECTED player, given state.editingAlignment --
-// `assignment` itself for the toggle's default value (nothing new to
-// create, matches every position with no toggle at all), or a real,
-// lazily-created entry under assignment.alignmentOverrides[value]
-// otherwise -- seeded from that alignment's own real anchor (mirror.js's
-// resolveAnchor, canonical Right/Right frame) the same way selectPlayer()
-// already seeds a brand-new default-alignment route, so a coach editing a
-// non-default alignment for the first time starts from a real point on
-// the field, never nothing.
-function routeHolder(assignment, playerId) {
-  // Nathan: "the wing needs to come in off the LT since the TE is in
-  // overload to the Right" -- same relationship overloadOppositeRouteFor()
-  // checks for RENDERING, checked first here too so dragging #4's handles
-  // while that exact combination is previewed writes into
-  // overloadOppositeRoute (what the render is actually using), not
-  // sameSideRoute/crossSideRoute -- data the render isn't reading in this
-  // state at all. A single flat route (no same/cross split -- the
-  // relationship itself already fully determines the geometry), so it
-  // gets its own distinct holder shape rather than forcing it into the
-  // existing sameSideRoute/crossSideRoute pair.
+// Which of routeHolder's 4 special "reverse" cases (if any) applies to the
+// CURRENTLY PREVIEWED state for a given player -- single source of truth
+// for routeHolder (eager-create-on-refine), needsRefine (read-only check),
+// and resetCase (delete-on-reset), so the three can't drift out of sync
+// the way several earlier "carry forward this field too" bugs did this
+// session when the same branch logic was independently duplicated by hand.
+// Priority order matches mirror.js's own resolveRoute exactly (overload-
+// opposite/alignment beat direction -- see resolveRoute's own "most
+// specific wins" comment).
+function currentCaseFor(playerId) {
   if (isWing(playerId)) {
     const overloadToggle = (currentFormation().alignmentToggles || []).find((t) => t.id === 'overload');
     const overloadValue = overloadToggle ? (state.alignmentPreview[overloadToggle.id] || overloadToggle.values[0].id) : null;
     if (overloadValue && overloadValue !== 'off' && overloadValue !== state.wingSide) {
-      if (!assignment.overloadOppositeRoute || !assignment.overloadOppositeRoute.length) {
-        const anchor = window.PlayBuilderMirror.resolveAnchor(currentFormation(), playerId, { wingSide: 'right', direction: 'right' });
-        assignment.overloadOppositeRoute = [{ x: anchor.x, y: anchor.y }];
-      }
-      if (assignment.overloadOppositeRoute.length < 2) {
-        assignment.overloadOppositeRoute.push({ x: assignment.overloadOppositeRoute[0].x, y: assignment.overloadOppositeRoute[0].y - 100 });
-      }
-      return { overloadOppositeRoute: assignment.overloadOppositeRoute };
+      return { key: 'overloadOpposite', label: `Overload: ${overloadValue}` };
     }
   }
   const toggle = alignmentToggleFor(currentFormation(), playerId);
   const value = state.editingAlignment;
   if (toggle && value && value !== toggle.values[0].id) {
+    const valueLabel = (toggle.values.find((v) => v.id === value) || {}).label || value;
+    return { key: 'alignment', alignmentValue: value, label: `${toggle.label}: ${valueLabel}` };
+  }
+  if (!isWing(playerId) && state.wingSide === 'left' && currentFormation().wingLeftAnchors && currentFormation().wingLeftAnchors[playerId]) {
+    return { key: 'wingLeft', label: 'Wing: Left' };
+  }
+  if (!isWing(playerId) && state.direction === 'left') {
+    return { key: 'directionLeft', label: 'Direction: Left' };
+  }
+  return { key: 'canonical', label: null };
+}
+// Does an override for this case already exist? Read-only -- never
+// creates anything, unlike routeHolder.
+function caseExists(assignment, kase) {
+  if (kase.key === 'overloadOpposite') return !!(assignment.overloadOppositeRoute && assignment.overloadOppositeRoute.length);
+  if (kase.key === 'alignment') return !!(assignment.alignmentOverrides && assignment.alignmentOverrides[kase.alignmentValue]);
+  if (kase.key === 'wingLeft') return !!(assignment.wingLeftRoute && assignment.wingLeftRoute.length);
+  if (kase.key === 'directionLeft') return !!(assignment.overrides && assignment.overrides.left);
+  return true; // canonical -- always directly editable, no refine step
+}
+// Nathan: "editing plays on the reverse of the standard play is so
+// strange... the editing should feel like its own play. I like the idea
+// of quickly mirroring the play but having the ability to refine the
+// paths. It just isn't intuitive." Root cause: dragging a point while
+// previewing a reverse case used to fork it into independent data
+// SILENTLY, the instant you touched it (routeHolder ran eagerly from
+// editablePointsForSelected, called on every render the moment a player
+// was selected -- before any drag at all) -- with no visible sign it had
+// happened, and no way back except manually redrawing. Now a reverse case
+// stays a pure, read-only mirror (see currentRoutePoints) until a coach
+// explicitly taps "Refine independently" -- see the pbCaseActionBtn
+// wiring below and its render()-time label/visibility logic.
+function needsRefine(assignment, playerId) {
+  const kase = currentCaseFor(playerId);
+  return kase.key !== 'canonical' && !caseExists(assignment, kase);
+}
+// The real, multi-point starting shape "Refine independently" seeds from --
+// NOT a bare single point the way this used to work for 3 of the 4 cases
+// (only directionLeft ever seeded a real route; alignment/wingLeft/
+// overloadOpposite each left a coach drawing the ENTIRE route from one
+// dot). "Quickly mirroring... but with the ability to refine" needs a
+// real mirror to refine FROM.
+function seedRouteForCase(formation, players, playerId, kase) {
+  const assignment = players.find((p) => p.player === playerId);
+  if (kase.key === 'alignment') {
+    // mirror.js's own resolveRoute already does the right shift-by-anchor-
+    // delta math for an alignment with no override yet (its own
+    // "usingFallbackPoints && alignment" branch) -- reuse it directly
+    // rather than re-deriving the same math by hand a second time.
+    const pts = window.PlayBuilderMirror.resolveRoute(formation, players, playerId, { wingSide: 'right', direction: 'right', alignment: kase.alignmentValue });
+    return (pts && pts.length) ? pts.map((pt) => ({ x: pt.x, y: pt.y })) : null;
+  }
+  if (kase.key === 'directionLeft') {
+    const pts = window.PlayBuilderMirror.resolveRoute(formation, players, playerId, { wingSide: 'right', direction: 'left' });
+    return ((pts && pts.length) ? pts : assignment.points || []).map((pt) => ({ x: pt.x, y: pt.y }));
+  }
+  if (kase.key === 'wingLeft') {
+    // mirror.js has no concept of wingLeftAnchors at all (a formation-
+    // specific mechanism layered on top, in this file and play-calls.js
+    // only) -- shift the position's own base route by the same anchor
+    // delta resolveRoute's alignment branch uses, so the seed starts
+    // already connected to the real wingLeftAnchor circle instead of
+    // stranded back at the position's ordinary spot.
+    const base = (assignment.points || []).map((pt) => ({ x: pt.x, y: pt.y }));
+    const defaultAnchor = formation.positions.find((p) => p.id === playerId);
+    const alt = formation.wingLeftAnchors[playerId];
+    const dx = alt.x - defaultAnchor.x, dy = alt.y - defaultAnchor.y;
+    return base.length ? base.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })) : [{ x: alt.x, y: alt.y }];
+  }
+  if (kase.key === 'overloadOpposite') {
+    // No established "full route" equivalent exists for this relationship
+    // yet (js/play-calls.js's own real-card version has the same gap) --
+    // seed from the position's own regular canonical route as the best
+    // available real starting shape, disclosed as imperfect rather than
+    // silently left as a single dot.
+    const base = assignment.points || assignment.sameSideRoute || null;
+    return base && base.length ? base.map((pt) => ({ x: pt.x, y: pt.y })) : null;
+  }
+  return null;
+}
+// Deletes whichever override the current case has, reverting the selected
+// player back to a pure, read-only mirror -- the "Reset to mirrored" half
+// of the refine/reset pair.
+function resetCase(assignment, kase) {
+  if (kase.key === 'overloadOpposite') { delete assignment.overloadOppositeRoute; return; }
+  if (kase.key === 'alignment') { if (assignment.alignmentOverrides) delete assignment.alignmentOverrides[kase.alignmentValue]; return; }
+  if (kase.key === 'wingLeft') { delete assignment.wingLeftRoute; return; }
+  if (kase.key === 'directionLeft') { if (assignment.overrides) delete assignment.overrides.left; return; }
+}
+// The object to read/write route data (points/sameSideRoute/crossSideRoute)
+// on for the CURRENTLY SELECTED player. Only ever called once a case is
+// confirmed refined (caseExists true) or is being refined for the first
+// time right now (see the pbCaseActionBtn click handler) -- never called
+// speculatively just from selecting a player anymore, which is what used
+// to cause the silent-fork problem this whole mechanism replaces.
+function routeHolder(assignment, playerId) {
+  const kase = currentCaseFor(playerId);
+  if (kase.key === 'overloadOpposite') {
+    // A single flat route (no same/cross split -- the wingSide/overload
+    // relationship itself already fully determines the geometry), so it
+    // gets its own distinct holder shape rather than forcing it into the
+    // existing sameSideRoute/crossSideRoute pair.
+    if (!assignment.overloadOppositeRoute || !assignment.overloadOppositeRoute.length) {
+      assignment.overloadOppositeRoute = seedRouteForCase(currentFormation(), currentVariant().players, playerId, kase)
+        || [{ x: 0, y: 0 }];
+    }
+    if (assignment.overloadOppositeRoute.length < 2) {
+      assignment.overloadOppositeRoute.push({ x: assignment.overloadOppositeRoute[0].x, y: assignment.overloadOppositeRoute[0].y - 100 });
+    }
+    return { overloadOppositeRoute: assignment.overloadOppositeRoute };
+  }
+  if (kase.key === 'alignment') {
+    const value = kase.alignmentValue;
     if (!assignment.alignmentOverrides) assignment.alignmentOverrides = {};
     if (!assignment.alignmentOverrides[value]) {
-      const anchor = window.PlayBuilderMirror.resolveAnchor(currentFormation(), playerId, { wingSide: 'right', direction: 'right', alignment: value });
+      const seeded = seedRouteForCase(currentFormation(), currentVariant().players, playerId, kase);
       assignment.alignmentOverrides[value] = isWing(playerId)
-        ? { sameSideRoute: [{ x: anchor.x, y: anchor.y }], crossSideRoute: [{ x: anchor.x, y: anchor.y }] }
-        : { points: [{ x: anchor.x, y: anchor.y }] };
+        ? { sameSideRoute: seeded || [{ x: 0, y: 0 }], crossSideRoute: (seeded || [{ x: 0, y: 0 }]).map((pt) => ({ x: pt.x, y: pt.y })) }
+        : { points: seeded || [{ x: 0, y: 0 }] };
     }
     const holder = assignment.alignmentOverrides[value];
     if (isWing(playerId)) {
@@ -271,54 +371,19 @@ function routeHolder(assignment, playerId) {
     }
     return holder;
   }
-  // "5 Guys"-style formations: a regular position's Wing-Left redistribution
-  // (Formation.wingLeftAnchors / PlayerAssignment.wingLeftRoute -- see
-  // wingLeftAnchorFor/wingLeftRouteFor near render()) is itself an
-  // independently-authored, absolute route, same idea as overrides.left --
-  // so editing while PREVIEWING Wing Left on a covered position has to
-  // write INTO wingLeftRoute, or the drag handles would edit data the
-  // Wing-Left render doesn't even use (render() already prefers
-  // wingLeftRoute over the base route whenever both exist). Checked before
-  // the direction-override branch below since it's the render's own
-  // priority too.
-  if (!isWing(playerId) && state.wingSide === 'left' && currentFormation().wingLeftAnchors && currentFormation().wingLeftAnchors[playerId]) {
+  if (kase.key === 'wingLeft') {
     if (!assignment.wingLeftRoute || !assignment.wingLeftRoute.length) {
-      const alt = currentFormation().wingLeftAnchors[playerId];
-      assignment.wingLeftRoute = [{ x: alt.x, y: alt.y }];
+      assignment.wingLeftRoute = seedRouteForCase(currentFormation(), currentVariant().players, playerId, kase);
     }
     if (assignment.wingLeftRoute.length < 2) {
       assignment.wingLeftRoute.push({ x: assignment.wingLeftRoute[0].x, y: assignment.wingLeftRoute[0].y - 100 });
     }
     return { points: assignment.wingLeftRoute };
   }
-  // General wingSide+direction override -- regular (non-wing) positions
-  // only, schema.js's own PlayerAssignment.overrides. Nathan: "regardless
-  // of toggles, all players paths should be allowed to be edited... if I
-  // click a player, I should be able to edit their path and it should
-  // save for them on the exact play call and not affect other
-  // variations." Keyed off whatever's actually being PREVIEWED right now
-  // (state.wingSide/state.direction) -- no separate "which am I editing"
-  // sub-toggle needed, what you're looking at is what you edit. Keyed by
-  // DIRECTION ONLY, never wingSide -- a regular position's route never
-  // actually depends on wingSide in this system (mirror.js's own resolveRoute
-  // never reads it for one), so "Wing Left, Dir Right" and "Wing Right, Dir
-  // Right" are the exact same route and correctly edit the same underlying
-  // data; only switching Direction to Left reaches a real, separate
-  // override. Direction:Right is the ordinary/base case and needs no
-  // override at all -- returns the base assignment, same as always.
-  // Doesn't compose with an alignment-override edit in progress (schema.js's
-  // own doc already flags this as not yet supported) -- the alignment
-  // branch above always takes priority when both could apply.
-  if (!isWing(playerId) && state.direction === 'left') {
+  if (kase.key === 'directionLeft') {
     if (!assignment.overrides) assignment.overrides = {};
     if (!assignment.overrides.left) {
-      // Seeded from the REAL, currently-computed route for this direction
-      // (not a blank stub) -- a coach previewing the mirrored view and
-      // clicking a player starts from the shape they're already looking
-      // at and adjusts it into a genuine one-off, rather than redrawing
-      // from scratch.
-      const computed = window.PlayBuilderMirror.resolveRoute(currentFormation(), currentVariant().players, playerId, { wingSide: 'right', direction: 'left' });
-      assignment.overrides.left = (computed || assignment.points || []).map((pt) => ({ x: pt.x, y: pt.y }));
+      assignment.overrides.left = seedRouteForCase(currentFormation(), currentVariant().players, playerId, kase);
     }
     return { points: assignment.overrides.left };
   }
@@ -685,6 +750,24 @@ function alignmentRouteFor(formation, players, positionId) {
   return (override && override.points) ? override.points.map((pt) => ({ x: pt.x, y: pt.y })) : null;
 }
 
+// What's actually shown on the field for one position right now -- the
+// SAME computation render()'s own per-position loop below uses (resolveRoute
+// plus the 3 override-lookup helpers just above), factored out so the
+// locked/read-only edit-handle preview (render()'s handlesLayer block) can
+// show a coach the exact same shape they're already looking at on the
+// diagram, not a separately-derived approximation that could drift from it.
+function currentRoutePoints(formation, players, routeFormation, playerId) {
+  let points = window.PlayBuilderMirror.resolveRoute(routeFormation, players, playerId, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, playerId) });
+  if (!points) return null;
+  const wingLeftPoints = wingLeftRouteFor(formation, players, playerId);
+  if (wingLeftPoints) points = wingLeftPoints;
+  const overloadOppositePoints = overloadOppositeRouteFor(formation, players, playerId);
+  if (overloadOppositePoints) points = overloadOppositePoints;
+  const alignmentPoints = alignmentRouteFor(formation, players, playerId);
+  if (alignmentPoints) points = alignmentPoints;
+  return points;
+}
+
 function render() {
   // Nathan: "include the name of the play at the top of the editing
   // screen so I know what play I am editing." Every render, not just on
@@ -782,14 +865,8 @@ function render() {
   state.lastRendered = {};
   const routeFormation = routeFormationFor(formation, state.currentPlay);
   formation.positions.forEach((pos) => {
-    let points = resolveRoute(routeFormation, players, pos.id, { wingSide: state.wingSide, direction: state.direction, alignment: previewAlignmentFor(formation, pos.id) });
+    let points = currentRoutePoints(formation, players, routeFormation, pos.id);
     if (!points) return;
-    const wingLeftPoints = wingLeftRouteFor(formation, players, pos.id);
-    if (wingLeftPoints) points = wingLeftPoints;
-    const overloadOppositePoints = overloadOppositeRouteFor(formation, players, pos.id);
-    if (overloadOppositePoints) points = overloadOppositePoints;
-    const alignmentPoints = alignmentRouteFor(formation, players, pos.id);
-    if (alignmentPoints) points = alignmentPoints;
     const assignment = resolveAssignment(formation, players, pos.id, state.direction, state.currentPlay);
     const hasBall = alignmentHasBall(formation, pos.id, assignment, wingLeftHasBall(assignment, !!(assignment && assignment.hasBall)));
     // Nathan, re: footballplaybook.com: "you can recolor the player."
@@ -901,73 +978,92 @@ function render() {
     }
   });
 
-  // Edit handles for the selected player -- only ever shown in canonical
-  // frame; see isEditingPreviewLocked().
+  // Edit handles for the selected player. isEditingPreviewLocked() is a
+  // different, older, always-false gate (kept for its own call sites'
+  // sake, see its own comment) -- the real gate now is per-case: a
+  // reverse case (Direction: Left, a non-default alignment, etc.) with no
+  // refined override yet shows a plain, non-interactive mirrored preview
+  // (currentRoutePoints -- the exact same shape the diagram itself is
+  // drawing) instead of draggable handles, until "Refine independently"
+  // is tapped (pbCaseActionBtn, wired below). This is the fix for
+  // Nathan's own "editing on the reverse is so strange" report -- dragging
+  // used to silently fork a case's data the instant a point was touched;
+  // now that fork is a deliberate, visible, reversible action instead.
   if (state.selectedPlayer !== null && !isEditingPreviewLocked()) {
-    const editPoints = editablePointsForSelected();
+    const assignment = assignmentFor(state.selectedPlayer);
+    const locked = needsRefine(assignment, state.selectedPlayer);
 
-    handlesLayer.appendChild(svgEl('path', {
-      d: pointsToPathD(editPoints), fill: 'none', stroke: '#1a8c3a', 'stroke-width': 3, 'stroke-dasharray': '6 6',
-    }));
+    if (locked) {
+      const previewPoints = currentRoutePoints(formation, players, routeFormation, state.selectedPlayer) || [];
+      handlesLayer.appendChild(svgEl('path', {
+        d: pointsToPathD(previewPoints), fill: 'none', stroke: '#999', 'stroke-width': 3, 'stroke-dasharray': '4 5',
+      }));
+    } else {
+      const editPoints = editablePointsForSelected();
 
-    // Invisible, wide hit-target laid over the same guide line -- grab
-    // anywhere along it (not just an existing handle) and drag to insert a
-    // new point right there, dragging immediately in the same gesture. The
-    // thin dashed stroke above is too narrow to reliably grab on its own;
-    // this gives it a generous hit area without changing how it looks.
-    if (editPoints.length >= 2) {
-      const hitPath = svgEl('path', {
-        d: pointsToPathD(editPoints), fill: 'none', stroke: 'transparent', 'stroke-width': 28, cursor: 'copy',
-      });
-      hitPath.addEventListener('pointerdown', (ev) => {
-        ev.stopPropagation();
-        const pt = svgPointFromEvent(ev);
-        const insertAt = nearestSegmentIndex(editPoints, pt) + 1;
-        editPoints.splice(insertAt, 0, pt);
-        state.selectedPointIndex = insertAt;
-        state.dragging = true;
-        render();
-      });
-      hitPath.addEventListener('click', (ev) => ev.stopPropagation());
-      handlesLayer.appendChild(hitPath);
-    }
+      handlesLayer.appendChild(svgEl('path', {
+        d: pointsToPathD(editPoints), fill: 'none', stroke: '#1a8c3a', 'stroke-width': 3, 'stroke-dasharray': '6 6',
+      }));
 
-    editPoints.forEach((pt, idx) => {
-      const isPicked = state.selectedPointIndex === idx;
-      const h = svgEl('circle', {
-        cx: pt.x, cy: pt.y, r: isPicked ? HANDLE_R + 4 : HANDLE_R,
-        fill: '#ffde00', stroke: '#111', 'stroke-width': 2, cursor: 'pointer',
-      });
-      h.addEventListener('pointerdown', (ev) => {
-        ev.stopPropagation();
-        state.selectedPointIndex = idx;
-        state.dragging = true;
-        render();
-      });
-      // pointerdown selects the handle; without also stopping the
-      // subsequent bubbled click here, that click would reach the field's
-      // own click handler and immediately deselect the point it was just
-      // set to (see that handler's "clicking away deselects" branch) --
-      // a select-then-instantly-deselect flicker on every handle click.
-      h.addEventListener('click', (ev) => ev.stopPropagation());
-      handlesLayer.appendChild(h);
-
-      if (isPicked && editPoints.length > 2) {
-        const badge = svgEl('g', { cursor: 'pointer' });
-        badge.appendChild(svgEl('circle', { cx: pt.x + 26, cy: pt.y - 26, r: 13, fill: '#e0201a' }));
-        const x = svgEl('text', { x: pt.x + 26, y: pt.y - 21, 'text-anchor': 'middle', fill: '#fff', 'font-size': 16, 'font-weight': 900 });
-        x.textContent = '✕';
-        badge.appendChild(x);
-        badge.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-        badge.addEventListener('click', (ev) => {
+      // Invisible, wide hit-target laid over the same guide line -- grab
+      // anywhere along it (not just an existing handle) and drag to insert a
+      // new point right there, dragging immediately in the same gesture. The
+      // thin dashed stroke above is too narrow to reliably grab on its own;
+      // this gives it a generous hit area without changing how it looks.
+      if (editPoints.length >= 2) {
+        const hitPath = svgEl('path', {
+          d: pointsToPathD(editPoints), fill: 'none', stroke: 'transparent', 'stroke-width': 28, cursor: 'copy',
+        });
+        hitPath.addEventListener('pointerdown', (ev) => {
           ev.stopPropagation();
-          editPoints.splice(idx, 1);
-          state.selectedPointIndex = null;
+          const pt = svgPointFromEvent(ev);
+          const insertAt = nearestSegmentIndex(editPoints, pt) + 1;
+          editPoints.splice(insertAt, 0, pt);
+          state.selectedPointIndex = insertAt;
+          state.dragging = true;
           render();
         });
-        handlesLayer.appendChild(badge);
+        hitPath.addEventListener('click', (ev) => ev.stopPropagation());
+        handlesLayer.appendChild(hitPath);
       }
-    });
+
+      editPoints.forEach((pt, idx) => {
+        const isPicked = state.selectedPointIndex === idx;
+        const h = svgEl('circle', {
+          cx: pt.x, cy: pt.y, r: isPicked ? HANDLE_R + 4 : HANDLE_R,
+          fill: '#ffde00', stroke: '#111', 'stroke-width': 2, cursor: 'pointer',
+        });
+        h.addEventListener('pointerdown', (ev) => {
+          ev.stopPropagation();
+          state.selectedPointIndex = idx;
+          state.dragging = true;
+          render();
+        });
+        // pointerdown selects the handle; without also stopping the
+        // subsequent bubbled click here, that click would reach the field's
+        // own click handler and immediately deselect the point it was just
+        // set to (see that handler's "clicking away deselects" branch) --
+        // a select-then-instantly-deselect flicker on every handle click.
+        h.addEventListener('click', (ev) => ev.stopPropagation());
+        handlesLayer.appendChild(h);
+
+        if (isPicked && editPoints.length > 2) {
+          const badge = svgEl('g', { cursor: 'pointer' });
+          badge.appendChild(svgEl('circle', { cx: pt.x + 26, cy: pt.y - 26, r: 13, fill: '#e0201a' }));
+          const x = svgEl('text', { x: pt.x + 26, y: pt.y - 21, 'text-anchor': 'middle', fill: '#fff', 'font-size': 16, 'font-weight': 900 });
+          x.textContent = '✕';
+          badge.appendChild(x);
+          badge.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+          badge.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            editPoints.splice(idx, 1);
+            state.selectedPointIndex = null;
+            render();
+          });
+          handlesLayer.appendChild(badge);
+        }
+      });
+    }
   }
 
   fieldGroup.appendChild(drawYardGrid(vw));
@@ -1123,6 +1219,11 @@ function selectPlayer(playerId) {
 function editablePointsForSelected() {
   if (state.selectedPlayer === null) return null;
   const assignment = assignmentFor(state.selectedPlayer);
+  // Locked (a reverse case with no refined override yet) -- null tells
+  // every caller (drag, click-to-add, freehand-draw) to no-op; the field
+  // still shows the real mirrored shape via currentRoutePoints, just not
+  // as draggable handles until "Refine independently" is tapped.
+  if (needsRefine(assignment, state.selectedPlayer)) return null;
   const holder = routeHolder(assignment, state.selectedPlayer);
   if (holder.overloadOppositeRoute) return holder.overloadOppositeRoute;
   if (isWing(state.selectedPlayer)) {
@@ -1259,7 +1360,6 @@ function renderSidebar() {
     b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
   if (window.placeToggleThumb) window.placeToggleThumb(els.pbWingRouteToggle);
-  els.pbPreviewLockNote.style.display = isEditingPreviewLocked() ? '' : 'none';
 
   // The selected player's OWN alignment toggle (e.g. Heavy), if their
   // position has one -- a second, independent editing-target axis
@@ -1282,21 +1382,32 @@ function renderSidebar() {
     }
   }
 
-  // No separate "which direction am I editing" control anymore -- Nathan:
-  // "if I click a player, I should be able to edit their path" regardless
-  // of what's toggled. routeHolder() now keys directly off the live
-  // Direction preview toggle, so this element is just a plain-language
-  // confirmation of what that means right now (a regular position's edit
-  // target follows Direction only -- Wing side never affects a regular
-  // position's route in this system; a wing position's edit target
-  // follows its own Same/Cross-side toggle above instead).
+  // Reverse-case status + Refine/Reset action. Nathan: "editing plays on
+  // the reverse of the standard play is so strange... it should feel like
+  // its own play. I like the idea of quickly mirroring the play but
+  // having the ability to refine the paths." Covers all 4 reverse cases
+  // (Direction: Left, a non-default alignment, Wing: Left redistribution,
+  // Overload-opposite) uniformly via currentCaseFor -- previously this
+  // element only ever explained the Direction: Left case, and the other
+  // three had no explanation or reset path at all. Not shown for a wing
+  // player's ordinary Same/Cross-side editing (the toggle just above) --
+  // that's two distinct AUTHORED shapes, not a mirror-vs-custom axis, so
+  // it never needs a refine step.
   if (els.pbDirectionEditToggle) {
-    const showNote = !isWing(state.selectedPlayer);
+    const kase = currentCaseFor(state.selectedPlayer);
+    const assignment = assignmentFor(state.selectedPlayer);
+    const showNote = kase.key !== 'canonical';
     els.pbDirectionEditToggle.style.display = showNote ? '' : 'none';
+    if (els.pbCaseActionBtn) els.pbCaseActionBtn.style.display = showNote ? '' : 'none';
     if (showNote) {
-      els.pbDirectionEditToggle.textContent = state.direction === 'left'
-        ? "Editing a one-off just for Direction: Left -- won't affect Direction: Right."
-        : 'Editing the default (Direction: Right) -- switch the Direction toggle above to Left to edit that side independently.';
+      const exists = caseExists(assignment, kase);
+      els.pbDirectionEditToggle.textContent = exists
+        ? `Custom for ${kase.label} -- separate from the mirrored data. Editing the default side won't affect this.`
+        : `Mirrored automatically from the default side. Tap Refine to adjust just ${kase.label} independently.`;
+      if (els.pbCaseActionBtn) {
+        els.pbCaseActionBtn.textContent = exists ? `Reset ${kase.label} to mirrored` : `Refine ${kase.label} independently`;
+        els.pbCaseActionBtn.dataset.mode = exists ? 'reset' : 'refine';
+      }
     }
   }
   updatePointInfo();
@@ -1667,7 +1778,20 @@ function buildSignalSequencePreview() {
   const formation = currentFormation();
   const play = state.currentPlay;
   const recipeName = play.signalRecipe || formation.id;
-  const recipe = window.Signals.RECIPES && window.Signals.RECIPES[recipeName];
+  // Play Builder V2's own seed formation for the classic Wing formation
+  // keeps 'shotgun' as its real id (js/playbuilder/seed-formations.js --
+  // matches js/formations.js's own registry alias, for the same reason:
+  // 'shotgun' is buildCard's historical toggle value, not a real
+  // formation identity). js/signals.js's real RECIPES engine has always
+  // kept this formation under 'wing' though, same as play-calls.js's own
+  // buildSignalSequence already resolves (its formationRecipeFallback).
+  // Without this alias, this preview never finds RECIPES.wing and falls
+  // through to the generic fallback below, which wrongly synthesizes a
+  // formation "touch" card that doesn't exist for Wing -- Nathan, live:
+  // "there is no shotgun signal! it is simply calling the wing side...
+  // followed by the play call."
+  const resolvedRecipeName = recipeName === 'shotgun' ? 'wing' : recipeName;
+  const recipe = window.Signals.RECIPES && window.Signals.RECIPES[resolvedRecipeName];
   if (recipe) {
     const cap = (s) => (s === 'left' ? 'Left' : 'Right');
     const ctx = {
@@ -1973,6 +2097,25 @@ function updatePointInfo() {
 }
 
 function bindSidebar() {
+  // "Refine independently" / "Reset to mirrored" -- see currentCaseFor's
+  // own comment for why this exists. Refine calls routeHolder() for real
+  // (creating + seeding the override from the actual mirrored shape,
+  // exactly what a coach is already looking at); Reset deletes it,
+  // reverting to a pure, read-only mirror again.
+  if (els.pbCaseActionBtn) {
+    els.pbCaseActionBtn.addEventListener('click', () => {
+      if (state.selectedPlayer === null) return;
+      const assignment = assignmentFor(state.selectedPlayer);
+      const kase = currentCaseFor(state.selectedPlayer);
+      if (els.pbCaseActionBtn.dataset.mode === 'reset') {
+        resetCase(assignment, kase);
+      } else {
+        routeHolder(assignment, state.selectedPlayer);
+      }
+      state.selectedPointIndex = null;
+      render();
+    });
+  }
   els.pbHasBallCheckbox.addEventListener('change', () => {
     assignmentFor(state.selectedPlayer).hasBall = els.pbHasBallCheckbox.checked;
   });
@@ -2327,12 +2470,12 @@ async function init() {
   els.pbWingRouteToggleWrap = q('pbWingRouteToggleWrap');
   els.pbWingSideToggle = q('pbWingSideToggle');
   els.pbDirectionToggle = q('pbDirectionToggle');
-  els.pbPreviewLockNote = q('pbPreviewLockNote');
   els.pbAlignmentEditWrap = q('pbAlignmentEditWrap');
   els.pbAlignmentEditToggle = q('pbAlignmentEditToggle');
   els.pbRoutesWrap = q('pbRoutesWrap');
   els.pbColorSwatches = q('pbColorSwatches');
   els.pbDirectionEditToggle = q('pbDirectionEditToggle');
+  els.pbCaseActionBtn = q('pbCaseActionBtn');
   els.pbAlignmentPreviewToggles = q('pbAlignmentPreviewToggles');
   els.pbSaveBtn = q('pbSaveBtn');
   els.pbDeletePlayBtn = q('pbDeletePlayBtn');

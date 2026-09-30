@@ -115,11 +115,11 @@
     if (entry.formation === 'split') {
       bits.push(`Split ${entry.splitSide}`);
     } else {
-      // Same 'Shotgun' rename as js/play-calls.js's own formationLabel --
-      // Nathan: "This formation is called shotgun - it's our base
-      // formation."
+      // Same 'Wing' naming as js/play-calls.js's own formationLabel --
+      // Nathan: "you are calling the wing formation (which is in
+      // shotgun) the shotgun formation. It should be the wing formation."
       const formationName = (entry.formation && entry.formation !== 'shotgun' && window.Formations && window.Formations.get(entry.formation))
-        ? window.Formations.get(entry.formation).name : 'Shotgun';
+        ? window.Formations.get(entry.formation).name : 'Wing';
       bits.push(`${formationName} ${entry.wingSide}`);
     }
     const align = alignmentSummary(entry);

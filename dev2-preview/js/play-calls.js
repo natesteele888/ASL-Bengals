@@ -3319,14 +3319,16 @@ function buildCard(combo, opts) {
   // only -- NOT the Wing L/R toggle, which always reads "Wing L/R"
   // regardless of formation (that axis names WHERE #4 lines up, not this
   // formation's own identity; see its own buildToggleGroup call below).
-  // Nathan: "This formation is called shotgun - it's our base formation"
-  // -- js/formations.js's own registry entry (id stays 'wing', only the
-  // real, coach-facing NAME changed) is the actual source of truth this
-  // falls back to for every OTHER formation; hardcoded here only because
-  // 'shotgun' is buildCard's own historical toggle value, not a real
-  // formation registry id, so `window.Formations.get('shotgun')` would
-  // find nothing without the id alias also defined there.
-  const formationLabel = formation === 'shotgun' ? 'Shotgun' : ((window.Formations.get(formation) || {}).name || formation);
+  // Nathan, correcting an earlier call from the same session: "you are
+  // calling the wing formation (which is in shotgun) the shotgun
+  // formation. It should be the wing formation." -- js/formations.js's
+  // own registry entry (id stays 'wing', only the real, coach-facing
+  // NAME changed) is the actual source of truth this falls back to for
+  // every OTHER formation; hardcoded here only because 'shotgun' is
+  // buildCard's own historical toggle value, not a real formation
+  // registry id, so `window.Formations.get('shotgun')` would find
+  // nothing without the id alias also defined there.
+  const formationLabel = formation === 'shotgun' ? 'Wing' : ((window.Formations.get(formation) || {}).name || formation);
   // renderCardDiagram/playCardAnimation expect the REAL formation
   // registry id ('wing', or omitted entirely -- already defaults to
   // 'wing', js/play-calls.js's own renderCardDiagram) -- not buildCard's
@@ -3433,7 +3435,8 @@ function buildCard(combo, opts) {
     return wrap;
   }
 
-  // Formation -- Shotgun (existing, default) vs Split (new). Split's own
+  // Formation -- Wing (existing, default; internal value stays 'shotgun',
+  // only the display label changed) vs Split (new). Split's own
   // Side toggle + Pass switch share this SAME row (rather than a row of
   // their own) so switching to Split never adds an extra row of vertical
   // space above the diagram -- that used to push the field diagram down
@@ -3441,7 +3444,7 @@ function buildCard(combo, opts) {
   const formationRow = document.createElement('div');
   formationRow.className = 'toggle-row-basics';
   const formationToggle = buildToggleGroup('green', [
-    { value: 'shotgun', label: 'Shotgun' },
+    { value: 'shotgun', label: 'Wing' },
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
