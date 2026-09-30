@@ -153,6 +153,13 @@ async function syncCustomFormationsIntoData() {
   if (!defenseLook) return; // nothing to render defenders against yet
   window.PlayBuilderActiveDefenseLook = (data.defenseLooks || []).find((d) => d.id === data.activeDefenseLookId) || null;
 
+  // Every play id that's genuinely still real right now, across every
+  // synced formation -- used below to prune anything this same mechanism
+  // previously merged in that no longer has a backing Play Builder V2
+  // record (a deleted play, or every play of a fully deleted formation,
+  // which simply won't appear in data.formations any more at all).
+  const stillRealKeys = new Set();
+
   data.formations
     .filter((f) => f.id !== 'shotgun' && f.id !== 'split')
     .forEach((formation) => {
@@ -160,6 +167,7 @@ async function syncCustomFormationsIntoData() {
       data.plays
         .filter((p) => p.formationId === formation.id)
         .forEach((play) => {
+          stillRealKeys.add(play.id);
           try {
             mergePlayType(window.PlayBuilderLegacyAdapter.toLegacyPlayType(play, formation, defenseLook, fbLegacyOptsFor(play)));
             window.PlayBuilderPlaysById[play.id] = play;
@@ -172,6 +180,23 @@ async function syncCustomFormationsIntoData() {
           }
         });
     });
+
+  // Nathan's own "Remove Play"/"Remove Formation" (js/playbuilder/store.js)
+  // delete the real Play Builder V2 record, then re-run this whole
+  // function -- but mergePlayType only ever inserts/updates by key, it
+  // never had a reason to delete before, so a removed play (or every play
+  // of a removed formation) would otherwise leave its last-synced legacy
+  // entry behind forever, a ghost tile a coach could still somehow reach.
+  // Safe to prune here specifically: toLegacyPlayType() always stamps
+  // authoredFormationId with the real formation id (js/playbuilder/
+  // legacy-adapter.js), so this can only ever remove an entry THIS sync
+  // mechanism itself created -- a real Wing/Split shipped play (no
+  // authoredFormationId at all) is never a candidate.
+  window.DATA.playTypes = window.DATA.playTypes.filter((p) => {
+    if (!p.authoredFormationId || stillRealKeys.has(p.key)) return true;
+    delete window.PlayBuilderPlaysById[p.key];
+    return false;
+  });
 }
 
 window.PlayBuilderSyncCustomFormations = { syncCustomFormationsIntoData };
