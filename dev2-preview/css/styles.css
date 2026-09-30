@@ -2663,6 +2663,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    tighter margins since a few of these stack inside one page. ---- */
 .last5List .scheduleRow.last5Row { margin-bottom: 8px; padding: 10px 14px; }
 .last5List .scheduleRow.last5Row:last-child { margin-bottom: 0; }
+/* Nathan: "if you click on a logo of one of the opponent's it should go to
+   that teams page." Only wired up as clickable on Standings' own Opponent
+   Page (js/standings.js) -- see compactGameRowHtml's own comment for why
+   this same span is otherwise inert. Slight lift on hover/press so the
+   logo itself reads as its own tappable thing, distinct from the row. */
+.last5RowOpponentLogo { border-radius: 10px; cursor: pointer; }
+.last5RowOpponentLogo:hover { filter: brightness(1.08); }
+.last5RowOpponentLogo:active { filter: brightness(1.18); }
 
 /* ---- Practices / Film Nights -- Nathan: "I also wants to add in
    practices to the app to... They need date, time and location with map

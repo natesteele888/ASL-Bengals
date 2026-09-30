@@ -638,7 +638,7 @@
     // showOpponentPage right below (real network call, shouldn't block
     // this page's own first render), same progressive-render pattern
     // js/schedule.js's own Game Recap narrative already uses.
-    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Form</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
+    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Games</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     if (hasFootage) {
       html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
       if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
@@ -681,17 +681,20 @@
     detailPanel.style.display = '';
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
-    loadOpponentRecentForm(game.opponent);
+    loadOpponentRecentForm(game.opponent, teams, games);
     applyOpponentHeroColor(game.opponent);
   }
 
-  async function loadOpponentRecentForm(opponentName) {
+  async function loadOpponentRecentForm(opponentName, teams, games) {
     const wrap = document.getElementById('standingsOpponentRecentForm');
     if (!wrap) return;
     if (!window.compactGameRowHtml || !window.opponentBadgeHtml) {
       wrap.innerHTML = '';
       return;
     }
+    // Nathan: "if you are on a team page from the standings, and you see
+    // the 'recent form' let's change that to 'recent games' as form is
+    // more of a soccer term." Plain rename, same section, same data.
     try {
       const rows = await fetchCmyfccRecentGamesFor(opponentName, 5);
       // A stale response landing after the coach has already navigated
@@ -701,16 +704,35 @@
       const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
       if (!stillOnThisOpponent) return;
       if (!rows.length) {
-        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
+        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
         return;
       }
       const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
         teamName: opponentName,
         teamBadgeHtml: window.opponentBadgeHtml(opponentName),
       })).join('');
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="last5List">${rowsHtml}</div>`;
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtml}</div>`;
+      // Nathan: "if you click on a logo of one of the opponent's it should
+      // go to that teams page." Each row's own away-side badge (this
+      // team's opponent in THAT game) is wrapped by compactGameRowHtml in
+      // a .last5RowOpponentLogo span specifically so it can be made
+      // clickable independently of the row itself (which already opens
+      // that specific game). stopPropagation so tapping the logo doesn't
+      // also fire the row's own click. gameId is left null -- these rows
+      // come from CMYFCC, not our own Schedule, so there's usually no
+      // matching local game record; showOpponentPage already falls back
+      // to a real, name-only team page in exactly that case (same as a
+      // division-only team we've never played).
+      wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
+        const name = el.dataset.opponentName;
+        if (!name) return;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showOpponentPage(null, name, teams, games);
+        });
+      });
     } catch (e) {
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
     }
   }
 
