@@ -1827,6 +1827,7 @@ function buildSignalSequencePreview() {
       // reads as something recognizable rather than blank.
       playSignalLabel: play.signalLabel || play.label,
       alignmentValues: Object.assign({}, state.alignmentPreview),
+      noDirection: !!play.noDirection,
     };
     return window.Signals.runRecipePreview(recipe, ctx);
   }

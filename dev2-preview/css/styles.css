@@ -1398,8 +1398,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
     right: 48px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    /* Nathan: "the [gif] button is right in the way. needs to be close
+       next to the play button." space-between put the 2nd of 3 children
+       (gifBtn) dead-centered in the whole row, nowhere near playBtn --
+       flex-start groups playBtn+gifBtn tight together on the left;
+       .speed-toggle's own margin-left:auto (below) is what still pins it
+       to the right edge, matching the old layout there. */
+    justify-content: flex-start;
+    gap: 8px;
   }
   .card-btn {
     width: 34px;
@@ -1423,6 +1429,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   .card-btn.gif-btn:disabled { opacity: 0.6; cursor: default; }
 
   .speed-toggle {
+    margin-left: auto;
     display: flex;
     background: #fff;
     border: 2px solid var(--bengal-black);

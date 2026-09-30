@@ -1138,6 +1138,7 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     overloadOn: !!overloadOn,
     alignmentValues: alignmentValues || {},
     directionOpposesWing: !!(playType && playType.directionOpposesWing),
+    noDirection: !!(playType && playType.noDirection),
     playSignalId: playSignalIdFor(playType, playKey),
     playSignalLabel: playSignalLabelFor(playType, playKey),
   });
@@ -4521,10 +4522,22 @@ function renderFormationPlays(container, formationId, formationName, modifyMode)
     // DIFFERENT formation's id is excluded; one that matches THIS
     // formation's own id (not possible for Wing/Split today, but real the
     // moment either is ever authored through Play Builder V2) still shows.
+    // Nathan: "pop pass needs to be removed from the Split formation, but
+    // it won't allow me to remove plays there." Modify is deliberately
+    // unavailable for Wing/Split (see the comment on that gate below) --
+    // Pop Pass showing up under Split at all was the actual bug, not a
+    // missing removal affordance. Pop Pass already carries noSplit:true
+    // (buildCard's own formation toggle already hides its "Split" pill for
+    // exactly this reason -- "Pop Pass has no Split formation data at
+    // all"), but this fallback never checked it, so it fell through to
+    // Split's grid anyway as one more "every play with no foreign
+    // authoredFormationId" match. Root-caused here rather than worked
+    // around with a curation write, same reasoning the authoredFormationId
+    // filter right above already established.
     const list = (curated && curated.length)
       ? curated.map(key => allCombos.find(c => c.playKey === key)).filter(Boolean)
       : (formationMeta && formationMeta.builtIn
-          ? allCombos.filter(c => !c.authoredFormationId || c.authoredFormationId === formationId)
+          ? allCombos.filter(c => (!c.authoredFormationId || c.authoredFormationId === formationId) && !(formationId === 'split' && c.noSplit))
           : []);
     const sorted = list.slice().sort((a, b) => (a.isPass ? 1 : 0) - (b.isPass ? 1 : 0));
 
