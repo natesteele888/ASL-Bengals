@@ -2346,6 +2346,15 @@
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
+    // Nathan: "when you click on a game to go to it, it opens the game at
+    // the middle of the page. It should open at the top." Real cause: the
+    // list can be scrolled well down (e.g. the current-week game's own
+    // auto-scroll, or just browsing) when a card is tapped, and swapping
+    // which panel is visible doesn't touch the page's own scroll position
+    // -- the coach lands on the detail view still scrolled exactly as far
+    // down as the list was, showing whatever section happens to fall at
+    // that same pixel offset instead of the hero at the top.
+    window.scrollTo(0, 0);
   }
 
   function closeDetail() {
@@ -2440,20 +2449,11 @@
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
         </div>
-        ${gameFootageTopCtaHtml(current)}
-        <div id="schedWeatherWrap" style="display:none;"></div>
-        <div id="schedH2HWrap" style="display:none;"></div>
-        <div id="schedGameLeadersWrap" style="margin-top:16px;"></div>
-        <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
-        <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
-        <div id="schedMomentumWrap" style="display:none;"></div>
-        <div id="schedLeadersWrap" style="margin-top:16px;"></div>
-        <div style="margin-top:16px;">
-          <div class="lbSectionHeader">🩹 Injury Report</div>
-          ${injuryReportReadOnlyHtml(current)}
-        </div>
-        <div id="schedLast5Wrap" style="margin-top:16px;"></div>
-        <div id="gameCancelSection"></div>
+        <!-- Nathan: "put location and game info right below the Game
+             preview." Moved as one intact block (was down near the bottom,
+             after Season Leaders/Injury Report/Last 5/Cancel) -- where +
+             when a coach/parent/player needs to be is more useful right
+             after the score/preview than buried below every stats section. -->
         <div class="lbSub" style="margin:16px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
@@ -2464,6 +2464,19 @@
         ${current.gameDayNotes ? `
         <div class="lbSectionHeader" style="margin-top:16px;">🗒️ Game Day Info</div>
         <div class="scheduleWriteup">${escapeHtml(current.gameDayNotes).replace(/\n/g, '<br>')}</div>` : ''}
+        ${gameFootageTopCtaHtml(current)}
+        <div id="schedWeatherWrap" style="display:none;"></div>
+        <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedGameLeadersWrap" style="margin-top:16px;"></div>
+        <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
+        <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
+        <div id="schedMomentumWrap" style="display:none;"></div>
+        <div style="margin-top:16px;">
+          <div class="lbSectionHeader">🩹 Injury Report</div>
+          ${injuryReportReadOnlyHtml(current)}
+        </div>
+        <div id="schedLast5Wrap" style="margin-top:16px;"></div>
+        <div id="gameCancelSection"></div>
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
           <div id="schedGamePlanKeys"></div>
@@ -2473,6 +2486,10 @@
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
+        <!-- Nathan: "move the season leaders section down." Was right after
+             Momentum, near the top of the stats stack -- now one of the
+             last things before Game Footage/fine print. -->
+        <div id="schedLeadersWrap" style="margin-top:16px;"></div>
         <div class="lbSectionHeader" style="margin-top:16px;">🎥 Game Footage</div>
         ${gameFootageReadOnlyHtml(current)}
         <div class="scheduleFinePrint">${gameIsFinal ? "Game Recap is auto-generated from this game's stats (Coach Tools &gt; Stats)." : "Game Preview is auto-generated from this game's Schedule info."}</div>`;
