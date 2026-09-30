@@ -2380,7 +2380,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    so the card doesn't read as edge-to-edge cramped even with zero slack,
    without undoing Nathan's own earlier "make it shorter" pass (still far
    below the pre-compacting 6px+ card gap every other row style uses). */
-.scheduleRow.scheduleRowFinal { padding: 8px 14px; gap: 6px; }
+/* Nathan, with a screenshot: "the logos are still too close to the top
+   bar - Tyngsboro almost collides with Week 5 - need more padding on the
+   top." Measured the real live card before touching this: the away
+   team's own logo circle and .scheduleWeekBadge (position:absolute, fixed
+   at top:10px regardless of this padding) were 1.5px apart vertically and
+   already overlapping horizontally by ~2px -- a real, confirmed near-
+   collision, not just a tight look. Padding-top bumped well past that
+   (8px -> 22px, everything else unchanged) since it's what actually
+   pushes the flexed .scheduleRowMatchup row down and away from the
+   fixed-position badge above it -- the gap on its own (right below)
+   can't move a badge that isn't part of this flex flow at all. */
+.scheduleRow.scheduleRowFinal { padding: 22px 14px 8px; gap: 6px; }
 .scheduleRow.scheduleRowFinal .scheduleRowMatchup { margin: auto 0; }
 /* Nathan: "the other cards for upcoming games let's add an orange stroke
    around the box to show that is the current game for that week." Follow-
