@@ -782,7 +782,17 @@
     if (!seed) return '';
     const name = playoffTeamShortName(seed.teamLabel);
     const isUs = isBengalsRow({ team: seed.teamLabel });
-    const badge = window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '';
+    // Nathan: "Use the Bengals logo for the Ayer/Shirley/Lunenburg team
+    // logo." opponentBadgeHtml has no idea "Ayer/Shirley/Lunenburg" is US
+    // (it's CMYFCC's own name for our program, not "Bengals") -- it fell
+    // through to the generic initials-circle fallback every OTHER
+    // unrecognized team gets. Same real logo asset js/schedule.js's own
+    // bengalsBadgeHtml uses everywhere else in the app (not exposed on
+    // window, so matched here directly rather than adding a new export
+    // for one line of markup).
+    const badge = isUs
+      ? '<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>'
+      : (window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '');
     return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
         <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
         ${badge}
