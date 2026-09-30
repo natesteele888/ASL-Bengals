@@ -349,7 +349,16 @@
       // own example: "I > Wing > Right > Overload > Right > Sweep >
       // Right" (the trailing side matches Wing/Overload's own Right, not
       // an opposite value).
-      { card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
+      // Nathan: "I Wing Left Pop Pass doesn't need to have left or right as
+      // a direction on the play. It's just choosing the wing side" -- a
+      // noDirection play (Play.noDirection, real card's own Dir L/R toggle
+      // hidden, direction synced to wingSide) has no independent direction
+      // call at all, same reasoning Jumbo's own recipe already established
+      // (see RECIPES.jumbo below) -- a trailing "Direction: X" card would
+      // just restate the wing-side card that already fired a few steps
+      // earlier in this same sequence.
+      { when: function (c) { return !c.noDirection; },
+        card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
     ],
 
@@ -376,7 +385,9 @@
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
-      { card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
+      // Same noDirection guard as RECIPES.i above -- see its own comment.
+      { when: function (c) { return !c.noDirection; },
+        card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
     ],
 
