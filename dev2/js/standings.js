@@ -106,6 +106,34 @@
     return { teams, rawText, divisionKey: ourRow.divisionKey };
   }
 
+  // Nathan: "CYMFCC site also has a playoff ladder that I want to
+  // incorporate." Same real, public, unauthenticated API as
+  // fetchCmyfccStandings above -- confirmed live (not guessed) that its
+  // response already carries a top-level playoffProjection array, one
+  // entry per division, each with a real seeded-bracket shape (seeds,
+  // byes, opening round, fixed semifinals, championship) rather than
+  // needing to be derived from the standings by hand. CMYFCC's own note
+  // field on this data is explicit that it's a live projection, not a
+  // locked bracket ("If the season ended today... This does not qualify,
+  // seed, or schedule any team") -- carried straight through to the UI
+  // rather than presented as final.
+  async function fetchCmyfccPlayoffProjection() {
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.playoffProjection)) {
+      throw new Error('CMYFCC response missing playoff projection data');
+    }
+    const ours = payload.playoffProjection.find(p => p.divisionKey === CMYFCC_OUR_DIVISION_KEY);
+    if (!ours) throw new Error(`No playoff projection posted yet for "${CMYFCC_OUR_DIVISION_KEY}".`);
+    return ours;
+  }
+
   // Nathan (follow-up): "Can we also utilize the CMYFCC website to also
   // pull in team game history for the other teams?" Same real API as
   // fetchCmyfccStandings above -- its own .games array already has every
@@ -736,11 +764,108 @@
     }
   }
 
+  // ---- Playoff Picture (Nathan: "CYMFCC site also has a playoff ladder
+  // that I want to incorporate.") A round-by-round list rather than a
+  // graphical bracket tree -- matches this app's own established card
+  // language everywhere else (Schedule, Recent Games) instead of
+  // introducing a wide, hard-to-read-on-a-phone diagram, and every real
+  // element (byes, opening round, fixed semifinals, championship) already
+  // has a natural "round" to sit under. Both divisions render -- a coach
+  // reasonably wants to see the other bracket too, not just ours -- with
+  // OUR OWN row highlighted wherever it appears (playoffSeedUs), reusing
+  // isBengalsRow's own fuzzy-match logic against a synthetic {team:
+  // teamLabel} object since that's all it ever reads.
+  function playoffTeamShortName(teamLabel) {
+    return (teamLabel || '').split(' · ')[0].trim();
+  }
+  function playoffSeedChipHtml(seed) {
+    if (!seed) return '';
+    const name = playoffTeamShortName(seed.teamLabel);
+    const isUs = isBengalsRow({ team: seed.teamLabel });
+    const badge = window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '';
+    return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
+        <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
+        ${badge}
+        <span class="scheduleTeamName">${escapeHtml(name)}</span>
+        <span class="scheduleTeamRecord">${escapeHtml(seed.record || '')}</span>
+      </span>`;
+  }
+  function playoffTbdChipHtml(text) {
+    return `<span class="playoffTbdChip">${escapeHtml(text)}</span>`;
+  }
+  function playoffMatchupRowHtml(leftHtml, rightHtml) {
+    return `<div class="playoffMatchupRow">
+        <div class="playoffMatchupSide">${leftHtml}</div>
+        <div class="playoffMatchupVs">vs</div>
+        <div class="playoffMatchupSide">${rightHtml}</div>
+      </div>`;
+  }
+  function playoffWinnerOfHtml(bracket, seedNums) {
+    const label = (seedNums || []).map(n => {
+      const s = bracket.seeds.find(x => x.seed === n);
+      return s ? `#${n} ${playoffTeamShortName(s.teamLabel)}` : `#${n}`;
+    }).join(' / ');
+    return playoffTbdChipHtml(`Winner: ${label}`);
+  }
+  function playoffBracketHtml(bracket) {
+    const seedByNum = (n) => bracket.seeds.find(s => s.seed === n);
+    const byeRows = (bracket.byes || [])
+      .map(n => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(n)), playoffTbdChipHtml('BYE')))
+      .join('');
+    const openingRows = (bracket.openingRound || [])
+      .map(m => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(m.homeSeed)), playoffSeedChipHtml(seedByNum(m.awaySeed))))
+      .join('');
+    const semiRows = (bracket.semifinals || [])
+      .map(sf => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(sf.fixedSeed)), playoffWinnerOfHtml(bracket, sf.winnerOf)))
+      .join('');
+    const champHtml = bracket.championship
+      ? playoffMatchupRowHtml(playoffTbdChipHtml('Winner: Semifinal 1'), playoffTbdChipHtml('Winner: Semifinal 2'))
+      : '';
+    return `
+      <div class="playoffBracketCard">
+        <div class="lbSectionHeader">${escapeHtml(bracket.label || ('Division ' + bracket.division))}</div>
+        ${byeRows ? `<div class="playoffRoundLabel">First-Round Bye</div>${byeRows}` : ''}
+        ${openingRows ? `<div class="playoffRoundLabel">Opening Round</div>${openingRows}` : ''}
+        ${semiRows ? `<div class="playoffRoundLabel">Semifinals</div>${semiRows}` : ''}
+        ${champHtml ? `<div class="playoffRoundLabel">Championship</div>${champHtml}` : ''}
+      </div>`;
+  }
+  async function loadPlayoffPicture() {
+    const wrap = document.getElementById('standingsPlayoffBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="hint" style="text-align:center;">Loading from CMYFCC…</div>';
+    try {
+      const projection = await fetchCmyfccPlayoffProjection();
+      const brackets = Array.isArray(projection.brackets) ? projection.brackets : [];
+      if (!brackets.length) {
+        wrap.innerHTML = '<div class="lbEmpty">No playoff projection posted yet.</div>';
+        return;
+      }
+      wrap.innerHTML =
+        (projection.note ? `<div class="lbSub" style="text-align:center;margin-bottom:14px;">${escapeHtml(projection.note)}</div>` : '') +
+        brackets.map(playoffBracketHtml).join('');
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbEmpty">Couldn't load the playoff picture from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
   function showStandingsList() {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
+    const playoffPanel = document.getElementById('standingsPlayoffDetail');
     if (listPanel) listPanel.style.display = '';
     if (detailPanel) detailPanel.style.display = 'none';
+    if (playoffPanel) playoffPanel.style.display = 'none';
+  }
+
+  function showPlayoffPicture() {
+    const listPanel = document.getElementById('standingsListPanel');
+    const detailPanel = document.getElementById('standingsOpponentDetail');
+    const playoffPanel = document.getElementById('standingsPlayoffDetail');
+    if (listPanel) listPanel.style.display = 'none';
+    if (detailPanel) detailPanel.style.display = 'none';
+    if (playoffPanel) playoffPanel.style.display = '';
+    loadPlayoffPicture();
   }
 
   let backBtnWired = false;
@@ -752,6 +877,10 @@
     if (!backBtnWired) {
       const backBtn = document.getElementById('standingsOpponentBackBtn');
       if (backBtn) { backBtn.addEventListener('click', showStandingsList); backBtnWired = true; }
+      const playoffBackBtn = document.getElementById('standingsPlayoffBackBtn');
+      if (playoffBackBtn) { playoffBackBtn.addEventListener('click', showStandingsList); }
+      const playoffOpenBtn = document.getElementById('standingsPlayoffOpenBtn');
+      if (playoffOpenBtn) { playoffOpenBtn.addEventListener('click', showPlayoffPicture); }
     }
     showStandingsList();
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';

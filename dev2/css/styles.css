@@ -3084,6 +3084,31 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .standingsTrendDown { color: #c62828; }
 .standingsTrendSame { color: var(--muted); }
 
+/* ---- Playoff Picture (js/standings.js) -- Nathan: "CYMFCC site also has
+   a playoff ladder that I want to incorporate." Real matchup content
+   (hypothetical, but genuine games a team could actually play), so this
+   deliberately reuses the SAME always-dark scoreboard family Schedule's
+   own game cards use (.scheduleTeamName/.scheduleTeamRecord, both white/
+   light-grey text) rather than the Standings table's own light/theme-
+   aware colors right above -- "a scoreboard reads like a scoreboard"
+   applies here too, and it's what lets opponentBadgeHtml's own team
+   badges and text sit on the same card with zero new color variants. ---- */
+.playoffBracketCard { background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 14px; margin-bottom: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.playoffRoundLabel { font-size: 10.5px; font-weight: 900; color: #9aa4ae; text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 6px; }
+.playoffRoundLabel:first-of-type { margin-top: 4px; }
+.playoffMatchupRow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #2c333b; }
+.playoffRoundLabel + .playoffMatchupRow { border-top: none; }
+.playoffMatchupSide { flex: 1; min-width: 0; }
+.playoffMatchupVs { flex: 0 0 auto; font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; }
+.playoffSeedChip { display: flex; align-items: center; gap: 8px; }
+.playoffSeedChip .scheduleTeamBadge { width: 30px; height: 30px; min-width: 30px; min-height: 30px; max-width: 30px; max-height: 30px; font-size: 10px; }
+.playoffSeedChip .scheduleTeamName { max-width: none; white-space: normal; }
+.playoffSeedNum { flex: 0 0 auto; font-size: 10px; font-weight: 900; color: #9aa4ae; min-width: 18px; }
+.playoffSeedChip.playoffSeedUs { position: relative; }
+.playoffSeedChip.playoffSeedUs .scheduleTeamName { color: var(--bengal-orange); }
+.playoffSeedChip.playoffSeedUs .playoffSeedNum { color: var(--bengal-orange); }
+.playoffTbdChip { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9aa4ae; font-style: italic; }
+
 /* ============================================================
    Game HUD preview theme -- see js/preview-theme.js for how the
    .gameHudPreview class gets onto <html> (a per-device localStorage flag,
