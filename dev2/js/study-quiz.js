@@ -589,9 +589,22 @@ function logQuizStart(kind){
 (function wireLogoPreviewHold(){
   const logo = document.getElementById('headerLogo');
   if (!logo) return;
+  logo.style.cursor = 'pointer';
   const HOLD_MS = 1400;
   let holdTimer = null;
-  function start(){ holdTimer = setTimeout(function(){ if (window.enterPlayerPreview) window.enterPlayerPreview(); }, HOLD_MS); }
+  // Nathan: "clicking the Bengals Logo or BENGALS wordmark should bring
+  // you back to the homepage." A plain click already does nothing here
+  // (the logo only ever had this hold gesture wired), so this is additive
+  // -- 'play' is the app's own real default/landing section (index.html's
+  // own boot sequence, and every nav tab's own click handler, already
+  // route through this exact same window.setSection('play') for "home").
+  // holdFired guards against the one real conflict: the browser still
+  // fires a click after a long-press's touchend/mouseup, which would
+  // otherwise navigate away the instant enterPlayerPreview() just turned
+  // it on -- skip navigating home that one time, since the coach clearly
+  // meant the hold gesture, not a tap home.
+  let holdFired = false;
+  function start(){ holdFired = false; holdTimer = setTimeout(function(){ holdFired = true; if (window.enterPlayerPreview) window.enterPlayerPreview(); }, HOLD_MS); }
   function cancel(){ if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; } }
   logo.addEventListener('touchstart', start, { passive: true });
   logo.addEventListener('touchend', cancel);
@@ -600,6 +613,22 @@ function logQuizStart(kind){
   logo.addEventListener('mousedown', start);
   logo.addEventListener('mouseup', cancel);
   logo.addEventListener('mouseleave', cancel);
+  logo.addEventListener('click', function(){
+    if (holdFired) { holdFired = false; return; }
+    if (typeof window.setSection === 'function') window.setSection('play');
+  });
+  // Nathan: "...or BENGALS wordmark..." -- the h1 sitting right next to
+  // the logo (the "ASL Bengals" title text every user actually sees; the
+  // real BENGALS decal image is a preview-theme-only easter egg, see its
+  // own comment in index.html). Same handler, no hold gesture on this one
+  // -- that's the logo image's own secret, not the title text's.
+  const wordmark = logo.closest('.headerRow') && logo.closest('.headerRow').querySelector('h1');
+  if (wordmark) {
+    wordmark.style.cursor = 'pointer';
+    wordmark.addEventListener('click', function(){
+      if (typeof window.setSection === 'function') window.setSection('play');
+    });
+  }
 })();
 
 function getLeaderboard(){
