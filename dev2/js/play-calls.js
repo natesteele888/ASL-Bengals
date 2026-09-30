@@ -4095,7 +4095,19 @@ function buildCard(combo, opts) {
       // custom formation's own name (e.g. "I") -- see its own comment,
       // above -- so this reads "I Right Inside Zone Right", matching how
       // a coach would actually call it, not always "Wing ...".
-      parts = [`${formationLabel} ${wingSide}`];
+      //
+      // Nathan, on "Jumbo": "Jumbo doesn't have a direction independent
+      // of Beast. So it's just Jumbo - then Beast Right or Left." A
+      // noDirection play's direction always EQUALS wingSide, so naming
+      // the side here (before the play's own name) AND again after it
+      // (parts.push(direction), below) said the same word twice --
+      // "Jumbo Right Beast Right." Dropped here, not at the end, so the
+      // side still reads naturally attached to the PLAY itself ("Jumbo
+      // Beast Right"), matching his own words exactly. Doesn't apply to
+      // directionOpposesWing (I's Sweep): direction is the OPPOSITE of
+      // wingSide there, so both words are real, distinct information
+      // ("I Right 4 Sweep Left"), not a repeat.
+      parts = combo.noDirection ? [formationLabel] : [`${formationLabel} ${wingSide}`];
       // Nathan: "when overload is chosen on a play, it should be added
       // to the play name after the formation call. So this play would
       // be I Left Overload Left 4Sweep Right." Same slot RECIPES.i's own
