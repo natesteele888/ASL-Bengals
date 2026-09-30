@@ -1714,6 +1714,12 @@ function syncToggleAvailabilityUI() {
   if (!state.currentPlay || !els.pbAllowBootCheckbox) return;
   els.pbAllowBootCheckbox.checked = !state.currentPlay.noBoot;
   els.pbAllowMotionCheckbox.checked = !state.currentPlay.noMotion;
+  // Nathan: "The run can only go to the same side as the wing... No
+  // exceptions." Unlike Boot/Motion (plain on/off, defaults to allowed),
+  // this one defaults to OFF (independent direction) -- every play that
+  // predates this checkbox already relies on Direction being a real,
+  // separate toggle.
+  if (els.pbLockDirectionToWingCheckbox) els.pbLockDirectionToWingCheckbox.checked = !!state.currentPlay.noDirection;
 }
 
 // Shared by the top "SIGNAL" dropdown AND the inline picker on the play's
@@ -2413,6 +2419,12 @@ function bindSidebar() {
     if (els.pbAllowMotionCheckbox.checked) delete state.currentPlay.noMotion;
     else state.currentPlay.noMotion = true;
   });
+  if (els.pbLockDirectionToWingCheckbox) {
+    els.pbLockDirectionToWingCheckbox.addEventListener('change', () => {
+      if (els.pbLockDirectionToWingCheckbox.checked) state.currentPlay.noDirection = true;
+      else delete state.currentPlay.noDirection;
+    });
+  }
 
   els.pbSignalSelect.addEventListener('change', () => {
     applyPlaySignalId(els.pbSignalSelect.value ? Number(els.pbSignalSelect.value) : null);
@@ -2511,6 +2523,7 @@ async function init() {
   els.pbNewVariantBtn = q('pbNewVariantBtn');
   els.pbAllowBootCheckbox = q('pbAllowBootCheckbox');
   els.pbAllowMotionCheckbox = q('pbAllowMotionCheckbox');
+  els.pbLockDirectionToWingCheckbox = q('pbLockDirectionToWingCheckbox');
   els.pbSignalSelect = q('pbSignalSelect');
   els.pbSignalPreviewImg = q('pbSignalPreviewImg');
   els.pbSignalResetBtn = q('pbSignalResetBtn');

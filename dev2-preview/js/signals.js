@@ -191,7 +191,7 @@
   // read in one place, and a play can override it -- see sequenceFor().
   //
   // Card ids referenced by name so the recipes stay readable.
-  var WING_TOUCH = 7, SPLIT_TOUCH = 31, I_TOUCH = 33, FIVE_GUYS_TOUCH = 34, BOOT = 26, COUNTER = 18, POP2 = 29,
+  var WING_TOUCH = 7, SPLIT_TOUCH = 31, I_TOUCH = 33, FIVE_GUYS_TOUCH = 34, JUMBO_TOUCH = 36, BOOT = 26, COUNTER = 18, POP2 = 29,
       QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29;
   // "WING LOCATION" already exists as a real, photographed 2-photo pool (7,
   // 8, data/cards.json -- Nathan: "Wing (signal 7 or 8)") from Wing's own
@@ -390,6 +390,21 @@
       { card: function (c) { return pickFinger(c.wingSide); },
         label: function (c) { return '5 Guys: ' + c.wingSide; } },
     ],
+
+    // "Jumbo": Nathan, on the play itself -- "The run can only go to the
+    // same side as the wing on this play... No exceptions" -- every
+    // Jumbo play is noDirection (direction locked to wingSide, see
+    // js/play-calls.js's own wingToggle onChange), so a separate
+    // "Direction: X" card would just restate the wing-side card that
+    // already fired -- same reasoning "5 Guys" already established for
+    // its own recipe, just with a real play card in the middle (unlike
+    // "5 Guys", called verbally with no signal at all).
+    jumbo: [
+      { card: JUMBO_TOUCH, label: 'Jumbo' },
+      { card: function (c) { return (c.wingFinger = pickFinger(c.wingSide)); },
+        label: function (c) { return 'Jumbo: ' + c.wingSide; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
+    ],
   };
 
   function isBlast(k) { return k === 'blast' || k === 'double_blast'; }
@@ -479,7 +494,7 @@
     // buildSignalSequencePreview) can show the real photo too, for
     // "i" and any future custom formation that gets one, not just
     // re-derive Wing/Split's own hardcoded ids a second time.
-    TOUCH_CARD_BY_FORMATION: { wing: WING_TOUCH, split: SPLIT_TOUCH, i: I_TOUCH, '5-guys': FIVE_GUYS_TOUCH, 'i-wing': I_TOUCH },
+    TOUCH_CARD_BY_FORMATION: { wing: WING_TOUCH, split: SPLIT_TOUCH, i: I_TOUCH, '5-guys': FIVE_GUYS_TOUCH, 'i-wing': I_TOUCH, jumbo: JUMBO_TOUCH },
     I_FORMATION: I_TOUCH,
     OVERLOAD: OVERLOAD,
     PASS_POCKET: 103,
