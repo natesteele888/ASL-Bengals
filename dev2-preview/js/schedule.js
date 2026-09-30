@@ -2092,7 +2092,18 @@
         // current-week behavior (see the bottom of this function) would
         // have nothing to land on during a bye, defeating its own purpose.
         const byeIsCurrentWeek = window.isDateInCurrentWeek && window.isDateInCurrentWeek(g.date);
-        row.className = 'scheduleRow scheduleRowBye' + (byeIsCurrentWeek ? ' scheduleRowCurrentWeek' : '');
+        // Nathan, live: "Bye week is still black - think it is still
+        // looking for results which it won't get." Correct diagnosis --
+        // scheduleRowFinal (the new lighter-background treatment) is only
+        // ever added once resultFor(g) finds a real score, and a bye has
+        // no score to find, by definition, so it stayed on the plain dark
+        // .scheduleRow background forever, even long after the week it
+        // covers has passed. A bye "completes" simply by its date passing,
+        // not by a score existing -- hasEventPassed with no time argument
+        // already means "end of that calendar day," the right bar for a
+        // bye, which has no kickoff time either.
+        const byeIsPast = hasEventPassed(g.date);
+        row.className = 'scheduleRow scheduleRowBye' + (byeIsPast ? ' scheduleRowFinal' : '') + (byeIsCurrentWeek ? ' scheduleRowCurrentWeek' : '');
         row.innerHTML = `${weekBadge}<span class="scheduleByeText">Bye Week</span>`;
         row.addEventListener('click', () => openDetail(g.id));
         listEl.appendChild(row);
