@@ -314,8 +314,20 @@
       '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px">' +
       '    <input type="checkbox" id="pbAllowBootCheckbox" checked> Allow Boot' +
       '  </label>' +
-      '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer">' +
+      '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px">' +
       '    <input type="checkbox" id="pbAllowMotionCheckbox" checked> Allow Motion' +
+      '  </label>' +
+      // Nathan, on "Jumbo": "The run can only go to the same side as the
+      // wing on this play. If it's Wing L the direction HAS TO BE LEFT.
+      // If it's Wing R the direction HAS TO BE RIGHT. No exceptions."
+      // Same mechanism "5 Guys" already uses under the hood
+      // (Play.noDirection -- syncs direction to MATCH wingSide and hides
+      // the now-redundant Dir L/R toggle), just never exposed as a real
+      // checkbox here before -- every prior use of it was set by script.
+      // Unchecked (independent direction) by default, matching every
+      // play that predates this checkbox.
+      '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer">' +
+      '    <input type="checkbox" id="pbLockDirectionToWingCheckbox"> Lock Direction to Wing side' +
       '  </label>' +
       '  <div class="hint" style="margin-top:8px">Counter / Read A-B / Inside-Outside / Pop Variant: pick one when you hit "+ New Variant" above.</div>' +
       '</div>' +
