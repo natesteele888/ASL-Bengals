@@ -408,8 +408,8 @@
     }
 
     const base = `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${openerPart}${seriesPart}`;
-    const statsText = teamLeadersAndAveragesText(allGames);
-    return statsText ? `${base} ${statsText}` : base;
+    const tendenciesText = bengalsScoringTendenciesText(allGames);
+    return tendenciesText ? `${base} ${tendenciesText}` : base;
   }
 
   // Nathan: "since you have game stats and history on all teams, we should
@@ -501,36 +501,33 @@
     const v = Number(n) || 0;
     return Number.isInteger(v) ? String(v) : v.toFixed(1);
   }
-  function teamLeadersAndAveragesText(allGames) {
-    const { byNum, playedGames, CATS } = teamSeasonAggregate(allGames);
-    const players = Object.values(byNum);
-    if (!players.length || !playedGames.length) return '';
-
-    // Lead with whichever offensive category the team has actually put up
-    // the most total yards in this season -- e.g. a run-heavy team gets a
-    // rushing leader/average called out, a pass-heavy team gets passing.
-    const offenseTotals = CATS.filter(c => c.key !== 'koYds').map(c => ({ ...c, total: players.reduce((s, p) => s + p[c.key], 0) }));
-    const topOffense = offenseTotals.sort((a, b) => b.total - a.total)[0];
-
-    const leaderLines = [];
-    if (topOffense && topOffense.total > 0) {
-      const leader = players.slice().sort((a, b) => b[topOffense.key] - a[topOffense.key])[0];
-      if (leader && leader[topOffense.key] > 0) {
-        leaderLines.push(`#${leader.num}${leader.name ? ' ' + escapeHtml(leader.name) : ''} leads the team in ${topOffense.label} (${formatNum(leader[topOffense.key])}).`);
-      }
-    }
-    const tacklesLeader = players.slice().sort((a, b) => b.tackles - a.tackles)[0];
-    if (tacklesLeader && tacklesLeader.tackles > 0) {
-      leaderLines.push(`#${tacklesLeader.num}${tacklesLeader.name ? ' ' + escapeHtml(tacklesLeader.name) : ''} leads the defense with ${formatNum(tacklesLeader.tackles)} tackles.`);
-    }
-
-    const avgParts = [];
-    if (topOffense && topOffense.total > 0) avgParts.push(`${formatNum(topOffense.total / playedGames.length)} ${topOffense.label}`);
-    const totalTackles = players.reduce((s, p) => s + p.tackles, 0);
-    if (totalTackles > 0) avgParts.push(`${formatNum(totalTackles / playedGames.length)} tackles`);
-    const avgLine = avgParts.length ? ` The Bengals are averaging ${avgParts.join(' and ')} per game this season.` : '';
-
-    return `${leaderLines.join(' ')}${avgLine}`.trim();
+  // Nathan: "for game previews don't mention stats as those have not been
+  // consistently kept. speak to the score tendencies, power rankings,
+  // matchups and all that to scope the game." Replaces the old
+  // teamLeadersAndAveragesText (removed) -- that one depended on every
+  // game's statSheet being filled in, which isn't reliable, so a preview
+  // could confidently name a "leader" who's actually just whoever's stats
+  // happened to get entered. Final score, by contrast, is exactly what a
+  // W-L record already needs, so it's tracked for every completed game
+  // without exception -- same math/wording as buildOpponentScoutingText's
+  // own read on the opponent (below), so the Bengals' own tendency reads
+  // as a direct, apples-to-apples comparison rather than a differently-
+  // shaped afterthought.
+  function bengalsScoringTendenciesText(allGames) {
+    const played = (allGames || []).filter(countsTowardRecord).filter(g => resultFor(g));
+    if (!played.length) return '';
+    let pf = 0, pa = 0;
+    played.forEach(g => { pf += Number(g.ourScore) || 0; pa += Number(g.oppScore) || 0; });
+    const gp = played.length;
+    const avgPf = (pf / gp).toFixed(1);
+    const avgPa = (pa / gp).toFixed(1);
+    const avgMargin = (pf - pa) / gp;
+    let strengthPart;
+    if (avgMargin >= 8) strengthPart = 'a strong, high-scoring team';
+    else if (avgMargin <= -8) strengthPart = "a team that's struggled to find points";
+    else if (Number(avgPa) < 8) strengthPart = "a defense that's been tough to score on";
+    else strengthPart = "a team that's been fairly even with opponents";
+    return `The Bengals are averaging ${avgPf} points scored and ${avgPa} allowed per game this season -- ${strengthPart}.`;
   }
 
   // Nathan: "make an AI write up of some of the game highlights based on
@@ -1444,13 +1441,24 @@
     const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
     const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
     const centerHtml = result ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>` : `<span class="scheduleRowCenter">${badge}</span>`;
+    // Nathan: "if you click on a logo of one of the opponent's it should go
+    // to that teams page." A plain span (not a nested <button>) wrapping
+    // just the away-side badge -- row is already a <button>, and this
+    // codebase's own established pattern for "one clickable thing inside
+    // another" is a span + its own click listener that stops the tap from
+    // also firing the row's. This function only returns markup; it's up to
+    // each caller to actually wire the listener (see js/standings.js's
+    // loadOpponentRecentForm, the one place this was asked for) -- left
+    // inert everywhere else (this same row also renders schedule.js's own
+    // "Last 5 Games"/"Vs Opponent" panel, which keeps its existing
+    // click-the-whole-row-to-open-the-game behavior unchanged).
     return `
       <button type="button" class="scheduleRow last5Row${result ? ' scheduleRowFinal' : ''}" data-game-id="${escapeHtml(g.id)}">
         <span class="scheduleRowDate">${fmtDate(g.date)}</span>
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
           ${centerHtml}
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
+          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${opponentBadgeHtml(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
         </span>
       </button>`;
   }
@@ -1496,11 +1504,11 @@
       const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       const list = played.slice(0, 5);
       const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div>${tabsHtml}<div class="last5List">${rowsHtml}</div>`;
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div>${tabsHtml}<div class="last5List">${rowsHtml}</div>`;
       wireUp();
       return;
     }
-    wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Form</div>${tabsHtml}<div class="last5List"><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
+    wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div>${tabsHtml}<div class="last5List"><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     wireUp();
     if (!window.fetchCmyfccRecentGamesFor || !forOpponent || isByeWeek) {
       const listEl = wrap.querySelector('.last5List');
