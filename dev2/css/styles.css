@@ -2383,8 +2383,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .scheduleRow.scheduleRowFinal { padding: 8px 14px; gap: 6px; }
 .scheduleRow.scheduleRowFinal .scheduleRowMatchup { margin: auto 0; }
 /* Nathan: "the other cards for upcoming games let's add an orange stroke
-   around the box to show that is the current game for that week." */
-.scheduleRow.scheduleRowCurrentWeek { border: 2px solid var(--bengal-orange); }
+   around the box to show that is the current game for that week." Follow-
+   up, with the schedule's own auto-scroll-to-here behavior added
+   alongside this (js/schedule.js's renderList): "make the stroke around
+   the current weeks game bigger and add a glow" -- this is now the actual
+   landing target when the Games tab opens, so it needs to read as clearly
+   "you are here" at a glance, not just a subtle accent. */
+.scheduleRow.scheduleRowCurrentWeek { border: 3px solid var(--bengal-orange); box-shadow: 0 0 0 4px rgba(255,106,19,.25), 0 0 22px rgba(255,106,19,.55), 0 2px 6px rgba(0,0,0,.25); }
 /* "See Game Stats" reuses .scheduleKeepStatsBtn's own pill shape but in a
    neutral tone -- a completed game's stats are already locked in, not an
    action still waiting to be done, so it shouldn't read as the same

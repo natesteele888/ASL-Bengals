@@ -1991,7 +1991,7 @@
   }
 
   // ---- Cloud load/save ----
-  function loadGames() {
+  function loadGames(scrollToCurrent) {
     const statusEl = document.getElementById('scheduleCloudStatus');
     if (statusEl) statusEl.textContent = 'Loading schedule…';
     const gamesFetch = window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -1999,7 +1999,7 @@
       .catch(err => { console.error('Could not load schedule:', err); if (statusEl) statusEl.textContent = 'Could not reach the cloud -- showing nothing saved yet.'; });
     return Promise.all([gamesFetch, loadOpponentLogos()]).then(() => {
       if (statusEl) statusEl.textContent = '';
-      renderList();
+      renderList(scrollToCurrent);
     });
   }
 
@@ -2022,7 +2022,20 @@
   }
 
   // ---- List view ----
-  function renderList() {
+  // Nathan: "the schedule is difficult to understand. When you open the
+  // schedule it shows you the jamboree results and you need to scroll way
+  // down... bring it to the top when the schedule is launched. You can
+  // then scroll back up to past games or down to future games." The list
+  // itself STAYS plain chronological (Nathan's own earlier, still-valid
+  // "list every game first to last" call, see the comment a few lines
+  // down) -- this only changes where the view LANDS when the Games tab is
+  // freshly opened, not the order. scrollToCurrent is true only from the
+  // real "opening/reopening this tab" call sites (loadGames()'s first-ever
+  // load, and initSchedule()'s "already loaded, tab reopened" branch) --
+  // NOT from closeDetail()'s own renderList() call, so returning from
+  // editing/reviewing some OTHER game doesn't yank the coach back to the
+  // current week and lose the spot they were just looking at.
+  function renderList(scrollToCurrent) {
     const listEl = document.getElementById('scheduleList');
     const addWrap = document.getElementById('scheduleAddWrap');
     if (!listEl) return;
@@ -2066,7 +2079,12 @@
       // the normal detail/edit view (e.g. to jot a note) like any other
       // entry.
       if (g.gameType === 'Bye') {
-        row.className = 'scheduleRow scheduleRowBye';
+        // Same current-week flag the real matchup card gets below -- a bye
+        // week is still "this week," and without this the auto-scroll-to-
+        // current-week behavior (see the bottom of this function) would
+        // have nothing to land on during a bye, defeating its own purpose.
+        const byeIsCurrentWeek = window.isDateInCurrentWeek && window.isDateInCurrentWeek(g.date);
+        row.className = 'scheduleRow scheduleRowBye' + (byeIsCurrentWeek ? ' scheduleRowCurrentWeek' : '');
         row.innerHTML = `${weekBadge}<span class="scheduleByeText">Bye Week</span>`;
         row.addEventListener('click', () => openDetail(g.id));
         listEl.appendChild(row);
@@ -2226,6 +2244,22 @@
         window.loadCompactWeatherInto(document.getElementById(weatherId), g.location, g.date, g.gameTime || g.time || '');
       }
     });
+    if (scrollToCurrent) {
+      // rAF, not a plain synchronous call -- listEl was just rebuilt from
+      // innerHTML='' above, and scrollIntoView needs the new rows' real
+      // layout (heights/positions) to already be committed, not the stale
+      // pre-rebuild layout still in this same tick.
+      requestAnimationFrame(() => {
+        const target = listEl.querySelector('.scheduleRowCurrentWeek')
+          // No current-week game at all (off-season, or a gap between a
+          // finished game and the next one's own real "current week" not
+          // having started yet) -- land on the first genuinely upcoming
+          // game instead of leaving the coach stranded at the season
+          // opener's jamboree result.
+          || [...listEl.querySelectorAll('.scheduleRow')].find((row) => row.querySelector('.scheduleResultBadge.upcoming'));
+        if (target) target.scrollIntoView({ block: 'center' });
+      });
+    }
   }
 
   // ---- Detail view (read-only for everyone, edit inputs added on top for an approved coach) ----
@@ -2891,11 +2925,11 @@
     wireControls();
     if (!loaded) {
       loaded = true;
-      gamesReadyPromise = loadGames();
+      gamesReadyPromise = loadGames(true);
     } else {
       document.getElementById('scheduleDetail').style.display = 'none';
       document.getElementById('scheduleListWrap').style.display = '';
-      renderList();
+      renderList(true);
     }
   };
 

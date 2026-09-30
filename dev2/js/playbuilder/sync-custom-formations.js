@@ -199,6 +199,87 @@ async function syncCustomFormationsIntoData() {
   });
 }
 
-window.PlayBuilderSyncCustomFormations = { syncCustomFormationsIntoData };
+// Nathan: "despite updating the play on play editor and saving it. It
+// won't update the play cards... Need to be able to edit and save and the
+// changes show up." Confirmed live this is Wing's OWN "Pop Pass" (formerly
+// built in Play Builder V2 under formationId 'shotgun', same id
+// seed-formations.js's Wing formation has always used) -- and Wing/Split
+// are the two formations syncCustomFormationsIntoData() above explicitly,
+// deliberately skips (the plan's own "Phase 7... POINT OF NO RETURN").
+// Investigated rather than just flipping that exclusion off: a full
+// Wing-wide sync would be genuinely unsafe RIGHT NOW, not just cautious for
+// its own sake -- toLegacyPlayType()'s own output for every real Wing play
+// is missing metadata Play Builder V2 never captured for it (isPass,
+// noSplit, noBoot, signalCardId -- confirmed directly against pop_pass's
+// own real Play Builder V2 record, which has none of them), and pop_pass
+// specifically ALSO has real, live, OLD-system-only content the adapter
+// has no equivalent for at all: directions.Right/.Left each carry TWO
+// named sub-keys, "Pop" and "Pop2" (the real "Pop Pass 2" toggle's own
+// alternate route+ball data), while Play Builder V2's record only has ONE
+// authored variant ("Base") -- a blanket replace would silently delete the
+// Pop2 content, not just show something slightly stale.
+//
+// Fix, scoped to exactly what's safe to ship today: a PER-PLAY merge,
+// triggered only when a coach actually saves that specific play through
+// Play Builder (js/playbuilder/editor.js's Save Play handler calls this
+// for any formationId in WING_SPLIT_BASE_VARIANT_KEY), not a blanket
+// formation-wide sync -- every OTHER Wing play keeps reading from its
+// real, live shipped-defaults.js/playEdits.json data completely
+// untouched, exactly as it does today, until it's specifically migrated
+// the same careful way. Metadata fields Play Builder V2 hasn't captured
+// yet are preserved from the CURRENT entry rather than dropped; a play
+// whose old data nests by variant (hasPopVariant/hasCounter/
+// hasInsideOutside) gets ONLY its own named base sub-key replaced, every
+// other named variant left byte-for-byte as it already is.
+const WING_SPLIT_BASE_VARIANT_KEY = {
+  // formationId -> { playId -> which existing directions.Right/.Left
+  // sub-key Play Builder V2's own single "Base" variant represents, for a
+  // play whose old data nests by variant instead of being a flat leaf.
+  // Add an entry by hand as each further Wing/Split play gets migrated --
+  // deliberately explicit, never inferred, since guessing wrong would
+  // silently overwrite the wrong named variant's real, live data.
+  shotgun: { pop_pass: 'Pop' },
+};
+
+async function mergeWingSplitPlayIntoData(play) {
+  // Gate on explicit membership in WING_SPLIT_BASE_VARIANT_KEY, not just
+  // formationId -- called unconditionally from editor.js's Save Play
+  // button for every formation, so this is what keeps it a safe no-op for
+  // every Wing/Split play that hasn't been individually vetted the way
+  // pop_pass was (see the big comment above). Add a play here only after
+  // confirming, the same way: does its old data nest by variant, and if
+  // so which sub-key is the default one this Base variant replaces.
+  const formationMap = WING_SPLIT_BASE_VARIANT_KEY[play.formationId];
+  if (!formationMap || !Object.prototype.hasOwnProperty.call(formationMap, play.id)) return;
+  if (!window.PlayBuilderLegacyAdapter || !window.DATA || !window.DATA.playTypes) return;
+  const data = await window.PlayBuilderStore.loadAll();
+  const formation = data.formations.find((f) => f.id === play.formationId);
+  const defenseLook = (data.defenseLooks || []).find((d) => d.id === data.activeDefenseLookId) || (data.defenseLooks || [])[0];
+  if (!formation || !defenseLook) return;
+  const legacy = window.PlayBuilderLegacyAdapter.toLegacyPlayType(play, formation, defenseLook, fbLegacyOptsFor(play));
+  const playTypes = window.DATA.playTypes;
+  const i = playTypes.findIndex((p) => p.key === legacy.key);
+  const variantKey = (WING_SPLIT_BASE_VARIANT_KEY[play.formationId] || {})[play.id];
+  if (i === -1) {
+    // No existing shipped entry at all (a genuinely new play authored
+    // straight in Play Builder for Wing/Split) -- nothing old to preserve.
+    delete legacy.authoredFormationId; // this IS a real, native Wing/Split play, not a foreign import
+    playTypes.push(legacy);
+    return;
+  }
+  const existing = playTypes[i];
+  const merged = Object.assign({}, existing, legacy);
+  delete merged.authoredFormationId; // see registerFormation/renderFormationPlays -- must never look "foreign" to its own formation's own grid
+  if (variantKey) {
+    merged.directions = {
+      Right: Object.assign({}, existing.directions.Right, { [variantKey]: legacy.directions.Right }),
+      Left: Object.assign({}, existing.directions.Left, { [variantKey]: legacy.directions.Left }),
+    };
+  }
+  playTypes[i] = merged;
+  window.PlayBuilderPlaysById[play.id] = play;
+}
+
+window.PlayBuilderSyncCustomFormations = { syncCustomFormationsIntoData, mergeWingSplitPlayIntoData };
 
 })();
