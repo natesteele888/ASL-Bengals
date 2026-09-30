@@ -2393,6 +2393,15 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    can't move a badge that isn't part of this flex flow at all. */
 .scheduleRow.scheduleRowFinal { padding: 22px 14px 8px; gap: 6px; }
 .scheduleRow.scheduleRowFinal .scheduleRowMatchup { margin: auto 0; }
+/* Nathan: "what would it look like if completed games also had a lighter
+   background once the game is complete so there is more visual
+   distinction." Previewed live at two strengths before shipping; this is
+   the stronger one he picked -- a lighter charcoal (still dark, not full
+   light-mode) that reads as "in the books" against the deeper near-black
+   of an upcoming card still ahead on the schedule. Border lightened to
+   match so the card's own outline doesn't look like a mismatched leftover
+   from the darker default. */
+.scheduleRow.scheduleRowFinal { background: linear-gradient(135deg, #3a4048 0%, #454d56 55%, #4a3d2e 100%); border-color: #5a6472; }
 /* Nathan: "the other cards for upcoming games let's add an orange stroke
    around the box to show that is the current game for that week." Follow-
    up, with the schedule's own auto-scroll-to-here behavior added
