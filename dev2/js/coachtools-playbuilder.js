@@ -174,6 +174,16 @@
       // doesn't fit that).
       '  <label style="' + LBL + 'margin-top:0">Color</label>' +
       '  <div id="pbColorSwatches" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>' +
+      // Nathan: "I need to be able to click on the 4 and have that be
+      // editable. So if I want it to say 92 or 65 for a player - I can."
+      // The "identifies players by jersey NUMBER" identification the
+      // Color field's own comment above already anticipated, now a real,
+      // editable field -- purely cosmetic (this circle's real slot id
+      // stays whatever it always was underneath; only the label shown on
+      // Play Builder's own canvas changes), and per-play by his own
+      // choice, not a formation-wide default.
+      '  <label style="' + LBL + '">Jersey #</label>' +
+      '  <input type="text" id="pbDisplayNumberInput" placeholder="e.g. 65" maxlength="3" style="width:100%;padding:9px;margin-bottom:10px">' +
       '  <div id="pbWingRouteToggleWrap" style="margin-bottom:10px">' +
       '    <label style="' + LBL + 'margin-top:0">Editing which shape?</label>' +
       '  </div>' +
