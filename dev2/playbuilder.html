@@ -27,7 +27,6 @@
   #pbPlayerPanel h3, #fbPlayerPanel h3 { margin-top: 0; }
   #pbPlayerPanel .field, #fbPlayerPanel .field { margin: 10px 0; }
   #pbPlayerPanel label, #fbPlayerPanel label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 3px; }
-  #pbPreviewLockNote { font-size: 12px; color: #b45309; background: #fff7e6; border: 1px solid #f0d090; border-radius: 6px; padding: 8px; margin-bottom: 10px; }
   select, input[type=number], input[type=text] { width: 100%; padding: 6px; font-size: 13px; }
   button.primary { padding: 8px 14px; font-size: 13px; cursor: pointer; }
   #pbStatus, #fbStatus { font-size: 12px; color: #777; padding: 0 14px; }
@@ -95,7 +94,6 @@
     </div>
     <div id="pbPlayerPanel" style="display:none;border-top:1px solid #eee;margin-top:14px;padding-top:12px">
       <h3 id="pbPlayerLabel">#4</h3>
-      <div id="pbPreviewLockNote">Switch Wing/Direction back to R/R to edit -- editing always happens on the canonical (right-side) data; the toggles above are preview-only.</div>
       <div class="field" id="pbWingRouteToggle" style="display:none">
         <label>Editing which shape?</label>
         <div class="toggleGroup">
@@ -109,8 +107,9 @@
         <div class="toggleGroup" id="pbAlignmentEditToggle" style="display:none"></div>
       </div>
       <div class="field">
-        <!-- Regular (non-wing) positions only -- editor.js hides this for a wing player (their own Same/Cross-side toggle above covers it). Plain status text, not a control -- the field-wide Wing/Direction toggles above the field ARE the editing-target selector now; this just confirms what that currently means for this player. -->
+        <!-- Reverse-case status (Direction: Left, a non-default alignment, Wing: Left redistribution, Overload-opposite) -- hidden for the canonical case and for a wing player's own Same/Cross-side toggle above, which is a different axis. Built entirely by editor.js's render(). -->
         <div class="hint" id="pbDirectionEditToggle" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px"></div>
+        <button id="pbCaseActionBtn" class="toggleGroup" style="display:none;margin-top:6px;padding:6px 12px;cursor:pointer;font-size:12px"></button>
       </div>
       <div class="field">
         <label><input type="checkbox" id="pbHasBallCheckbox"> Has the ball</label>

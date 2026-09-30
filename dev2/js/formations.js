@@ -97,14 +97,18 @@
   var BUILT_IN = {
     wing: {
       id: 'wing',
-      // Nathan: "This formation is called shotgun - it's our base
-      // formation." Real, coach-facing display name only -- the internal
-      // id stays 'wing' (keyed everywhere: Firebase paths, DATA.playTypes'
-      // own implicit formation, the 'shotgun' alias below, this session's
-      // own Play Builder V2 schema id) and the Wing L/R TOGGLE (a
-      // different, formation-agnostic axis -- which side #4 lines up on,
-      // not this formation's own name) is deliberately untouched.
-      name: 'Shotgun',
+      // Nathan, correcting an earlier call from the same session ("This
+      // formation is called shotgun - it's our base formation"): "you are
+      // calling the wing formation (which is in shotgun) the shotgun
+      // formation. It should be the wing formation." Shotgun is the
+      // backfield/snap depth (still the internal id/type everywhere --
+      // Firebase paths, DATA.playTypes' own implicit formation, the
+      // 'shotgun' alias below, Play Builder V2's own schema id), not the
+      // formation's own name -- the name comes from the wing position
+      // (#4). Real, coach-facing display name only; the Wing L/R TOGGLE
+      // (a different, formation-agnostic axis -- which side #4 lines up
+      // on, not this formation's own name) is deliberately untouched.
+      name: 'Wing',
       // What the existing code calls this formation internally. play-calls.js
       // uses 'shotgun' as its string for the Wing look; keeping the alias here
       // means callers can pass either and the registry resolves it, which is

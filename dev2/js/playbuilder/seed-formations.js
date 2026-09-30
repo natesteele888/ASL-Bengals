@@ -16,7 +16,14 @@
 
 const SHOTGUN_FORMATION = {
   id: 'shotgun',
-  label: 'Shotgun',
+  // Nathan, correcting an earlier call from the same session: "you are
+  // calling the wing formation (which is in shotgun) the shotgun
+  // formation. It should be the wing formation." Shotgun is the
+  // backfield/snap depth (stays the internal id/type -- matches
+  // js/formations.js's own 'wing' registry entry, which keeps the same
+  // 'shotgun' id/alias for the identical reason), not the formation's
+  // own name -- that comes from the wing position (#4).
+  label: 'Wing',
   type: 'shotgun',
   wingPositionIds: [4],
   positions: [

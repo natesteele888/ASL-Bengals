@@ -174,7 +174,6 @@
       // doesn't fit that).
       '  <label style="' + LBL + 'margin-top:0">Color</label>' +
       '  <div id="pbColorSwatches" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>' +
-      '  <div class="hint" id="pbPreviewLockNote" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px"></div>' +
       '  <div id="pbWingRouteToggleWrap" style="margin-bottom:10px">' +
       '    <label style="' + LBL + 'margin-top:0">Editing which shape?</label>' +
       '  </div>' +
@@ -191,12 +190,15 @@
       '    <span id="pbAlignmentEditToggle" class="toggleGroup" style="display:none"></span>' +
       '  </div>' +
       '  <div style="margin-bottom:10px">' +
-      // Regular (non-wing) positions only -- editor.js hides this for a
-      // wing player (their own Same/Cross-side toggle above covers it).
-      // Plain status text, not a control -- the field-wide Wing/Direction
-      // toggles above the field ARE the editing-target selector now; this
-      // just confirms what that currently means for this player.
-      '    <div id="pbDirectionEditToggle" class="hint" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px"></div>' +
+      // Reverse-case status (Direction: Left, a non-default alignment,
+      // Wing: Left redistribution, Overload-opposite) -- hidden for the
+      // canonical case and for a wing player's own Same/Cross-side toggle
+      // above, which is a different axis. Nathan: "editing plays on the
+      // reverse of the standard play is so strange... I like the idea of
+      // quickly mirroring the play but having the ability to refine the
+      // paths." Built entirely by editor.js's render()/currentCaseFor().
+      '    <div id="pbDirectionEditToggle" class="hint" style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:6px"></div>' +
+      '    <button id="pbCaseActionBtn" class="navBtn secondary" style="display:none;width:auto;margin:0;padding:7px 14px"></button>' +
       '  </div>' +
       '  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px">' +
       '    <input type="checkbox" id="pbHasBallCheckbox"> Has the ball' +

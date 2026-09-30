@@ -455,7 +455,7 @@ function bind() {
     const formation = state.formations.find((f) => f.id === fbState.editingId);
     if (!formation) { q('fbStatus').textContent = 'Nothing to remove.'; return; }
     if (formation.id === 'shotgun' || formation.id === 'split') {
-      alert('Shotgun and Split are built in and can\'t be removed.');
+      alert('Wing and Split are built in and can\'t be removed.');
       return;
     }
 

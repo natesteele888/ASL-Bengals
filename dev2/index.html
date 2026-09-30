@@ -278,7 +278,7 @@
         <div class="pcTutorialHeader">🎛️ Every formation, its own calls</div>
         <div class="pcTutorialIllustration">
           <div class="mockPillRow">
-            <span class="mockPill">Shotgun</span><span class="mockPill active">Split</span>
+            <span class="mockPill">Wing</span><span class="mockPill active">Split</span>
           </div>
           <div class="mockPillRow">
             <span class="mockPill active">Split L</span><span class="mockPill">Split R</span>
@@ -1049,7 +1049,7 @@
       <label>Formation</label>
       <div class="toggle-group toggle-green" id="editFormationToggle">
         <span class="toggle-thumb"></span>
-        <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Shotgun</button>
+        <button class="toggle-btn" data-value="shotgun" aria-pressed="true">Wing</button>
         <button class="toggle-btn" data-value="split" aria-pressed="false">Split</button>
       </div>
     </div>
@@ -1310,7 +1310,7 @@
   </div>
   <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
   <div class="play-grid" id="playCallsGrid"></div>
-  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Shotgun or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
+  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Wing or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
 </div>
 
 
@@ -2307,7 +2307,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20260929f';
+  const BUILD_V = '20260929h';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
