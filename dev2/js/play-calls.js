@@ -834,11 +834,25 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl,
 }
 
 const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
-// Nathan, screenshot: "the defensive players are too bright, I want them to
-// be reduced by about 10% just so there is some visual difference between
-// the offense and defense." Was #1a3fae (26,63,174) -- each channel x0.9.
-const DEFENSE_COLOR = '#17399d';
-const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+// Nathan, screenshot (earlier): "the defensive players are too bright, I
+// want them to be reduced by about 10% just so there is some visual
+// difference between the offense and defense." Was #1a3fae (26,63,174) --
+// each channel x0.9, landing on #17399d -- still the same navy HUE as
+// NOBALL_COLOR below, just dimmer, so the actual confusion (two different
+// "roles" sharing one color family) was never really fixed, only muted.
+// Nathan (later, direct): "I need a way to make the defense look a little
+// more different than the offense so it's less confusing... as called out
+// several times, I want the colors to easily identify what that player is
+// doing on the play." A genuinely different hue (green, not used by any
+// offensive role below) rather than another shade of the same blue.
+// READKEY_COLOR had the same real problem, worse -- it was IDENTICAL to
+// BALL_COLOR, so the one defender a coach is told to watch read as "the
+// ball carrier" at a glance. Now a distinct gold, matching the same
+// "highlighted/watch this" meaning BALLSTART_COLOR's own gold already
+// carries on the offensive side, without being the same color as it
+// (defense gold is darker/more muted so the two don't read as one thing).
+const DEFENSE_COLOR = GAME_HUD_PREVIEW ? '#22c55e' : '#1a7a4a';
+const READKEY_COLOR = GAME_HUD_PREVIEW ? '#f1c40f' : '#b8860b';
 const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
 const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
@@ -2215,7 +2229,21 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     }
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
-    const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    // Real bug, found live: a position whose role genuinely SWITCHES
+    // between blocker and ball carrier depending on a live toggle (Jet
+    // Sweep's own #5/#6, via directionLeftHasBall/wingLeftHasBall) can
+    // have isBlocking baked true (his own default, non-carrying role)
+    // while effectiveBall is ALSO true for this specific render (he's
+    // the one actually carrying it right now) -- isBlocking checked
+    // first meant he showed blocking-orange even while actively
+    // carrying the ball, exactly the "colors should say what the player
+    // is doing" bug this whole pass exists to fix. Ball-carrier status
+    // is the more specific, more currently-true fact about a player on
+    // ANY given render, so it now wins outright; isBlocking only ever
+    // applies to whoever ISN'T credited with the ball on this exact
+    // combination of toggles -- a pure no-op for every position (O-line
+    // included) that never carries in the first place.
+    const color = effectiveBall ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
 
     const blockPoints = p.player != null ? blockRouteFor(p.player, effectiveBall) : null;
     if (blockPoints) points = blockPoints;
@@ -2781,7 +2809,12 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const lastRenderedPaths = [];
   function drawPath(p) {
-    const color = p.isBlocking ? BLOCK_COLOR : (p.ball ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    // Same priority fix as renderCardDiagram's own color formula above --
+    // ball-carrier status wins over a static isBlocking flag, not the
+    // other way around. A no-op for Split's own data today (no position
+    // there currently swaps roles the way Jet Sweep's #5/#6 do), kept in
+    // sync so the same rule holds if one ever does.
+    const color = p.ball ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
     const points = p.points;
     // Nathan: see the matching guard/comment in renderCardDiagram above --
     // same fix, same reason (a lineThenCurve route whose point count has
@@ -4603,24 +4636,32 @@ function buildCard(combo, opts) {
       // above -- so this reads "I Right Inside Zone Right", matching how
       // a coach would actually call it, not always "Wing ...".
       //
-      // Nathan, on "Jumbo": "Jumbo doesn't have a direction independent
-      // of Beast. So it's just Jumbo - then Beast Right or Left." A
-      // noDirection play's direction always EQUALS wingSide, so naming
-      // the side here (before the play's own name) AND again after it
-      // (parts.push(direction), below) said the same word twice --
-      // "Jumbo Right Beast Right." Dropped here, not at the end, so the
-      // side still reads naturally attached to the PLAY itself ("Jumbo
-      // Beast Right"), matching his own words exactly. Doesn't apply to
+      // Nathan (correction): "play should be called the same as the
+      // signals Jumbo Left Beast. not Jumbo Beast Left." The earlier
+      // version of this comment put the side word AFTER the play name
+      // for a noDirection play (reasoning it read more naturally
+      // attached to the play), but that doesn't match RECIPES.jumbo's
+      // (and RECIPES.i's, for double_blast_i/pop_pass_i/pop_pass_i-wing
+      // -- the same real gap, just not yet noticed there) own actual,
+      // already-shipped signal order: touch, wing-side finger card,
+      // THEN the play card, with no trailing repeat at all for a
+      // noDirection play (its own `when: !c.noDirection` guard on the
+      // trailing direction step). So the side word now goes in the
+      // SAME prefix slot every other formation already uses, and simply
+      // isn't repeated at the end for this case. Doesn't apply to
       // directionOpposesWing (I's Sweep): direction is the OPPOSITE of
       // wingSide there, so both words are real, distinct information
-      // ("I Right 4 Sweep Left"), not a repeat.
+      // ("I Right 4 Sweep Left"), not a repeat -- that play isn't
+      // noDirection, so the trailing push below still fires for it.
       //
       // Jet Sweep (5 Guys): Nathan -- "5 Guys Right Sweep Right goes to
       // the 5. 5 Guys Left Sweep Left goes to the 6" -- the SAME word
       // repeated IS the real, intended call for this specific
       // noDirection play (Play.repeatWingSideBeforePlay, opt-in -- see
-      // legacy-adapter.js's own comment), unlike Jumbo just above.
-      parts = (combo.noDirection && !combo.repeatWingSideBeforePlay) ? [formationLabel] : [`${formationLabel} ${wingSide}`];
+      // legacy-adapter.js's own comment) -- still gets BOTH the prefix
+      // (now unconditional, same as every other play) AND the trailing
+      // repeat (its own condition below), unchanged from before.
+      parts = [`${formationLabel} ${wingSide}`];
       // Nathan: "when overload is chosen on a play, it should be added
       // to the play name after the formation call. So this play would
       // be I Left Overload Left 4Sweep Right." Same slot RECIPES.i's own
@@ -4653,7 +4694,13 @@ function buildCard(combo, opts) {
       if (motionOn) parts.push('Motion');
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
-      parts.push(direction);
+      // Skipped for a noDirection play UNLESS it opts into repeating the
+      // side word (Jet Sweep) -- direction always equals wingSide here,
+      // already said once in the prefix above, so repeating it blindly
+      // would read "Jumbo Left Beast Left" instead of the real call,
+      // "Jumbo Left Beast." Every other play (independent direction, or
+      // directionOpposesWing's real opposite value) still gets it.
+      if (!combo.noDirection || combo.repeatWingSideBeforePlay) parts.push(direction);
       if (bootOn) parts.push('Boot');
       if (counterOn) parts.push('Counter');
       if (reverseOn) parts.push('Reverse');
@@ -4705,7 +4752,201 @@ window.buildGamePlanEditCard = function (entry, opts) {
 function buildGrid() {
   const grid = document.getElementById('playCallsGrid');
   grid.innerHTML = '';
-  renderFormationPicker(grid);
+  renderBallCarrierFilterBar(grid);
+  // renderFormationPicker does its own container.innerHTML = '' -- a
+  // second, nested host keeps that from wiping the filter bar just
+  // added above it (both would otherwise be fighting over the same
+  // top-level container).
+  const formationHost = document.createElement('div');
+  grid.appendChild(formationHost);
+  renderFormationPicker(formationHost);
+}
+
+// ---- "Who carries it?" filter (Nathan: "a way to filter all plays that
+// go to a certain position. Like, all plays that give the 3 back a hand
+// off. Or all plays designed to have the 6 run it"). A cross-formation
+// search, not a per-formation one -- #3 might carry on Inside Zone
+// (Wing), Dive (I), or a 5 Guys numbered call, so this can't live inside
+// any one formation's own grid.
+//
+// "Does this play ever hand #6 the ball" has to mean under ANY of the
+// play's own real toggle combinations, not just the one its tile happens
+// to open on -- Jet Sweep hands off to a different player depending on
+// Wing side alone, and I's "4 Sweep" depends on its own Heavy toggle too.
+// Brute-forces every reachable combination of direction/wingSide/
+// alignment values/Boot/Reverse/QB Sneak/Counter/Pop Pass 2 (the real
+// axes that can actually change WHO carries -- Motion/In-Out/Read A-B
+// never do, in any mechanism this whole rebuild has ever used, so
+// they're left out to keep this from blowing up combinatorially for no
+// real benefit) and records every position stage._lastRenderedPaths ever
+// credits with the ball (the exact same isBall flag that colors a route
+// red) across all of them. Capped in practice by there only being ~30
+// real plays with a handful of toggles each -- not cached, since this
+// only ever runs on an explicit tap, not on every page load.
+function cartesianBoolDims(dims) {
+  return dims.reduce((acc, dim) => {
+    const next = [];
+    acc.forEach((combo) => {
+      next.push(Object.assign({}, combo, { [dim]: false }));
+      next.push(Object.assign({}, combo, { [dim]: true }));
+    });
+    return next;
+  }, [{}]);
+}
+function cartesianAlignmentCombos(toggles) {
+  return (toggles || []).reduce((acc, toggle) => {
+    const next = [];
+    acc.forEach((combo) => {
+      (toggle.values || []).forEach((v) => {
+        next.push(Object.assign({}, combo, { [toggle.id]: v.id }));
+      });
+    });
+    return next.length ? next : acc;
+  }, [{}]);
+}
+// A Play Builder V2 play belongs to exactly one formation
+// (authoredFormationId), but a classic play has never worked that way --
+// "every play has always been available for" both Wing AND Split (see
+// renderFormationPlays' own built-in fallback), each with its own
+// completely separate rendering function/geometry (renderCardDiagram vs.
+// renderSplitDiagram). Nathan: "pop pass needs to be removed from the
+// Split formation" -- noSplit is the one real exception, a classic play
+// that opts OUT of the Split side specifically. Checked here so a
+// classic play's carrier set gets computed once per formation it's
+// ACTUALLY reachable from, not assumed to be the same under both.
+function reachableFormationIdsFor(combo) {
+  if (combo.authoredFormationId) return [combo.authoredFormationId];
+  return combo.noSplit ? ['wing'] : ['wing', 'split'];
+}
+function computeBallCarrierPositions(combo, formationId) {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const carriers = new Set();
+  const record = (stage) => {
+    (stage._lastRenderedPaths || []).forEach((p) => {
+      if (p.isBall && p.player != null) carriers.add(p.player);
+    });
+  };
+  if (formationId === 'split') {
+    // Split has its own, simpler toggle set (no direction/wingSide/
+    // alignment/Boot/Reverse at all -- see renderSplitDiagram's own
+    // signature) -- splitSide and the run/pass switch are the two axes
+    // that could plausibly change who carries; leftCall/rightCall are
+    // the OUTSIDE RECEIVERS' own route picks, left at buildPlayTile's
+    // same fixed default ('seattle') rather than enumerated, since
+    // neither ever reassigns who's credited with the snap/run itself.
+    ['Left', 'Right'].forEach((splitSide) => {
+      [false, true].forEach((passOn) => {
+        const stage = document.createElementNS(svgNS, 'svg');
+        document.body.appendChild(stage);
+        try {
+          window.renderSplitDiagram(stage, combo.playKey, splitSide,
+            combo.hasInsideOutside ? 'Outside' : null, 'A', 'seattle', 'seattle', passOn, null, 'pocket');
+          record(stage);
+        } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
+        document.body.removeChild(stage);
+      });
+    });
+    return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+  }
+  const alignmentCombos = cartesianAlignmentCombos(combo.alignmentToggles);
+  const boolDims = [];
+  if (!combo.noBoot) boolDims.push('boot');
+  if (combo.hasReverse) boolDims.push('reverse');
+  if (combo.hasQbSneak) boolDims.push('qbSneak');
+  if (combo.hasCounter) boolDims.push('counter');
+  if (combo.hasPopVariant) boolDims.push('popVariant');
+  const boolCombos = cartesianBoolDims(boolDims);
+  ['Right', 'Left'].forEach((direction) => {
+    ['Right', 'Left'].forEach((wingSide) => {
+      alignmentCombos.forEach((alignmentValues) => {
+        boolCombos.forEach((bools) => {
+          const stage = document.createElementNS(svgNS, 'svg');
+          document.body.appendChild(stage);
+          try {
+            window.renderCardDiagram(stage, combo.playKey, direction, wingSide, null, false, null,
+              false, !!bools.boot, null, !!bools.counter, !!bools.popVariant, formationId, false,
+              alignmentValues, !!bools.qbSneak, !!bools.reverse);
+            record(stage);
+          } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
+          document.body.removeChild(stage);
+        });
+      });
+    });
+  });
+  return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+}
+
+function renderBallCarrierFilterBar(container) {
+  const wrap = document.createElement('div');
+  wrap.className = 'pc-carrier-filter';
+  const toggleLink = document.createElement('button');
+  toggleLink.type = 'button';
+  toggleLink.className = 'lbLinkBtn';
+  toggleLink.textContent = '🔍 Filter plays by who carries it';
+  const pillGrid = document.createElement('div');
+  pillGrid.className = 'posPillGrid pc-carrier-pills';
+  pillGrid.style.display = 'none';
+  pillGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  for (let n = 1; n <= 6; n++) {
+    const pill = document.createElement('div');
+    pill.className = 'posPill';
+    pill.textContent = '#' + n;
+    pill.addEventListener('click', () => renderBallCarrierResults(container, n));
+    pillGrid.appendChild(pill);
+  }
+  toggleLink.addEventListener('click', () => {
+    const show = pillGrid.style.display === 'none';
+    pillGrid.style.display = show ? '' : 'none';
+    toggleLink.textContent = show ? '🔍 Hide ball-carrier filter' : '🔍 Filter plays by who carries it';
+  });
+  wrap.appendChild(toggleLink);
+  wrap.appendChild(pillGrid);
+  container.appendChild(wrap);
+}
+
+function renderBallCarrierResults(container, positionNum) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← Formations', () => buildGrid()));
+  const title = document.createElement('h3');
+  title.className = 'formation-play-title';
+  title.textContent = `Plays that can give #${positionNum} the ball`;
+  container.appendChild(title);
+  const hint = document.createElement('p');
+  hint.className = 'empty-note';
+  hint.style.marginTop = '0';
+  hint.textContent = 'Across every formation, under any toggle that reaches it -- not just each play’s own default look.';
+  container.appendChild(hint);
+  const gridEl = document.createElement('div');
+  gridEl.className = 'formation-play-grid';
+  container.appendChild(gridEl);
+  // One entry per (play, formation) PAIR, not per play -- a classic play
+  // reachable from both Wing and Split (see reachableFormationIdsFor)
+  // gets its own carrier set computed separately for each, since they're
+  // two completely different renderers/geometries; a Play Builder V2
+  // play only ever has the one formation it was authored for.
+  const matches = [];
+  buildPlayList().forEach((combo) => {
+    reachableFormationIdsFor(combo).forEach((formationId) => {
+      if (computeBallCarrierPositions(combo, formationId).includes(positionNum)) {
+        matches.push({ combo, formationId });
+      }
+    });
+  });
+  if (!matches.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.textContent = `No plays currently give #${positionNum} the ball.`;
+    gridEl.replaceWith(note);
+    return;
+  }
+  matches.forEach(({ combo, formationId }) => {
+    const formationMeta = window.Formations.get(formationId);
+    const formationLabel = (formationMeta && formationMeta.name) || 'Wing';
+    const tile = buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationLabel));
+    const nm = tile.querySelector('.play-tile-nm');
+    if (nm) nm.textContent = `${formationLabel} — ${combo.label}`;
+    gridEl.appendChild(tile);
+  });
 }
 
 function pcBackButton(label, onClick) {

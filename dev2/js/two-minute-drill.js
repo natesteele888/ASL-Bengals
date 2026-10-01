@@ -169,8 +169,13 @@
   }
 
   const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
-  const DEFENSE_COLOR = '#1a3fae';
-  const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+  // Same fix as js/play-calls.js's own DEFENSE_COLOR/READKEY_COLOR -- was a
+  // navy nearly identical to NOBALL_COLOR (and a read-key red identical to
+  // BALL_COLOR), confusing offense/defense on this diagram too. Kept in
+  // sync with that file's own constants so a kid sees the exact same
+  // color language in the 2-Minute Drill as on the real play cards.
+  const DEFENSE_COLOR = GAME_HUD_PREVIEW ? '#22c55e' : '#1a7a4a';
+  const READKEY_COLOR = GAME_HUD_PREVIEW ? '#f1c40f' : '#b8860b';
   const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
   const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
   const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
@@ -385,7 +390,12 @@
       }
 
       const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
-      const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : NOBALL_COLOR);
+      // Same priority fix as js/play-calls.js's own renderCardDiagram --
+      // ball-carrier status wins over a static isBlocking flag (a
+      // position whose role genuinely switches between blocker and
+      // carrier by toggle, like Jet Sweep's #5/#6, would otherwise show
+      // blocking-orange even while actively carrying).
+      const color = effectiveBall ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : NOBALL_COLOR);
 
       const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
       const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1
@@ -782,7 +792,9 @@
 
     const lastRenderedPaths = [];
     function drawPath(p) {
-      const color = p.isBlocking ? BLOCK_COLOR : (p.ball ? BALL_COLOR : NOBALL_COLOR);
+      // Same priority fix as above -- ball-carrier status wins over a
+      // static isBlocking flag.
+      const color = p.ball ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : NOBALL_COLOR);
       const points = p.points;
       // Nathan: same 4-point-only guard as the other lineThenCurve dispatch
       // above (and in play-calls.js/edit-plays.js) -- prevents a route
