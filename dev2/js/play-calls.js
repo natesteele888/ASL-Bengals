@@ -2867,6 +2867,11 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // which paths the ▶ animation actually plays. Matches Split, which
   // never filtered by selection to begin with.
   const lastRenderedPaths = stage._lastRenderedPaths;
+  // Moved up from just before authoredBallPath below (unchanged otherwise)
+  // so the new carrier pre-snap motion block, right below, can know who
+  // the real carrier is for THIS wingSide/direction before the snap even
+  // happens.
+  const wingAwareBallPath = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   // Nathan, "I Wing Left Dive Right": "still hikes the ball directly to
@@ -2909,6 +2914,43 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
         if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', pt.x); p4Entry.textEl.setAttribute('y', pt.y + 12); }
       });
       await wait(150 * speedMultiplier);
+    }
+  }
+
+  // Jet Sweep: Nathan -- "he can't start moving when the ball is snapped.
+  // he needs to start motioning over then the ball is snapped." A real
+  // pre-snap motion, same idea as #4's own Motion toggle just above, but
+  // generalized to WHOEVER the live, wingSide/direction-resolved carrier
+  // actually is (wingAwareBallPath's own 2nd leg -- the 1st is always just
+  // the snap-holder, {player:1}) instead of a hardcoded position id, and
+  // using HIS OWN authored route's own direction rather than a fixed
+  // wing-side swap (#4's own model has no route of his own to extrapolate
+  // from, just two static spots).
+  // Gated on Play.carrierPreSnapMotion so this is a no-op for every other
+  // play (nothing else sets it) -- ends EXACTLY at the carrier's own real,
+  // unchanged points[0], so the main reveal just below picks him up
+  // mid-stride with zero jump/glitch, rather than needing any change to
+  // the shared reveal/exchange-timing machinery every other play also
+  // relies on.
+  if (playType && playType.carrierPreSnapMotion && wingAwareBallPath && wingAwareBallPath[1]) {
+    const carrierId = wingAwareBallPath[1].player;
+    const carrierEntry = lastRenderedPaths.find(p => String(p.player) === String(carrierId) && p.circleEl && p.points && p.points.length > 1);
+    if (carrierEntry) {
+      const [p0x, p0y] = carrierEntry.points[0];
+      const [p1x, p1y] = carrierEntry.points[1];
+      // A modest head start along his own first leg's own direction,
+      // reversed -- he's already moving, arriving at his real lined-up
+      // spot (points[0], untouched) right as the ball is snapped, so the
+      // main route-reveal's own draw (starting there) reads as a
+      // continuation of the same motion, not a second, separate start.
+      const startPos = { x: p0x - (p1x - p0x) * 0.15, y: p0y - (p1y - p0y) * 0.15 };
+      const endPos = { x: p0x, y: p0y };
+      carrierEntry.circleEl.setAttribute('cx', startPos.x); carrierEntry.circleEl.setAttribute('cy', startPos.y);
+      if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', startPos.x); carrierEntry.textEl.setAttribute('y', startPos.y + 12); }
+      await tweenPoint(startPos, endPos, 900 * speedMultiplier, pt => {
+        carrierEntry.circleEl.setAttribute('cx', pt.x); carrierEntry.circleEl.setAttribute('cy', pt.y);
+        if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', pt.x); carrierEntry.textEl.setAttribute('y', pt.y + 12); }
+      });
     }
   }
 
@@ -2974,7 +3016,6 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // the rest of this function can stay one code path: the ball still follows
   // ONE `carrier` element at a time, there are just now N of them instead of
   // at most two.
-  const wingAwareBallPath = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn);
   const authoredBallPath = (window.BallPath && window.BallPath.isValid(wingAwareBallPath))
     ? window.BallPath.schedule(wingAwareBallPath, (player) => {
         const entry = lastRenderedPaths.find(p => String(p.player) === String(player) && p.circleEl);
