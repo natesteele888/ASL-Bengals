@@ -1109,12 +1109,18 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     const decoyPlayKey = decoyPlayKeys[Math.floor(Math.random() * decoyPlayKeys.length)];
     const decoyDirection = Math.random() < 0.5 ? 'Left' : 'Right';
     const decoyDirFingerId = randomFingerId(decoyDirection, sideFingerId);
+    // id added on each step (found auditing every play's sequence shape) --
+    // this special case predates runRecipe's {id,src,label} convention and
+    // never carried the raw card number, unlike every other recipe's own
+    // output. Didn't affect the real flip-card UI (reads src/label only),
+    // but silently broke js/gameplan-pdf.js's own compact numeric
+    // reference ("33 -> 3 -> 9 -> ...") for this one play specifically.
     return [
-      { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
-      { src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
-      { src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID[decoyPlayKey]], label: PLAY_TYPE_SIGNAL_LABEL[decoyPlayKey] },
-      { src: SIGNAL_CARDS[decoyDirFingerId], label: `Direction: ${decoyDirection}` },
-      { src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
+      { id: SPLIT_TOUCH_ID, src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
+      { id: sideFingerId, src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
+      { id: PLAY_TYPE_SIGNAL_ID[decoyPlayKey], src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID[decoyPlayKey]], label: PLAY_TYPE_SIGNAL_LABEL[decoyPlayKey] },
+      { id: decoyDirFingerId, src: SIGNAL_CARDS[decoyDirFingerId], label: `Direction: ${decoyDirection}` },
+      { id: QB_SNEAK_SIGNAL_ID, src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
     ];
   }
   const playType = DATA.playTypes.find(p => p.key === playKey);
@@ -1517,6 +1523,21 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
     const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
     return (assignment && assignment.wingLeftHasBall != null) ? assignment.wingLeftHasBall : ball;
+  };
+  // Jet Sweep ("5 Guys"): Nathan -- "Direction=Right -> 5 carries.
+  // Direction=Left -> 6 carries," independent of wing side (wing side only
+  // moves where everyone lines up, via wingLeftRouteFor above -- WHO
+  // carries is purely a function of Direction here). Same live-read
+  // pattern/stash as wingLeftHasBall, just keyed by direction instead --
+  // reads PlayerAssignment.directionLeftHasBall, the hasBall sibling of
+  // the already-existing overrides.left (route points) mechanism. Falls
+  // back to the leaf's own baked `ball` value when nothing overrides it,
+  // so safe to call unconditionally for every other play too.
+  const directionLeftHasBall = (positionId, ball) => {
+    if (direction !== 'Left' || positionId == null) return ball;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.directionLeftHasBall != null) ? assignment.directionLeftHasBall : ball;
   };
   // I's Sweep: Nathan: "When the 4 is out wide in I formation, the sweep
   // can no longer go to the 4. If the 4 is out of heavy, the ball would
@@ -2062,7 +2083,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       return;
     }
 
-    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, wingLeftHasBall(p.player, p.ball)));
+    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
     const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
