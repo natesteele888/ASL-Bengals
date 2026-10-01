@@ -191,6 +191,38 @@
     if (logo) return `<span class="scheduleTeamBadge hasLogo"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
     return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
   }
+  // Nathan: "make sure the bengals logo is used in other teams games" --
+  // compactGameRowHtml's right column always ran g.opponent through the
+  // generic opponentBadgeHtml lookup, which has no idea "Ayer/Shirley/
+  // Lunenburg" (CMYFCC's own registered name for OUR program, not
+  // "Bengals") is actually us -- it fell through to the same colored-
+  // initials placeholder any other unrecognized team gets. Invisible
+  // until this component started being reused for a THIRD-PARTY team's
+  // own recent-games list (js/standings.js's loadOpponentRecentForm),
+  // where we can legitimately show up as someone else's opponent --
+  // every row on our OWN schedule never has this problem, since we're
+  // never listed as our own opponent there. Same real logo asset
+  // bengalsBadgeHtml() already uses everywhere else -- the identical fix
+  // already proven once for this exact failure mode, in a different
+  // component (js/standings.js's own playoffSeedChipHtml / isBengalsRow).
+  // Token-overlap, not an exact string match, for the same reason that
+  // precedent uses it -- a coach's own typed Schedule opponent ("Ayer
+  // Shirley") won't exactly match CMYFCC's own registered name either.
+  const BENGALS_NAME_TOKENS = ['ayer', 'shirley', 'lunenburg'];
+  function isBengalsTeamName(name) {
+    const s = (name || '').toLowerCase();
+    if (/bengal/.test(s)) return true;
+    const tokens = s.split(/[^a-z0-9]+/).filter(Boolean);
+    return BENGALS_NAME_TOKENS.some((t) => tokens.includes(t));
+  }
+  // The one shared "which badge does this team name actually get" entry
+  // point -- used by compactGameRowHtml's own right column below, and
+  // exported so js/standings.js's 3 other badge sites (loadOpponentRecentForm,
+  // opponentPageHtml, playoffSeedChipHtml) can all go through the same
+  // check instead of each re-deciding it their own way.
+  function teamBadgeHtmlFor(name) {
+    return isBengalsTeamName(name) ? bengalsBadgeHtml() : opponentBadgeHtml(name);
+  }
 
   function loadOpponentLogos() {
     return window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -1458,7 +1490,7 @@
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
           ${centerHtml}
-          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${opponentBadgeHtml(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
+          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${teamBadgeHtmlFor(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
         </span>
       </button>`;
   }
@@ -1883,6 +1915,12 @@
   // page header needs the bare src to run it through canvas color
   // extraction, not markup.
   window.getOpponentLogoSrc = opponentLogoSrc;
+  // For js/standings.js's own 3 other badge sites (loadOpponentRecentForm,
+  // opponentPageHtml, playoffSeedChipHtml) -- see teamBadgeHtmlFor's own
+  // comment, above.
+  window.bengalsBadgeHtml = bengalsBadgeHtml;
+  window.isBengalsTeamName = isBengalsTeamName;
+  window.teamBadgeHtmlFor = teamBadgeHtmlFor;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;
