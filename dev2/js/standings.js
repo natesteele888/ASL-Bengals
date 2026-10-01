@@ -147,8 +147,35 @@
   // fetchCmyfccStandings's own division pin: a town can field a
   // same-named program in several age divisions, and every real opponent
   // on OUR schedule only ever plays us within our own division anyway.
-  async function fetchCmyfccRecentGamesFor(teamName, limit) {
-    limit = limit || 5;
+  // Same "not yet happened" date-only logic as js/schedule.js's own
+  // hasEventPassed (private to that file's own IIFE, same reason every
+  // other small cross-file helper in this app gets its own local copy
+  // instead of reaching into another file's closure) -- CMYFCC's
+  // logistics block for a game doesn't reliably carry a kickoff time the
+  // way our own Schedule records do, so this only ever compares by
+  // calendar date (a same-day game stays "not passed" through the end of
+  // that day, same fallback behavior hasEventPassed uses when it has no
+  // time either).
+  function cmyfccEventPassed(dateStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
+  }
+  // Nathan: "when clicking on another team in the standings, don't just
+  // show their finished games but use the master schedule to show their
+  // upcoming games as well." CMYFCC's getPublicSeasonSchedule payload
+  // (CMYFCC_API_URL) IS the division's real master schedule -- every game
+  // for every team, played or not -- so this is the one real fetch+match
+  // both fetchCmyfccRecentGamesFor (final games only) and
+  // fetchCmyfccUpcomingGamesFor (below) now build on, instead of each
+  // issuing its own separate network call for the same payload.
+  // ourScore/oppScore are left undefined for a game with no final result
+  // yet -- compactGameRowHtml (js/schedule.js) already renders that
+  // correctly as an "Upcoming" pill with no score, the exact same
+  // convention it already uses for our own not-yet-played Schedule games.
+  async function fetchCmyfccGamesFor(teamName) {
     const res = await fetch(CMYFCC_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,19 +194,41 @@
       return gTokens.length && tTokens.some(t => gTokens.includes(t));
     };
     return payload.games
-      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY && g.result && g.result.status === 'final')
+      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY)
       .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
       .map(g => {
         const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
+        const isFinal = !!(g.result && g.result.status === 'final');
         return {
           id: g.id,
           date: g.logistics ? g.logistics.date : null,
           opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
-          ourScore: isHome ? g.result.homeScore : g.result.awayScore,
-          oppScore: isHome ? g.result.awayScore : g.result.homeScore,
+          ourScore: isFinal ? (isHome ? g.result.homeScore : g.result.awayScore) : undefined,
+          oppScore: isFinal ? (isHome ? g.result.awayScore : g.result.homeScore) : undefined,
+          isFinal,
         };
-      })
+      });
+  }
+  async function fetchCmyfccRecentGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const all = await fetchCmyfccGamesFor(teamName);
+    return all
+      .filter(g => g.isFinal)
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, limit);
+  }
+  // The other half of the same master schedule -- games with no final
+  // result yet. Soonest-first (not furthest-out-first), matching how a
+  // coach actually thinks about "what's next" for a team; also excludes
+  // anything whose date has already passed without a posted result (a
+  // postponed/cancelled game, or a final score CMYFCC just hasn't entered
+  // yet) rather than mislabeling it "Upcoming."
+  async function fetchCmyfccUpcomingGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const all = await fetchCmyfccGamesFor(teamName);
+    return all
+      .filter(g => !g.isFinal && !cmyfccEventPassed(g.date))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
       .slice(0, limit);
   }
   // Nathan: "recent games for our opponents are not showing" -- flagged
@@ -194,6 +243,7 @@
   // convention window.opponentBadgeHtml/window.getOpponentLogoSrc already
   // establish in the other direction.
   window.fetchCmyfccRecentGamesFor = fetchCmyfccRecentGamesFor;
+  window.fetchCmyfccUpcomingGamesFor = fetchCmyfccUpcomingGamesFor;
 
   function escapeHtml(s) {
     const d = document.createElement('div');
@@ -729,23 +779,44 @@
     // Nathan: "if you are on a team page from the standings, and you see
     // the 'recent form' let's change that to 'recent games' as form is
     // more of a soccer term." Plain rename, same section, same data.
+    //
+    // Nathan (follow-up): "don't just show their finished games but use
+    // the master schedule to show their upcoming games as well." One
+    // shared fetchCmyfccGamesFor call (the real master schedule payload)
+    // instead of two separate network round-trips for what's really one
+    // dataset split two ways -- Recent Games stays exactly as it was,
+    // Upcoming Games is new, appended below it.
     try {
-      const rows = await fetchCmyfccRecentGamesFor(opponentName, 5);
+      const all = await fetchCmyfccGamesFor(opponentName);
       // A stale response landing after the coach has already navigated
       // to a DIFFERENT opponent (or back to the list) shouldn't clobber
       // whatever's on screen now -- re-check the container's still
       // showing a loading state for the SAME opponent before writing.
       const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
       if (!stillOnThisOpponent) return;
-      if (!rows.length) {
-        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
-        return;
-      }
-      const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
+      const recent = all
+        .filter(g => g.isFinal)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .slice(0, 5);
+      const upcoming = all
+        .filter(g => !g.isFinal && !cmyfccEventPassed(g.date))
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .slice(0, 5);
+      const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponentName) : window.opponentBadgeHtml(opponentName);
+      const rowsHtmlFor = (rows) => rows.map(g => window.compactGameRowHtml(g, {
         teamName: opponentName,
-        teamBadgeHtml: window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponentName) : window.opponentBadgeHtml(opponentName),
+        teamBadgeHtml: badgeHtml,
       })).join('');
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtml}</div>`;
+      const recentHtml = recent.length
+        ? `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtmlFor(recent)}</div>`
+        : `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
+      // Omitted entirely (not an empty-state line) when there genuinely
+      // are none left -- a team with no games remaining this season
+      // doesn't need a section telling you so.
+      const upcomingHtml = upcoming.length
+        ? `<div class="lbSectionHeader" style="margin-top:16px;">📅 Upcoming Games</div><div class="last5List">${rowsHtmlFor(upcoming)}</div>`
+        : '';
+      wrap.innerHTML = recentHtml + upcomingHtml;
       // Nathan: "if you click on a logo of one of the opponent's it should
       // go to that teams page." Each row's own away-side badge (this
       // team's opponent in THAT game) is wrapped by compactGameRowHtml in
@@ -756,7 +827,8 @@
       // come from CMYFCC, not our own Schedule, so there's usually no
       // matching local game record; showOpponentPage already falls back
       // to a real, name-only team page in exactly that case (same as a
-      // division-only team we've never played).
+      // division-only team we've never played). Wired once over the whole
+      // wrap, so it covers both the Recent and Upcoming sections' rows.
       wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
         const name = el.dataset.opponentName;
         if (!name) return;
