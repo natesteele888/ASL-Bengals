@@ -609,6 +609,27 @@
  *   omit if hasQbSneak is false, required if it's true. Absolute points,
  *   used as-is (this replaces #1's whole path for the card, not just a
  *   segment of it).
+ * @property {RoutePoint[]} [bootRoute] - #1's own real "keeps it himself"
+ *   path when Boot is actually on, same "swap ONLY #1's own drawn path"
+ *   shape as qbSneakRoute just above (js/play-calls.js's renderCardDiagram
+ *   swaps this in right alongside it). #1's normal `points` (his everyday
+ *   fake/mesh step) stay exactly as authored for the boot-off render --
+ *   this is purely an alternate, only ever shown while Boot is on. Omit
+ *   to fall back to the universal Boot behavior (just recolors whichever
+ *   path #1 already has as the real one, no new shape) -- only worth
+ *   authoring when #1's own everyday points are too short/plain to read
+ *   as a real run. Nathan, on Jet Sweep ("5 Guys"): "a boot option...
+ *   for the 1 (QB) to take the ball on a carry likely up the middle
+ *   after faking the handoff with the rest of the play looking exactly
+ *   the same. We can't do a boot on the reverse but we can on the sweep
+ *   itself" -- Boot and Reverse share one slot on the real card (both
+ *   toggles coexist when a play sets BOTH hasReverse and bootRoute/
+ *   !noBoot) and lock each other off live, not statically, the same
+ *   updateBootAvailability()/updateCounterAvailability() pattern
+ *   buildCard already uses for Boot vs. Counter. Absolute points, used
+ *   as-is, same shape/precedent as qbSneakRoute -- not keyed by
+ *   direction or wingSide (a straight run up the middle has no
+ *   handedness, same reasoning qbSneakRoute already applies).
  * @property {boolean} [noDirection] - true to hide the Dir L/R toggle for
  *   this play entirely (same shape/precedent as the real, existing
  *   `isQbSneak` case in js/play-calls.js's buildCard, generalized to be

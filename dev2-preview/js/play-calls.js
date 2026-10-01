@@ -932,7 +932,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse, repeatWingSideBeforePlay: !!playType.repeatWingSideBeforePlay }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, noOverload: !!playType.noOverload, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse, repeatWingSideBeforePlay: !!playType.repeatWingSideBeforePlay }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1545,6 +1545,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // so this is safe to call unconditionally.
   const blockRouteFor = (positionId, hasBall) => {
     if (reverseOn || positionId == null || hasBall) return null;
+    // Boot: the ONE player whose handoff actually got faked (bootFakePath's
+    // own carrier, computed just above this closure) keeps running his
+    // real, full motion route to sell the fake -- Nathan's own Boot spec,
+    // "the rest of the play looking exactly the same." Scoped to that one
+    // player specifically, not bootOn generally -- the OTHER non-carrying
+    // player (the reverse-eligible teammate who was never part of this
+    // fake at all) is unaffected and still follows the normal, reverseOn-
+    // gated block rule just below, exactly as before Boot existed.
+    if (bootOn && bootFakePath && String(positionId) === String(bootFakePath.player)) return null;
     const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
     const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
     if (!assignment) return null;
@@ -1714,7 +1723,20 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // Option), there's nothing to swap and the toggle is a no-op.
   let bootBallPath = null, bootFakePath = null;
   if (bootOn) {
-    const realBallPath = variant.paths.find(p => p.ball && !p.optionLine);
+    // Jet Sweep: real bug, found building its own Boot -- a raw p.ball
+    // check only ever finds whoever's baked as the carrier for the
+    // RIGHT/default direction (variant.paths is baked once per render,
+    // before any live per-player override applies). Fine for a play
+    // whose carrier never changes by direction, but Jet Sweep's own
+    // carrier DOES (directionLeftHasBall -- #5 on Right, #6 on Left) --
+    // a raw check left bootFakePath pointed at #5 even on a Left-
+    // direction card, so #6 (the real Left-direction carrier) never got
+    // recolored and still showed red alongside #1. Same resolution
+    // precedence the per-player loop's own effectiveBall uses below,
+    // applied here too so Boot finds whoever ACTUALLY carries for this
+    // specific direction/wingSide/alignment, not just the raw default.
+    const realBallPath = variant.paths.find(p => !p.optionLine && p.player !== 1
+      && alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
     const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
     if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
   }
@@ -2170,6 +2192,19 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // AND the coach actually flips the switch (qbSneakOn).
     if (p.player === 1 && qbSneakOn && playType.hasQbSneak && playType.qbSneakRoute) {
       points = playType.qbSneakRoute.map((pt) => [pt.x, pt.y]);
+    }
+    // Jet Sweep's own Boot: Nathan -- "take the ball on a carry likely up
+    // the middle after faking the handoff with the rest of the play
+    // looking exactly the same." Same "swap ONLY #1's own drawn path"
+    // shape as QB Sneak just above -- #1's normal points (the short
+    // fake/mesh step) stay exactly as authored for the boot-off render;
+    // playType.bootRoute (optional) is a real, distinct alternate only
+    // swapped in while Boot is actually on. No-op for every play without
+    // one -- the generic Boot mechanism just above (bootBallPath/
+    // bootFakePath) still recolors whichever path #1 already has as the
+    // real one either way, this just gives that path real shape to draw.
+    if (p.player === 1 && bootOn && playType.bootRoute) {
+      points = playType.bootRoute.map((pt) => [pt.x, pt.y]);
     }
     if (p.optionLine) {
       const [[x1,y1],[x2,y2]] = p.points;
@@ -4046,6 +4081,7 @@ function buildCard(combo, opts) {
   const bootSlot = document.createElement('div');
   bootSlot.className = 'toggle-slot';
   let bootToggle = null;
+  let reverseToggle = null;
   // "QB Sneak" (5 Guys) takes over this SAME slot instead of Boot --
   // mutually exclusive concepts, see combo.hasQbSneak's own doc.
   if (combo.hasQbSneak) {
@@ -4053,12 +4089,26 @@ function buildCard(combo, opts) {
     bootSlot.appendChild(qbSneakToggle);
   } else if (combo.hasReverse) {
     // Jet Sweep: same "reuse the slot that's otherwise empty for THIS
-    // play" convention Overload already uses on ioSlot -- Jet Sweep is
-    // noBoot (the mesh-exchange carrier already has his own built-in
-    // fake, same reasoning Option/Double Blast skip Boot) so this slot
-    // would just be blank otherwise.
-    const reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
+    // play" convention Overload already uses on ioSlot -- the mesh-
+    // exchange carrier already has his own built-in fake, so Boot would
+    // just leave this slot blank on top of Reverse otherwise.
+    reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
     bootSlot.appendChild(reverseToggle);
+    // Nathan: "add a boot option... for the 1 (QB) to take the ball on a
+    // carry likely up the middle after faking the handoff with the rest
+    // of the play looking exactly the same. We can't do a boot on the
+    // reverse but we can on the sweep itself." Boot and Reverse now share
+    // this one slot -- noBoot still lets a hasReverse play opt all the
+    // way out (leaving just Reverse, the original behavior) for any
+    // future reverse-style play that doesn't want a Boot option at all.
+    // The two lock each other off live (updateBootAvailability/
+    // updateReverseAvailability below), not statically, since whether
+    // Boot makes sense depends on Reverse's CURRENT state, not the play's
+    // own fixed data.
+    if (!combo.noBoot) {
+      bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
+      bootSlot.appendChild(bootToggle);
+    }
   } else if (!combo.noBoot) {
     bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
@@ -4174,9 +4224,13 @@ function buildCard(combo, opts) {
     // doesn't involve the backside TE surface Overload creates, unlike
     // every other Wing play, so it's excluded here the same way Split
     // itself is, rather than teaching Formations.supportsOverload about
-    // individual plays inside a formation it does support.
+    // individual plays inside a formation it does support. combo.noOverload
+    // generalizes this to any other play with the same kind of gap --
+    // Nathan: Shuffle Pass, Option Pass, and QB Sneak also "can't have the
+    // overload button available" (none of their own route concepts involve
+    // the backside TE surface Overload creates either).
     overloadWrap.style.display =
-      (!isSplit && !combo.hasPopVariant && window.Formations.supportsOverload(formation)) ? '' : 'none';
+      (!isSplit && !combo.hasPopVariant && !combo.noOverload && window.Formations.supportsOverload(formation)) ? '' : 'none';
     if (motionToggle) motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
@@ -4463,10 +4517,14 @@ function buildCard(combo, opts) {
   // Mirrors updateCounterAvailability above, in the other direction: Boot
   // locks off (and grey out) while Counter is on. No wing/dir concept
   // applies to Boot itself, so this is a straight one-condition check.
+  // Jet Sweep: also locks off while Reverse is on -- Nathan: "We can't do
+  // a boot on the reverse but we can on the sweep itself." reverseOn is
+  // false for every play without combo.hasReverse, so this extra
+  // condition is a no-op everywhere else.
   function updateBootAvailability() {
     if (!bootToggle) return;
     const btn = bootToggle.querySelector('.switch-toggle');
-    if (counterOn) {
+    if (counterOn || reverseOn) {
       if (bootOn) {
         bootOn = false;
         if (btn) btn.setAttribute('aria-pressed', 'false');
@@ -4481,9 +4539,33 @@ function buildCard(combo, opts) {
     }
   }
 
+  // Mirrors updateBootAvailability above, in the other direction: Reverse
+  // locks off (and greys out) while Boot is on -- the QB keeping the ball
+  // himself means there's no exchange left for #5 to hand to #6 (or vice
+  // versa) on a reverse. No-op (reverseToggle is null) for every play
+  // without combo.hasReverse.
+  function updateReverseAvailability() {
+    if (!reverseToggle) return;
+    const btn = reverseToggle.querySelector('.switch-toggle');
+    if (bootOn) {
+      if (reverseOn) {
+        reverseOn = false;
+        if (btn) btn.setAttribute('aria-pressed', 'false');
+      }
+      if (btn) btn.disabled = true;
+      reverseToggle.style.opacity = '0.35';
+      reverseToggle.style.pointerEvents = 'none';
+    } else {
+      if (btn) btn.disabled = false;
+      reverseToggle.style.opacity = '';
+      reverseToggle.style.pointerEvents = '';
+    }
+  }
+
   function onComboChanged() {
     updateCounterAvailability();
     updateBootAvailability();
+    updateReverseAvailability();
     selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
