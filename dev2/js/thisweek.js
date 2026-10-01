@@ -759,7 +759,7 @@
         if (e.formation === 'split' && window.renderSplitDiagram) {
           window.renderSplitDiagram(svg, e.key, e.splitSide, e.insideOutside, e.readPosition, e.leftCall, e.rightCall, e.passOn, null, e.protection);
         } else {
-          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn);
+          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn, e.reverseOn);
         }
       } else if (info.row) {
         const row = info.row;

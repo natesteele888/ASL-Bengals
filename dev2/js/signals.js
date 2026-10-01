@@ -207,7 +207,7 @@
   //
   // Card ids referenced by name so the recipes stay readable.
   var WING_TOUCH = 7, SPLIT_TOUCH = 31, I_TOUCH = 33, FIVE_GUYS_TOUCH = 34, JUMBO_TOUCH = 36, BOOT = 26, COUNTER = 18, POP2 = 29,
-      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29;
+      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29, REVERSE = 22;
   // "WING LOCATION" already exists as a real, photographed 2-photo pool (7,
   // 8, data/cards.json -- Nathan: "Wing (signal 7 or 8)") from Wing's own
   // deck. I's "Wing" modifier call (moving #4 out from Heavy's tucked
@@ -466,6 +466,12 @@
       { when: function (c) { return c.playSignalId != null; },
         card: function (c) { return c.wingFinger; },
         label: function (c) { return '5 Guys: ' + c.wingSide; } },
+      // Jet Sweep's own Reverse: a real, photographed card already exists
+      // for exactly this (#22, "REVERSE") -- tacked on at the very end,
+      // same "modifier comes last" slot Boot/Counter already use
+      // elsewhere. No-op for every numbered 1-5 play (none sets
+      // c.reverseOn, nor could they -- hasReverse is a per-play opt-in).
+      { when: function (c) { return c.reverseOn; }, card: REVERSE, label: 'Reverse' },
     ],
 
     // "Jumbo": Nathan, on the play itself -- "The run can only go to the

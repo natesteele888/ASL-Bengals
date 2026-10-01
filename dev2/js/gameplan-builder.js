@@ -236,7 +236,7 @@
         if (entry.formation === 'split' && window.renderSplitDiagram) {
           window.renderSplitDiagram(svg, entry.key, entry.splitSide, entry.insideOutside, entry.readPosition, entry.leftCall, entry.rightCall, entry.passOn, null, entry.protection);
         } else {
-          window.renderCardDiagram(svg, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn);
+          window.renderCardDiagram(svg, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn, entry.reverseOn);
         }
       } else {
         const playType = window.DATA.playTypes.find((p) => p.key === entry.key);

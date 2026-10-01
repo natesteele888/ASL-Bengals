@@ -92,7 +92,7 @@
   // yet) rather than leaving the line blank with no explanation.
   function compactSequence(entry) {
     try {
-      const seq = window.buildSignalSequence(entry.key, entry.wingSide, entry.direction, entry.insideOutside, entry.motionOn, entry.bootOn, entry.formation, entry.splitSide, entry.passOn, entry.counterOn, entry.popVariantOn, entry.protection, entry.overloadOn, entry.alignmentValues);
+      const seq = window.buildSignalSequence(entry.key, entry.wingSide, entry.direction, entry.insideOutside, entry.motionOn, entry.bootOn, entry.formation, entry.splitSide, entry.passOn, entry.counterOn, entry.popVariantOn, entry.protection, entry.overloadOn, entry.alignmentValues, undefined, entry.reverseOn);
       const nums = (seq || []).map((s) => s.id).filter((id) => id != null);
       return nums.length ? nums.join(' → ') : '—';
     } catch (e) {
@@ -242,7 +242,7 @@
           if (entry.formation === 'split' && window.renderSplitDiagram) {
             window.renderSplitDiagram(stage, entry.key, entry.splitSide, entry.insideOutside, entry.readPosition, entry.leftCall, entry.rightCall, entry.passOn, null, entry.protection);
           } else {
-            window.renderCardDiagram(stage, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn);
+            window.renderCardDiagram(stage, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn, entry.reverseOn);
           }
           const png = await svgToPng(stage, CELL_W, DIAGRAM_H, RASTER_SCALE);
 
