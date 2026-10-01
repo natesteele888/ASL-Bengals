@@ -2417,6 +2417,62 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // assignment finished needs this instead. Used by the assignment editor to
   // place its handles on the real end points.
   stage._resolvedPaths = variant.paths;
+
+  // Jet Sweep's Boot: Nathan -- "Boot needs to be delayed until the 5 or
+  // 6 runs by the 1 (QB). The 1 can't take off until the fake hand off
+  // is made." Player 1's own drawn boot route (playType.bootRoute, swap
+  // applied earlier in the per-player loop above) always starts
+  // revealing at delayMs 0, in lockstep with every other path, so his
+  // run upfield visibly starts well before the sweeper has actually
+  // gotten anywhere near him.
+  //
+  // First attempt tried to hold him mid-route, right at the authored
+  // mesh point, only delaying the keep-and-run portion -- wrong in a way
+  // that took real digging to find: a 4-point route here renders via
+  // chainedCurvePathD (routeDForRange), which treats every ODD index as
+  // a Bezier CONTROL coordinate, never actually touched by the drawn
+  // curve -- the mesh point (index 1) is exactly one of those, so the
+  // circle never passed anywhere near it, on-curve-index-based AND
+  // nearest-point-on-the-real-curve approaches both landed the "hold" at
+  // a position that didn't read as "at the mesh." Rather than reshape
+  // the already-approved boot route's own visual curve just to create a
+  // genuine on-curve waypoint there, this delays the WHOLE path instead
+  // (same mechanism reverseDelayMsFor already uses, just computed, not
+  // authored) -- he stands still at the snap spot, then runs his entire
+  // boot route (the brief mesh step and the break upfield together, one
+  // continuous motion) the instant the real exchange would have
+  // happened. Simpler, and sidesteps the curve-geometry trap entirely.
+  //
+  // The real exchange timing: resolveBallPathForWing (called with
+  // bootOn forced false so its own "QB keeps it" truncation -- a
+  // ball-ICON concern -- doesn't hide the real handoff leg from this
+  // calculation) finds who actually receives the fake and where; the
+  // exact same fractionAlongPath/elapsedMsForFraction math
+  // BallPath.schedule() already uses for a real (non-Boot) exchange
+  // gives how long the sweeper's own route-reveal takes to reach that
+  // point. A plain nominal (1x-speed) ms value, same convention as
+  // reverseDelayMs -- it gets its own speedMultiplier scaling later, in
+  // the shared pathPromises/pathFracAt code every delayMs already runs
+  // through, so computing it pre-scaled here would double it at any
+  // speed but 1x. A no-op for every other play (no bootRoute) and a
+  // no-op the moment this one can't resolve a real exchange leg -- never
+  // throws, just leaves the route animating at its old, unpaused rate.
+  if (bootOn && playType && playType.bootRoute && playType.bootRoute.length) {
+    const bootEntry = lastRenderedPaths.find((e) => e.player === 1);
+    if (bootEntry) {
+      const fullBp = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, false, reverseOn);
+      const realLeg = fullBp && fullBp[1];
+      if (realLeg && realLeg.at && realLeg.player != null) {
+        const receiverEntry = lastRenderedPaths.find((e) => String(e.player) === String(realLeg.player));
+        const exchangeFrac = (receiverEntry && Array.isArray(receiverEntry.points) && window.BallPath)
+          ? window.BallPath.fractionAlongPath(receiverEntry.points, realLeg.at) : null;
+        if (exchangeFrac != null) {
+          const nominalHoldMs = Math.max(0, (receiverEntry.delayMs || 0) + elapsedMsForFraction(receiverEntry.points, 1400, exchangeFrac, 1));
+          if (nominalHoldMs > 0) bootEntry.delayMs = nominalHoldMs;
+        }
+      }
+    }
+  }
   // What seekCardAnimation (below) needs to reproduce the ball's position
   // deterministically at an arbitrary instant -- wingSide for the QB/center
   // anchor, playType for its authored ballPath if any. bootOn included so
