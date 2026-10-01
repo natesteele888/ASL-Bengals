@@ -3087,28 +3087,47 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // Jet Sweep's pre-snap motion, drawn for real by renderCardDiagram (a
   // dashed segment from the carrier's true anchor to the near-tackle
   // crossing point, then a solid segment for his real route -- see
-  // motionSplitPointFor there) -- Nathan: "the 5 should slowly motion
-  // towards the 1... when they get in line with the LT, the ball will
-  // snap and he will run full speed." That means the dashed segment has
-  // to play out BEFORE the snap below, not together with everyone else's
-  // reveal after it (which is what simply leaving it in lastRenderedPaths
-  // would do) -- pulled out of the array and animated standalone here, a
-  // real duration (slow -- this is the "walking into motion" part, not
-  // the snap-triggered full-speed run) rather than the old, much smaller
-  // circle-only nudge this block used to do.
+  // motionSplitPointFor there). Nathan, after seeing the first version of
+  // this: "looks good - only thing I don't like is that the motion guy
+  // comes to a stop. I want him to be in continuous motion and the ball
+  // is snapped right as he transitions from presnap motion to run." The
+  // original version played the motion segment, THEN sequentially waited
+  // + snapped the ball + waited again before the main reveal (the solid
+  // segment) started -- a real stop at the crossing point. Fixed by
+  // running the ball-snap tween CONCURRENTLY with the tail end of the
+  // motion segment (timed to finish exactly when it does, via
+  // snapStartDelay below) and removing the two wait()s entirely for this
+  // play -- the main reveal (his own solid segment included) now starts
+  // the instant the motion segment's own animation promise resolves, so
+  // his circle never stops moving, and the ball visibly arrives at the
+  // QB right at that same transition instant.
   const preSnapMotionIdx = lastRenderedPaths.findIndex(p => p.isPreSnapMotion);
   if (preSnapMotionIdx !== -1) {
     const [preSnapEntry] = lastRenderedPaths.splice(preSnapMotionIdx, 1);
-    await animatePathDraw(preSnapEntry.el, null, 1800 * speedMultiplier, 0, preSnapEntry.circleEl, preSnapEntry.textEl, null);
-  }
-
-  await wait(250 * speedMultiplier);
-  if (playType && playType.delayedSnapBall) {
-    ball.style.opacity = '0';
+    const motionDurationMs = 1800 * speedMultiplier;
+    const snapDurationMs = 450 * speedMultiplier;
+    const snapStartDelayMs = Math.max(0, motionDurationMs - snapDurationMs);
+    const ballSnapPromise = (async () => {
+      await wait(snapStartDelayMs);
+      if (playType && playType.delayedSnapBall) {
+        ball.style.opacity = '0';
+      } else {
+        await tweenPoint(centerPos, qbPos, snapDurationMs, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+      }
+    })();
+    await Promise.all([
+      animatePathDraw(preSnapEntry.el, null, motionDurationMs, 0, preSnapEntry.circleEl, preSnapEntry.textEl, null),
+      ballSnapPromise,
+    ]);
   } else {
-    await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    await wait(250 * speedMultiplier);
+    if (playType && playType.delayedSnapBall) {
+      ball.style.opacity = '0';
+    } else {
+      await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    }
+    await wait(150 * speedMultiplier);
   }
-  await wait(150 * speedMultiplier);
 
   // startFrac/lenFrac (set on a handoff split's two segments -- see
   // renderCardDiagram) scale a segment's own share of animMs by its share
