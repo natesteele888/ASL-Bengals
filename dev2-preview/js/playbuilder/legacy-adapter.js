@@ -290,6 +290,12 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // nothing to wire beyond "is this allowed for this play or not."
   if (play.noBoot) result.noBoot = true;
   if (play.noMotion) result.noMotion = true;
+  // Jet Sweep: Nathan -- "he can't start moving when the ball is
+  // snapped. he needs to start motioning over then the ball is snapped."
+  // A real pre-snap motion for whoever the live carrier resolves to
+  // (js/play-calls.js's own playCardAnimation), not authored per
+  // direction/variant -- just an opt-in on the play itself.
+  if (play.carrierPreSnapMotion) result.carrierPreSnapMotion = true;
   // Nathan: "all the plays for 5 guys is supposed to [be] passing plays
   // not running plays" -- real bug, not just a label: this field never
   // existed on this adapter's output at all, so every Play Builder V2

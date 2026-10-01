@@ -757,6 +757,21 @@ function wingLeftHasBall(assignment, hasBall) {
   return assignment.wingLeftHasBall != null ? assignment.wingLeftHasBall : hasBall;
 }
 
+// Jet Sweep: same pattern as wingLeftHasBall just above, keyed by
+// Direction instead -- found live, verifying the carrier color never
+// changed when flipping the Direction preview toggle, because this
+// render()-time color computation had wingLeftHasBall/alignmentHasBall
+// wired in but no directionLeftHasBall counterpart, even though
+// hasBallHolder() (the EDITING side, used by the checkbox) already
+// resolves this case correctly -- the preview's own color and the
+// checkbox were silently reading two different rules. Falls back to the
+// assignment's own plain hasBall when nothing overrides it -- a no-op
+// for every play that doesn't set this field.
+function directionLeftHasBall(assignment, hasBall) {
+  if (state.direction !== 'left' || !assignment) return hasBall;
+  return assignment.directionLeftHasBall != null ? assignment.directionLeftHasBall : hasBall;
+}
+
 // I's Sweep: Nathan: "When the 4 is out wide in I formation, the sweep
 // can no longer go to the 4. If the 4 is out of heavy, the ball would be
 // pitched to the 3 back" -- deliberately checks the 'heavy' toggle BY
@@ -914,7 +929,7 @@ function render() {
     let points = currentRoutePoints(formation, players, routeFormation, pos.id);
     if (!points) return;
     const assignment = resolveAssignment(formation, players, pos.id, state.direction, state.currentPlay);
-    const hasBall = alignmentHasBall(formation, pos.id, assignment, wingLeftHasBall(assignment, !!(assignment && assignment.hasBall)));
+    const hasBall = alignmentHasBall(formation, pos.id, assignment, directionLeftHasBall(assignment, wingLeftHasBall(assignment, !!(assignment && assignment.hasBall))));
     // Nathan, re: footballplaybook.com: "you can recolor the player."
     // Ball-carrier red still wins unconditionally (the app-wide "red =
     // has the ball" convention every real card/PDF/etc. already relies
