@@ -390,16 +390,30 @@
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
+      // Nathan, on I's "Double Blast Pass" (internal id pop_pass_i, a
+      // real, always-pass play -- a play-action look off Double Blast's
+      // own run action, not a run/pass TOGGLE the way Split's passOn is):
+      // "we are missing the pass signal in the sequence. It needs to be
+      // I > direction > double blast > Pass." The play's own card stays
+      // DOUBLE BLAST (same card the pure-run double_blast_i uses -- the
+      // defense sees the identical backfield action before the pass
+      // shows), this is just the missing confirmation card after it.
+      // Gated on Play.isPass rather than a toggle, since this play has
+      // no run/pass choice at all -- always a pass, every time it's
+      // called. No protection distinction of its own (unlike Split's
+      // Pocket/Straight), so a single PASS_1 card, not PASS_1/PASS_2.
+      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
     ],
 
     // "I Wing" formation: Nathan: "We should break the formation into I
     // formation with the 4 in the heavy position, then call 'I wing' the
     // one with the wing off the end of the line." Structurally identical
     // to RECIPES.i -- same touch card (still recognizably "I"), same
-    // Overload/Motion/Boot/Counter steps, same play-card/direction steps --
-    // except the "Wing" modifier ALWAYS fires here (no `when` guard): this
-    // formation has no Heavy state to gate it on, the wing-out alignment
-    // isn't a toggle any more, it's the formation's own whole identity.
+    // Overload/Motion/Boot/Counter/Pass steps, same play-card/direction
+    // steps -- except the "Wing" modifier ALWAYS fires here (no `when`
+    // guard): this formation has no Heavy state to gate it on, the
+    // wing-out alignment isn't a toggle any more, it's the formation's
+    // own whole identity.
     'i-wing': [
       { card: I_TOUCH, label: 'I' },
       { card: function () { return pickFrom(I_WING_IDS); }, label: 'Wing' },
@@ -424,6 +438,8 @@
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
+      // Same Pass gap fix as RECIPES.i -- see its own comment.
+      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
     ],
 
     // "5 Guys": Nathan, verbatim -- "the only signals are 5 guys > Left or
