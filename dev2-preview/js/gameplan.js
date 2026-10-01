@@ -147,6 +147,26 @@
     return { label: `${row.label} • ${row.direction}`, color: row.color, v2: null, row };
   }
 
+  // A v1 entry only ever stored ONE direction value, from back when
+  // direction and wingSide were the same axis for every play. I's Sweep
+  // (i_sweep/i_wing_sweep, directionOpposesWing: true) broke that
+  // assumption -- its real toggle always keeps wingSide and direction
+  // OPPOSITE of each other, so reusing direction as wingSide produces a
+  // combination the real card can never actually reach, and renders the
+  // carrier running toward the wing side instead of away from it (found
+  // checking these two plays for the same wing-side-scoping bug Jet Sweep
+  // had -- a different mechanism, but the same "flip side comes out
+  // wrong" symptom). Every other real play has no such coupling, so this
+  // is a no-op for them -- confirmed live: of 19 real PlayTypes, only
+  // these two have directionOpposesWing set.
+  function legacyWingSideFor(key, direction) {
+    const playType = (window.DATA && window.DATA.playTypes) ? window.DATA.playTypes.find((p) => p.key === key) : null;
+    if (playType && playType.directionOpposesWing) {
+      return direction === 'Left' ? 'Right' : 'Left';
+    }
+    return direction;
+  }
+
   // Same v1-defaulting js/thisweek.js's makeStaticCard already does inline
   // (that function's own copy is left untouched -- already verified working,
   // no reason to risk it for a DRY pass) -- but a SECOND real consumer, the
@@ -166,7 +186,7 @@
     const playType = (window.DATA && window.DATA.playTypes) ? window.DATA.playTypes.find((p) => p.key === row.key) : null;
     const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
     return {
-      v: 1, key: row.key, label: row.label, direction: row.direction, wingSide: row.direction,
+      v: 1, key: row.key, label: row.label, direction: row.direction, wingSide: legacyWingSideFor(row.key, row.direction),
       formation: playType ? playType.authoredFormationId : undefined,
       splitSide: 'Left', insideOutside: def.io, readPosition: def.rp,
       motionOn: false, bootOn: false, qbSneakOn: false, counterOn: false, popVariantOn: false,
@@ -316,7 +336,7 @@
   // a section header, so repeating the formation name on every card would
   // be redundant) without a second copy of this same toggle-walking logic.
   window.GamePlan = {
-    describe, resolveForRender, alignmentSummary, addEntry, numberedRows, MAX_PLAYS,
+    describe, resolveForRender, legacyWingSideFor, alignmentSummary, addEntry, numberedRows, MAX_PLAYS,
     loadCurrentGamePlan, saveDraftAsGamePlan,
   };
 })();
