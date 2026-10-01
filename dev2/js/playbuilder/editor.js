@@ -389,6 +389,39 @@ function routeHolder(assignment, playerId) {
   }
   return assignment;
 }
+// hasBall needs the SAME "most specific wins" per-case resolution
+// routeHolder's points already get. Nathan: "5 Guys Jet Sweep Right is
+// running correctly but the flip side of the play changes the ball
+// carrier... if I change it on one, it does it to the flip side." Root
+// cause: the "Has the ball" checkbox always read/wrote the base
+// assignment.hasBall no matter which side was being previewed --
+// wingLeftHasBall (the real field play-calls.js's own renderer already
+// checks) had no way to be SET from this screen at all, so a coach
+// trying to fix one side's carrier was silently editing the shared base
+// value both sides fall back to. No geometry to seed from (a boolean has
+// no "mirror to refine"), so this reads/writes the override directly --
+// no separate "Refine independently" step needed the way routeHolder's
+// cases need one.
+function hasBallHolder(assignment, playerId) {
+  const kase = currentCaseFor(playerId);
+  if (kase.key === 'alignment') {
+    const value = kase.alignmentValue;
+    if (!assignment.alignmentOverrides) assignment.alignmentOverrides = {};
+    if (!assignment.alignmentOverrides[value]) assignment.alignmentOverrides[value] = {};
+    const holder = assignment.alignmentOverrides[value];
+    return {
+      get: () => (holder.hasBall != null ? holder.hasBall : !!assignment.hasBall),
+      set: (v) => { holder.hasBall = v; },
+    };
+  }
+  if (kase.key === 'wingLeft') {
+    return {
+      get: () => (assignment.wingLeftHasBall != null ? assignment.wingLeftHasBall : !!assignment.hasBall),
+      set: (v) => { assignment.wingLeftHasBall = v; },
+    };
+  }
+  return { get: () => !!assignment.hasBall, set: (v) => { assignment.hasBall = v; } };
+}
 // Which assignment's OWN flags (hasBall, endType) actually apply to a
 // given formation slot -- almost always that slot's own assignment,
 // EXCEPT a swap-pair position on direction='left', where resolveRoute
@@ -1324,7 +1357,7 @@ function renderSidebar() {
   if (!assignment) return;
 
   els.pbPlayerLabel.textContent = `#${state.selectedPlayer}`;
-  els.pbHasBallCheckbox.checked = !!assignment.hasBall;
+  els.pbHasBallCheckbox.checked = hasBallHolder(assignment, state.selectedPlayer).get();
   els.pbDelayInput.value = assignment.delayMs || 0;
   els.pbEndTypeSelect.value = assignment.endType || 'run';
 
@@ -2137,7 +2170,9 @@ function bindSidebar() {
     });
   }
   els.pbHasBallCheckbox.addEventListener('change', () => {
-    assignmentFor(state.selectedPlayer).hasBall = els.pbHasBallCheckbox.checked;
+    const assignment = assignmentFor(state.selectedPlayer);
+    hasBallHolder(assignment, state.selectedPlayer).set(els.pbHasBallCheckbox.checked);
+    render();
   });
   if (els.pbDisplayNumberInput) {
     els.pbDisplayNumberInput.addEventListener('input', () => {
