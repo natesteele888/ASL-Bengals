@@ -296,6 +296,10 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // (js/play-calls.js's own playCardAnimation), not authored per
   // direction/variant -- just an opt-in on the play itself.
   if (play.carrierPreSnapMotion) result.carrierPreSnapMotion = true;
+  // Jet Sweep's own Reverse option (js/signals.js's RECIPES['5-guys'],
+  // js/play-calls.js's own reverseOn toggle) -- gates whether the real
+  // card shows a Reverse switch at all.
+  if (play.hasReverse) result.hasReverse = true;
   // Nathan: "all the plays for 5 guys is supposed to [be] passing plays
   // not running plays" -- real bug, not just a label: this field never
   // existed on this adapter's output at all, so every Play Builder V2

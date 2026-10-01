@@ -207,7 +207,7 @@
   //
   // Card ids referenced by name so the recipes stay readable.
   var WING_TOUCH = 7, SPLIT_TOUCH = 31, I_TOUCH = 33, FIVE_GUYS_TOUCH = 34, JUMBO_TOUCH = 36, BOOT = 26, COUNTER = 18, POP2 = 29,
-      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29;
+      QB_SNEAK = 27, OUTSIDE_ZONE = 10, OVERLOAD = 35, PASS_1 = 28, PASS_2 = 29, REVERSE = 22;
   // "WING LOCATION" already exists as a real, photographed 2-photo pool (7,
   // 8, data/cards.json -- Nathan: "Wing (signal 7 or 8)") from Wing's own
   // deck. I's "Wing" modifier call (moving #4 out from Heavy's tucked
@@ -402,7 +402,16 @@
       // no run/pass choice at all -- always a pass, every time it's
       // called. No protection distinction of its own (unlike Split's
       // Pocket/Straight), so a single PASS_1 card, not PASS_1/PASS_2.
-      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
+      //
+      // Nathan, on I Wing's own Pop Pass (same isPass:true flag, but its
+      // own identity card already reads "Pop Pass"): "We don't need to
+      // have the pass signal after the pop pass signal. Pop pass is
+      // enough." The extra confirmation only earns its place when the
+      // play's own card DOESN'T already say pass (Double Blast's own
+      // card reads just "DOUBLE BLAST", genuinely ambiguous without
+      // it) -- also correctly skips Option Pass/Shuffle Pass, whose own
+      // cards are self-evident the same way Pop Pass's is.
+      { when: function (c) { return c.isPass && !/pass/i.test(c.playSignalLabel || ''); }, card: PASS_1, label: 'Pass' },
     ],
 
     // "I Wing" formation: Nathan: "We should break the formation into I
@@ -438,8 +447,10 @@
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
-      // Same Pass gap fix as RECIPES.i -- see its own comment.
-      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
+      // Same Pass gap fix as RECIPES.i -- see its own comment, including
+      // the "skip it when the play's own card already says pass" rule
+      // (I Wing's own Pop Pass is exactly that case).
+      { when: function (c) { return c.isPass && !/pass/i.test(c.playSignalLabel || ''); }, card: PASS_1, label: 'Pass' },
     ],
 
     // "5 Guys": Nathan, verbatim -- "the only signals are 5 guys > Left or
@@ -466,6 +477,12 @@
       { when: function (c) { return c.playSignalId != null; },
         card: function (c) { return c.wingFinger; },
         label: function (c) { return '5 Guys: ' + c.wingSide; } },
+      // Jet Sweep's own Reverse: a real, photographed card already exists
+      // for exactly this (#22, "REVERSE") -- tacked on at the very end,
+      // same "modifier comes last" slot Boot/Counter already use
+      // elsewhere. No-op for every numbered 1-5 play (none sets
+      // c.reverseOn, nor could they -- hasReverse is a per-play opt-in).
+      { when: function (c) { return c.reverseOn; }, card: REVERSE, label: 'Reverse' },
     ],
 
     // "Jumbo": Nathan, on the play itself -- "The run can only go to the

@@ -932,7 +932,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1060,7 +1060,7 @@ function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, pro
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn, reverseOn) {
   // protection/overloadOn appended last for the same reason formation/
   // splitSide/passOn were: play-calls-quiz.js and the PDF exporters pass
   // these positionally and stop short. altCallOn is the newest, same
@@ -1146,6 +1146,7 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     directionOpposesWing: !!(playType && playType.directionOpposesWing),
     noDirection: !!(playType && playType.noDirection),
     isPass: !!(playType && playType.isPass),
+    reverseOn: !!reverseOn,
     playSignalId: playSignalIdFor(playType, playKey),
     playSignalLabel: playSignalLabelFor(playType, playKey),
   });
@@ -1294,7 +1295,7 @@ function shiftPathsToFormation(paths, fromAlign, toAlign) {
   });
 }
 
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn) {
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn) {
   // Defaults to the formation these routes were authored against, so every
   // existing caller -- including the PDF exporters and This Week, which pass
   // these arguments positionally -- keeps its exact current behaviour.
@@ -1506,6 +1507,26 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
     const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
     return (assignment && assignment.wingLeftRoute) ? assignment.wingLeftRoute.map((pt) => [pt.x, pt.y]) : null;
+  };
+  // Jet Sweep's own Reverse: Nathan -- "for the reverse, the opposite side
+  // runner will have to do a slight delay before going across." Same
+  // live-read pattern as wingLeftRouteFor just above (a per-toggle-state
+  // override the adapter's own per-direction bake has no way to
+  // anticipate) -- reads PlayerAssignment.reverseDelayMs, used INSTEAD of
+  // the leaf's own baked delayMs only while Reverse is actually on AND
+  // this specific player is NOT the direction's own primary carrier
+  // (effectiveBall, computed by the caller right before this -- whoever
+  // currently carries starts immediately either way; it's only the OTHER
+  // player, waiting to receive the reverse, who needs the delay). Since
+  // the carrier itself flips by Direction (5 on Right, 6 on Left), this
+  // naturally applies the delay to whichever one is actually waiting,
+  // without hardcoding either player id. Returns null (caller keeps the
+  // baked delayMs) otherwise, so this is safe to call unconditionally.
+  const reverseDelayMsFor = (positionId, hasBall) => {
+    if (!reverseOn || positionId == null || hasBall) return null;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.reverseDelayMs != null) ? assignment.reverseDelayMs : null;
   };
   // "5 Guys": WHO'S featured (has the ball) rotates to a DIFFERENT player
   // when Wing flips, not just where the same player is drawn. Nathan:
@@ -2181,7 +2202,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       }
       pathsLayer.appendChild(wrap);
 
-      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
+      const reverseDelay = reverseDelayMsFor(p.player, effectiveBall);
+      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: reverseDelay != null ? reverseDelay : (p.delayMs || 0),
         circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null, points });
     }
 
@@ -2210,7 +2232,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // resolveBallPathForWing's own "QB keeps the whole play" truncation
   // (Nathan: "Any time Boot is chosen the QB does not give up the ball")
   // applies to the scrub bar too, not just the live ▶ Play animation.
-  stage._animCtx = { wingSide, playType, formationId, alignmentValues, direction, bootOn };
+  stage._animCtx = { wingSide, playType, formationId, alignmentValues, direction, bootOn, reverseOn };
 
   // Nathan, after the label fix above turned out to still be too much:
   // "regardless of what I pick, the ball path should not show on the
@@ -2774,9 +2796,26 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 // differs by direction too, the same reason wingLeftBallPath exists for
 // the wingSide axis. Checked ALONGSIDE it, not instead -- a different
 // axis, no real play needs both today.
-function resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn) {
+function resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn, reverseOn) {
   let resolved;
-  if (direction === 'Left' && playType && playType.key) {
+  // Jet Sweep's own Reverse: Nathan -- "If 5 gets the handoff, then 6
+  // gets the reverse going the opposite way and vise versa." Checked
+  // FIRST (highest priority, same reasoning directionLeft already has
+  // over wingLeft/alignment -- the most specific, most recently-chosen
+  // thing a coach can pick wins) -- a real, 3-leg exchange schedule
+  // (snap -> handoff -> reverse) replaces the play's normal 2-leg one
+  // entirely while Reverse is on, direction-keyed the same way the
+  // normal handoff already is (reverseBallPath for Direction=Right,
+  // directionLeftReverseBallPath for Direction=Left -- the carrier and
+  // the reverse-receiver swap roles between the two, same as the
+  // normal handoff already does).
+  if (reverseOn && playType && playType.key) {
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
+    const variant = pbPlay && pbPlay.variants && pbPlay.variants[0];
+    const rbp = direction === 'Left' ? (variant && variant.directionLeftReverseBallPath) : (variant && variant.reverseBallPath);
+    if (rbp && rbp.length) resolved = rbp;
+  }
+  if (!resolved && direction === 'Left' && playType && playType.key) {
     const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
     const dlbp = pbPlay && pbPlay.variants && pbPlay.variants[0] && pbPlay.variants[0].directionLeftBallPath;
     if (dlbp && dlbp.length) resolved = dlbp;
@@ -2844,10 +2883,10 @@ function pointsFromRenderedPath(el, samples) {
   }
   return pts;
 }
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn) {
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn);
   // QB Sneak: "walks out to talk to receivers... as he walks back... he
   // gets under center, taps the center and its a quick snap." He carries no
   // ball at all during that walk -- the football only exists from the snap
@@ -2871,7 +2910,7 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // so the new carrier pre-snap motion block, right below, can know who
   // the real carrier is for THIS wingSide/direction before the snap even
   // happens.
-  const wingAwareBallPath = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn);
+  const wingAwareBallPath = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn, reverseOn);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
   // Nathan, "I Wing Left Dive Right": "still hikes the ball directly to
@@ -3406,7 +3445,7 @@ function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
   const qbPos = wingAlign['1'];
   const playType = ctx.playType;
 
-  const wingAwareBallPath = resolveBallPathForWing(playType, ctx.wingSide, ctx.formationId, ctx.alignmentValues, ctx.direction, ctx.bootOn);
+  const wingAwareBallPath = resolveBallPathForWing(playType, ctx.wingSide, ctx.formationId, ctx.alignmentValues, ctx.direction, ctx.bootOn, ctx.reverseOn);
   const authoredBallPath = (window.BallPath && window.BallPath.isValid(wingAwareBallPath))
     ? window.BallPath.schedule(wingAwareBallPath, (player) => {
         const entry = lastRenderedPaths.find((p) => String(p.player) === String(player) && p.circleEl);
@@ -3593,6 +3632,9 @@ function buildCard(combo, opts) {
   // play as authored, not a state most cards should start in.
   let motionOn = false;
   let bootOn = false;
+  // Jet Sweep's own Reverse: only reachable when combo.hasReverse is set.
+  // Defaults off, same reasoning as Motion/Boot/QB Sneak.
+  let reverseOn = false;
   // Alt call (e.g. "Jumbo"): only reachable when combo.altCallCardId is
   // set. See the ioSlot toggle above for the full explanation.
   let altCallOn = false;
@@ -3881,6 +3923,14 @@ function buildCard(combo, opts) {
   if (combo.hasQbSneak) {
     const qbSneakToggle = buildSwitchToggle('QB Sneak', qbSneakOn, (v) => { if (isPlayingRef.value) return; qbSneakOn = v; onComboChanged(); });
     bootSlot.appendChild(qbSneakToggle);
+  } else if (combo.hasReverse) {
+    // Jet Sweep: same "reuse the slot that's otherwise empty for THIS
+    // play" convention Overload already uses on ioSlot -- Jet Sweep is
+    // noBoot (the mesh-exchange carrier already has his own built-in
+    // fake, same reasoning Option/Double Blast skip Boot) so this slot
+    // would just be blank otherwise.
+    const reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
+    bootSlot.appendChild(reverseToggle);
   } else if (!combo.noBoot) {
     bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
@@ -4033,7 +4083,7 @@ function buildCard(combo, opts) {
 
   function rerenderDiagram() {
     if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection); return; }
-    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn);
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
   }
 
   stage.addEventListener('playerclick', (ev) => {
@@ -4058,7 +4108,7 @@ function buildCard(combo, opts) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
   });
 
   // Nathan: "give me an option next to the Play button to save the play
@@ -4080,7 +4130,7 @@ function buildCard(combo, opts) {
     try {
       await exportPlayGif(stage, () => {
         if (formation === 'split') return playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
-        return playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn);
+        return playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
       }, `${safeName}.gif`);
     } catch (e) {
       console.error('GIF export failed:', e);
@@ -4145,6 +4195,7 @@ function buildCard(combo, opts) {
         passOn, protection, overloadOn, leftCall, rightCall,
         alignmentValues: Object.assign({}, alignmentValues),
         callLabel: titleBar.textContent,
+        reverseOn,
       };
       if (opts.onGamePlanCapture) { opts.onGamePlanCapture(capturedState); return; }
       const prevText = gamePlanBtn.textContent;
@@ -4194,7 +4245,7 @@ function buildCard(combo, opts) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn, reverseOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -4389,6 +4440,7 @@ function buildCard(combo, opts) {
       parts.push(direction);
       if (bootOn) parts.push('Boot');
       if (counterOn) parts.push('Counter');
+      if (reverseOn) parts.push('Reverse');
     }
     titleBar.textContent = parts.join(' ');
     if (outer.classList.contains('flipped')) startSignalSequence();

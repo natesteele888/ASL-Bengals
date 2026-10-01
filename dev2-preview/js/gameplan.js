@@ -191,6 +191,7 @@
       splitSide: 'Left', insideOutside: def.io, readPosition: def.rp,
       motionOn: false, bootOn: false, qbSneakOn: false, counterOn: false, popVariantOn: false,
       passOn: false, protection: null, overloadOn: false, leftCall: null, rightCall: null, alignmentValues: null,
+      reverseOn: false,
     };
   }
 
