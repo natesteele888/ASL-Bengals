@@ -365,8 +365,14 @@
   // instead, which also means it's always computed against the real,
   // current CMYFCC_OUR_ASSOCIATION_NAME rather than a value snapshotted
   // once at load time.
+  // js/schedule.js's isBengalsTeamName is the same check (built later,
+  // reusing this function's own logic, for compactGameRowHtml's own
+  // right-column badge -- see its comment) -- delegate to it so the two
+  // never drift, falling back to the original inline logic only if
+  // schedule.js somehow hasn't loaded yet.
   function isBengalsRow(t) {
     const name = t.team || '';
+    if (window.isBengalsTeamName) return window.isBengalsTeamName(name);
     if (/bengal/i.test(name)) return true;
     const tTokens = teamTokens(name);
     if (!tTokens.length) return false;
@@ -655,7 +661,7 @@
     // a plain {opponent: teamName} stand-in for that second case.
     const hasGame = !!game.id;
     const hue = hashHue(game.opponent);
-    const badgeHtml = window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '';
+    const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(game.opponent) : (window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '');
     let html = `<div class="lbHeroHeader" id="standingsOpponentHero" data-opponent="${escapeHtml(game.opponent || '')}" style="background:${heroGradient(hue)};">
         <div class="lbHeroTeamBadgeWrap">${badgeHtml}</div>
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
@@ -737,7 +743,7 @@
       }
       const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
         teamName: opponentName,
-        teamBadgeHtml: window.opponentBadgeHtml(opponentName),
+        teamBadgeHtml: window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponentName) : window.opponentBadgeHtml(opponentName),
       })).join('');
       wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtml}</div>`;
       // Nathan: "if you click on a logo of one of the opponent's it should
@@ -783,15 +789,20 @@
     const name = playoffTeamShortName(seed.teamLabel);
     const isUs = isBengalsRow({ team: seed.teamLabel });
     // Nathan: "Use the Bengals logo for the Ayer/Shirley/Lunenburg team
-    // logo." opponentBadgeHtml has no idea "Ayer/Shirley/Lunenburg" is US
-    // (it's CMYFCC's own name for our program, not "Bengals") -- it fell
-    // through to the generic initials-circle fallback every OTHER
-    // unrecognized team gets. Same real logo asset js/schedule.js's own
-    // bengalsBadgeHtml uses everywhere else in the app (not exposed on
-    // window, so matched here directly rather than adding a new export
-    // for one line of markup).
-    const badge = isUs
-      ? '<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>'
+    // logo." Now goes through the same shared teamBadgeHtmlFor every
+    // other badge site in the app uses (js/schedule.js) instead of its
+    // own separate isUs branch + hardcoded markup -- this was the
+    // original, first-found instance of this bug class; consolidated
+    // once the other 3 sites needed the identical fix, so there's one
+    // real place left to ever update the logo markup.
+    // teamBadgeHtmlFor's own Bengals check tolerates the full label (extra
+    // tokens like "Tackle"/"11U" don't cause a false match either way),
+    // but the non-Bengals logo lookup needs the SHORT name -- same value
+    // the original, pre-consolidation code here already passed -- since
+    // opponentLogos/BUNDLED_LOGOS are keyed off a team's first word, not
+    // the full "Team · Division" label.
+    const badge = window.isBengalsTeamName && window.isBengalsTeamName(seed.teamLabel)
+      ? (window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '')
       : (window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '');
     return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
         <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
