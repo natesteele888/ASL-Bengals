@@ -81,6 +81,9 @@ const wingToggle = document.getElementById('wingToggle');
 const dirToggle = document.getElementById('dirToggle');
 const playSelect = document.getElementById('playSelect');
 const stage = document.getElementById('stage');
+const editSignalSelect = document.getElementById('editSignalSelect');
+const editSignalResetBtn = document.getElementById('editSignalResetBtn');
+const editSignalPreview = document.getElementById('editSignalPreview');
 
 const DUPLICATE_OPTION_VALUE = '__duplicate__';
 
@@ -98,6 +101,95 @@ function rebuildPlaySelectOptions() {
   playSelect.appendChild(dupOpt);
 }
 rebuildPlaySelectOptions();
+
+// --- Signal: which card represents this play, and the sequence it sits in --
+//
+// Nathan: "on play edits you should also be able to see and edit the play
+// signals." The deck (window.ALL_CARDS, plus js/signals.js's photo-less
+// PENDING signals) mixes several kinds of card -- finger counts, formation
+// touches, blocking calls -- only the 'Play Call' group is ever a play's own
+// identity card, so that's what this picker offers. The deck itself doesn't
+// change during a session, so it's built once.
+function playCallSignalDeck() {
+  const pending = (window.Signals && window.Signals.PENDING_IDS || []).map(id => window.Signals.get(id));
+  return (window.ALL_CARDS || []).concat(pending)
+    .filter(c => c && c.group === 'Play Call')
+    .sort((a, b) => a.meaning.localeCompare(b.meaning));
+}
+playCallSignalDeck().forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = String(c.id);
+  opt.textContent = c.meaning + ' (#' + c.id + ')';
+  editSignalSelect.appendChild(opt);
+});
+
+// The live "what would a coach actually see" strip -- built with
+// window.buildSignalSequence, the exact function Play Calls itself calls,
+// so this can't quietly drift out of sync with the real thing. Split mode
+// always previews the run call: this editor has no passOn/protection state
+// of its own (Split here is about SEATTLE/HOUSTON/etc. route shapes, not
+// the Pass toggle), so those steps just don't fire here, same as any other
+// play that hasn't had Pass turned on.
+function renderSignalPreview(playType) {
+  let seq;
+  try {
+    seq = window.buildSignalSequence(
+      playKey, wingSide, direction, insideOutside, motionOn, bootOn,
+      editorFormation, splitSide, false, counterVariant === 'Counter', popVariant === 'Pop2', null, false
+    );
+  } catch (e) { seq = []; }
+  editSignalPreview.innerHTML = '';
+  seq.forEach(step => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;width:52px';
+    const img = document.createElement('img');
+    img.src = step.src;
+    img.style.cssText = 'width:48px;height:59px;object-fit:cover;border-radius:5px;border:1px solid var(--line);background:#fff';
+    const cap = document.createElement('div');
+    cap.style.cssText = 'font-size:8.5px;text-align:center;color:var(--muted);line-height:1.2';
+    cap.textContent = step.label || '';
+    cell.appendChild(img);
+    cell.appendChild(cap);
+    editSignalPreview.appendChild(cell);
+  });
+}
+
+// Keeps the select showing whichever card THIS play is currently using
+// (including a coach's own prior override, via window.playSignalIdFor --
+// same lookup play-calls.js uses when it actually calls the play) and
+// redraws the preview. Called from render()/renderSplitEditor() so it
+// never falls out of sync with the play or any toggle.
+function syncSignalUI() {
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  const currentId = window.playSignalIdFor && window.playSignalIdFor(playType, playKey);
+  if (currentId != null) editSignalSelect.value = String(currentId);
+  renderSignalPreview(playType);
+}
+
+editSignalSelect.addEventListener('change', () => {
+  if (isPlaying) return;
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType) return;
+  const id = Number(editSignalSelect.value);
+  const card = window.Signals && window.Signals.get(id);
+  playType.signalCardId = id;
+  playType.signalLabel = card ? card.meaning : undefined;
+  // Distinguishes a coach's real choice from the "cloud snapshot predates
+  // this flag" staleness normalizePlayData otherwise corrects -- see that
+  // function's own comment in play-calls.js.
+  playType.signalCardIdManual = true;
+  renderSignalPreview(playType);
+});
+
+editSignalResetBtn.addEventListener('click', () => {
+  if (isPlaying) return;
+  const playType = DATA.playTypes.find(p => p.key === playKey);
+  if (!playType) return;
+  delete playType.signalCardId;
+  delete playType.signalLabel;
+  delete playType.signalCardIdManual;
+  syncSignalUI();
+});
 
 // Mirrors Play Calls' base signal-card mapping just enough to carry a
 // signal forward when duplicating one of the 6 standard plays.
@@ -847,21 +939,6 @@ function tweenPoint(fromPt, toPt, durationMs, onFrame) {
   });
 }
 
-function animateBallAlongPath(pathEl, durationMs, onFrame) {
-  return new Promise(resolve => {
-    const totalLen = pathEl.getTotalLength();
-    const start = Date.now();
-    function step() {
-      const t = Math.min(1, (Date.now() - start) / durationMs);
-      const pt = pathEl.getPointAtLength(t * totalLen);
-      onFrame(pt);
-      if (t < 1) requestAnimationFrame(step);
-      else resolve();
-    }
-    requestAnimationFrame(step);
-  });
-}
-
 // Draws a path on progressively (stroke-dashoffset) while sliding its
 // arrowhead along the growing tip, instead of a static SVG marker that
 // would just sit at the endpoint from the very start.
@@ -1339,11 +1416,6 @@ let editTarget = null;
 let settingBallCarrier = false;
 let settingBallStart = false;
 
-const DEFENDER_IDS_4x3 = ['DE_L','DT_L','DT_R','DE_R','OLB_L','MLB','OLB_R','CB_L','CB_R','FS','SS'];
-const DEFENDER_IDS_4x4 = ['DE_L','DT_L','DT_R','DE_R','LB1','LB2','LB3','LB4','CB_L','CB_R','FS'];
-function getDefenderIds() {
-  return defenseMode === '4x4' ? DEFENDER_IDS_4x4 : DEFENDER_IDS_4x3;
-}
 function getActiveDefenseArr(variant) {
   return (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
 }
@@ -1684,8 +1756,13 @@ function renderSplitEditor() {
     circlesLayer.appendChild(drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22));
   });
 
-  const wideNum = splitSide === 'Right' ? 6 : 5;
-  const flexNum = splitSide === 'Right' ? 2 : 3;
+  // Shared from js/play-calls.js (window.splitPersonnel) rather than this
+  // file's own guess -- this exact ternary was hardcoded here too, with the
+  // SAME mistake (flexNum wrong for Right), independently of play-calls.js's
+  // copy. See play-calls.js's splitPersonnel for the data it comes from.
+  const { wideNum, flexNum } = window.splitPersonnel
+    ? window.splitPersonnel(splitSide)
+    : { wideNum: splitSide === 'Right' ? 6 : 5, flexNum: 3 };
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
     const role = (Number(num) === wideNum) ? 'wide' : (Number(num) === flexNum) ? 'flex' : null;
     const isTarget = role && splitEditTarget === role;
@@ -1795,6 +1872,7 @@ function renderSplitEditor() {
 }
 
 function render() {
+  syncSignalUI();
   if (editorFormation === 'split') { renderSplitEditor(); return; }
   const playType = DATA.playTypes.find(p => p.key === playKey);
   const variant = getPlayVariant(playType, direction);

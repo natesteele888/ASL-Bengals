@@ -12355,6 +12355,7 @@ window.SHIPPED_PLAYS_JSON = {
     {
       "key": "option_pass",
       "label": "Option Pass",
+      "isPass": true,
       "noBoot": true,
       "hasReadToggle": false,
       "directions": {
@@ -14116,6 +14117,7 @@ window.SHIPPED_PLAYS_JSON = {
     {
       "key": "shuffle_pass",
       "label": "Shuffle Pass",
+      "isPass": true,
       "hasReadToggle": false,
       "directions": {
         "Right": {
@@ -15148,6 +15150,7 @@ window.SHIPPED_PLAYS_JSON = {
           {
     "key": "pop_pass",
     "label": "Pop Pass",
+    "isPass": true,
     "directions": {
       "Right": {
         "Pop": {

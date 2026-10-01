@@ -268,8 +268,17 @@
     const emptyHtml = g.players.length ? '' : '<div class="lbEmpty" style="padding:6px 0;">No one listed yet.</div>';
 
     const listedNums = new Set(g.players);
+    // Nathan: "list in numerical order not alphabetical order. Easier to
+    // find the kids that way." Real, pre-existing inconsistency, not just
+    // a preference -- every OTHER roster-number picker in the app
+    // (js/roster.js's own sortedRoster(), js/game-stats-editor.js,
+    // js/schedule.js's injury picker) already sorts numeric-by-jersey,
+    // same rank() idiom (blank/non-numeric # sorts to the bottom, not
+    // clumped at "0"); this one alone sorted alphabetically by name while
+    // still rendering "#{num} {name}" with the number leading.
+    const rank = (p) => (p.num === '' || p.num == null || isNaN(Number(p.num))) ? Infinity : Number(p.num);
     const available = Object.values(byNum).filter(p => p.num && !listedNums.has(String(p.num)))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      .sort((a, b) => rank(a) - rank(b));
     const options = available.map(p => `<option value="${escapeHtml(p.num)}">#${escapeHtml(p.num)} ${escapeHtml(p.name || '')}</option>`).join('');
 
     const nudgeHtml = (g.x != null) ? `
@@ -379,6 +388,96 @@
       input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
     });
   }
+
+  // ---------------------------------------------------------------------
+  // Defender-circle jersey-number lookup, for Play Calls (js/play-calls.js)
+  // and Play Builder V2's own authoring canvas (js/playbuilder/editor.js).
+  // Nathan: a defender's circle on a real play diagram should show HIS
+  // real jersey number (e.g. "23") once a real starter is on file for that
+  // spot -- this file's own "defense" section IS that starter list
+  // already, for OUR OWN team (there's no opponent-scouting depth chart
+  // anywhere in this app -- every number this ever surfaces is one of our
+  // own kids). Falls back to the generic position label (untouched
+  // default) for anything it can't confidently resolve.
+  //
+  // Deliberately conservative, and deliberately NOT position-vocabulary-
+  // aware (no baked-in list of DE/DT/LB/CB/S): a depth-chart group's own
+  // LAST WORD (the coach's own label -- "Left CB" -> "CB", "Middle LB" ->
+  // "LB") is compared against the diagram's defender label. A label
+  // shared by more than one real spot on the field (e.g. 3 linebackers
+  // all labeled "LB") only resolves once the coach has ALSO split the
+  // depth chart into that many same-tagged groups -- paired up left-to-
+  // right by each side's own x (the defender's real field x, the group's
+  // own diagram x%) -- one generic "Middle LB" group for 3 real LB spots
+  // stays silent rather than guess which of the 3 kids' numbers goes
+  // where. No UI toggle: this is silent/automatic, entirely driven by
+  // whether the Depth Chart actually has that data -- nothing to flip on
+  // for a team that hasn't filled theirs in yet.
+  let depthChartLoadPromise = null;
+  function ensureDepthChartLoaded() {
+    if (!loaded && !depthChartLoadPromise) depthChartLoadPromise = loadChart();
+    return depthChartLoadPromise;
+  }
+
+  function groupPositionTag(g) {
+    const words = String(g.label || '').trim().toUpperCase().split(/\s+/);
+    return words[words.length - 1] || '';
+  }
+
+  // Found testing against the real, live depth chart: the real defense
+  // alignment (base_4x4) labels all 4 linebacker spots plainly "LB", but
+  // the real depth chart splits them into two "LB" groups and two "MLB"
+  // groups (a coach's own, more specific naming) -- an exact-tag match
+  // left all 4 unresolved even though 4 real jersey numbers exist for
+  // them. A group tag that ENDS WITH the (shorter) alignment label is the
+  // same position, more specifically named (MLB/OLB both end in "LB", FS/
+  // SS both end in "S") -- checked ONE way only, so "LB" never also
+  // matches an unrelated tag like "DE" or "DT".
+  function positionTagsCompatible(defenderLabel, groupTag) {
+    if (!defenderLabel || !groupTag) return false;
+    if (defenderLabel === groupTag) return true;
+    return groupTag.length > defenderLabel.length && groupTag.endsWith(defenderLabel);
+  }
+
+  // defenders: [{id, label, x, y}, ...] -- the exact shape all three
+  // callers (renderCardDiagram/renderSplitDiagram in js/play-calls.js,
+  // and js/playbuilder/editor.js's own render()) already build their
+  // defender circles from. Returns { [defenderId]: '23' } for only the
+  // defenders this could confidently resolve. Kicks off the (one-time)
+  // background load if it hasn't already run -- callers don't await
+  // anything; like every other roster-dependent bit of UI in this app,
+  // the real data just shows up once it's in, on whatever render happens
+  // to come next.
+  window.getDefenseStarterNumbers = function (defenders) {
+    ensureDepthChartLoaded();
+    const result = {};
+    if (!loaded || !Array.isArray(defenders) || !defenders.length) return result;
+    const starterGroups = groups.filter(g => g.section === 'defense' && g.players && g.players.length);
+    if (!starterGroups.length) return result;
+    const byNum = rosterByNum();
+
+    const labelsSeen = new Set();
+    defenders.forEach(d => {
+      const l = String(d.label || '').trim().toUpperCase();
+      if (l) labelsSeen.add(l);
+    });
+
+    labelsSeen.forEach(label => {
+      const sameLabelDefenders = defenders.filter(d => String(d.label || '').trim().toUpperCase() === label);
+      const matchingGroups = starterGroups.filter(g => positionTagsCompatible(label, groupPositionTag(g)));
+      // Ambiguous (no matching group, or a different count of groups than
+      // real spots on the field) -- leave every defender at this label
+      // alone rather than risk pairing the wrong kid to the wrong spot.
+      if (!matchingGroups.length || matchingGroups.length !== sameLabelDefenders.length) return;
+      const sortedDefenders = sameLabelDefenders.slice().sort((a, b) => a.x - b.x);
+      const sortedGroups = matchingGroups.slice().sort((a, b) => (a.x || 0) - (b.x || 0));
+      sortedDefenders.forEach((d, i) => {
+        const num = sortedGroups[i].players[0];
+        if (num && byNum[num]) result[d.id] = num;
+      });
+    });
+    return result;
+  };
 
   window.initDepthChart = function () {
     const wrap = document.getElementById('depthChartBody');

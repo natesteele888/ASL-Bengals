@@ -40,6 +40,14 @@ const SHIPPED_PLAY_FLAGS = {};
     // on this flag instead of assuming every hasCounter play uses the same
     // same-side rule.
     counterAwayFromWing: !!pt.counterAwayFromWing,
+    // Option Pass/Pop Pass both shipped their isPass:true after some
+    // coaches had already saved a "Save to Cloud" snapshot from before that
+    // field existed -- same "cloud always wins" loss as every other flag
+    // above, just for the RUN/PASS pill and the run-plays-first sort
+    // (buildGrid/buildPlayTile, coachtools-createplay.js's renderPlayGrid)
+    // instead of a toggle. Nathan: both showed as RUN and sorted with the
+    // run plays instead of at the bottom.
+    isPass: !!pt.isPass,
   };
 });
 
@@ -189,7 +197,13 @@ function normalizePlayData(playTypes) {
     // this page. Only overrides plays the map actually knows about --
     // 'boot' has no map entry precisely because it NEEDS its own
     // signalCardId (26) to work at all, so that one's left alone.
-    if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
+    // Nathan: "on play edits you should also be able to see and edit the
+    // play signals" -- js/edit-plays.js's new Signal picker deliberately
+    // sets signalCardIdManual alongside signalCardId, which is what tells
+    // this apart from the stale-snapshot case the stomp above exists to
+    // fix: a coach's own real choice must survive the next load, same as
+    // every other field on this page already does.
+    if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined && !pt.signalCardIdManual) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
     // Force the behavioral flags back to whatever's actually shipped in
     // code, regardless of what this particular cloud snapshot has (or is
     // missing) for them -- see SHIPPED_PLAY_FLAGS above for why.
@@ -256,19 +270,32 @@ function normalizePlayData(playTypes) {
     // this fix works immediately for every coach regardless of whether
     // that admin button has ever been pressed.
     if (pt.key === 'option' || pt.key === 'outside_zone') {
-      const REPAIRED_COUNTER_P4_POINTS = {
-        'option|Left': [[360, 269], [480, 360], [520, 322], [650, 230]],
-        'option|Right': [[1251, 269], [1131, 360], [1091, 322], [961, 230]],
-        'outside_zone|Left': [[360, 269], [520, 340], [700, 309], [900, 220]],
-        'outside_zone|Right': [[1251, 269], [1091, 340], [911, 309], [711, 220]],
+      // Authored ONCE, in the Wing-Left canonical shape -- same rule the
+      // comment on the plain-#4-points render branch below documents
+      // ("points are authored assuming Wing Left as the base"), which
+      // already mirrors this correctly around center for Direction Right.
+      // An earlier version of this fix stored a SEPARATE, independently-
+      // hardcoded "Right" copy here too, which double-mirrored: Direction
+      // Right's Counter always renders with p4Side === 'Right' whenever
+      // Counter is actually eligible/on (updateCounterAvailability's gate
+      // guarantees effectiveWingSide === direction for these two plays,
+      // since neither sets counterAwayFromWing), so the render-time branch
+      // mirrored the already-Right-anchored points AGAIN, silently
+      // collapsing Right's shape back onto Left's. Nathan: "Wing Left
+      // Motion Outside Zone Right Counter... still showing the run path
+      // from his old position." One source of truth instead -- no second
+      // copy left to double-transform or drift out of sync with the first.
+      const REPAIRED_COUNTER_P4_POINTS_LEFT = {
+        option: [[360, 269], [480, 360], [520, 322], [650, 230]],
+        outside_zone: [[360, 269], [520, 340], [700, 309], [900, 220]],
       };
+      const basePoints = REPAIRED_COUNTER_P4_POINTS_LEFT[pt.key];
       ['Left', 'Right'].forEach(dirKey => {
         const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
         if (!counterVariant || !counterVariant.paths) return;
         const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
         if (idx === -1) return;
-        const points = REPAIRED_COUNTER_P4_POINTS[`${pt.key}|${dirKey}`];
-        if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
+        counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(basePoints)) };
       });
     }
     // Same "stale auto-grafted clone" problem as #4 above, one level deeper
@@ -550,8 +577,18 @@ function buildSwitchToggle(label, checked, onChange, extraClass) {
 }
 
 (function() {
-  const SIGNAL_CARDS = {};
-  ALL_CARDS.forEach(c => { SIGNAL_CARDS[c.id] = c.img; });
+  // The deck now comes from js/signals.js, which adds the calls that exist but
+  // have not been photographed yet (Overload, I-Formation, the two pass-
+  // protection calls) and hands back a generated placeholder card for them
+  // instead of a broken image. SIGNAL_CARDS stays a plain id -> src map so
+  // every existing call site is unchanged.
+  if (window.Signals) window.Signals.load(ALL_CARDS);
+  const SIGNAL_CARDS = new Proxy({}, {
+    get: function (_t, id) {
+      return window.Signals ? window.Signals.src(Number(id)) : undefined;
+    },
+    has: function () { return true; },
+  });
 
 const NS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs) {
@@ -638,9 +675,125 @@ function buildEndCapEl(endType, color, width) {
       stroke: color, 'stroke-width': Math.max(6, width + 2), 'stroke-linecap': 'round',
     });
   }
-  return svgEl('polygon', { points: '-2,-11 20,0 -2,11', fill: color });
+  // Nathan: "very thin lines. Needs to be more bold, like the Madden
+  // cards." The arrowhead used to be a fixed size regardless of the
+  // route's own stroke width, so simply bolding ROUTE_STROKE_WIDTH left
+  // a bold line ending in the same small, thin-looking arrow it always
+  // had. Scaled off the polygon's original design width (9, the most
+  // common authored p.width before ROUTE_STROKE_WIDTH replaced it) so a
+  // caller still passing the old default gets the exact original arrow.
+  const s = width / 9;
+  return svgEl('polygon', { points: `${-2 * s},${-11 * s} ${20 * s},0 ${-2 * s},${11 * s}`, fill: color });
 }
-function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl) {
+// A genuine mid-route pause -- "Y stands still at the stop, then releases,"
+// the reference footballplaybook.com behavior Nathan asked to match ("stop
+// and go route has a couple nodes but it doesn't delay"). Distinct from
+// delayMs (a fixed wait BEFORE the reveal starts at all, already handled
+// below): a RoutePoint carrying `stopMs` (schema.js) pauses the reveal once
+// it reaches THAT point, mid-route, for real time, before continuing.
+//
+// Reads stopMs off either point shape this app uses -- a Play Builder V2
+// {x,y,stopMs} object, or one of play-calls.js's own legacy [x,y] tuples
+// with stopMs appended as a 3rd element (js/playbuilder/legacy-adapter.js
+// -- a named property would be silently dropped by JSON.stringify, a
+// trailing array element survives it).
+function pointStopMs(p) { return !p ? 0 : (Array.isArray(p) ? (p[2] || 0) : (p.stopMs || 0)); }
+function pointXY(p) { return Array.isArray(p) ? { x: p[0], y: p[1] } : { x: p.x, y: p.y }; }
+
+// Builds the real elapsed-ms -> reveal-fraction timeline for one player's
+// route. Running segments keep the SAME constant rate a stop-free route
+// already has (fraction-per-ms = 1/durationMs) -- a stop only ADDS real
+// time on top, it never compresses the motion around it. Returns null
+// (meaning "no stops here, use durationMs unchanged") the moment `points`
+// carries no stopMs data at all, so this is a provable no-op for every
+// route that doesn't use the feature -- which is every route today except
+// ones a coach has explicitly set a Timed Stop on.
+function buildStopTimeline(points, durationMs, speedMultiplier) {
+  if (!points || points.length < 2) return null;
+  const speed = speedMultiplier || 1;
+  const stops = [];
+  points.forEach((p, idx) => { const ms = pointStopMs(p); if (ms > 0) stops.push({ idx, ms: ms * speed }); });
+  if (!stops.length) return null;
+
+  let total = 0;
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    const a = pointXY(points[i - 1]), b = pointXY(points[i]);
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+    cum.push(total);
+  }
+  if (!total) return null;
+
+  const withFrac = stops.map((s) => ({ ms: s.ms, frac: cum[s.idx] / total })).sort((a, b) => a.frac - b.frac);
+  const segments = [];
+  let elapsed = 0;
+  let prevFrac = 0;
+  withFrac.forEach((s) => {
+    const runMs = Math.max(0, (s.frac - prevFrac) * durationMs);
+    if (runMs > 0) segments.push({ hold: false, startMs: elapsed, endMs: elapsed + runMs, fromFrac: prevFrac, toFrac: s.frac });
+    elapsed += runMs;
+    segments.push({ hold: true, startMs: elapsed, endMs: elapsed + s.ms, frac: s.frac });
+    elapsed += s.ms;
+    prevFrac = s.frac;
+  });
+  const tailMs = Math.max(0, (1 - prevFrac) * durationMs);
+  segments.push({ hold: false, startMs: elapsed, endMs: elapsed + tailMs, fromFrac: prevFrac, toFrac: 1 });
+  elapsed += tailMs;
+
+  return {
+    totalMs: elapsed,
+    segments, // exposed for elapsedMsForFraction below -- the inverse lookup
+    fracAt(elapsedMs) {
+      const t = Math.max(0, Math.min(elapsedMs, elapsed));
+      let seg = segments[segments.length - 1];
+      for (let i = 0; i < segments.length; i++) { if (t <= segments[i].endMs) { seg = segments[i]; break; } }
+      if (seg.hold) return seg.frac;
+      const span = seg.endMs - seg.startMs;
+      return span ? seg.fromFrac + (seg.toFrac - seg.fromFrac) * (t - seg.startMs) / span : seg.toFrac;
+    },
+  };
+}
+
+// The inverse of buildStopTimeline's own fracAt() -- given a target
+// fraction along the route (not a time), how much real elapsed time does
+// it take to actually get there, INCLUDING any stop(s) strictly before it.
+// This is what js/ball-path.js's schedule() needs: an exchange point's
+// timing is derived from "how far along his own route is the receiver
+// when he reaches it" (fractionAlongPath), and if a Timed Stop sits
+// earlier on that same route, the real answer is later than a plain
+// fraction*durationMs would say -- the receiver isn't there yet, he's
+// still standing at the stop. A stop sitting AT OR AFTER the target
+// fraction doesn't matter (the exchange already happened before he'd
+// even reach it) and is correctly ignored by only walking non-hold
+// segments below. No stops at all (points has no stopMs data) returns
+// the exact original linear formula, so every route without a Timed
+// Stop is unaffected.
+//
+// speedMultiplier must be threaded through to buildStopTimeline exactly
+// like animatePathDraw's own stop-aware call already does -- found live,
+// at 1/2x playback specifically: the receiver's own circle correctly
+// holds for stopMs*speedMultiplier (animatePathDraw gets speedMultiplier
+// right), but without passing it here too, this function would compute
+// the exchange as if the stop were still its raw, un-scaled duration --
+// scheduling the ball to arrive up to a full stopMs EARLY relative to
+// where the receiver's own (correctly slowed-down) circle actually is.
+// Invisible at the default 1x speed (scaled and unscaled are identical),
+// which is why the first pass of this fix didn't catch it.
+function elapsedMsForFraction(points, durationMs, targetFrac, speedMultiplier) {
+  const timeline = buildStopTimeline(points, durationMs, speedMultiplier);
+  if (!timeline) return targetFrac * durationMs;
+  for (const seg of timeline.segments) {
+    if (seg.hold) continue;
+    if (targetFrac <= seg.toFrac) {
+      const span = seg.toFrac - seg.fromFrac;
+      const localT = span ? (targetFrac - seg.fromFrac) / span : 0;
+      return seg.startMs + localT * (seg.endMs - seg.startMs);
+    }
+  }
+  return timeline.totalMs;
+}
+
+function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl, stopTimeline) {
   return new Promise(async resolve => {
     // Hide immediately, BEFORE the delay -- not after. renderCardDiagram
     // just drew every path fully solid (that's the static, non-animated
@@ -658,9 +811,15 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
     if (arrowEl) arrowEl.style.opacity = '0';
     if (delayMs) await wait(delayMs);
     if (arrowEl) arrowEl.style.opacity = '1';
+    // stopTimeline (built by buildStopTimeline, above) is undefined/null for
+    // every path without a Timed Stop -- frac/effectiveDuration then reduce
+    // to the exact original linear math, byte-identical to before this was
+    // added.
+    const effectiveDuration = stopTimeline ? stopTimeline.totalMs : durationMs;
     const start = performance.now();
     function frame(now) {
-      const t = Math.min(1, (now - start) / durationMs);
+      const elapsedMs = now - start;
+      const t = stopTimeline ? stopTimeline.fracAt(elapsedMs) : Math.min(1, elapsedMs / durationMs);
       pathEl.style.strokeDashoffset = `${len * (1 - t)}`;
       if (arrowEl) placeArrowAtFraction(arrowEl, pathEl, t);
       if (circleEl) {
@@ -668,34 +827,102 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl)
         circleEl.setAttribute('cx', pt.x); circleEl.setAttribute('cy', pt.y);
         if (textEl) { textEl.setAttribute('x', pt.x); textEl.setAttribute('y', pt.y + 12); }
       }
-      if (t < 1) requestAnimationFrame(frame); else resolve();
+      if (elapsedMs < effectiveDuration) requestAnimationFrame(frame); else resolve();
     }
     requestAnimationFrame(frame);
   });
 }
 
 const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
-const DEFENSE_COLOR = '#1a3fae';
+// Nathan, screenshot: "the defensive players are too bright, I want them to
+// be reduced by about 10% just so there is some visual difference between
+// the offense and defense." Was #1a3fae (26,63,174) -- each channel x0.9.
+const DEFENSE_COLOR = '#17399d';
 const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
 const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
 const BALLSTART_COLOR = '#d99000'; // gold -- matches js/edit-plays.js's same constant/meaning
 const CIRCLE_R = 36;
+// Nathan, comparing against real Madden-style play cards: "very thin
+// lines. Needs to be more bold." Real route data (data/plays.json,
+// js/shipped-defaults.js) only ever authors p.width as 7 or 9 -- no
+// per-play football meaning behind the exact number, confirmed by
+// checking the actual distribution before touching this -- so every
+// REAL route/block line renders at one bold, consistent width instead
+// of whatever was authored, rather than migrating thousands of stored
+// values. Deliberately NOT applied to the thin, dashed, gray "option
+// decision line" (p.optionLine, always width:4) -- that's a reference
+// indicator, not a player's own path, and staying visibly thinner/
+// dashed/gray is what tells the two apart at a glance.
+const ROUTE_STROKE_WIDTH = 16;
+const CIRCLE_STROKE_WIDTH = 11;
+// Nathan: "5 guys players are directly to the edge of the card. There
+// needs to be more padding around the play diagram on the card to make
+// it easier to see." Pure viewBox canvas margin (see the two
+// stage.setAttribute('viewBox', ...) call sites below) -- adds visual
+// breathing room around the real content without moving a single
+// player/route coordinate. DATA.topPad (400, shipped-defaults.js)
+// already handles most of the top margin by shifting content down; a
+// small extra DIAGRAM_PAD_TOP tops that up since it left only ~10 units
+// of headroom above the highest real point (a defender clamped to
+// y=-390).
+const DIAGRAM_PAD_X = 70;
+const DIAGRAM_PAD_TOP = 30;
+const DIAGRAM_PAD_BOTTOM = 40;
 
-function getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn) {
+function getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn, alignmentValues) {
   // Defensive fallback for any play missing one side's data (a brand-new
   // play added via Edit Plays might only have one direction authored at
   // first) -- falls back to whichever side DOES exist instead of blanking/
   // crashing the diagram. Every shipped play has both Left and Right
   // authored, so this never actually triggers for them.
   let v = playType.directions[direction] || playType.directions.Right || playType.directions.Left;
+  // playType.alignmentToggles (same shape as schema.js's own Formation.
+  // alignmentToggles -- [{id, label, values: [{id, label}, ...]}, ...],
+  // copied straight through by js/playbuilder/legacy-adapter.js) is the
+  // one DATA-DRIVEN dimension in this walk -- a custom formation's own
+  // toggle (Heavy is the first), not hand-added here. Unset/empty for
+  // every existing PlayType (Wing/Split never set it), so this is a
+  // no-op loop for them -- zero change to anything already relied on.
+  // Walked BEFORE the four hardcoded dimensions below since it's a
+  // formation-wide axis, not a per-play variant one -- see the adapter's
+  // own nesting order.
+  (playType.alignmentToggles || []).forEach((toggle) => {
+    const value = (alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id;
+    v = v[value];
+  });
   if (playType.hasInsideOutside) v = v[insideOutside || 'Outside'];
   if (playType.hasReadToggle) v = v[readPosition || 'A'];
   if (playType.hasCounter) v = v[counterOn ? 'Counter' : 'Normal'];
   if (playType.hasPopVariant) v = v[popVariantOn ? 'Pop2' : 'Pop'];
   return v;
 }
+
+// Exported so other screens describe a play from the SAME resolution the
+// diagram uses, rather than re-implementing the walk down the variant tree.
+// js/study-guide.js re-implemented it and stopped two levels early, which
+// silently dropped every hasCounter play (Outside Zone, Blast, Option) out of
+// a player's study guide entirely -- the walk is four levels deep and varies
+// per play, so a partial copy returns an interior node with no `paths` and the
+// caller just skips it. Note the name: edit-plays.js already owns a global
+// getPlayVariant() with a different (2-arg) signature.
+window.resolvePlayVariant = getVariant;
+
+// Which coordinate array the diagram ACTUALLY draws for a path. The 4x4
+// defense is what the app pins to (see defenseMode in buildCard), and 190 of
+// the 350 authored paths carry a separate points4x4 -- every one of them a
+// blocking path. Reading `points` instead means describing a block that lands
+// somewhere the player never sees.
+window.renderedPointsFor = function (p, defenseMode) {
+  return (defenseMode === '4x4' && p.isBlocking && !p.blockRelative && !p.dualSideBlock
+    && !p.motionIndependentBlock && p.points4x4) ? p.points4x4 : p.points;
+};
+
+// The defense actually on screen for a variant, same 4x4 pin.
+window.renderedDefenseFor = function (variant, defenseMode) {
+  return (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+};
 
 // ---- Build every base play x direction combo (wing is a per-card toggle, not a filter) ----
 const BASE_PLAY_ORDER = ['inside_zone', 'outside_zone', 'option', 'option_pass', 'blast', 'double_blast'];
@@ -705,7 +932,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -726,13 +953,6 @@ const BOOT_SIGNAL_ID = 26;
 // never updated to actually call it out, so the flip-card signal sequence
 // silently looked identical for Normal and Counter this whole time.
 const COUNTER_SIGNAL_ID = 18;
-// Nathan: "On Pop Pass 2, there are 4 signals, the final signal should be
-// Pass #2 (signal #29)" -- same "modifier tacked on at the end" pattern as
-// Boot/Counter above, a fixed single card (not randomized from
-// PASS_SIGNAL_IDS -- that pool means "it's a pass" generically; this one
-// specifically has to mean "it's the crossing-block Pop Pass 2 variant,"
-// so it can't be ambiguous with anything else).
-const POP2_SIGNAL_ID = 29;
 
 // ---- Split formation (added alongside Wing, doesn't touch anything above) ----
 // Split's own touch/identity card, parallel to WING_TOUCH_ID. Real photo is
@@ -776,11 +996,35 @@ const SPLIT_ROUTE_LABELS = { seattle: 'Seattle', houston: 'Houston', florida: 'F
 // buildToggleGroup's optional `short` option field below.
 const SPLIT_ROUTE_SHORT_LABELS = { seattle: 'SEA', houston: 'HOU', florida: 'FLO', boston: 'BOS' };
 
+// A play may name its own signal series -- playType.signalRecipe -- which is
+// how a new formation's plays get a series assigned without editing code.
+// Falls back to the formation's own recipe.
+function recipeNameFor(playType, formationRecipe) {
+  return (playType && playType.signalRecipe) || formationRecipe;
+}
+function playSignalIdFor(playType, playKey) {
+  return (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
+}
+function playSignalLabelFor(playType, playKey) {
+  return (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
+}
+// Exposed so js/edit-plays.js's Signal picker can show which card a play
+// is CURRENTLY using (including a coach's own override) without a second
+// copy of this same playType-overrides-map-default logic -- same reason
+// buildSignalSequence itself is exposed just below.
+window.playSignalIdFor = playSignalIdFor;
+window.playSignalLabelFor = playSignalLabelFor;
+
 function randomFingerId(side, exclude) {
   const pool = side === 'Right' ? FINGER_RIGHT_IDS : FINGER_LEFT_IDS;
   const options = exclude !== undefined ? pool.filter(id => id !== exclude) : pool;
   return options[Math.floor(Math.random() * options.length)];
 }
+// Universal (not Wing/Split-specific -- see FINGER_RIGHT_IDS/
+// FINGER_LEFT_IDS's own comment), so js/playbuilder/editor.js's own
+// signal-SEQUENCE preview reuses this directly for its side/direction
+// cards instead of re-picking the same finger-count convention by hand.
+window.randomFingerId = randomFingerId;
 
 // Split's signal order, per Nathan: Split -> Direction (the split side) ->
 // Play call -> Direction (the split side AGAIN, as its own explicit card) ->
@@ -801,42 +1045,45 @@ function randomFingerId(side, exclude) {
 // passOn is a plain boolean now -- Nathan: "it's just any of those signals
 // means it is pass", so which of Pass 1/2/3 actually shows is randomized,
 // same idea as MOTION_SIGNAL_IDS below, not a coach-facing choice.
-function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn) {
-  const splitFingerId = randomFingerId(splitSide);
-  // Avoid showing the literal same card image twice in a row for the two
-  // direction cards (both now the same side) -- same dedup approach Wing's
-  // Direction card already uses when direction === wingSide.
-  const dirFingerId = randomFingerId(splitSide, splitFingerId);
+function buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, protection, overloadOn) {
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
-  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
-  const signals = [
-    { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
-    { src: SIGNAL_CARDS[splitFingerId], label: `Split: ${splitSide}` },
-  ];
-  if (playKey === 'blast' || playKey === 'double_blast') {
-    if (insideOutside === 'Outside') {
-      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
-    }
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  } else {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  }
-  signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${splitSide}` });
-  if (passOn) {
-    const passId = PASS_SIGNAL_IDS[Math.floor(Math.random() * PASS_SIGNAL_IDS.length)];
-    signals.push({ src: SIGNAL_CARDS[passId], label: 'Pass' });
-  }
-  return signals;
+  return window.Signals.sequenceFor(recipeNameFor(playType, 'split'), {
+    playKey, splitSide, insideOutside, passOn,
+    protection: protection || null,
+    overloadOn: !!overloadOn,
+    playSignalId: playSignalIdFor(playType, playKey),
+    playSignalLabel: playSignalLabelFor(playType, playKey),
+  });
 }
 
 // formation/splitSide/passOn are new, optional, and appended at the end
 // specifically so every existing caller (play-calls-quiz.js included) that
 // only ever passes the first 6 args keeps working completely unchanged --
 // formation defaults to Wing behavior whenever it's left undefined.
-function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn) {
+function buildSignalSequence(playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn, reverseOn) {
+  // protection/overloadOn appended last for the same reason formation/
+  // splitSide/passOn were: play-calls-quiz.js and the PDF exporters pass
+  // these positionally and stop short. altCallOn is the newest, same
+  // convention -- undefined/falsy for every existing caller that doesn't
+  // know about it, which is exactly "alt call off" (the correct default).
   if (formation === 'split') {
-    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn);
+    return buildSplitSignalSequence(playKey, splitSide, insideOutside, passOn, protection, overloadOn);
+  }
+  // A play may declare an alternate, shorter call (Play.altCallCardId/
+  // altCallLabel) that means the EXACT same play as its own normal signal
+  // -- e.g. I's own Double Blast can also be called "Jumbo" (card 36).
+  // Nathan: "For Jumbo, it's just Jumbo > Direction." Bypasses the
+  // formation's own recipe entirely -- routes/blocking/ball-carrier are
+  // completely unaffected by this, it's purely which cadence gets flashed.
+  // Checked before qb_sneak's own special case below since the two are
+  // mutually exclusive by construction (qb_sneak never sets altCallCardId).
+  const altCallPlayType = DATA.playTypes.find(p => p.key === playKey);
+  if (altCallOn && altCallPlayType && altCallPlayType.altCallCardId != null) {
+    const dirFingerId = randomFingerId(direction);
+    return [
+      { id: altCallPlayType.altCallCardId, src: SIGNAL_CARDS[altCallPlayType.altCallCardId], label: altCallPlayType.altCallLabel || altCallPlayType.label },
+      { id: dirFingerId, src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` },
+    ];
   }
   // QB Sneak's own card is Split formation only (see buildSplitSignalSequence's
   // comment) -- its diagram lives on the Wing/Shotgun rendering pipeline for
@@ -862,73 +1109,47 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     const decoyPlayKey = decoyPlayKeys[Math.floor(Math.random() * decoyPlayKeys.length)];
     const decoyDirection = Math.random() < 0.5 ? 'Left' : 'Right';
     const decoyDirFingerId = randomFingerId(decoyDirection, sideFingerId);
+    // id added on each step (found auditing every play's sequence shape) --
+    // this special case predates runRecipe's {id,src,label} convention and
+    // never carried the raw card number, unlike every other recipe's own
+    // output. Didn't affect the real flip-card UI (reads src/label only),
+    // but silently broke js/gameplan-pdf.js's own compact numeric
+    // reference ("33 -> 3 -> 9 -> ...") for this one play specifically.
     return [
-      { src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
-      { src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
-      { src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID[decoyPlayKey]], label: PLAY_TYPE_SIGNAL_LABEL[decoyPlayKey] },
-      { src: SIGNAL_CARDS[decoyDirFingerId], label: `Direction: ${decoyDirection}` },
-      { src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
+      { id: SPLIT_TOUCH_ID, src: SIGNAL_CARDS[SPLIT_TOUCH_ID], label: 'Split' },
+      { id: sideFingerId, src: SIGNAL_CARDS[sideFingerId], label: `Split: ${side}` },
+      { id: PLAY_TYPE_SIGNAL_ID[decoyPlayKey], src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID[decoyPlayKey]], label: PLAY_TYPE_SIGNAL_LABEL[decoyPlayKey] },
+      { id: decoyDirFingerId, src: SIGNAL_CARDS[decoyDirFingerId], label: `Direction: ${decoyDirection}` },
+      { id: QB_SNEAK_SIGNAL_ID, src: SIGNAL_CARDS[QB_SNEAK_SIGNAL_ID], label: 'QB Sneak' },
     ];
   }
-  const wingFingerId = randomFingerId(wingSide);
-  const dirFingerId = direction === wingSide
-    ? randomFingerId(direction, wingFingerId)
-    : randomFingerId(direction);
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const playSignalId = (playType && playType.signalCardId != null) ? playType.signalCardId : PLAY_TYPE_SIGNAL_ID[playKey];
-  const playSignalLabel = (playType && playType.signalLabel) ? playType.signalLabel : PLAY_TYPE_SIGNAL_LABEL[playKey];
-  const signals = [
-    { src: SIGNAL_CARDS[WING_TOUCH_ID], label: 'Wing' },
-    { src: SIGNAL_CARDS[wingFingerId], label: `Wing Location: ${wingSide}` },
-  ];
-  // Motion is called right after the wing spot is set, since it's part of
-  // the pre-snap picture -- matches where the Motion toggle sits in the UI.
-  if (motionOn) {
-    const motionId = MOTION_SIGNAL_IDS[Math.floor(Math.random() * MOTION_SIGNAL_IDS.length)];
-    signals.push({ src: SIGNAL_CARDS[motionId], label: 'Motion' });
-  }
-  if (playKey === 'blast' || playKey === 'double_blast') {
-    // Inside is a silent default for BOTH Blast and Double Blast -- no
-    // extra card at all, just the play card then direction. Outside is
-    // the one that gets called out explicitly, with the real Outside Zone
-    // card inserted BEFORE the play card (same "modifier before play name"
-    // order as every other play -- see the onComboChanged() comment above
-    // and Nathan's own example: "Wing, Right, Outside, Double Blast,
-    // Right"). Blast used to show an explicit Inside/Outside card either
-    // way (reusing plain finger-count images) -- that was wrong; both
-    // plays behave identically here.
-    if (insideOutside === 'Outside') {
-      signals.push({ src: SIGNAL_CARDS[PLAY_TYPE_SIGNAL_ID['outside_zone']], label: 'Outside Zone' });
-    }
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  } else {
-    signals.push({ src: SIGNAL_CARDS[playSignalId], label: playSignalLabel });
-  }
-  // Nathan: "There is no direction for Pop Pass, the 4th signal is the Pass
-  // 2 signal" -- unlike every other play, Pop Pass never calls a direction
-  // finger card at all; Pop Pass 2's own modifier below takes that 4th
-  // slot instead, and plain Pop Pass (no variant) just ends after the play
-  // card, 3 signals total.
-  if (playKey !== 'pop_pass') {
-    signals.push({ src: SIGNAL_CARDS[dirFingerId], label: `Direction: ${direction}` });
-  }
-  // Boot and Counter are both modifiers tacked on at the very end, after
-  // direction is set -- and mutually exclusive (see updateBootAvailability/
-  // updateCounterAvailability above), so at most one of these ever fires.
-  if (bootOn) {
-    signals.push({ src: SIGNAL_CARDS[BOOT_SIGNAL_ID], label: 'Boot' });
-  }
-  if (counterOn) {
-    signals.push({ src: SIGNAL_CARDS[COUNTER_SIGNAL_ID], label: 'Counter' });
-  }
-  // Pop Pass 2's own modifier -- see POP2_SIGNAL_ID above. Only ever
-  // applies to Pop Pass itself; the toggle can't even be on for any other
-  // play (see hasPopVariant), but the playKey check keeps this safe even
-  // if that ever changes.
-  if (popVariantOn && playKey === 'pop_pass') {
-    signals.push({ src: SIGNAL_CARDS[POP2_SIGNAL_ID], label: 'Pop Pass 2' });
-  }
-  return signals;
+  // Real, live bug found testing the Overload signal-order fix just above:
+  // this fallback was hardcoded to 'wing' no matter what `formation`
+  // actually was -- a custom-formation play only ever got its OWN recipe
+  // (RECIPES.i / RECIPES['i-wing'] / etc.) if it happened to have
+  // signalRecipe set explicitly. i_dive/i_wing_dive etc. do (set by hand,
+  // same session this was all built), but js/play-calls.js's own "copy an
+  // existing play to remake" flow never has -- confirmed live: Nathan's
+  // real "double_blast_i-wing" (created through that exact flow) was
+  // silently getting Wing's touch/location cards instead of I Wing's own.
+  // Falls back to the formation's own recipe when one exists (RECIPES is
+  // already exposed on window.Signals for exactly this), 'wing' only when
+  // it doesn't -- Wing/Split/every existing play keeps its own already-
+  // correct behavior unchanged.
+  const formationRecipeFallback = (formation && window.Signals.RECIPES && window.Signals.RECIPES[formation]) ? formation : 'wing';
+  return window.Signals.sequenceFor(recipeNameFor(playType, formationRecipeFallback), {
+    playKey, wingSide, direction, insideOutside,
+    motionOn, bootOn, counterOn, popVariantOn,
+    overloadOn: !!overloadOn,
+    alignmentValues: alignmentValues || {},
+    directionOpposesWing: !!(playType && playType.directionOpposesWing),
+    noDirection: !!(playType && playType.noDirection),
+    isPass: !!(playType && playType.isPass),
+    reverseOn: !!reverseOn,
+    playSignalId: playSignalIdFor(playType, playKey),
+    playSignalLabel: playSignalLabelFor(playType, playKey),
+  });
 }
 // Exposed globally so play-calls-quiz.js (loaded after this file) can
 // reuse the exact same signal-sequence logic instead of duplicating it --
@@ -944,12 +1165,495 @@ window.buildSignalSequence = buildSignalSequence;
 // could always silently drift from.
 window.renderCardDiagram = renderCardDiagram;
 window.renderSplitDiagram = renderSplitDiagram;
+// Exposed the same way -- js/playbuilder/editor.js's own "Play" preview
+// button (Play Builder V2 has no toggle-driven card of its own to
+// animate; it plays its OWN canonical-frame data directly) reuses these
+// exact same low-level tween primitives rather than a second, drifting
+// reimplementation of "reveal a path while dragging a circle along it."
+window.animatePathDraw = animatePathDraw;
+window.tweenPoint = tweenPoint;
+window.buildStopTimeline = buildStopTimeline;
+window.elapsedMsForFraction = elapsedMsForFraction;
 
 // ---- Render a card's diagram into its SVG stage ----
-function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
+// Where the eleven players line up, from the formation registry
+// (js/formations.js) instead of from DATA's three scattered position keys.
+//
+// DATA never had a formation axis: Wing's personnel was spread across
+// DATA.formation (the line AND tight ends 5/6), DATA.backfield (1/2/3) and
+// DATA.wing (player 4's anchor), while Split kept all six numbered players in
+// DATA.split[side]. Every renderer below had to know which of those keys held
+// which player, which is exactly why a third formation had nowhere to live.
+//
+// The registry returns one flat map of all 11 for a given formation and side,
+// reassembled from those same keys -- identical numbers, one lookup.
+function alignment(formationId, side, opts) {
+  const pos = window.Formations.positions(formationId, side, opts);
+  // Fail loudly and by name. The alternative -- quietly falling back to Wing
+  // -- is exactly the silent-wrongness failure this registry exists to
+  // remove: a card that claims one formation and draws another. A play
+  // pointing at a formation that no longer exists is a data problem the
+  // coach needs told about, not papered over.
+  if (!pos) throw new Error('Unknown formation: "' + formationId + '"');
+  return pos;
+}
+
+// Translate a play's authored routes into a different formation.
+//
+// Routes are authored against Wing, and they do NOT all begin on the
+// player's lineup spot: 56 of the 182 authored paths deliberately start a
+// step or two into the play. So a route cannot simply be re-anchored onto
+// the new formation's spot the way reanchorRoute() moves one player's shape
+// onto another player -- that would snap out the authoring nuance and shift
+// some routes by ~30 units.
+//
+// Shift by the DELTA between where that player stands in the two formations
+// instead. Same shape, same authored head start, new starting point. When
+// the target IS the authoring formation every delta is zero, so this is
+// exactly the identity -- which is what lets the existing Wing diagrams stay
+// byte-for-byte unchanged while the same code renders a formation that did
+// not exist when the routes were drawn.
+//
+// Paths with no `player` (the O-line's id-keyed blocks) shift by that
+// lineman's own delta when the formation moves the line, and otherwise stay
+// put.
+// Deliberately only the two absolute fields. The rest of a path's coordinate
+// arrays are RELATIVE and must not be touched:
+//   sameSideOffsets / crossOffsets      -- offsets from player 4's anchor
+//   sameSidePoints* / crossPoints*      -- index [1] is read as a DELTA off
+//                                          that same anchor (see the
+//                                          blockRelative branch below)
+// Player 4's anchor already comes from the formation registry, so those paths
+// follow a new formation on their own; shifting them too would move them twice.
+const SHIFTABLE = ['points', 'points4x4'];
+
+// Per-alignment assignment overrides.
+//
+// Shifting a route by how far its owner moved keeps the SHAPE, which is the
+// right default and is provably free for the formation a play was authored
+// in. It is not the same as being right. Overload carries the back-side tight
+// end 801 units across the formation and hands him his old block, which lands
+// near the right defensive end rather than on him -- because Overload creates
+// a body the play was never authored for. An I-formation back running a
+// sweep shape from a spot 130 units deeper has the same problem.
+//
+// So: shift is the default, and a coach can overwrite any individual
+// assignment for a specific alignment. Stored on the play as
+//
+//   playType.assignments['wing+overload']['5'] = { points, points4x4, endType }
+//
+// keyed by alignmentKey (formation + modifiers) then by the path's owner --
+// `player` for a numbered man, `id` for a lineman. `pathIndex` picks which of
+// that owner's paths when he has more than one (a quarterback's fake and his
+// real carry); it defaults to the first.
+//
+// Absent overrides, this is the identity, so every play that has not been
+// reviewed still behaves exactly as before.
+function applyAssignmentOverrides(paths, playType, alignKey) {
+  const table = playType && playType.assignments && playType.assignments[alignKey];
+  if (!table || !paths) return paths;
+  const seen = {};
+  return paths.map(p => {
+    const owner = p.player != null ? String(p.player) : p.id;
+    if (!owner) return p;
+    const n = (seen[owner] = (seen[owner] === undefined ? 0 : seen[owner] + 1));
+    const ov = table[owner];
+    if (!ov) return p;
+    if ((ov.pathIndex || 0) !== n) return p;
+    const out = Object.assign({}, p);
+    if (ov.points) out.points = ov.points.map(pt => pt.slice());
+    if (ov.points4x4) out.points4x4 = ov.points4x4.map(pt => pt.slice());
+    if (ov.endType) out.endType = ov.endType;
+    if (ov.isBlocking !== undefined) out.isBlocking = ov.isBlocking;
+    // An override is authored AT the target alignment, so it must not then be
+    // shifted again. Marked so the caller can tell the two apart.
+    out.__overridden = true;
+    return out;
+  });
+}
+
+function shiftPathsToFormation(paths, fromAlign, toAlign) {
+  if (!paths || fromAlign === toAlign) return paths;
+  return paths.map(p => {
+    const key = p.player != null ? String(p.player) : p.id;
+    const from = key && fromAlign[key];
+    const to = key && toAlign[key];
+    if (!from || !to) return p;
+    const dx = to[0] - from[0], dy = to[1] - from[1];
+    if (dx === 0 && dy === 0) return p;
+    const moved = Object.assign({}, p);
+    // `points` and `points4x4` are the two ABSOLUTE-coordinate fields, and both
+    // must move. points4x4 matters more than its name suggests: the app is
+    // pinned to the 4x4 defense, and 190 of the 350 authored paths carry a
+    // points4x4 -- every one of them a blocking path. Shifting only `points`
+    // left every lineman's block sitting at his old spot the moment a
+    // formation moved the line, which is exactly the data a lineman needs.
+    SHIFTABLE.forEach(key => {
+      if (p[key]) moved[key] = p[key].map(pt => (pt ? [pt[0] + dx, pt[1] + dy] : pt));
+    });
+    return moved;
+  });
+}
+
+function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn) {
+  // Defaults to the formation these routes were authored against, so every
+  // existing caller -- including the PDF exporters and This Week, which pass
+  // these arguments positionally -- keeps its exact current behaviour.
+  formationId = formationId || 'wing';
   stage.innerHTML = '';
   const playType = DATA.playTypes.find(p => p.key === playKey);
-  const variant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn);
+
+  // Where this play's routes were drawn, and where the eleven actually stand
+  // for the formation being asked for. Identical objects' worth of numbers
+  // when formationId is 'wing'. Defaults to 'wing' (unchanged behavior for
+  // every existing PlayType -- the old customFormations system genuinely
+  // reuses Wing's own routes, shifted live) -- but a Play Builder V2 play
+  // (js/playbuilder/legacy-adapter.js) sets its own authoredFormationId,
+  // since ITS points are already resolved against its own real formation,
+  // not Wing's; shifting those again from a hardcoded 'wing' baseline would
+  // double-move every point (confirmed live: player 1's authored (806,299)
+  // rendered as (803,160) before this fix existed).
+  const authoredAlign = alignment(playType.authoredFormationId || 'wing', wingSide);
+  // Nathan: "you don't have to have the overload on the same side as the
+  // wing, you can use it as misdirection." The real, explicit target side
+  // (from the NEW Off/L/R toggle's own alignmentValues.overload) takes
+  // priority; falls back to the OLD "overload always matched wingSide"
+  // assumption only for data that never set it (an already-saved Game
+  // Plan/This Week entry captured before this toggle existed, still
+  // carrying just the old overloadOn boolean) -- so nothing already saved
+  // silently renders differently.
+  const overloadValue = alignmentValues && alignmentValues.overload;
+  const overloadSide = overloadValue && overloadValue !== 'off'
+    ? (overloadValue === 'left' ? 'Left' : 'Right')
+    : (overloadOn ? wingSide : null);
+  const wingAlign = alignment(formationId, wingSide, { overloadSide, wingSide });
+
+  // Player 4's spot for a given side. Overload pushes him out past the tight
+  // end that came over -- but only on the side the formation is actually set
+  // to, so motioning him away from an overloaded side lands him on that
+  // side's ordinary wing spot, not an overloaded one.
+  //
+  // Two real, confirmed bugs here, both only ever visible once a formation
+  // OTHER than Wing/Split had its own real #4 position + alignment toggle
+  // (I's Heavy): (1) this used to hardcode 'wing' as the formation id
+  // regardless of what was actually being rendered, so #4's CIRCLE always
+  // sat at Wing's own real wing-out spot no matter the formation. (2) even
+  // passing the real formationId isn't enough on its own -- window.
+  // Formations' registry (js/formations.js's positions()) only ever
+  // stores ONE static position per slot per side (confirmed: it only
+  // reads opts.overload, has no idea alignmentToggles exists), baked in
+  // at boot using the toggle's DEFAULT value -- so it could show Heavy's
+  // On spot but never move to Off no matter what was selected. Nathan,
+  // testing live: "Heavy On is still incorrect... the 4 should move down
+  // to the spot next to the 2 back... If heavy is turned off, it's then
+  // wing outside." Fixed by resolving directly through the REAL Play
+  // Builder V2 Formation object (stashed by js/playbuilder/sync-custom-
+  // formations.js at window.PlayBuilderFormationsById) via
+  // PlayBuilderMirror -- the same real alignment-aware resolver
+  // everything else in Play Builder V2 already trusts -- when one
+  // exists; Wing/Split (no such stash) fall through to the original,
+  // unchanged legacy-registry path.
+  // General "where does this position ACTUALLY stand right now" resolver --
+  // originally written just for #4 (p4AnchorOn below is now a thin wrapper
+  // over it, unchanged at all 3 of its own call sites), generalized after a
+  // second, sibling bug: Nathan, testing Overload live: "so the overload was
+  // added correctly to all the formations except i-formation... Pre-
+  // animation, it doesn't move the TE over, just shifts their blocking
+  // path." Root cause was the SAME class of gap p4AnchorOn already exists
+  // to fix, just not yet applied beyond position 4 -- positions 5/6's own
+  // PATHS were already correct (they come from the adapter's own pre-baked,
+  // alignment-aware data via getVariant, which already knows about the
+  // 'overload' toggle), but their CIRCLES were still drawn from wingAlign[5]
+  // /wingAlign[6] -- the OLD window.Formations registry, which only ever
+  // bakes ONE static position per slot at sync time and has no live concept
+  // of an alignment toggle covering a REGULAR (non-wing) position at all.
+  // Falls through to the untouched legacy path for Wing/Split (no PB2
+  // stash) and for any position no alignmentToggle actually covers (every
+  // regular position on every existing formation) -- a provable no-op
+  // there, not just an assumed one.
+  const pbLiveAnchor = (positionId, side) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    if (pbFormation && window.PlayBuilderMirror) {
+      // Real bug, found live building "5 Guys": this used to bail out
+      // (return null, falling through to the Wing-hardcoded legacy path
+      // below) whenever NO alignmentToggle covered this position -- fine
+      // for a REGULAR position (nothing downstream needed a live anchor
+      // for those until 5/6 needed it for Overload), but wrong for a WING
+      // position with no toggle at all, like "5 Guys"' own #4: he has a
+      // real, fixed, per-side anchor (wingPositionIds:[4], no alignment
+      // axis at all), and the Wing-hardcoded fallback doesn't know "5
+      // Guys" exists -- it silently returned WING'S OWN real #4 anchor
+      // instead, confirmed live (#4 rendered at Wing's spot, not his
+      // own). resolveAnchor already handles alignment=undefined
+      // correctly for every position kind (regular/wing/swap/center-
+      // mirror) by falling back to the position's own base x/y -- so a
+      // formation existing at all in this stash is reason enough to
+      // trust it as the live source of truth, toggle or not.
+      const toggle = (pbFormation.alignmentToggles || []).find((t) => t.positionIds.includes(positionId));
+      const alignValue = toggle ? ((alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id) : undefined;
+      // Case mismatch between the two systems, confirmed live as a real
+      // bug in the original #4-only version of this fix: play-calls.js's
+      // own wingSide/direction convention is capitalized ('Left'/'Right'),
+      // but PlayBuilderMirror (Play Builder V2's own code) checks
+      // lowercase 'left' specifically -- passing 'Left' straight through
+      // silently never matched. Lowercased here, at the one seam between
+      // the two conventions, rather than changing either system's own.
+      const sideLower = (side || '').toLowerCase();
+      const anchor = window.PlayBuilderMirror.resolveAnchor(pbFormation, positionId, { wingSide: sideLower, direction: sideLower, alignment: alignValue });
+      return [anchor.x, anchor.y];
+    }
+    return null;
+  };
+  // Nathan, live, screenshot of #4 and the newly-arrived 2nd tight end
+  // drawn on top of each other: "if Overload is on, and wing is set to
+  // Off of Heavy, the wings starting spot needs to be further out as
+  // they are colliding with the TE." Real, and expected given how the
+  // TE-stacking itself works (js/playbuilder/schema.js's own
+  // Formation.overload doc) -- the newly-arrived tight end lines up
+  // exactly one TE-split outside the one already there, right where #4's
+  // own plain wing-out spot already sits. Only matters when #4 is
+  // ACTUALLY standing at real wing depth (not tucked) AND Overload is
+  // called to HIS OWN current side (the other side's TE move doesn't
+  // touch him at all) -- gated on both before ever reading
+  // flankerAnchors, so this is a no-op for every other combination, not
+  // just an assumed one.
+  //
+  // "I Wing" (the formation split this became, later): a formation can
+  // have real overload.flankerAnchors data with NO 'heavy' toggle at all
+  // -- #4 has only one state there (permanently out wide), so there's no
+  // "tucked" value to compare against the way "I" itself still has. Only
+  // consult a heavy toggle's value when one actually exists; a formation
+  // with flankerAnchors data but no heavy toggle is understood to have
+  // #4 out wide unconditionally. "I" itself never wrongly falls into
+  // that branch because it has no flankerAnchors data at all once Heavy
+  // stopped being a toggle there (the EARLIER `!pbFormation.overload`
+  // check above already returns null for it) -- confirmed, not assumed.
+  const p4OverloadCollisionAnchor = (side) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    if (!pbFormation || !pbFormation.overload || pbFormation.overload.flanker !== 4) return null;
+    const heavyToggle = (pbFormation.alignmentToggles || []).find((t) => t.positionIds.includes(4));
+    if (heavyToggle) {
+      const heavyValue = (alignmentValues && alignmentValues[heavyToggle.id]) || heavyToggle.values[0].id;
+      if (heavyValue === heavyToggle.values[0].id) return null; // Heavy at its default (on/tucked) -- not out at wing depth, nothing to collide with
+    }
+    const overloadValue = alignmentValues && alignmentValues.overload;
+    const sideLower = (side || '').toLowerCase();
+    if (!overloadValue || overloadValue === 'off' || overloadValue !== sideLower) return null;
+    const anchor = pbFormation.overload.flankerAnchors && pbFormation.overload.flankerAnchors[sideLower];
+    return anchor ? [anchor.x, anchor.y] : null;
+  };
+  const p4AnchorOn = (side) => {
+    const collision = p4OverloadCollisionAnchor(side);
+    if (collision) return collision;
+    const live = pbLiveAnchor(4, side);
+    if (live) return live;
+    // Same decoupled overloadSide as the main wingAlign call above --
+    // NOT gated to "only when side === wingSide" any more. That gate was
+    // right for the OLD same-side-only collision case (overload only
+    // ever touched the flanker when viewing the side he's actually on),
+    // but real bug, found live testing the opposite-side case: it also
+    // suppressed the NEW "flanker tightens up" adjustment (Nathan: "the
+    // wing needs to scoot in closer to be off the end of the T"), which
+    // needs to apply precisely when queried FOR his own side (wingSide)
+    // even though overloadSide is the OPPOSITE side.
+    //
+    // Real bug, found live (adversarial review): passing the TRUE
+    // `wingSide` here broke Motion. `positions(id, side)` doesn't just
+    // look up one player in a fixed layout -- Wing's `f.positions.Right`/
+    // `.Left` are two fully separate, hand-authored mirror datasets, so
+    // `pos` (what applyOverload's TE/tackle math actually reads) is
+    // built entirely in the `side`-side frame, not the wingSide-side
+    // frame. p4AnchorOn is called with `side` = a MOTIONED side that can
+    // differ from wingSide (see the Motion call site below) -- passing
+    // the true wingSide then made applyOverload compare a real side
+    // against a `pos` object built for a DIFFERENT side, producing
+    // nonsense (a same-side "push further out" computed against the
+    // wrong side's TE/tackle spacing landed #4 off the edge of the
+    // field). Omitting wingSide and letting positions() fall back to
+    // `side` (opts.wingSide || s, js/formations.js) fixes Motion without
+    // touching the original non-motion fix above at all: in every
+    // non-motion call, `side` already equals the true wingSide, so `s`
+    // and wingSide were always the same value there -- this only changes
+    // behavior in the one case that was actually broken.
+    return alignment('wing', side, { overloadSide })['4'];
+  };
+  // Nathan, on "5 Guys": "if 5 guys right is setup, and then you want to
+  // flip the wing side so it's 5 guys left, the 3, 5, 2 and 6 all have to
+  // slide... so the spacing on the left side is the same as it was on
+  // the right side. It basically flips the play visually... everyone
+  // starts in the same order except for the 4" -- then, explicitly:
+  // "Make sure the 3 and 5 remain the inside receivers on the left and 6
+  // and 2 are on the right." NOT a reflection/swap -- #4 is the only one
+  // whose SIDE changes; 3/5 and 2/6 just need real, authored alternate
+  // spots to make room for him (or fill in behind him) without crossing
+  // the center. Formation.wingLeftAnchors (schema.js) holds those, keyed
+  // by position id, live in the real formation stash -- a no-op for
+  // every formation without one (every formation but "5 Guys" today).
+  const wingLeftAnchor = (positionId, anchor) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    const alt = pbFormation && pbFormation.wingLeftAnchors && pbFormation.wingLeftAnchors[positionId];
+    return (alt && wingSide === 'Left') ? [alt.x, alt.y] : anchor;
+  };
+  // The route sibling of the anchor override just above -- PlayerAssignment.
+  // wingLeftRoute (schema.js), read directly off the real, live Play
+  // Builder V2 Play object (window.PlayBuilderPlaysById, same stash #4's
+  // own direct-resolveRoute fix already uses) since it depends on the
+  // live wingSide toggle, not something the adapter's per-direction bake
+  // can anticipate. Returns null (caller keeps its own points) when
+  // nothing applies, so this is safe to call unconditionally.
+  const wingLeftRouteFor = (positionId) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    if (!pbFormation || !pbFormation.wingLeftAnchors || !pbFormation.wingLeftAnchors[positionId] || wingSide !== 'Left') return null;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.wingLeftRoute) ? assignment.wingLeftRoute.map((pt) => [pt.x, pt.y]) : null;
+  };
+  // Jet Sweep's own Reverse: Nathan -- "for the reverse, the opposite side
+  // runner will have to do a slight delay before going across." Same
+  // live-read pattern as wingLeftRouteFor just above (a per-toggle-state
+  // override the adapter's own per-direction bake has no way to
+  // anticipate) -- reads PlayerAssignment.reverseDelayMs, used INSTEAD of
+  // the leaf's own baked delayMs only while Reverse is actually on AND
+  // this specific player is NOT the direction's own primary carrier
+  // (effectiveBall, computed by the caller right before this -- whoever
+  // currently carries starts immediately either way; it's only the OTHER
+  // player, waiting to receive the reverse, who needs the delay). Since
+  // the carrier itself flips by Direction (5 on Right, 6 on Left), this
+  // naturally applies the delay to whichever one is actually waiting,
+  // without hardcoding either player id. Returns null (caller keeps the
+  // baked delayMs) otherwise, so this is safe to call unconditionally.
+  const reverseDelayMsFor = (positionId, hasBall) => {
+    if (!reverseOn || positionId == null || hasBall) return null;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.reverseDelayMs != null) ? assignment.reverseDelayMs : null;
+  };
+  // Jet Sweep's own "only comes across on Reverse" block route -- Nathan:
+  // "The 6 should only come across when Reverse is called... the 6 goes
+  // out to block for the runner [by default]." A non-carrying player on a
+  // play like this has two real jobs depending on Reverse: block in place
+  // (default) or come across to receive the reverse pitch (Reverse on).
+  // PlayerAssignment.blockRoute/wingLeftBlockRoute (new fields) are the
+  // SHORT default block shape -- the player's own normal points/
+  // wingLeftRoute stays the long crossing route, now only actually used
+  // when it's needed: this player IS the active carrier for the current
+  // direction (hasBall already true, keeps his own long route untouched),
+  // or Reverse is on and he's the one coming across for it. Same live-read
+  // pattern as wingLeftRouteFor/reverseDelayMsFor just above -- depends on
+  // reverseOn, not something the adapter's per-direction bake can
+  // anticipate. Returns null (caller keeps its current points) otherwise,
+  // so this is safe to call unconditionally.
+  const blockRouteFor = (positionId, hasBall) => {
+    if (reverseOn || positionId == null || hasBall) return null;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    if (!assignment) return null;
+    const route = (wingSide === 'Left' && assignment.wingLeftBlockRoute) ? assignment.wingLeftBlockRoute : assignment.blockRoute;
+    return route ? route.map((pt) => [pt.x, pt.y]) : null;
+  };
+  // "5 Guys": WHO'S featured (has the ball) rotates to a DIFFERENT player
+  // when Wing flips, not just where the same player is drawn. Nathan:
+  // "the target refers to the 1st position going from receivers left to
+  // right... when the wing switches to the other side, the wing becomes
+  // the outside guy making him position 1 and the 3 is now in position
+  // 2" -- so "5 Guys #1" means "whoever is standing in the #1 (leftmost)
+  // spot," a DIFFERENT jersey number depending on wingSide. Player-
+  // agnostic (works for the wing position #4 too, not just
+  // wingLeftAnchors-covered regular positions) -- a pure live data
+  // lookup, same stash/reasoning as wingLeftRouteFor just above. Falls
+  // back to the leaf's own baked `ball` value when nothing overrides it,
+  // so this is safe to call unconditionally.
+  const wingLeftHasBall = (positionId, ball) => {
+    if (wingSide !== 'Left' || positionId == null) return ball;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.wingLeftHasBall != null) ? assignment.wingLeftHasBall : ball;
+  };
+  // Jet Sweep ("5 Guys"): Nathan -- "Direction=Right -> 5 carries.
+  // Direction=Left -> 6 carries," independent of wing side (wing side only
+  // moves where everyone lines up, via wingLeftRouteFor above -- WHO
+  // carries is purely a function of Direction here). Same live-read
+  // pattern/stash as wingLeftHasBall, just keyed by direction instead --
+  // reads PlayerAssignment.directionLeftHasBall, the hasBall sibling of
+  // the already-existing overrides.left (route points) mechanism. Falls
+  // back to the leaf's own baked `ball` value when nothing overrides it,
+  // so safe to call unconditionally for every other play too.
+  const directionLeftHasBall = (positionId, ball) => {
+    if (direction !== 'Left' || positionId == null) return ball;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    return (assignment && assignment.directionLeftHasBall != null) ? assignment.directionLeftHasBall : ball;
+  };
+  // I's Sweep: Nathan: "When the 4 is out wide in I formation, the sweep
+  // can no longer go to the 4. If the 4 is out of heavy, the ball would
+  // be pitched to the 3 back" -- deliberately checks the 'heavy' toggle
+  // BY NAME, not "whichever toggle covers this position" (unlike
+  // wingLeftAnchor/alignment-route overrides elsewhere, which key off a
+  // toggle's own positionIds -- #4's Heavy coverage). #3 isn't listed in
+  // ANY toggle's positionIds (his own STANDING SPOT never changes, only
+  // his ROLE does), and looping over every toggle instead would be a
+  // real, live ambiguity bug on "I" specifically: Overload's OWN default
+  // value is also 'off', so a generic "does any toggle's current value
+  // match a key in alignmentOverrides" check would wrongly fire off of
+  // Overload sitting at its default, regardless of Heavy. Reads
+  // PlayerAssignment.alignmentOverrides[value].hasBall (schema.js already
+  // documented this field; nothing actually read it until now). Falls
+  // back to the leaf's own baked `ball` value when nothing overrides it
+  // or the formation has no 'heavy' toggle at all, so safe to call
+  // unconditionally.
+  const alignmentHasBall = (positionId, ball) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    const toggle = pbFormation && (pbFormation.alignmentToggles || []).find((t) => t.id === 'heavy');
+    if (!toggle || positionId == null) return ball;
+    const value = (alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    const override = assignment && assignment.alignmentOverrides && assignment.alignmentOverrides[value];
+    return (override && override.hasBall != null) ? override.hasBall : ball;
+  };
+  // Same class of gap as wingLeftRouteFor -- the adapter only bakes an
+  // alignment-specific ROUTE for a position the toggle ITSELF covers
+  // (fbLegacyAlignmentToggleFor, keyed by positionIds -- #4 for Heavy).
+  // #3's own alignmentOverrides.off.points (his "carry the sweep when
+  // Heavy is off" route) would never be baked at all, since he's not
+  // listed in Heavy's positionIds -- his STANDING SPOT never changes,
+  // only his ROLE does. Read live, same reasoning/stash as every other
+  // wingLeft*/alignment* live-override here. Checks 'heavy' specifically,
+  // same reason alignmentHasBall does. A no-op for #4 himself (he uses
+  // sameSideRoute/crossSideRoute inside alignmentOverrides, never
+  // `.points`, so this naturally finds nothing for him).
+  const alignmentRouteFor = (positionId) => {
+    const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    const toggle = pbFormation && (pbFormation.alignmentToggles || []).find((t) => t.id === 'heavy');
+    if (!toggle || positionId == null) return null;
+    const value = (alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    const override = assignment && assignment.alignmentOverrides && assignment.alignmentOverrides[value];
+    return (override && override.points) ? override.points.map((pt) => [pt.x, pt.y]) : null;
+  };
+
+  const authoredVariant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn, alignmentValues);
+  // Present the play at the alignment the players are ACTUALLY standing in by
+  // moving each authored route as far as its owner moved. That covers both a
+  // different formation and an alignment call like Overload -- once a man's
+  // spot changes, his route and his block follow, with no separate notion of
+  // what Overload means anywhere downstream. Identical alignments make every
+  // delta zero, so a plain Wing call is untouched.
+  // Shift first, then let any authored override win outright -- an override is
+  // drawn at the alignment it belongs to, so shifting it would move it twice.
+  // Existing coach-authored overrides (Assignment Editor) were only ever
+  // saved for the same-side case (overload always matched wingSide until
+  // now) -- keying on that specific case here, not the new decoupled
+  // overloadSide, means an opposite-side (misdirection) call correctly
+  // finds no override and falls back to the play's own default technique,
+  // rather than wrongly matching a same-side override that doesn't apply.
+  const alignKey = window.Formations.alignmentKey(formationId, wingSide, { overload: overloadSide === wingSide });
+  const variant = Object.assign({}, authoredVariant, {
+    paths: applyAssignmentOverrides(
+      shiftPathsToFormation(authoredVariant.paths, authoredAlign, wingAlign),
+      playType, alignKey),
+  });
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
 
   // Boot: swap which path is treated as the ball carrier, purely for this
@@ -963,7 +1667,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
     if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
   }
-  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  // Nathan: "5 guys players are directly to the edge of the card. There
+  // needs to be more padding around the play diagram." A wide formation
+  // like 5 Guys authors real receivers close enough to the sidelines
+  // (mirror.js's own MARGIN_X=20 clamp allows as little as 20 of 1600
+  // units) that they rendered flush against the tile's own border.
+  // Expands the viewBox itself on every side -- pure canvas breathing
+  // room, no player/route coordinate moves at all, so nothing about an
+  // already-correct diagram's real positions changes.
+  stage.setAttribute('viewBox', `${-DIAGRAM_PAD_X} ${-DIAGRAM_PAD_TOP} ${vw + DIAGRAM_PAD_X * 2} ${vh + DIAGRAM_PAD_TOP + DIAGRAM_PAD_BOTTOM}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
@@ -977,8 +1689,26 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // matching numbered circle. Defenders are never selectable, so they
   // never glow either way.
   const isLineSelectedForCircles = typeof selectedPlayer === 'string';
-  const wingPos = DATA.wing[wingSide];
-  const activeDefense = (defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense;
+  const wingPos = wingAlign['4'];
+  // Nathan: "I need to be able to set the defense for the week so all our
+  // plays run against that look." window.PlayBuilderActiveDefenseLook
+  // (js/playbuilder/sync-custom-formations.js) is the real, coach-picked
+  // DefenseLook for this week, or null -- unset, every play keeps
+  // rendering its own normal, per-play defense exactly as before, so this
+  // is a no-op until a coach actually sets one. Reflects for direction
+  // (schema.js's DefenseLook doc always said a defense only needs the one
+  // mirror pass; legacy-adapter.js's own baked defense never actually got
+  // it, since it only ever had ONE shared look to bake -- a real weekly
+  // override needs to look right called BOTH ways, so this is where that
+  // long-flagged gap actually gets closed). Converts straight to the same
+  // {pos:[x,y],label,id} shape legacy-adapter.js's own fbLegacyBuildLeaf
+  // already produces, so nothing downstream (read-key flashing, the
+  // defender circles themselves) needs to know this came from a
+  // different source.
+  const activeDefense = (window.PlayBuilderActiveDefenseLook && window.PlayBuilderMirror)
+    ? window.PlayBuilderMirror.reflectDefensePositions(window.PlayBuilderActiveDefenseLook.positions, direction.toLowerCase(), wingAlign.C[0])
+        .map((d) => ({ pos: [d.x, d.y], label: d.label, id: d.id }))
+    : ((defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense);
   // QB Sneak is a real Split Left/Right personnel grouping (Nathan: "It
   // shows Split on the QB Sneak play but it still shows the Shotgun
   // formation... Needs to be the split formation"), but it's rendered on
@@ -990,12 +1720,12 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // DATA.formation's fixed, non-side-aware 5/6), so the diagram actually
   // shows 6/4 tucked in on the line and 5/3 split out, matching Nathan's
   // real Split reference diagrams instead of Shotgun's personnel.
-  const splitPositions = playType.key === 'qb_sneak' ? DATA.split[wingSide] : null;
+  const splitPositions = playType.key === 'qb_sneak' ? alignment('split', wingSide) : null;
 
   function drawCircle(x, y, label, stroke, fontSize, isSelected, r, playerNum) {
     r = r || CIRCLE_R;
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
-    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: '#fff', stroke, 'stroke-width': 8 }));
+    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: '#fff', stroke, 'stroke-width': CIRCLE_STROKE_WIDTH }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
@@ -1005,6 +1735,27 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       wrap.addEventListener('click', (ev) => { ev.stopPropagation(); stage.dispatchEvent(new CustomEvent('playerclick', { detail: playerNum })); });
     }
     return wrap;
+  }
+  // Nathan: "on Jumbo Beast, it isn't showing the custom numbers I added
+  // to the 2 and 4. It should show 92 and 65." Play Builder V2's own
+  // editing canvas already reads/writes PlayerAssignment.displayNumber
+  // and shows it on its own circles -- this real, coach-facing card never
+  // did, because it always draws each numbered/line position's circle
+  // with its raw position number/id as a hardcoded label, never looking
+  // at the play's own data at all. legacy-adapter.js now carries
+  // displayNumber through onto each leaf's own path entry (only when
+  // actually set), so it's already sitting on variant.paths by the time
+  // this renders -- just needed to be looked up and preferred over the
+  // raw fallback, the same way every OTHER per-path field here already
+  // is. Checked against variant.paths (the final, already shifted/
+  // overridden array everything else in this function reads), not the
+  // playType's own raw authored data, so a custom number correctly
+  // follows its player through Overload/formation-shift/etc. the exact
+  // same way his route already does.
+  function displayLabelFor(playerNumOrId, fallback) {
+    if (!variant || !Array.isArray(variant.paths)) return fallback;
+    const p = variant.paths.find((pp) => (pp.player != null ? pp.player === playerNumOrId : pp.id === playerNumOrId));
+    return (p && p.displayNumber) || fallback;
   }
   const playerCircles = {};
 
@@ -1059,6 +1810,14 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     if (bestId && defenseCircles[bestId]) defenseCircles[bestId].classList.add('te-read-flash');
   }
 
+  // Nathan: "I shouldn't see our defensive depth chart guys on defense, it
+  // should just say the name of the position" -- a defender on a play
+  // diagram is a generic alignment spot (DE/DT/LB/CB/S), not literally one
+  // of our own kids, and showing a real jersey number there read as
+  // confusing rather than helpful. Reverted the earlier jersey-number
+  // substitution (window.getDefenseStarterNumbers, js/depth-chart.js) --
+  // that function stays defined/used elsewhere (Depth Chart, Play
+  // Builder's own authoring canvas), just no longer called here.
   activeDefense.forEach(d => {
     const isReadKey = variant.readKeyId && d.id === variant.readKeyId;
     const stroke = isReadKey ? READKEY_COLOR : DEFENSE_COLOR;
@@ -1069,9 +1828,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     defenseCircles[d.id] = dc;
   });
 
-  const p5Pos = splitPositions ? splitPositions[5] : DATA.formation['5'];
+  const p5Pos = wingLeftAnchor(5, splitPositions ? splitPositions[5] : (pbLiveAnchor(5, wingSide) || wingAlign['5']));
   const c5Selected = selectedPlayer === 5;
-  const c5 = drawCircle(p5Pos[0], p5Pos[1], '5', '#111', 34, c5Selected, null, 5);
+  const c5 = drawCircle(p5Pos[0], p5Pos[1], displayLabelFor(5, '5'), '#111', 34, c5Selected, null, 5);
   circlesLayer.appendChild(c5); playerCircles['5'] = c5;
   // O-line circles were never selectable/highlightable at all originally
   // (no playerNum -> no click listener) -- added so a player whose
@@ -1081,12 +1840,13 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // these alone, same as it always has.
   ['LT','LG','C','RG','RT'].forEach(k => {
     const isSelected = isLineSelectedForCircles && selectedPlayer === k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, '#111', 22, isSelected, null, k);
+    const kPos = pbLiveAnchor(k, wingSide) || wingAlign[k];
+    const c = drawCircle(kPos[0], kPos[1], displayLabelFor(k, k), '#111', 22, isSelected, null, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
-  const p6Pos = splitPositions ? splitPositions[6] : DATA.formation['6'];
+  const p6Pos = wingLeftAnchor(6, splitPositions ? splitPositions[6] : (pbLiveAnchor(6, wingSide) || wingAlign['6']));
   const c6Selected = selectedPlayer === 6;
-  const c6 = drawCircle(p6Pos[0], p6Pos[1], '6', '#111', 34, c6Selected, null, 6);
+  const c6 = drawCircle(p6Pos[0], p6Pos[1], displayLabelFor(6, '6'), '#111', 34, c6Selected, null, 6);
   circlesLayer.appendChild(c6); playerCircles['6'] = c6;
 
   // Motion is now a pure playback choice, exactly like Wing L/R and Dir L/R
@@ -1105,7 +1865,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // about Motion/wing math below is unchanged.
   const p4HomeSide = playType.p4StartsOpposite ? oppositeWingSide : wingSide;
   const p4MotionedSide = playType.p4StartsOpposite ? wingSide : oppositeWingSide;
-  const p4Anchor = splitPositions ? splitPositions[4] : (motionOn ? DATA.wing[p4MotionedSide] : DATA.wing[p4HomeSide]);
+  const p4Anchor = splitPositions ? splitPositions[4]
+    : (motionOn ? p4AnchorOn(p4MotionedSide) : p4AnchorOn(p4HomeSide));
   // Which side #4 is ACTUALLY standing on -- used to mirror his
   // block/seam offsets correctly. Using raw wingSide here (ignoring
   // Motion) left the mirror sign out of sync with p4Anchor whenever
@@ -1114,7 +1875,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   const p4Side = motionOn ? p4MotionedSide : p4HomeSide;
 
   const wingSelected = selectedPlayer === 4;
-  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], '4', '#111', 34, wingSelected, null, 4);
+  const c4 = drawCircle(p4Anchor[0], p4Anchor[1], displayLabelFor(4, '4'), '#111', 34, wingSelected, null, 4);
   circlesLayer.appendChild(c4); playerCircles['4'] = c4;
 
   if (motionOn) {
@@ -1124,7 +1885,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // motion arrow is drawn from his real (opposite-side) starting spot
     // instead of the coach's literal Wing L/R setting, which for this kind
     // of play is the opposite end of the same line.
-    const p4HomeAnchor = DATA.wing[p4HomeSide];
+    const p4HomeAnchor = p4AnchorOn(p4HomeSide);
     circlesLayer.appendChild(svgEl('path', {
       d: `M ${p4HomeAnchor[0]} ${p4HomeAnchor[1]} L ${p4Anchor[0]} ${p4Anchor[1]}`,
       fill: 'none', stroke: '#111', 'stroke-width': 5, 'stroke-linecap': 'round', 'stroke-dasharray': '3 12',
@@ -1136,8 +1897,8 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     // #3 splits out wide in real Split personnel instead of standing in
     // the backfield (see splitPositions above) -- 1 and 2 sit in the same
     // spot either way, so only 3 needs the override.
-    const pos = (splitPositions && num === '3') ? splitPositions[3] : DATA.backfield[num];
-    const c = drawCircle(pos[0], pos[1], num, '#111', 34, isSelected, null, Number(num));
+    const pos = (splitPositions && num === '3') ? splitPositions[3] : wingLeftAnchor(Number(num), pbLiveAnchor(Number(num), wingSide) || wingAlign[num]);
+    const c = drawCircle(pos[0], pos[1], displayLabelFor(Number(num), num), '#111', 34, isSelected, null, Number(num));
     circlesLayer.appendChild(c); playerCircles[num] = c;
   });
 
@@ -1194,7 +1955,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         if (motionOn && p[motionKey]) {
           points = [p4Anchor, p[motionKey][1]];
         } else {
-          const noMotionAnchor = DATA.wing[p4HomeSide];
+          const noMotionAnchor = p4AnchorOn(p4HomeSide);
           const stored = p[baseKey] || p.points;
           const [dx, dy] = stored[1];
           const sign = p4HomeSide === 'Left' ? 1 : -1;
@@ -1213,6 +1974,65 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         const [dx, dy] = srcPoints[1];
         const sign = p4Side === 'Left' ? 1 : -1;
         points = [p4Anchor, [p4Anchor[0] + sign * dx, p4Anchor[1] + dy]];
+      } else if (playType.authoredFormationId) {
+        // A Play Builder V2 play's #4 data (sameSideRoute/crossSideRoute)
+        // does NOT follow the "plain points assumed Wing Left" convention
+        // the branch below exists for. js/playbuilder/legacy-adapter.js
+        // bakes ONE shape per DIRECTION (wingSide pinned 'left' purely so
+        // the OLD branch below's own reflect-based round-trip would work
+        // for data authored THAT way -- see its own header comment) -- but
+        // for a wing position, WHICH shape is correct (same vs cross)
+        // depends on wingSide, which isn't known yet at bake time. No
+        // reflection applied here after the fact can recover the right
+        // SHAPE once the wrong one was already selected at bake time --
+        // confirmed live, real bug: Sweep's #4 rendered his cross-side
+        // technique at Wing Right/Direction Right (should be same-side).
+        // Invisible for as long as sameSideRoute/crossSideRoute happened
+        // to be equal (true for Dive, and for Sweep/4-Sweep before Nathan
+        // authored them as genuinely distinct shapes) -- swapping two
+        // identical shapes has no visible effect, which is why this went
+        // uncaught until now.
+        //
+        // Fix: bypass the adapter's pre-baked data for #4 entirely and
+        // call PlayBuilderMirror.resolveRoute directly with the REAL, live
+        // wingSide (window.PlayBuilderPlaysById -- js/playbuilder/sync-
+        // custom-formations.js -- stashes the real Play Builder V2 Play
+        // object precisely so this can reach its actual players array).
+        // Point 0 is still swapped for p4Anchor afterward, same as every
+        // other branch here -- resolveRoute has no idea about the Overload
+        // collision-avoidance shift (p4OverloadCollisionAnchor, above),
+        // which is real but only in play-calls.js.
+        const pbFormation = window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+        const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+        // Nathan: "I Wing Left Overload Right Blast Left. The wing needs
+        // to come in off the LT since the TE is in overload to the
+        // Right." A RELATIONSHIP between two toggles (this position's own
+        // wingSide vs. Overload's current value), not a fixed value
+        // either toggle can reach alone -- checked and applied BEFORE the
+        // normal resolveRoute call below, since when it applies it
+        // replaces the whole same/cross-side selection, not just one
+        // point. See PlayerAssignment.overloadOppositeRoute (schema.js)
+        // for the full reasoning and the canonical-frame/reflection
+        // convention this follows.
+        const assignment4 = pbPlay && pbPlay.variants[0].players.find((pl) => pl.player === 4);
+        const overloadVal4 = alignmentValues && alignmentValues.overload;
+        const p4SideLower = (p4Side || '').toLowerCase();
+        const overloadOpposite = overloadVal4 && overloadVal4 !== 'off' && overloadVal4 !== p4SideLower;
+        const oppositeRoute = (overloadOpposite && assignment4 && assignment4.overloadOppositeRoute) || null;
+        let resolved;
+        if (oppositeRoute) {
+          resolved = p4Side === 'Left'
+            ? oppositeRoute.map((pt) => ({ x: wingAlign.C[0] + (wingAlign.C[0] - pt.x), y: pt.y }))
+            : oppositeRoute;
+        } else {
+          const toggle4 = pbFormation && (pbFormation.alignmentToggles || []).find((t) => t.positionIds.includes(4));
+          const alignValue4 = toggle4 ? ((alignmentValues && alignmentValues[toggle4.id]) || toggle4.values[0].id) : undefined;
+          resolved = (pbFormation && pbPlay && window.PlayBuilderMirror)
+            ? window.PlayBuilderMirror.resolveRoute(pbFormation, pbPlay.variants[0].players, 4,
+                { wingSide: p4SideLower, direction: (direction || '').toLowerCase(), alignment: alignValue4 })
+            : null;
+        }
+        points = resolved ? [p4Anchor, ...resolved.slice(1).map((pt) => [pt.x, pt.y])] : [p4Anchor, ...points.slice(1)];
       } else {
         // See the matching (much longer) comment in edit-plays.js's render()
         // -- plain points are authored assuming Wing Left as the base;
@@ -1220,12 +2040,85 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         // the right, not just swap the live anchor into point 0 (which left
         // the rest of the route at its literal Left-authored coordinates).
         if (p4Side === 'Right') {
-          const centerX = DATA.formation.C[0];
+          const centerX = wingAlign.C[0];
           points = points.map(([x, y]) => [centerX + (centerX - x), y]);
         } else {
           points = [p4Anchor, ...points.slice(1)];
         }
       }
+    }
+    // Nathan, on I's Sweep: "I have the wing (4) right so he 4 goes out
+    // to the edge and the 3 follows him. If I change the wing to the
+    // left, the 3 should automatically match what the 4 is doing... They
+    // need to sync up." A sweep-style ball carrier's real assignment is
+    // "follow wherever the wing actually is," not a fixed side -- a
+    // genuinely different axis than Direction (which Dive's own #3
+    // already correctly, independently responds to). UNLIKE #4 just
+    // above (whose adapter-baked data is always "as if Wing Left,"
+    // mirror.js's own wing-position convention), a REGULAR position's
+    // baked route has no such assumption at all -- it's simply authored
+    // for Wing:Right (this whole rebuild's own established canonical
+    // frame, confirmed against every other regular-position fix this
+    // session), so THIS reflects on Wing:Left instead, the opposite
+    // trigger from #4's. Generalized to whichever positions THIS play
+    // declares via playType.wingMirrorPlayers (js/playbuilder/legacy-
+    // adapter.js copies Play.wingMirrorPlayers straight through) --
+    // gated on that field existing at all, which no real Wing/Split
+    // PlayType has ever set, so this is a provable no-op for every
+    // existing play, same guarantee every other Play-Builder-V2-only
+    // addition to this shared renderer has kept.
+    // I's Sweep: #3's real carrier route when Heavy is Off -- see
+    // alignmentRouteFor's own comment. Applied BEFORE the wingMirrorPlayers
+    // check just below, not after -- #3's alternate "off" shape is
+    // authored in the same canonical (Wing:Right) frame as his normal
+    // route, and still needs the SAME wingSide reflection wingMirrorPlayers
+    // already provides for him; swapping it in afterward would have
+    // skipped that reflection entirely, leaving him running the same
+    // direction regardless of wingSide (confirmed live, caught before
+    // shipping: heavyOff_wingRight and heavyOff_wingLeft rendered
+    // byte-identical until this reordering).
+    const alignmentPoints = p.player != null ? alignmentRouteFor(p.player) : null;
+    if (alignmentPoints) points = alignmentPoints;
+    // Nathan, on I's Sweep: "I have the wing (4) right so he 4 goes out
+    // to the edge and the 3 follows him. If I change the wing to the
+    // left, the 3 should automatically match what the 4 is doing... They
+    // need to sync up." A sweep-style ball carrier's real assignment is
+    // "follow wherever the wing actually is," not a fixed side -- a
+    // genuinely different axis than Direction (which Dive's own #3
+    // already correctly, independently responds to). UNLIKE #4 just
+    // above (whose adapter-baked data is always "as if Wing Left,"
+    // mirror.js's own wing-position convention), a REGULAR position's
+    // baked route has no such assumption at all -- it's simply authored
+    // for Wing:Right (this whole rebuild's own established canonical
+    // frame, confirmed against every other regular-position fix this
+    // session), so THIS reflects on Wing:Left instead, the opposite
+    // trigger from #4's. Generalized to whichever positions THIS play
+    // declares via playType.wingMirrorPlayers (js/playbuilder/legacy-
+    // adapter.js copies Play.wingMirrorPlayers straight through) --
+    // gated on that field existing at all, which no real Wing/Split
+    // PlayType has ever set, so this is a provable no-op for every
+    // existing play, same guarantee every other Play-Builder-V2-only
+    // addition to this shared renderer has kept.
+    if (playType.wingMirrorPlayers && playType.wingMirrorPlayers.includes(p.player) && wingSide === 'Left') {
+      const centerX = wingAlign.C[0];
+      points = points.map(([x, y]) => [centerX + (centerX - x), y]);
+    }
+    // "5 Guys": the route sibling of wingLeftAnchor above -- an explicit,
+    // authored alternate route (schema.js's PlayerAssignment.
+    // wingLeftRoute) for a position whose STANDING SPOT changes (but
+    // never crosses sides) when wingSide is 'left'. Returns null (no
+    // change to `points`) for every position/play that doesn't opt in.
+    const wingLeftPoints = p.player != null ? wingLeftRouteFor(p.player) : null;
+    if (wingLeftPoints) points = wingLeftPoints;
+    // QB Sneak (5 Guys): swaps ONLY #1's own drawn path for his real
+    // sneak route -- every receiver's own path is untouched, same "swap
+    // one thing, leave the rest exactly as authored" shape Boot already
+    // uses just below. schema.js's own hasQbSneak/qbSneakRoute doc has
+    // the full reasoning for why this is a real toggle, not the play
+    // becoming a run. No-op unless BOTH the play opts in (hasQbSneak)
+    // AND the coach actually flips the switch (qbSneakOn).
+    if (p.player === 1 && qbSneakOn && playType.hasQbSneak && playType.qbSneakRoute) {
+      points = playType.qbSneakRoute.map((pt) => [pt.x, pt.y]);
     }
     if (p.optionLine) {
       const [[x1,y1],[x2,y2]] = p.points;
@@ -1235,8 +2128,11 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       return;
     }
 
-    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : p.ball);
+    const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
     const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+
+    const blockPoints = p.player != null ? blockRouteFor(p.player, effectiveBall) : null;
+    if (blockPoints) points = blockPoints;
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
     // having the ball and his line changes to red." handoffIndex (set via
@@ -1254,17 +2150,32 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     let arrowEl = null;
     let ownerCircle = null;
-    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    // `p.player != null` (loose) on purpose. Firebase strips null values, so
+    // a cloud-loaded O-line path has NO player key at all rather than a null
+    // one -- and the synthesized Split protection paths never had one either.
+    // With a strict !==, `undefined !== null` is true, so ownerKey became the
+    // string "undefined", playerCircles lookup missed, and the five O-line
+    // circles silently failed to travel with their blocks on every Split
+    // Pass press of the play button.
+    const ownerKey = p.player != null ? String(p.player) : p.id;
     ownerCircle = (ownerKey && !p.fake) ? playerCircles[ownerKey] : null;
 
     if (hasHandoffSplit) {
       const leftPts = points.slice(0, handoffIdx + 1);
       const rightPts = points.slice(handoffIdx);
-      const leftPath = svgEl('path', { d: routeDForRange(leftPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+      const leftPath = svgEl('path', { d: routeDForRange(leftPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' });
       wrap.appendChild(leftPath);
       let rightPath = null;
       if (rightPts.length >= 2) {
-        rightPath = svgEl('path', { d: routeDForRange(rightPts), fill: 'none', stroke: BALL_COLOR, 'stroke-width': p.width, 'stroke-linecap': 'round' });
+        // Real bug, found in review: this half hardcoded BALL_COLOR
+        // regardless of Boot -- effectiveBall (computed just above, already
+        // correctly false for this player's path when he's bootFakePath)
+        // is what every OTHER route's color already reads; a handoff-split
+        // route (Shuffle Pass's own #5/#6, via handoffIndex) is drawn on a
+        // separate path from that single-path branch and was never wired
+        // to read it, so the diagram kept showing him going red/"gets the
+        // ball" past the handoff mark even with Boot on.
+        rightPath = svgEl('path', { d: routeDForRange(rightPts), fill: 'none', stroke: effectiveBall ? BALL_COLOR : NOBALL_COLOR, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' });
         wrap.appendChild(rightPath);
       }
       pathsLayer.appendChild(wrap);
@@ -1275,7 +2186,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
       const totalLen = leftLen + rightLen;
       const startFracRight = totalLen > 0 ? leftLen / totalLen : 1;
 
-      arrowEl = buildEndCapEl(endTypeFor(p), BALL_COLOR, p.width);
+      arrowEl = buildEndCapEl(endTypeFor(p), effectiveBall ? BALL_COLOR : NOBALL_COLOR, ROUTE_STROKE_WIDTH);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, rightPath || leftPath, 1);
 
@@ -1305,20 +2216,21 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
         : points.length === 2 ? straightPathD(points)
         : points.length === 3 ? quadPathD(points)
         : chainedCurvePathD(points);
-      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': p.width, 'stroke-linecap': 'round' };
+      const attrs = { d, fill: 'none', stroke: color, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' };
       if (p.fake) attrs['stroke-dasharray'] = '10 8';
       const path = svgEl('path', attrs);
       wrap.appendChild(path);
 
       if (!p.fake) {
-        arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+        arrowEl = buildEndCapEl(endTypeFor(p), color, ROUTE_STROKE_WIDTH);
         wrap.appendChild(arrowEl);
         placeArrowAtFraction(arrowEl, path, 1);
       }
       pathsLayer.appendChild(wrap);
 
-      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
-        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null });
+      const reverseDelay = reverseDelayMsFor(p.player, effectiveBall);
+      lastRenderedPaths.push({ el: path, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: !!p.isBlocking, delayMs: reverseDelay != null ? reverseDelay : (p.delayMs || 0),
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null, points });
     }
 
     if (readNoteToShow) {
@@ -1334,6 +2246,32 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   stage._mainGroup = g;
   stage._circlesLayerRef = circlesLayer;
   stage._lastRenderedPaths = lastRenderedPaths;
+  // The path DATA actually drawn -- after the formation shift and any
+  // assignment override. _lastRenderedPaths holds render artifacts (elements,
+  // circles) rather than geometry, so anything that needs to know where an
+  // assignment finished needs this instead. Used by the assignment editor to
+  // place its handles on the real end points.
+  stage._resolvedPaths = variant.paths;
+  // What seekCardAnimation (below) needs to reproduce the ball's position
+  // deterministically at an arbitrary instant -- wingSide for the QB/center
+  // anchor, playType for its authored ballPath if any. bootOn included so
+  // resolveBallPathForWing's own "QB keeps the whole play" truncation
+  // (Nathan: "Any time Boot is chosen the QB does not give up the ball")
+  // applies to the scrub bar too, not just the live ▶ Play animation.
+  stage._animCtx = { wingSide, playType, formationId, alignmentValues, direction, bootOn, reverseOn };
+
+  // Nathan, after the label fix above turned out to still be too much:
+  // "regardless of what I pick, the ball path should not show on the
+  // play - it should be data in the background and the ball will carry
+  // out the path." The authored ballPath stays exactly what it was --
+  // real, meaningful data -- it just doesn't get a permanent static
+  // overlay (badges + dashed connector) drawn on the base diagram
+  // anymore. playCardAnimation/seekCardAnimation (below) read
+  // playType.ballPath directly via window.BallPath.schedule(), a
+  // completely separate code path from drawOverlay -- confirmed before
+  // removing this call, not assumed -- so the ball still visibly runs
+  // the real path when a coach actually hits ▶ Play; it's just invisible
+  // on the still diagram, matching "data in the background."
 }
 
 // ---- Render the Split formation's lineup, plus whichever of the play's
@@ -1364,10 +2302,49 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 // routes"), and the actual route shapes (Houston/Seattle/Florida) aren't
 // authored yet, so those three are left out of the reused paths rather than
 // shown blocking, which would be wrong.
+// Who is split out wide, and who is the flexed-out back, on a given side --
+// derived from DATA.splitRoutes rather than hand-guessed, because a guess is
+// exactly how this went wrong.
+//
+// Split Right shipped with the flex back hardcoded as #2 in THREE places
+// (here, and twice in getSplitPassProtectionPaths below) while the actual
+// route data -- splitRoutes.Right.flex.player, digitized from Nathan's real
+// reference diagram -- says #3. That is not a coordinate typo: #3's route
+// starts at [1364,270], exactly the flexed-out spot in DATA.split.Right,
+// while #2 sits at [985,438], an ordinary backfield spot. The DATA was right;
+// the code's assumption about which back gets flexed was wrong, and it was
+// wrong on Right only -- Left's hardcoded guess (#3) happened to already
+// match its data.
+//
+// So blocking exclusion and route drawing now read the SAME field instead of
+// each carrying their own guess about who is out there. The literal
+// fallback survives only for a side with no splitRoutes authored yet (a
+// brand-new formation, say), so this never throws on missing data -- it
+// just falls back to the same guess that was wrong once already, which is
+// better than nothing but worth a coach's eye if it ever actually fires.
+function splitPersonnel(splitSide) {
+  const sr = DATA.splitRoutes && DATA.splitRoutes[splitSide];
+  const wideNum = (sr && sr.wide && sr.wide.player != null) ? sr.wide.player : (splitSide === 'Right' ? 6 : 5);
+  // Unlike wideNum, the real reference data puts the SAME back (#3) at the
+  // flex spot on both sides -- not a side-mirrored pair like 5/6 are. So the
+  // fallback is a flat 3, not a per-side guess; a per-side guess is exactly
+  // what produced the Right-side bug this function exists to prevent.
+  const flexNum = (sr && sr.flex && sr.flex.player != null) ? sr.flex.player : 3;
+  return { wideNum, flexNum };
+}
+
+// Shared with js/edit-plays.js and js/two-minute-drill.js, which each carry
+// their own copy of Split's rendering pipeline (a known, pre-existing
+// duplication -- see the architecture notes on formation-engine). Exporting
+// this one function is what stops "who is the flexed-out back" from being a
+// fact three files can each get wrong independently, which is exactly how it
+// went wrong the first time: this same ternary, with the same mistake, was
+// copy-pasted into both of those files too.
+window.splitPersonnel = splitPersonnel;
+
 function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
   const variant = getVariant(playType, splitSide, insideOutside, readPosition);
-  const wideNum = splitSide === 'Right' ? 6 : 5;
-  const flexBackNum = splitSide === 'Right' ? 2 : 3;
+  const { wideNum, flexNum: flexBackNum } = splitPersonnel(splitSide);
   const excluded = new Set([wideNum, flexBackNum, 4]);
   return (variant.paths || []).filter(p => {
     if (p.optionLine || p.dualSideBlock) return false; // Option-style relative blocking isn't wired for Split yet
@@ -1412,22 +2389,90 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
 //      player 4) are unaffected either way -- getSplitRoutePaths already
 //      draws their routes regardless of run/pass, per "even if the team
 //      runs the receivers still run their assigned routes."
-function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
-  const pos = DATA.split[splitSide];
-  const tightNum = splitSide === 'Right' ? 5 : 6; // stays in (the wide one of 5/6 is out running a route instead)
-  const companionNum = splitSide === 'Right' ? 3 : 2; // the backfield player NOT flexed out
-  const paths = [];
+// ---- Pass protection schemes ----
+//
+// Nathan: the linemen "need to work in a pass pocket protection vs a straight
+// pass block". Two calls, because they are two different jobs.
+//
+// What shipped before was neither: every one of the five linemen got the
+// SAME hardcoded 22-unit segment straight backwards, and so did the tight
+// end. Five identical stubs is not a protection -- it tells a kid nothing
+// about who he has or where to set, and it looked the same whichever way the
+// play was going.
+//
+// Both schemes below are derived from where the players actually stand and
+// where the defense actually is, so they hold up in any formation rather than
+// only in the one they were drawn against.
 
-  ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
-    const [x, y] = DATA.formation[k];
-    paths.push({ id: k, isBlocking: true, endType: 'block', width: 7, points: [[x, y], [x, y + 22]] });
+// POCKET: everyone sets back and the ends set deepest, forming a cup around
+// the quarterback. Depth and width both scale with how far out a man starts
+// from the center -- which is what makes it a pocket shape instead of a flat
+// wall, and means a shifted or unbalanced line still forms a sensible cup.
+function pocketProtectionEnd(start, centerX) {
+  const dx = start[0] - centerX;
+  // The base depth is not cosmetic: the O-line circles are drawn at r=22, so
+  // a set shorter than that disappears inside its own man. The center's set is
+  // the shallowest of the five, so it sets the floor for all of them.
+  const depth = 34 + Math.abs(dx) * 0.12;
+  const widen = Math.sign(dx) * Math.abs(dx) * 0.1;
+  return [Math.round(start[0] + widen), Math.round(start[1] + depth)];
+}
+
+// STRAIGHT: he fires out at the man over him. The target is the nearest DOWN
+// lineman (DE/DT) -- not just the nearest defender, or a lineman would be
+// sent at a linebacker he has no business climbing to in protection -- and
+// the segment stops short of him, because a pass block is a punch and a
+// reset, not a drive downfield.
+function straightBlockEnd(start, defense) {
+  const front = (defense || []).filter(d => d && d.pos && (d.label === 'DE' || d.label === 'DT'));
+  if (!front.length) return [start[0], start[1] - 34];
+  let best = null, bestDist = Infinity;
+  front.forEach(d => {
+    const dx = d.pos[0] - start[0], dy = d.pos[1] - start[1];
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) { bestDist = dist; best = d; }
+  });
+  const dx = best.pos[0] - start[0], dy = best.pos[1] - start[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const reach = Math.min(46, len - 12);
+  return [Math.round(start[0] + (dx / len) * reach), Math.round(start[1] + (dy / len) * reach)];
+}
+
+function protectionPath(key, start, scheme, centerX, defense) {
+  const end = scheme === 'straight'
+    ? straightBlockEnd(start, defense)
+    : pocketProtectionEnd(start, centerX);
+  const path = { isBlocking: true, endType: 'block', width: 7, points: [start.slice(), end] };
+  // Numbered players carry `player`; the O-line carries `id`. Both are needed
+  // -- renderSplitDiagram looks the owner's circle up by whichever is present,
+  // so a path missing both never animates with its man.
+  if (/^[0-9]+$/.test(String(key))) path.player = Number(key);
+  else path.id = key;
+  return path;
+}
+
+function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition, scheme) {
+  // One map for all eleven: the registry's Split alignment carries the
+  // offensive line too, so the line no longer has to be fetched from a
+  // different DATA key than the players it blocks alongside.
+  const pos = alignment('split', splitSide);
+  const { wideNum, flexNum } = splitPersonnel(splitSide);
+  const tightNum = wideNum === 5 ? 6 : 5; // whichever of 5/6 is NOT split out wide stays in
+  const companionNum = flexNum === 2 ? 3 : 2; // the backfield player NOT flexed out
+  const paths = [];
+  const centerX = pos.C ? pos.C[0] : 806;
+  const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
+  const defense = variant ? (variant.defense4x4 || variant.defense) : null;
+  const useScheme = scheme === 'straight' ? 'straight' : 'pocket';
+
+  window.Formations.lineSlots('split').forEach(k => {
+    paths.push(protectionPath(k, pos[k], useScheme, centerX, defense));
   });
 
-  const [tx, ty] = pos[tightNum];
-  paths.push({ player: tightNum, isBlocking: true, endType: 'block', width: 7, points: [[tx, ty], [tx, ty + 22]] });
+  // The tight end who stays in blocks with the line, on the same call.
+  paths.push(protectionPath(String(tightNum), pos[tightNum], useScheme, centerX, defense));
 
   const [cx] = pos[companionNum]; // only the x is needed now, for the QB's mesh-step direction below
-  const variant = playType ? getVariant(playType, splitSide, insideOutside, readPosition) : null;
   const realBallPath = variant && (variant.paths || []).find(p => p.player === companionNum && p.ball && !p.optionLine);
   if (realBallPath) {
     // Just run the path -- no separate block segment tacked on after it.
@@ -1500,7 +2545,8 @@ function getSplitRoutePaths(splitSide, leftCall, rightCall) {
   const oppositeSide = splitSide === 'Right' ? 'Left' : 'Right';
   const oppositeCall = splitSide === 'Right' ? leftCall : rightCall;
   const oppositeFlexSource = routes[oppositeSide] && routes[oppositeSide].flex;
-  const fourPos = DATA.split[splitSide] && DATA.split[splitSide]['4'];
+  const splitAlign = alignment('split', splitSide);
+  const fourPos = splitAlign && splitAlign['4'];
   if (oppositeFlexSource && oppositeFlexSource[oppositeCall] && fourPos) {
     out.push({ points: reanchorRoute(oppositeFlexSource[oppositeCall], fourPos), player: 4, width: 7 });
   }
@@ -1510,8 +2556,8 @@ function getSplitRoutePaths(splitSide, leftCall, rightCall) {
 // Split's defensive look. Nathan: "The defense should always remain in the
 // 4x4 defense with no change." So this is the exact same static 4x4 front
 // used everywhere else in the app (every playType's defense4x4 field is
-// this identical array -- see DEFENDER_IDS_4x4 above) -- 4 down linemen, 4
-// linebackers, 2 corners, 1 free safety, always at these same fixed spots,
+// this identical array) -- 4 down linemen, 4 linebackers, 2 corners, 1
+// free safety, always at these same fixed spots,
 // never shifted based on splitSide or where the receivers are standing. No
 // nickel, no second safety, no per-side tracking -- those were a previous,
 // over-designed attempt at "smart" coverage that Nathan asked to remove.
@@ -1531,14 +2577,24 @@ function getSplitDefense() {
   ];
 }
 
-function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer) {
+function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection) {
+  // Appended last, defaulting to the pocket, so playbook-pdf.js and the
+  // 2-minute drill -- both of which pass these positionally -- are unchanged.
   stage.innerHTML = '';
   const vw = DATA.viewBox[0], vh = DATA.viewBox[1];
-  stage.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  // Nathan: "5 guys players are directly to the edge of the card. There
+  // needs to be more padding around the play diagram." A wide formation
+  // like 5 Guys authors real receivers close enough to the sidelines
+  // (mirror.js's own MARGIN_X=20 clamp allows as little as 20 of 1600
+  // units) that they rendered flush against the tile's own border.
+  // Expands the viewBox itself on every side -- pure canvas breathing
+  // room, no player/route coordinate moves at all, so nothing about an
+  // already-correct diagram's real positions changes.
+  stage.setAttribute('viewBox', `${-DIAGRAM_PAD_X} ${-DIAGRAM_PAD_TOP} ${vw + DIAGRAM_PAD_X * 2} ${vh + DIAGRAM_PAD_TOP + DIAGRAM_PAD_BOTTOM}`);
   const g = svgEl('g', { transform: `translate(0,${DATA.topPad})` });
   const pathsLayer = svgEl('g', {});
   const circlesLayer = svgEl('g', {});
-  const pos = DATA.split[splitSide];
+  const pos = alignment('split', splitSide);
 
   // Auto-highlight the signed-in player's own position, same idea as
   // renderCardDiagram (Shotgun). Also now click-to-toggle just like
@@ -1551,7 +2607,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
   function drawCircle(x, y, label, fontSize, r, stroke, isSelected, playerNum) {
     stroke = stroke || '#111';
     const wrap = svgEl('g', { class: isSelected ? 'full-op selected-glow' : 'full-op' });
-    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': 8 }));
+    wrap.appendChild(svgEl('circle', { cx: x, cy: y, r: r || CIRCLE_R, fill: '#fff', stroke, 'stroke-width': CIRCLE_STROKE_WIDTH }));
     const t = svgEl('text', { x, y: y + 12, 'font-size': fontSize, 'font-weight': 900, 'font-style': 'italic', 'text-anchor': 'middle', fill: stroke });
     t.textContent = label;
     wrap.appendChild(t);
@@ -1563,7 +2619,12 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     return wrap;
   }
 
-  getSplitDefense().forEach(d => {
+  // Nathan: "I shouldn't see our defensive depth chart guys on defense, it
+  // should just say the name of the position" -- same reversion as
+  // renderCardDiagram's own defense loop above; Split is a second,
+  // separate place real defender circles get drawn.
+  const splitDefense = getSplitDefense();
+  splitDefense.forEach(d => {
     circlesLayer.appendChild(drawCircle(d.pos[0], d.pos[1], d.label, 26, CIRCLE_R, DEFENSE_COLOR, false));
   });
 
@@ -1572,7 +2633,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     // Same rule as renderCardDiagram's Shotgun O-line circles: only glows
     // for a LINE selection, not a numbered one.
     const isSelected = isLineSelected && selectedPlayer === k;
-    const c = drawCircle(DATA.formation[k][0], DATA.formation[k][1], k, 22, null, null, isSelected, k);
+    const c = drawCircle(pos[k][0], pos[k][1], k, 22, null, null, isSelected, k);
     circlesLayer.appendChild(c); playerCircles[k] = c;
   });
   ['5', '6', '3', '4', '1', '2'].forEach(num => {
@@ -1605,12 +2666,19 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
     wrap.appendChild(pathEl);
     let arrowEl = null;
     if (!p.fake) {
-      arrowEl = buildEndCapEl(endTypeFor(p), color, p.width);
+      arrowEl = buildEndCapEl(endTypeFor(p), color, ROUTE_STROKE_WIDTH);
       wrap.appendChild(arrowEl);
       placeArrowAtFraction(arrowEl, pathEl, 1);
     }
     pathsLayer.appendChild(wrap);
-    const ownerKey = p.player !== null ? String(p.player) : p.id;
+    // `p.player != null` (loose) on purpose. Firebase strips null values, so
+    // a cloud-loaded O-line path has NO player key at all rather than a null
+    // one -- and the synthesized Split protection paths never had one either.
+    // With a strict !==, `undefined !== null` is true, so ownerKey became the
+    // string "undefined", playerCircles lookup missed, and the five O-line
+    // circles silently failed to travel with their blocks on every Split
+    // Pass press of the play button.
+    const ownerKey = p.player != null ? String(p.player) : p.id;
     const ownerCircle = ownerKey ? playerCircles[ownerKey] : null;
     lastRenderedPaths.push({
       el: pathEl, arrowEl, player: p.player, id: p.id, isBall: !!p.ball, isBlocking: !!p.isBlocking, delayMs: p.delayMs || 0,
@@ -1620,7 +2688,7 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const playType = DATA.playTypes.find(p => p.key === playKey);
   if (passOn) {
-    getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
+    getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition, protection).forEach(drawPath);
   } else if (playType) {
     getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition).forEach(drawPath);
   }
@@ -1649,8 +2717,9 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
   const lastRenderedPaths = stage._lastRenderedPaths || [];
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
-  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
-  const qbPos = { x: DATA.split[splitSide]['1'][0], y: DATA.split[splitSide]['1'][1] };
+  const splitAlign = alignment('split', splitSide);
+  const centerPos = { x: splitAlign['C'][0], y: splitAlign['C'][1] };
+  const qbPos = { x: splitAlign['1'][0], y: splitAlign['1'][1] };
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
 
@@ -1703,10 +2772,147 @@ async function playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRe
 }
 
 // ---- Play the animation for a card ----
-async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn) {
+// overloadOn appended last, same convention as renderCardDiagram's own
+// formationId/overloadOn. Its OWN internal renderCardDiagram call below used
+// to never receive this flag at all -- Overload had no effect on the ▶
+// button, only on the static card, which is a real bug: pressing Play under
+// Overload silently re-rendered the animation frame in plain Wing geometry
+// (#5's circle snapping from 1263 back to 462, mid-play), throwing away
+// exactly the shift a coach turned Overload on to see. Confirmed by running
+// the real animation and reading the DOM mid-play before this fix existed.
+//
+// formationId is the same class of bug, fixed the same way. buildCard's own
+// call below still omits it (undefined, defaults to 'wing' inside
+// renderCardDiagram) since Play Calls has no formation-picker wired into its
+// real UI yet -- harmless there. But js/assignment-editor.js's Assignment
+// Editor DOES have a real formationId (a coach can be checking Split, or a
+// custom formation), and its Play button reuses this same function -- so
+// without threading it through, hitting Play showed the edit's overrides
+// computed for the WRONG alignment key (always Wing's), i.e. it looked like
+// the original, unedited play. Nathan: "the play button played back the
+// original animation of the play."
+// "5 Guys": the ball's exchange TARGET rotates to a DIFFERENT player when
+// Wing flips (see wingLeftHasBall's own comment, above, for the football
+// reasoning) -- so the whole authored sequence, not just where a fixed
+// player is drawn, has to change too. PlayVariant.wingLeftBallPath
+// (schema.js) is read live off window.PlayBuilderPlaysById, same as
+// wingLeftRoute/wingLeftHasBall, since it depends on the live wingSide
+// toggle and the adapter only ever bakes ONE, direction-varying (never
+// wingSide-varying) ballPath per PlayType. Shared by both animation
+// functions below rather than duplicated, since neither closes over
+// anything the other doesn't also have (playType, wingSide, both already
+// capitalized 'Left'/'Right' consistently -- confirmed: stage._animCtx,
+// which seekCardAnimation reads its wingSide from, is set from THIS
+// file's own wingSide param, same casing throughout). Falls back to the
+// play's own canonical ballPath otherwise, so safe to call unconditionally.
+// I's Sweep: Nathan: "If the 4 is out of heavy, the ball would be pitched
+// to the 3 back" -- the exchange TARGET also rotates by alignment toggle
+// value, not just wingSide (PlayVariant.alignmentBallPath, schema.js,
+// nested by toggle id then value id since a formation can have more than
+// one alignment toggle live on the same play). Checked ALONGSIDE the
+// wing-based check above, not instead of it -- different axes, no real
+// play needs both today, but nothing stops a future one from using
+// either independently.
+// I's Dive: Nathan, watching the real animation: "It's hiking the ball to
+// the 2, then the 1 has it as it moved by the 2 and then it jumps back to
+// the 2. Should go to 1, then hand to 2 as the 1 and 2 cross paths." #1's
+// own route is a real, HAND-AUTHORED fake per direction (schema.js's
+// PlayerAssignment.overrides), not a reflection of the canonical shape --
+// so exactly where his path crosses #2's (the actual receiver) genuinely
+// differs by direction too, the same reason wingLeftBallPath exists for
+// the wingSide axis. Checked ALONGSIDE it, not instead -- a different
+// axis, no real play needs both today.
+function resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn, reverseOn) {
+  let resolved;
+  // Jet Sweep's own Reverse: Nathan -- "If 5 gets the handoff, then 6
+  // gets the reverse going the opposite way and vise versa." Checked
+  // FIRST (highest priority, same reasoning directionLeft already has
+  // over wingLeft/alignment -- the most specific, most recently-chosen
+  // thing a coach can pick wins) -- a real, 3-leg exchange schedule
+  // (snap -> handoff -> reverse) replaces the play's normal 2-leg one
+  // entirely while Reverse is on, direction-keyed the same way the
+  // normal handoff already is (reverseBallPath for Direction=Right,
+  // directionLeftReverseBallPath for Direction=Left -- the carrier and
+  // the reverse-receiver swap roles between the two, same as the
+  // normal handoff already does).
+  if (reverseOn && playType && playType.key) {
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
+    const variant = pbPlay && pbPlay.variants && pbPlay.variants[0];
+    const rbp = direction === 'Left' ? (variant && variant.directionLeftReverseBallPath) : (variant && variant.reverseBallPath);
+    if (rbp && rbp.length) resolved = rbp;
+  }
+  if (!resolved && direction === 'Left' && playType && playType.key) {
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
+    const dlbp = pbPlay && pbPlay.variants && pbPlay.variants[0] && pbPlay.variants[0].directionLeftBallPath;
+    if (dlbp && dlbp.length) resolved = dlbp;
+  }
+  if (!resolved && wingSide === 'Left' && playType && playType.key) {
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
+    const wlbp = pbPlay && pbPlay.variants && pbPlay.variants[0] && pbPlay.variants[0].wingLeftBallPath;
+    if (wlbp && wlbp.length) resolved = wlbp;
+  }
+  if (!resolved) {
+    const pbFormation = formationId && window.PlayBuilderFormationsById && window.PlayBuilderFormationsById[formationId];
+    if (pbFormation && playType && playType.key) {
+      const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playType.key];
+      const variant = pbPlay && pbPlay.variants && pbPlay.variants[0];
+      const abp = variant && variant.alignmentBallPath;
+      if (abp) {
+        for (const toggle of (pbFormation.alignmentToggles || [])) {
+          const value = (alignmentValues && alignmentValues[toggle.id]) || toggle.values[0].id;
+          const leg = abp[toggle.id] && abp[toggle.id][value];
+          if (leg && leg.length) { resolved = leg; break; }
+        }
+      }
+    }
+  }
+  if (!resolved) resolved = playType && playType.ballPath;
+  // Nathan: "Any time Boot is chosen the QB does not give up the ball and
+  // should stay with him the whole time." The static route-color swap
+  // (renderCardDiagram, just above where bootBallPath/bootFakePath are
+  // computed) already correctly makes #1 the sole ball carrier -- but the
+  // real, live bug he found is that the ANIMATED ball still followed the
+  // play's own authored exchange schedule regardless, since this function
+  // (and both its callers, playCardAnimation/seekCardAnimation) had zero
+  // idea Boot existed. A real, live confirmed bug, not a content gap --
+  // the fix is structural, not per-play content: whenever Boot is on and
+  // the snap goes to #1 (every real play in this book), truncate to just
+  // the snap leg so the ball visibly stays with him the entire play,
+  // instead of animating a handoff Boot says never happens.
+  if (bootOn && resolved && resolved.length && String(resolved[0].player) === '1') {
+    return [resolved[0]];
+  }
+  return resolved;
+}
+// Ball-path exchange TIMING (BallPath.schedule's fractionAlongPath) needs
+// the receiver's own ACTUAL, currently-drawn route -- not the raw baked
+// leaf data (stage._resolvedPaths, a plain alias of variant.paths, never
+// mutated by any of the live, render-time corrections this file applies:
+// wingLeftRouteFor's "5 Guys" redistribution, #4's own direct-resolveRoute
+// bypass, QB Sneak's path swap). Rather than duplicate every one of those
+// correction mechanisms a second time here, sample the geometry actually
+// on screen -- the rendered <path>'s `d` already reflects every
+// correction that applied, whatever it was, so this stays correct even
+// for a future one this function never has to know about. Falls back to
+// the old _resolvedPaths lookup only if the element has no real geometry
+// yet (defensive; shouldn't normally trigger post-render).
+function pointsFromRenderedPath(el, samples) {
+  if (!el || typeof el.getTotalLength !== 'function') return null;
+  let len;
+  try { len = el.getTotalLength(); } catch (e) { return null; }
+  if (!len) return null;
+  const n = samples || 24;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const pt = el.getPointAtLength((len * i) / n);
+    pts.push([pt.x, pt.y]);
+  }
+  return pts;
+}
+async function playCardAnimation(stage, playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn) {
   if (isPlayingRef.value) return;
   isPlayingRef.value = true;
-  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+  renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, formationId, overloadOn, alignmentValues, qbSneakOn, reverseOn);
   // QB Sneak: "walks out to talk to receivers... as he walks back... he
   // gets under center, taps the center and its a quick snap." He carries no
   // ball at all during that walk -- the football only exists from the snap
@@ -1726,10 +2932,28 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // which paths the ▶ animation actually plays. Matches Split, which
   // never filtered by selection to begin with.
   const lastRenderedPaths = stage._lastRenderedPaths;
+  // Moved up from just before authoredBallPath below (unchanged otherwise)
+  // so the new carrier pre-snap motion block, right below, can know who
+  // the real carrier is for THIS wingSide/direction before the snap even
+  // happens.
+  const wingAwareBallPath = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn, reverseOn);
 
   const ball = svgEl('ellipse', { rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3 });
-  const centerPos = { x: DATA.formation['C'][0], y: DATA.formation['C'][1] };
-  const qbPos = { x: DATA.backfield['1'][0], y: DATA.backfield['1'][1] };
+  // Nathan, "I Wing Left Dive Right": "still hikes the ball directly to
+  // the 2 instead of the 1." This pre-snap tween hardcoded 'wing' as the
+  // formation id regardless of what was actually being rendered -- the
+  // same class of bug p4AnchorOn/pbLiveAnchor were built to fix, just
+  // never applied here. Wing's own real #1/#C anchors (a shotgun-depth
+  // backfield) sit nowhere near where I Wing's own #1 is actually drawn
+  // (an under-center stack) -- close enough to I Wing's real #2 that the
+  // ball's very first, pre-route-reveal tween landed on top of #2
+  // instead of #1, before any of this session's other ball-path fixes
+  // (which all run AFTER this tween) ever got a chance to correct it.
+  // Fixed the same way renderCardDiagram's own wingAlign already is
+  // (line ~1130): the real formationId, not a hardcoded literal.
+  const wingAlign = alignment(formationId || 'wing', wingSide);
+  const centerPos = { x: wingAlign['C'][0], y: wingAlign['C'][1] };
+  const qbPos = { x: wingAlign['1'][0], y: wingAlign['1'][1] };
   ball.setAttribute('cx', centerPos.x); ball.setAttribute('cy', centerPos.y);
   mainGroup.insertBefore(ball, circlesLayerRef);
 
@@ -1744,8 +2968,10 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     const p4Entry = lastRenderedPaths.find(p => p.player === 4);
     if (p4Entry && p4Entry.circleEl) {
       const oppositeSide = wingSide === 'Left' ? 'Right' : 'Left';
-      const startPos = { x: DATA.wing[wingSide][0], y: DATA.wing[wingSide][1] };
-      const endPos = { x: DATA.wing[oppositeSide][0], y: DATA.wing[oppositeSide][1] };
+      const here = alignment('wing', wingSide)['4'];
+      const there = alignment('wing', oppositeSide)['4'];
+      const startPos = { x: here[0], y: here[1] };
+      const endPos = { x: there[0], y: there[1] };
       p4Entry.circleEl.setAttribute('cx', startPos.x); p4Entry.circleEl.setAttribute('cy', startPos.y);
       if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', startPos.x); p4Entry.textEl.setAttribute('y', startPos.y + 12); }
       await tweenPoint(startPos, endPos, 2200 * speedMultiplier, pt => {
@@ -1753,6 +2979,43 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
         if (p4Entry.textEl) { p4Entry.textEl.setAttribute('x', pt.x); p4Entry.textEl.setAttribute('y', pt.y + 12); }
       });
       await wait(150 * speedMultiplier);
+    }
+  }
+
+  // Jet Sweep: Nathan -- "he can't start moving when the ball is snapped.
+  // he needs to start motioning over then the ball is snapped." A real
+  // pre-snap motion, same idea as #4's own Motion toggle just above, but
+  // generalized to WHOEVER the live, wingSide/direction-resolved carrier
+  // actually is (wingAwareBallPath's own 2nd leg -- the 1st is always just
+  // the snap-holder, {player:1}) instead of a hardcoded position id, and
+  // using HIS OWN authored route's own direction rather than a fixed
+  // wing-side swap (#4's own model has no route of his own to extrapolate
+  // from, just two static spots).
+  // Gated on Play.carrierPreSnapMotion so this is a no-op for every other
+  // play (nothing else sets it) -- ends EXACTLY at the carrier's own real,
+  // unchanged points[0], so the main reveal just below picks him up
+  // mid-stride with zero jump/glitch, rather than needing any change to
+  // the shared reveal/exchange-timing machinery every other play also
+  // relies on.
+  if (playType && playType.carrierPreSnapMotion && wingAwareBallPath && wingAwareBallPath[1]) {
+    const carrierId = wingAwareBallPath[1].player;
+    const carrierEntry = lastRenderedPaths.find(p => String(p.player) === String(carrierId) && p.circleEl && p.points && p.points.length > 1);
+    if (carrierEntry) {
+      const [p0x, p0y] = carrierEntry.points[0];
+      const [p1x, p1y] = carrierEntry.points[1];
+      // A modest head start along his own first leg's own direction,
+      // reversed -- he's already moving, arriving at his real lined-up
+      // spot (points[0], untouched) right as the ball is snapped, so the
+      // main route-reveal's own draw (starting there) reads as a
+      // continuation of the same motion, not a second, separate start.
+      const startPos = { x: p0x - (p1x - p0x) * 0.15, y: p0y - (p1y - p0y) * 0.15 };
+      const endPos = { x: p0x, y: p0y };
+      carrierEntry.circleEl.setAttribute('cx', startPos.x); carrierEntry.circleEl.setAttribute('cy', startPos.y);
+      if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', startPos.x); carrierEntry.textEl.setAttribute('y', startPos.y + 12); }
+      await tweenPoint(startPos, endPos, 900 * speedMultiplier, pt => {
+        carrierEntry.circleEl.setAttribute('cx', pt.x); carrierEntry.circleEl.setAttribute('cy', pt.y);
+        if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', pt.x); carrierEntry.textEl.setAttribute('y', pt.y + 12); }
+      });
     }
   }
 
@@ -1770,9 +3033,21 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // segment's share, so the two segments draw back-to-back at a matching
   // pace instead of each taking the full animMs (which would make a split
   // route draw twice as slow as every other path).
-  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac }) =>
-    animatePathDraw(el, arrowEl, (lenFrac != null ? lenFrac : 1) * animMs,
-      (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs, circleEl, textEl));
+  // A Timed Stop can genuinely extend how long ONE path takes to fully
+  // reveal past the play's normal animMs -- trackFinishMs (below) is the
+  // real max across every path, so the ball-tracking loop doesn't stop
+  // updating early while a paused receiver is still finishing his route.
+  let trackFinishMs = animMs;
+  const pathPromises = lastRenderedPaths.map(({ el, arrowEl, delayMs, circleEl, textEl, startFrac, lenFrac, points }) => {
+    const segDurationMs = (lenFrac != null ? lenFrac : 1) * animMs;
+    // points is undefined for a handoff-split segment (see renderCardDiagram's
+    // own two-lastRenderedPaths-entries branch just above) -- buildStopTimeline
+    // already returns null for that, same as for any stop-free route.
+    const stopTimeline = points ? buildStopTimeline(points, segDurationMs, speedMultiplier) : null;
+    const delayOffset = (delayMs || 0) * speedMultiplier + (startFrac || 0) * animMs;
+    trackFinishMs = Math.max(trackFinishMs, delayOffset + (stopTimeline ? stopTimeline.totalMs : segDurationMs));
+    return animatePathDraw(el, arrowEl, segDurationMs, delayOffset, circleEl, textEl, stopTimeline);
+  });
 
   // isBallStart (p.ballStart in the data) marks "who the floating ball icon
   // visually starts with," which can be a DIFFERENT path than isBall/p.ball
@@ -1801,9 +3076,40 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
   // along with the QB at that moment, then the existing carrier-switch
   // logic below (ballEntry && handoffEntry, different circleEl) eases it
   // over to the TE exactly when his route reaches the real handoff point.
-  const initialEntry = (ballEntry && ballEntry.circleEl) ? ballEntry
+  // An authored ball path replaces the single-handoff machinery below with a
+  // real carrier schedule -- as many exchanges as the play has. Built here so
+  // the rest of this function can stay one code path: the ball still follows
+  // ONE `carrier` element at a time, there are just now N of them instead of
+  // at most two.
+  const authoredBallPath = (window.BallPath && window.BallPath.isValid(wingAwareBallPath))
+    ? window.BallPath.schedule(wingAwareBallPath, (player) => {
+        const entry = lastRenderedPaths.find(p => String(p.player) === String(player) && p.circleEl);
+        if (!entry) return null;
+        // entry.points (set at render time, right where `points` builds the
+        // path's own `d` attribute) reflects every live render-time
+        // correction exactly like pointsFromRenderedPath's own DOM sample
+        // does (verified: matches to sub-pixel precision even on a play
+        // with wingLeftRouteFor/alignment corrections applied) -- and,
+        // unlike a geometry resample, it can actually carry a RoutePoint's
+        // stopMs (js/play-calls.js's buildStopTimeline), which
+        // BallPath.schedule()'s own exchange-timing math now checks for.
+        // Falls through to the resampled/stale-alias chain exactly as
+        // before for the one case entry.points is absent (a "Ball Starts
+        // Here" handoff-split segment).
+        const points = entry.points || pointsFromRenderedPath(entry.el) || (() => {
+          const src = (stage._resolvedPaths || []).find(p => String(p.player) === String(player) && p.points);
+          return src && src.points;
+        })();
+        return { circleEl: entry.circleEl, points };
+      }, animMs, speedMultiplier)
+    : null;
+
+  const initialEntry = authoredBallPath && authoredBallPath.length
+    ? { circleEl: authoredBallPath[0].circleEl, delayMs: 0 }
+    : (ballEntry && ballEntry.circleEl) ? ballEntry
     : (handoffEntry && handoffEntry.circleEl) ? handoffEntry : null;
   const initialDelay = !initialEntry ? 0
+    : (authoredBallPath && authoredBallPath.length) ? 0
     : initialEntry === ballEntry ? (ballEntry.delayMs || 0) * speedMultiplier
     : (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
   if (initialEntry) {
@@ -1816,11 +3122,21 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     let catchingUp = true;
     let easing = true;
     let tracking = false;
+    // Nathan, on 5 Guys' own pass plays: "on the pass the ball goes way
+    // too fast out to the receiver, slow the pass speed." This ease
+    // closes a fixed FRACTION of the remaining distance every frame, so a
+    // real throw (QB to a receiver well downfield) covers far more ground
+    // per frame than a close-proximity handoff/pitch/reverse does, in the
+    // very same handful of frames -- reads as a snap, not a thrown ball.
+    // Slower specifically for 'pass' rather than lowering every exchange's
+    // rate, since handoff/pitch/reverse/the initial snap are short and
+    // were never reported as wrong.
+    let easeRate = 0.25;
     function catchUpFrame() {
       const targetX = Number(carrier.getAttribute('cx'));
       const targetY = Number(carrier.getAttribute('cy')) + OFFY;
-      cx += (targetX - cx) * 0.25;
-      cy += (targetY - cy) * 0.25;
+      cx += (targetX - cx) * easeRate;
+      cy += (targetY - cy) * easeRate;
       ball.setAttribute('cx', cx);
       ball.setAttribute('cy', cy);
       const dist = Math.hypot(targetX - cx, targetY - cy);
@@ -1852,7 +3168,32 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     // mid-play -- if handoffEntry is what we're ALREADY starting from
     // (initialEntry === handoffEntry, the Shuffle Pass case above), there's
     // no second carrier left to switch to.
-    if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier) {
+    if (authoredBallPath && authoredBallPath.length > 1) {
+      // One scheduled switch per exchange. Each waits from the same time
+      // origin as the path drawing, so "when #4 reaches the pitch point" means
+      // the moment his own route is drawn to it.
+      authoredBallPath.slice(1).forEach((leg) => {
+        wait(leg.atMs * speedMultiplier).then(() => {
+          if (!tracking) return; // play ended before this exchange came round
+          if (leg.circleEl === carrier) return;
+          carrier = leg.circleEl;
+          easeRate = leg.how === 'pass' ? 0.07 : 0.25;
+          catchingUp = true;
+          easing = true;
+          catchUpFrame();
+        });
+      });
+    } else if (ballEntry && handoffEntry && handoffEntry.circleEl !== carrier && !bootOn) {
+      // Real bug, found in review: this is the OLDER ballStart/handoffIndex
+      // animation path (Shuffle Pass -- the one real play with no authored
+      // playType.ballPath for resolveBallPathForWing's own Boot handling
+      // above to truncate), and it scheduled this mid-play switch to the
+      // real ball carrier unconditionally -- Nathan: "Any time Boot is
+      // chosen the QB does not give up the ball and should stay with him
+      // the whole time," but this branch had zero idea Boot existed.
+      // initialEntry already starts the ball on ballEntry (the QB, via
+      // p.ballStart) in every case, boot or not -- skipping this switch
+      // when bootOn is on is enough to keep it there for the whole play.
       const handoffDelay = (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs;
       wait(handoffDelay).then(() => {
         if (!tracking) return; // play already ended (or never started) -- nothing to hand off
@@ -1881,16 +3222,306 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     }
     tracking = true;
     catchUpFrame();
-    await wait(animMs);
+    await wait(trackFinishMs);
     tracking = false;
   } else {
-    await wait(animMs);
+    await wait(trackFinishMs);
   }
   await Promise.all(pathPromises);
   await wait(300 * speedMultiplier);
   ball.remove();
   isPlayingRef.value = false;
 }
+// js/whats-new.js has always called window.playCardAnimation and guarded on
+// its existence -- but it was never exported, so that guard has been silently
+// falling through to the static diagram ever since it was written. Exporting
+// it makes the What's New snapshot actually animate, and is what lets the
+// ball path be exercised from outside this file.
+window.playCardAnimation = playCardAnimation;
+
+// ---- Save as GIF -- Nathan: "If I am a player or coach and have a play
+// up in the Play section, give me an option next to the Play button to
+// save the play to your device as a gif. It will save an animation of
+// the play to your phone."
+//
+// Captures the SAME live SVG the real ▶ button already animates (not a
+// second, separately-computed render) -- runs the real playCardAnimation/
+// playSplitAnimation while sampling the live <svg> on an interval, so
+// whatever a coach or kid just watched IS what gets saved, byte for byte.
+// Each sample rasterizes the current DOM state via the browser's own SVG
+// renderer -- the exact "serialize -> data URI -> <img> -> canvas" method
+// call-sheet-pdf.js/playbook-pdf.js already proved out for PDF export
+// (can't misinterpret a curve the way a vector-conversion library could,
+// since it's the same engine already drawing this correctly on screen).
+const GIF_WORKER_SCRIPT = 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js';
+// ~9fps -- plenty smooth for a route diagram (nothing here moves fast
+// enough to need more), keeps both the file size and the encode time down.
+const GIF_FRAME_DELAY_MS = 110;
+const GIF_EXPORT_WIDTH = 640; // downscaled from the real ~1600-wide field viewBox
+
+function svgToCanvas(stage, width, height) {
+  return new Promise((resolve, reject) => {
+    const xml = new XMLSerializer().serializeToString(stage);
+    const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    const img = new Image();
+    img.onload = () => {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = width;
+      canvasEl.height = height;
+      // gif.js reads pixels back out of this same canvas on every single
+      // frame (getImageData, inside addFrame) -- willReadFrequently tells
+      // the browser to optimize for exactly that access pattern instead of
+      // the usual "draw once, display" one.
+      const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvasEl);
+    };
+    img.onerror = reject;
+    img.src = dataUri;
+  });
+}
+
+// Confirmed live: `new Worker('https://cdnjs...')` throws SecurityError --
+// a cross-origin script URL can't be handed to the Worker constructor
+// directly (unlike a plain <script src>, which cdnjs is fine with). gif.js
+// passes its own `workerScript` option straight into `new Worker(...)`
+// internally, so the fix has to happen out here: fetch the real script's
+// SOURCE TEXT once, wrap it in a same-origin blob: URL, and hand gif.js
+// that instead -- a Worker constructed from a blob: URL is always
+// same-origin, regardless of where the text inside it actually came from.
+// Cached (not re-fetched per export) since the file never changes at a
+// pinned version.
+let gifWorkerBlobUrlPromise = null;
+function getGifWorkerBlobUrl() {
+  if (!gifWorkerBlobUrlPromise) {
+    gifWorkerBlobUrlPromise = fetch(GIF_WORKER_SCRIPT)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Couldn't load the GIF encoder (status ${res.status}).`);
+        return res.text();
+      })
+      .then((text) => URL.createObjectURL(new Blob([text], { type: 'application/javascript' })));
+  }
+  return gifWorkerBlobUrlPromise;
+}
+
+// runAnimation is a () => Promise -- the exact same playCardAnimation/
+// playSplitAnimation call the ▶ button already makes, handed in by the
+// caller so this function never has to know which one applies. Frames are
+// sampled on a plain interval running ALONGSIDE that real animation, not a
+// reimplementation of its timing -- when the animation finishes (however
+// long that actually took on this device), capture just stops.
+async function exportPlayGif(stage, runAnimation, filename) {
+  if (!window.GIF) throw new Error('GIF export isn\'t available right now -- try reloading the page.');
+  const vb = stage.viewBox && stage.viewBox.baseVal;
+  const vw = (vb && vb.width) || 1600;
+  const vh = (vb && vb.height) || 1000;
+  const width = GIF_EXPORT_WIDTH;
+  const height = Math.round(width * (vh / vw));
+
+  const workerBlobUrl = await getGifWorkerBlobUrl();
+  const gif = new window.GIF({
+    workers: 2, quality: 10, width, height,
+    workerScript: workerBlobUrl, background: '#ffffff',
+  });
+
+  let capturing = true, busy = false, frameCount = 0;
+  const captureLoop = async () => {
+    while (capturing) {
+      if (!busy) {
+        busy = true;
+        try {
+          const canvasEl = await svgToCanvas(stage, width, height);
+          gif.addFrame(canvasEl, { copy: true, delay: GIF_FRAME_DELAY_MS });
+          frameCount++;
+        } catch (e) { /* a single missed frame isn't worth aborting the export over */ }
+        busy = false;
+      }
+      await wait(GIF_FRAME_DELAY_MS);
+    }
+  };
+  const loopPromise = captureLoop();
+  try {
+    await runAnimation();
+  } finally {
+    capturing = false;
+    await loopPromise;
+  }
+  if (frameCount === 0) throw new Error('Nothing was captured -- try again.');
+
+  return new Promise((resolve, reject) => {
+    gif.on('finished', (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      resolve();
+    });
+    gif.on('abort', () => reject(new Error('GIF export was aborted.')));
+    gif.render();
+  });
+}
+
+// ---- Scrub: the same animation, evaluated at one instant instead of played
+// forward ----
+//
+// Nathan: "Need to be able to play it or scrub through to time things up."
+// playCardAnimation answers "play it"; this answers "scrub through" -- drag a
+// slider and see exactly where every route and the ball are at that moment,
+// with no requestAnimationFrame loop and no waiting.
+//
+// It is deterministic ON PURPOSE, which is why it does not simply replay
+// playCardAnimation up to a cutoff: that function's ball-follow is a SPRING
+// (catchUpFrame eases 25% of the remaining distance per frame), whose
+// position at a given instant depends on every frame that came before it,
+// not just the instant itself. A slider that jumps around would have to
+// replay the whole spring from t=0 every time it moved, and "where exactly is
+// the ball 400ms in" would still be an approximation of a physics simulation
+// rather than an answer. So scrubbing shows the EXACT position an exchange
+// happens at, which is more useful for checking timing than reproducing
+// Play's cosmetic ease -- Play still has the polish; this has the truth.
+//
+// It reuses the live animation's own machinery for the one part that must
+// not drift: revealing a path's progress. animatePathDraw strokes a path via
+// getTotalLength/getPointAtLength on the path's own live DOM element, so
+// asking that same element for its point at a given fraction, synchronously,
+// produces the pixel-identical frame Play would have shown at that instant --
+// same geometry, same math, just evaluated once instead of once per frame.
+//
+// Requires a render (renderCardDiagram) to have already run on this stage --
+// reads _lastRenderedPaths/_resolvedPaths/_animCtx it left behind, same
+// contract playCardAnimation itself depends on.
+function seekCardAnimation(stage, elapsedMs, speedMultiplier) {
+  speedMultiplier = speedMultiplier || 1;
+  const animMs = 1400 * speedMultiplier;
+  const ctx = stage._animCtx;
+  const lastRenderedPaths = stage._lastRenderedPaths || [];
+  const resolvedPaths = stage._resolvedPaths || [];
+  if (!ctx || !lastRenderedPaths.length) return;
+
+  // Same formula animatePathDraw/pathPromises already use: a path starts
+  // revealing at its own delay (plus, for a "Ball Starts Here" split
+  // segment, its startFrac share of animMs) and draws over its own share
+  // (lenFrac) of animMs.
+  function pathFracAt(entry) {
+    const dur = (entry.lenFrac != null ? entry.lenFrac : 1) * animMs;
+    const delay = (entry.delayMs || 0) * speedMultiplier + (entry.startFrac || 0) * animMs;
+    if (dur <= 0) return 1;
+    // Mirrors playCardAnimation's pathPromises exactly (must stay pixel-
+    // identical to Play, per this function's own header comment) -- a
+    // Timed Stop pins the fraction at the stop point for real elapsed time
+    // instead of the plain linear ratio below. Falls straight through to
+    // the original formula for any entry with no stop data.
+    const stopTimeline = entry.points ? window.buildStopTimeline(entry.points, dur, speedMultiplier) : null;
+    if (stopTimeline) return stopTimeline.fracAt(elapsedMs - delay);
+    return Math.max(0, Math.min(1, (elapsedMs - delay) / dur));
+  }
+
+  lastRenderedPaths.forEach((entry) => {
+    if (!entry.el) return;
+    const frac = pathFracAt(entry);
+    const len = entry.el.getTotalLength();
+    entry.el.style.strokeDasharray = `${len} ${len}`;
+    entry.el.style.strokeDashoffset = `${len * (1 - frac)}`;
+    if (entry.arrowEl) {
+      entry.arrowEl.style.opacity = frac > 0 ? '1' : '0';
+      placeArrowAtFraction(entry.arrowEl, entry.el, frac);
+    }
+    if (entry.circleEl) {
+      const pt = entry.el.getPointAtLength(len * frac);
+      entry.circleEl.setAttribute('cx', pt.x);
+      entry.circleEl.setAttribute('cy', pt.y);
+      if (entry.textEl) { entry.textEl.setAttribute('x', pt.x); entry.textEl.setAttribute('y', pt.y + 12); }
+    }
+  });
+
+  // Where a carrier's OWN path puts him right now -- ask his path, the same
+  // principle as above, rather than trust whatever his circle's cx/cy
+  // happens to already hold (which a previous seek call may have left mid-
+  // reveal at a different instant).
+  function circleNow(circleEl) {
+    const entry = lastRenderedPaths.find((p) => p.circleEl === circleEl);
+    if (!entry || !entry.el) {
+      return { x: Number(circleEl.getAttribute('cx')), y: Number(circleEl.getAttribute('cy')) };
+    }
+    const frac = pathFracAt(entry);
+    const len = entry.el.getTotalLength();
+    const pt = entry.el.getPointAtLength(len * frac);
+    return { x: pt.x, y: pt.y };
+  }
+
+  const OFFY = 50;
+  const ball = stage._scrubBall || (stage._scrubBall = svgEl('ellipse', {
+    rx: 34, ry: 21, fill: '#7a4a24', stroke: '#f4e9dc', 'stroke-width': 3,
+  }));
+  if (!ball.parentNode && stage._mainGroup && stage._circlesLayerRef) {
+    stage._mainGroup.insertBefore(ball, stage._circlesLayerRef);
+  }
+
+  // Same hardcoded-'wing' bug as playCardAnimation's own pre-snap tween
+  // above, fixed the same way -- ctx.formationId (already stashed for
+  // resolveBallPathForWing's own use just below) is the real formation
+  // being rendered, not always Wing.
+  const wingAlign = alignment(ctx.formationId || 'wing', ctx.wingSide);
+  const qbPos = wingAlign['1'];
+  const playType = ctx.playType;
+
+  const wingAwareBallPath = resolveBallPathForWing(playType, ctx.wingSide, ctx.formationId, ctx.alignmentValues, ctx.direction, ctx.bootOn, ctx.reverseOn);
+  const authoredBallPath = (window.BallPath && window.BallPath.isValid(wingAwareBallPath))
+    ? window.BallPath.schedule(wingAwareBallPath, (player) => {
+        const entry = lastRenderedPaths.find((p) => String(p.player) === String(player) && p.circleEl);
+        if (!entry) return null;
+        // Same preference as playCardAnimation's own identical lookup above
+        // -- entry.points over a geometry resample, so a Timed Stop is
+        // visible to seekCardAnimation's exchange timing too (this
+        // function's whole job is staying pixel-identical to what Play
+        // actually shows at a given instant, so the two must agree).
+        const points = entry.points || pointsFromRenderedPath(entry.el) || (() => {
+          const src = resolvedPaths.find((p) => String(p.player) === String(player) && p.points);
+          return src && src.points;
+        })();
+        return { circleEl: entry.circleEl, points };
+      }, animMs, speedMultiplier)
+    : null;
+
+  if (authoredBallPath && authoredBallPath.length) {
+    let active = authoredBallPath[0];
+    for (let i = 1; i < authoredBallPath.length; i++) {
+      if (authoredBallPath[i].atMs <= elapsedMs) active = authoredBallPath[i]; else break;
+    }
+    const pt = circleNow(active.circleEl);
+    ball.setAttribute('cx', pt.x);
+    ball.setAttribute('cy', pt.y + OFFY);
+    ball.style.opacity = '1';
+    return;
+  }
+
+  // The plain single-handoff model every other shipped play still uses.
+  const ballEntry = lastRenderedPaths.find((p) => p.isBallStart) || lastRenderedPaths.find((p) => p.isBall);
+  if (!ballEntry || !ballEntry.circleEl) { ball.style.opacity = '0'; return; }
+  const handoffEntry = lastRenderedPaths.find((p) => p.handoffFraction != null && p.circleEl);
+  const handoffAt = handoffEntry
+    ? (handoffEntry.delayMs || 0) * speedMultiplier + handoffEntry.handoffFraction * animMs
+    : Infinity;
+  const ballDelay = (ballEntry.delayMs || 0) * speedMultiplier;
+
+  if (elapsedMs < ballDelay) {
+    ball.setAttribute('cx', qbPos[0]);
+    ball.setAttribute('cy', qbPos[1]);
+  } else {
+    const activeCircle = (handoffEntry && elapsedMs >= handoffAt) ? handoffEntry.circleEl : ballEntry.circleEl;
+    const pt = circleNow(activeCircle);
+    ball.setAttribute('cx', pt.x);
+    ball.setAttribute('cy', pt.y + OFFY);
+  }
+  ball.style.opacity = '1';
+}
+window.seekCardAnimation = seekCardAnimation;
 
 // Signed-in player's stored position (player-identity.js), translated into
 // whatever renderCardDiagram/renderSplitDiagram's selectedPlayer expects --
@@ -1910,7 +3541,8 @@ function defaultHighlightForSignedInPlayer() {
 }
 
 // ---- Build a single flip-card ----
-function buildCard(combo) {
+function buildCard(combo, opts) {
+  opts = opts || {};
   const outer = document.createElement('div');
   outer.className = 'card-outer';
   const inner = document.createElement('div');
@@ -1926,6 +3558,23 @@ function buildCard(combo) {
 
   let wingSide = 'Left';
   let direction = 'Left';
+  // Both default 'Left' above -- for a directionOpposesWing play (I's
+  // Sweep), the real initial state has to already be the OPPOSITE pair,
+  // not the "same" default, or the card would open on an invalid
+  // combination (direction === wingSide) before a coach ever touches
+  // either toggle.
+  if (combo.directionOpposesWing) direction = 'Right';
+  // I's Dive: Nathan: "the default on this play is for the 2 back to run
+  // the ball to the opposite side of the 4. If the 4 goes left, the 2
+  // runs it inside right. So I right, Dive Left and I left, Dive Right
+  // are the defaults for this play. You can have the dive go to the same
+  // side as the wing but it's about misdirection." UNLIKE
+  // directionOpposesWing, Direction stays fully independent and visible
+  // here -- a coach can still call same-side as a real, deliberate
+  // misdirection variant, this only fixes what the card opens ON before
+  // anyone touches a toggle (both defaulted 'Left' above, which is the
+  // MISDIRECTION pairing, not the standard one).
+  else if (combo.directionDefaultsAwayFromWing) direction = 'Right';
   // Split formation -- a second, independent formation alongside Shotgun
   // (the existing Wing-based formation; every play up to now has been run
   // out of Shotgun, it's just never been called out explicitly since it's
@@ -1937,13 +3586,50 @@ function buildCard(combo) {
   // Seattle/Florida calls, and Play button animation, are the next
   // increment -- for now the front of the card shows the real Split Right/
   // Split Left lineup at rest, matching Nathan's reference diagrams.
-  let formation = 'shotgun';
+  let formation = opts.lockFormation || 'shotgun';
+  // buildCard's own display label for `formation` -- 'shotgun' keeps
+  // meaning "Shotgun" (its historical toggle-button value, predating the
+  // formation registry) for every existing play; a real, non-Wing/Split
+  // custom formationId (opts.lockFormation passing e.g. 'i', once
+  // renderPlayDetail stops collapsing every custom formation to
+  // 'shotgun' -- see below) uses that formation's own real,
+  // coach-authored name instead. Used for this card's own title-bar text
+  // only -- NOT the Wing L/R toggle, which always reads "Wing L/R"
+  // regardless of formation (that axis names WHERE #4 lines up, not this
+  // formation's own identity; see its own buildToggleGroup call below).
+  // Nathan, correcting an earlier call from the same session: "you are
+  // calling the wing formation (which is in shotgun) the shotgun
+  // formation. It should be the wing formation." -- js/formations.js's
+  // own registry entry (id stays 'wing', only the real, coach-facing
+  // NAME changed) is the actual source of truth this falls back to for
+  // every OTHER formation; hardcoded here only because 'shotgun' is
+  // buildCard's own historical toggle value, not a real formation
+  // registry id, so `window.Formations.get('shotgun')` would find
+  // nothing without the id alias also defined there.
+  const formationLabel = formation === 'shotgun' ? 'Wing' : ((window.Formations.get(formation) || {}).name || formation);
+  // renderCardDiagram/playCardAnimation expect the REAL formation
+  // registry id ('wing', or omitted entirely -- already defaults to
+  // 'wing', js/play-calls.js's own renderCardDiagram) -- not buildCard's
+  // own 'shotgun' toggle-button label. Translates once, used everywhere
+  // this card calls into the render pipeline, so a real custom
+  // formationId passes straight through unchanged.
+  function registryFormationId() {
+    return formation === 'shotgun' ? undefined : formation;
+  }
   let splitSide = 'Left';
   // Pass is a plain on/off switch -- off means run, on means whichever of
   // the three named calls (Houston/Seattle/Florida, i.e. Pass 1/2/3 in the
   // card catalog) gets randomized in as the final signal. Nathan: "any of
   // those signals means it is pass" -- not a coach-facing choice of which.
   let passOn = false;
+  // Which protection the line is on when the call is a pass. Nathan: pass
+  // pocket vs a straight pass block. Only meaningful with Pass on, so the
+  // toggle only appears then.
+  let protection = 'pocket';
+  // Nathan: "new signal for Overload which tells the non-wing side TE to play
+  // over as a second TE on the wing side." Declared here so the call can be
+  // signalled now; the alignment change it describes is still to come.
+  let overloadOn = false;
   // Which of Seattle/Houston/Florida is called to each SIDE of the play --
   // not a wide-receiver-vs-inside-receiver choice. The split side's two
   // receivers (wide + flex) both run whatever's called to their side;
@@ -1972,6 +3658,17 @@ function buildCard(combo) {
   // play as authored, not a state most cards should start in.
   let motionOn = false;
   let bootOn = false;
+  // Jet Sweep's own Reverse: only reachable when combo.hasReverse is set.
+  // Defaults off, same reasoning as Motion/Boot/QB Sneak.
+  let reverseOn = false;
+  // Alt call (e.g. "Jumbo"): only reachable when combo.altCallCardId is
+  // set. See the ioSlot toggle above for the full explanation.
+  let altCallOn = false;
+  // "QB Sneak" (5 Guys): mutually exclusive with Boot -- see
+  // combo.hasQbSneak's own doc (schema.js) for why they're two different
+  // concepts, not the same toggle renamed. Defaults off, same reasoning
+  // as Motion/Boot.
+  let qbSneakOn = false;
   // Nathan: "Both Option and Outside Zone need a new toggle for Counter...
   // added to the end of the play call like boot." Defaults off, same as
   // Motion/Boot. Unlike Boot, this doesn't swap anything live -- it just
@@ -1982,6 +3679,13 @@ function buildCard(combo) {
   // sub-variant (Pop/Pop2, see getVariant), not a live swap, gated on
   // hasPopVariant so any other play simply never shows this toggle.
   let popVariantOn = false;
+  // A custom formation's own toggle(s) (Heavy is the first) -- keyed by
+  // AlignmentToggle.id, value is that toggle's OWN current value id.
+  // Empty object for every existing play (combo.alignmentToggles is
+  // null/empty), so getVariant()'s own default-value fallback is what
+  // actually applies -- this only ever gets populated by the dynamic
+  // toggle built further down, for a play whose formation declares one.
+  const alignmentValues = {};
   const isPlayingRef = { value: false };
 
   // FRONT
@@ -2012,7 +3716,8 @@ function buildCard(combo) {
     return wrap;
   }
 
-  // Formation -- Shotgun (existing, default) vs Split (new). Split's own
+  // Formation -- Wing (existing, default; internal value stays 'shotgun',
+  // only the display label changed) vs Split (new). Split's own
   // Side toggle + Pass switch share this SAME row (rather than a row of
   // their own) so switching to Split never adds an extra row of vertical
   // space above the diagram -- that used to push the field diagram down
@@ -2020,14 +3725,15 @@ function buildCard(combo) {
   const formationRow = document.createElement('div');
   formationRow.className = 'toggle-row-basics';
   const formationToggle = buildToggleGroup('green', [
-    { value: 'shotgun', label: 'Shotgun' },
+    { value: 'shotgun', label: 'Wing' },
     { value: 'split', label: 'Split' },
   ], formation, (v) => { if (isPlayingRef.value) return; formation = v; updateFormationRows(); onComboChanged(); });
   formationRow.appendChild(formationToggle);
-  if (isQbSneak) {
+  if (isQbSneak || opts.lockFormation) {
     // Not just "no Split option" (below) -- Shotgun isn't right either, so
     // hide the whole Shotgun/Split toggle rather than leave a single
-    // Shotgun pill implying that's the formation.
+    // Shotgun pill implying that's the formation. Same treatment when the
+    // formation is locked in from outside (see opts.lockFormation above).
     formationToggle.style.display = 'none';
   } else if (combo.noSplit) {
     // Pop Pass has no Split formation data at all (same reason edit-plays.js
@@ -2057,6 +3763,58 @@ function buildCard(combo) {
     onComboChanged();
   });
   formationRow.appendChild(passSwitch);
+
+  // Which protection the line is on. Only meaningful once the call IS a pass,
+  // so it appears with Pass and hides with it -- a run has no pocket.
+  const protectionToggle = buildToggleGroup('brown', [
+    { value: 'pocket', label: 'Pocket', short: 'PKT' },
+    { value: 'straight', label: 'Straight', short: 'STR' },
+  ], protection, (v) => {
+    if (isPlayingRef.value) return;
+    protection = v;
+    onComboChanged();
+  });
+  formationRow.appendChild(protectionToggle);
+
+  // Overload: the back-side tight end comes over as a second TE on the wing
+  // side. It belongs to Wing, not Split -- "the non-wing side TE" only means
+  // something in the formation that has a wing. The registry says which
+  // formations can be overloaded at all, so the switch is never offered where
+  // it would do nothing.
+  // Nathan: "All plays in the playbook except the 5 guys formation plays,
+  // should have Overload Off, L, R as the 3 options because you don't
+  // have to have the overload on the same side as the wing, you can use
+  // it as misdirection." Same Off/L/R shape as I/I-Wing's own
+  // alignmentToggles-based Overload, and reuses the SAME alignmentValues
+  // object those already thread through renderCardDiagram/
+  // playCardAnimation/buildSignalSequence/the Game Plan capture -- no new
+  // parameter needed anywhere downstream. `overloadOn` (the older,
+  // separate boolean every one of those functions' own signatures still
+  // takes positionally) stays derived from it in lockstep, so every
+  // existing consumer that only ever knew "on/off" keeps working
+  // unchanged; only the code that specifically needs to know WHICH side
+  // (js/formations.js's applyOverload, via opts.overloadSide) reads
+  // alignmentValues.overload directly. 'off' is always index 0/the
+  // default, matching every other alignment toggle's own convention.
+  const overloadToggle = buildToggleGroup('brown', [
+    { value: 'off', label: 'Off' },
+    { value: 'left', label: 'L' },
+    { value: 'right', label: 'R' },
+  ], alignmentValues.overload || 'off', (v) => {
+    if (isPlayingRef.value) return;
+    alignmentValues.overload = v;
+    overloadOn = v !== 'off';
+    onComboChanged();
+  });
+  const overloadWrap = document.createElement('div');
+  overloadWrap.className = 'switch-control';
+  const overloadLbl = document.createElement('span');
+  overloadLbl.className = 'switch-label';
+  overloadLbl.textContent = 'Overload';
+  overloadWrap.appendChild(overloadLbl);
+  overloadWrap.appendChild(overloadToggle);
+  formationRow.appendChild(overloadWrap);
+
   toggleRow.appendChild(formationRow);
 
   const basicsRow = document.createElement('div');
@@ -2066,7 +3824,16 @@ function buildCard(combo) {
   // still drives the same wingSide state everything else does (the title
   // bar's "Split ${wingSide}" and the Split: side signal card), it just
   // reads "Split L/R" here instead of "Wing L/R" since there's no Wing
-  // version of this play a coach would ever actually call.
+  // (or other formation's) version of this play a coach would ever
+  // actually call.
+  //
+  // Nathan, on I: "this toggle needs to be wing L or R" -- this axis is
+  // always "which side is the WING position (#4) on," a fixed concept
+  // regardless of which formation it's rendering for, distinct from the
+  // title bar's own use of formationLabel (which correctly names the
+  // FORMATION, e.g. "I Right I Dive Right"). A literal 'Wing' label here
+  // reads correctly for Wing itself too (formationLabel is already
+  // 'Wing' there) -- this isn't formation-specific, on purpose.
   const wingToggle = buildToggleGroup('orange', isQbSneak ? [
     { value: 'Left', label: 'Split L' },
     { value: 'Right', label: 'Split R' },
@@ -2080,8 +3847,21 @@ function buildCard(combo) {
     // keep direction in lockstep with this toggle instead, so getVariant's
     // playType.directions[direction] lookup actually picks the side the
     // coach just selected. Nathan: "split left, he goes to the left, split
-    // right he goes to the right."
-    if (isQbSneak) direction = v;
+    // right he goes to the right." Same reasoning, generalized via
+    // combo.noDirection -- "5 Guys": "it's either right or left to say
+    // which side the 4 will be on, everything is the same... remove the
+    // direction toggle and just keep the Wing Left or R." Every "5 Guys"
+    // assignment is directionIndependent, so direction's own VALUE can't
+    // change what renders -- confirmed live before hiding anything --
+    // this keeps it syncing to Wing purely so nothing downstream that
+    // ever reads `direction` sees a stale, pre-flip value.
+    if (isQbSneak || combo.noDirection) direction = v;
+    // I's Sweep: Nathan: "If wing is Left, then the sweep has to go
+    // right... There is no sweep left handing off to the 4, with the
+    // wing in heavy on the left side." Opposite sync, not the same-value
+    // sync noDirection uses just above -- these two are mutually
+    // exclusive in practice (else-if, not a second independent if).
+    else if (combo.directionOpposesWing) direction = (v === 'Left') ? 'Right' : 'Left';
     onComboChanged();
   });
   basicsRow.appendChild(wingToggle);
@@ -2091,7 +3871,7 @@ function buildCard(combo) {
     { value: 'Right', label: 'Dir R' },
   ], direction, (v) => { if (isPlayingRef.value) return; direction = v; onComboChanged(); });
   basicsRow.appendChild(dirToggle);
-  if (isQbSneak) dirToggle.style.display = 'none';
+  if (isQbSneak || combo.noDirection || combo.directionOpposesWing) dirToggle.style.display = 'none';
 
   toggleRow.appendChild(basicsRow);
 
@@ -2124,16 +3904,33 @@ function buildCard(combo) {
       { value: 'Inside', label: 'In' },
     ], insideOutside, (v) => { if (isPlayingRef.value) return; insideOutside = v; onComboChanged(); });
     ioSlot.appendChild(ioToggle);
+  } else if (combo.altCallCardId != null) {
+    // A play may name an alternate, shorter call (e.g. Jumbo for I's own
+    // Double Blast) that means the EXACT same assignments/routes as its
+    // normal call -- a coach's choice of which cadence to flash this
+    // series, not a second play. Nathan: "For Jumbo, it's just Jumbo >
+    // Direction." Reuses this slot the same way Counter/Pop Pass 2/a 2nd
+    // alignment toggle already do -- free here whenever hasInsideOutside
+    // isn't set, which is true for every play that has this today.
+    const altCallToggle = buildSwitchToggle(combo.altCallLabel || 'Alt Call', altCallOn, (v) => { if (isPlayingRef.value) return; altCallOn = v; onComboChanged(); });
+    ioSlot.appendChild(altCallToggle);
   }
   extrasRow.appendChild(ioSlot);
 
   // #4 is the only player who ever goes in motion, so this is a simple
   // on/off rather than a direction pick. Every play has this slot in
   // Shotgun; in Split it's swapped out for the Left route-call picker.
+  // noMotion (additive -- unset/false on every existing PlayType, so this
+  // is a no-op for all of them) lets a play opt out, same shape as Boot's
+  // own noBoot just below -- Nathan: "ability to say which options should
+  // be available for toggles," and Motion previously had no way at all.
   const motionSlot = document.createElement('div');
   motionSlot.className = 'toggle-slot';
-  const motionToggle = buildSwitchToggle('Motion', motionOn, (v) => { if (isPlayingRef.value) return; motionOn = v; onComboChanged(); });
-  motionSlot.appendChild(motionToggle);
+  let motionToggle = null;
+  if (!combo.noMotion) {
+    motionToggle = buildSwitchToggle('Motion', motionOn, (v) => { if (isPlayingRef.value) return; motionOn = v; onComboChanged(); });
+    motionSlot.appendChild(motionToggle);
+  }
   motionSlot.appendChild(leftCallWrap);
   extrasRow.appendChild(motionSlot);
 
@@ -2147,7 +3944,20 @@ function buildCard(combo) {
   const bootSlot = document.createElement('div');
   bootSlot.className = 'toggle-slot';
   let bootToggle = null;
-  if (!combo.noBoot) {
+  // "QB Sneak" (5 Guys) takes over this SAME slot instead of Boot --
+  // mutually exclusive concepts, see combo.hasQbSneak's own doc.
+  if (combo.hasQbSneak) {
+    const qbSneakToggle = buildSwitchToggle('QB Sneak', qbSneakOn, (v) => { if (isPlayingRef.value) return; qbSneakOn = v; onComboChanged(); });
+    bootSlot.appendChild(qbSneakToggle);
+  } else if (combo.hasReverse) {
+    // Jet Sweep: same "reuse the slot that's otherwise empty for THIS
+    // play" convention Overload already uses on ioSlot -- Jet Sweep is
+    // noBoot (the mesh-exchange carrier already has his own built-in
+    // fake, same reasoning Option/Double Blast skip Boot) so this slot
+    // would just be blank otherwise.
+    const reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
+    bootSlot.appendChild(reverseToggle);
+  } else if (!combo.noBoot) {
     bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
   }
@@ -2178,6 +3988,71 @@ function buildCard(combo) {
     // to add alongside updateCounterAvailability).
     const popVariantToggle = buildSwitchToggle('Pop Pass 2', popVariantOn, (v) => { if (isPlayingRef.value) return; popVariantOn = v; onComboChanged(); });
     readSlot.appendChild(popVariantToggle);
+  } else if (combo.alignmentToggles && combo.alignmentToggles.length) {
+    // A custom formation's own toggle(s) (Heavy is the first) -- same
+    // reuse logic as Counter/Pop Pass 2 above (a formation built this way
+    // has none of Read/Counter/In-Out/Pop-Variant, so this slot is free).
+    // Built straight from combo.alignmentToggles (js/playbuilder/legacy-
+    // adapter.js, copied verbatim from schema.js's own Formation.
+    // alignmentToggles) rather than hand-added per concept -- a future
+    // custom toggle needs no new code here, same as js/playbuilder/
+    // editor.js's own dynamic toggle-building.
+    // Nathan, live, after Heavy + Overload both landed in readSlot
+    // together: "lets move overload to the left side where there is
+    // room." ioSlot (the row's 1st of 4 columns, normally the Inside/
+    // Outside toggle) is guaranteed genuinely empty here -- it's only
+    // ever populated `if (combo.hasInsideOutside)`, a Wing-only legacy
+    // dimension no Play Builder V2 play has ever set. So the FIRST
+    // alignment toggle (Heavy) keeps its existing spot in readSlot,
+    // unchanged, and anything past it (Overload, today's only 2nd one)
+    // goes in ioSlot instead -- real breathing room, not a cosmetic
+    // shuffle, and still fully data-driven (by toggle ORDER, not name) so
+    // a 3rd future toggle doesn't need new code here either, just a 3rd
+    // slot to actually land in if one's ever added.
+    combo.alignmentToggles.forEach((toggle, toggleIdx) => {
+      // buildToggleGroup has no separate caption slot -- every other use
+      // of it (Wing L/R, Dir L/R) relies on each PILL's own label being
+      // self-descriptive instead. A custom toggle's own values.label
+      // (e.g. "On"/"Off") isn't, on its own -- confirmed live, Nathan
+      // looking at I's real card: a bare "On/Off" pill pair with nothing
+      // saying what it toggles. Prefixing with the toggle's own label
+      // ("Heavy On"/"Heavy Off") matches the same self-describing
+      // convention as every other toggle group on this card.
+      //
+      // toggle.compactValues (schema.js's own AlignmentToggle doc) opts
+      // OUT of that per-pill prefix instead -- a toggle with more than 2
+      // values (Overload: Off/Right/Left) overflowed this slot with it on
+      // (this IS a single, shared grid cell meant for one compact toggle,
+      // e.g. Read A/B -- Heavy and Overload both land here together, and
+      // "Overload Right"/"Overload Left" repeated the word 3 times for no
+      // reason). Nathan, live: "make It Overload (R,L, Off)". A compact
+      // toggle instead gets its own label ONCE, to the left (reusing
+      // buildSwitchToggle's own switch-label styling, not a new pattern),
+      // with bare short pills next to it -- same idea "Motion"/"Boot"
+      // already use, just with a 3-pill group instead of a single switch.
+      // Default (unset) keeps every existing toggle, Heavy included,
+      // exactly as it already renders -- additive, not a behavior change
+      // for anything that doesn't opt in.
+      const options = toggle.values.map((v) => ({ value: v.id, label: toggle.compactValues ? v.label : `${toggle.label} ${v.label}` }));
+      const alignToggle = buildToggleGroup('brown', options, alignmentValues[toggle.id] || toggle.values[0].id, (v) => {
+        if (isPlayingRef.value) return;
+        alignmentValues[toggle.id] = v;
+        onComboChanged();
+      });
+      const targetSlot = toggleIdx === 0 ? readSlot : ioSlot;
+      if (toggle.compactValues) {
+        const wrap = document.createElement('div');
+        wrap.className = 'switch-control';
+        const lbl = document.createElement('span');
+        lbl.className = 'switch-label';
+        lbl.textContent = toggle.label;
+        wrap.appendChild(lbl);
+        wrap.appendChild(alignToggle);
+        targetSlot.appendChild(wrap);
+      } else {
+        targetSlot.appendChild(alignToggle);
+      }
+    });
   }
   extrasRow.appendChild(readSlot);
 
@@ -2189,7 +4064,18 @@ function buildCard(combo) {
     basicsRow.style.display = isSplit ? 'none' : '';
     splitSideToggle.style.display = isSplit ? '' : 'none';
     passSwitch.style.display = isSplit ? '' : 'none';
-    motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
+    // Protection only exists inside a pass; Overload only OUTSIDE Split
+    // (Split has no wing/tight-end surface to overload at all -- see
+    // Formations.supportsOverload below).
+    protectionToggle.style.display = (isSplit && passOn) ? '' : 'none';
+    // Nathan: "can't do overload on a pop pass" -- Pop Pass's route concept
+    // doesn't involve the backside TE surface Overload creates, unlike
+    // every other Wing play, so it's excluded here the same way Split
+    // itself is, rather than teaching Formations.supportsOverload about
+    // individual plays inside a formation it does support.
+    overloadWrap.style.display =
+      (!isSplit && !combo.hasPopVariant && window.Formations.supportsOverload(formation)) ? '' : 'none';
+    if (motionToggle) motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
     rightCallWrap.style.display = isSplit ? '' : 'none';
@@ -2222,8 +4108,8 @@ function buildCard(combo) {
   stageWrap.appendChild(stage);
 
   function rerenderDiagram() {
-    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer); return; }
-    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+    if (formation === 'split') { renderSplitDiagram(stage, combo.playKey, splitSide, insideOutside, readPosition, leftCall, rightCall, passOn, selectedPlayer, protection); return; }
+    renderCardDiagram(stage, combo.playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
   }
 
   stage.addEventListener('playerclick', (ev) => {
@@ -2248,7 +4134,39 @@ function buildCard(combo) {
       playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
       return;
     }
-    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn);
+    playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
+  });
+
+  // Nathan: "give me an option next to the Play button to save the play
+  // to your device as a gif." Everyone (player or coach) gets this, not
+  // gated like "+ Add to Game Plan" above -- it's just a save/share
+  // action, not a roster-affecting one. Runs the exact same animation
+  // playBtn does (same branch for Split vs. everything else) while
+  // exportPlayGif captures it.
+  const gifBtn = document.createElement('button');
+  gifBtn.className = 'card-btn gif-btn';
+  gifBtn.title = 'Save as GIF';
+  gifBtn.textContent = 'GIF';
+  gifBtn.addEventListener('click', async () => {
+    if (isPlayingRef.value) return;
+    const prevHtml = gifBtn.innerHTML;
+    gifBtn.disabled = true;
+    gifBtn.textContent = '…';
+    const safeName = (titleBar.textContent || combo.label || 'play').trim().replace(/[^a-z0-9]+/gi, '_') || 'play';
+    try {
+      await exportPlayGif(stage, () => {
+        if (formation === 'split') return playSplitAnimation(stage, splitSide, speedMultiplier, isPlayingRef);
+        return playCardAnimation(stage, combo.playKey, direction, wingSide, speedMultiplier, isPlayingRef, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, popVariantOn, registryFormationId(), overloadOn, alignmentValues, qbSneakOn, reverseOn);
+      }, `${safeName}.gif`);
+    } catch (e) {
+      console.error('GIF export failed:', e);
+      gifBtn.textContent = '!';
+      setTimeout(() => { gifBtn.innerHTML = prevHtml; }, 1800);
+      gifBtn.disabled = false;
+      return;
+    }
+    gifBtn.innerHTML = prevHtml;
+    gifBtn.disabled = false;
   });
 
   const speedToggle = document.createElement('div');
@@ -2260,6 +4178,7 @@ function buildCard(combo) {
   speedToggle.appendChild(b1); speedToggle.appendChild(b2);
 
   controls.appendChild(playBtn);
+  controls.appendChild(gifBtn);
   controls.appendChild(speedToggle);
   stageWrap.appendChild(controls);
 
@@ -2270,6 +4189,54 @@ function buildCard(combo) {
   stageWrap.appendChild(flipBtn);
 
   front.appendChild(stageWrap);
+
+  // Nathan: "I need to be able to choose plays from the playbook, with the
+  // directions and toggles I want. Those are the plays of the week that the
+  // coach wants to run against the other team." Captures this card's OWN
+  // live state (whatever the coach has actually dialed in -- Wing/Direction,
+  // Motion/Boot/Counter/PopVariant, any alignmentToggles) rather than a
+  // separate, second toggle-picking UI -- js/gameplan.js's addEntry() saves
+  // it straight to thisWeek.json. Coach-only, same gate This Week's own
+  // editor already uses.
+  // opts.onGamePlanCapture (new) -- js/gameplan-builder.js's Playlist "Edit"
+  // panel mounts this SAME real card, inline, so fine-tuning a play never
+  // needs a second, separately-maintained toggle UI (the exact "two
+  // places" problem this whole rebuild exists to avoid). A draft playlist
+  // entry isn't saved to Firebase until the Builder's own "Save Game Plan"
+  // button -- so that context needs this button to just hand its captured
+  // state back to the caller instead of writing to thisWeek.json directly
+  // via GamePlan.addEntry(). The real Play tab (renderPlayDetail, the only
+  // OTHER caller) never passes this, so its own behavior is byte-identical
+  // to before.
+  if (window.isApprovedCoachProfile && window.isApprovedCoachProfile() && (opts.onGamePlanCapture || window.GamePlan)) {
+    const gamePlanBtn = document.createElement('button');
+    gamePlanBtn.type = 'button';
+    gamePlanBtn.className = 'navBtn card-gameplan-btn';
+    gamePlanBtn.textContent = opts.onGamePlanCapture ? 'Use This' : '+ Add to Game Plan';
+    gamePlanBtn.addEventListener('click', () => {
+      const capturedState = {
+        key: combo.playKey, label: combo.label, formation,
+        wingSide, direction, splitSide, insideOutside, readPosition,
+        motionOn, bootOn, qbSneakOn, counterOn, popVariantOn,
+        passOn, protection, overloadOn, leftCall, rightCall,
+        alignmentValues: Object.assign({}, alignmentValues),
+        callLabel: titleBar.textContent,
+        reverseOn,
+      };
+      if (opts.onGamePlanCapture) { opts.onGamePlanCapture(capturedState); return; }
+      const prevText = gamePlanBtn.textContent;
+      gamePlanBtn.disabled = true;
+      gamePlanBtn.textContent = 'Adding…';
+      window.GamePlan.addEntry(capturedState).then(() => {
+        gamePlanBtn.textContent = 'Added to Game Plan ✓';
+      }).catch((err) => {
+        gamePlanBtn.textContent = (err && err.message) || 'Failed to add';
+      }).finally(() => {
+        setTimeout(() => { gamePlanBtn.textContent = prevText; gamePlanBtn.disabled = false; }, 2200);
+      });
+    });
+    front.appendChild(gamePlanBtn);
+  }
 
   // BACK
   const back = document.createElement('div');
@@ -2304,7 +4271,7 @@ function buildCard(combo) {
   function startSignalSequence() {
     stopSignalSequence();
     replayBtn.style.display = 'none';
-    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn);
+    const signals = buildSignalSequence(combo.playKey, wingSide, direction, insideOutside, motionOn, bootOn, formation, splitSide, passOn, counterOn, popVariantOn, protection, overloadOn, alignmentValues, altCallOn, reverseOn);
     progress.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progress.appendChild(d); });
     // Longer calls (Motion and/or Boot stacked on top of In/Out) pack more
@@ -2439,21 +4406,67 @@ function buildCard(combo) {
       parts.push(splitSide);
       if (passOn) parts.push('Pass');
     } else {
-      // Same order as the actual signal call: Wing side, then Motion (right
-      // after the wing spot is set), then In/Out if this play has it, then
-      // the play itself, then Direction, then Boot/Counter tacked on at the
-      // very end (Nathan: "It is added to the end of the play call like
-      // boot"). Boot and Counter can't both be on in practice -- Boot's
-      // slot is empty for Option (noBoot) and Counter's toggle only exists
-      // on Option/Outside Zone -- but pushing both here regardless costs
-      // nothing if that ever changes.
-      parts = [`Wing ${wingSide}`];
+      // Same order as the actual signal call: formation side, then Motion
+      // (right after the wing spot is set), then In/Out if this play has
+      // it, then the play itself, then Direction, then Boot/Counter
+      // tacked on at the very end (Nathan: "It is added to the end of
+      // the play call like boot"). Boot and Counter can't both be on in
+      // practice -- Boot's slot is empty for Option (noBoot) and
+      // Counter's toggle only exists on Option/Outside Zone -- but
+      // pushing both here regardless costs nothing if that ever changes.
+      // formationLabel is "Wing" for the classic pipeline, or a real
+      // custom formation's own name (e.g. "I") -- see its own comment,
+      // above -- so this reads "I Right Inside Zone Right", matching how
+      // a coach would actually call it, not always "Wing ...".
+      //
+      // Nathan, on "Jumbo": "Jumbo doesn't have a direction independent
+      // of Beast. So it's just Jumbo - then Beast Right or Left." A
+      // noDirection play's direction always EQUALS wingSide, so naming
+      // the side here (before the play's own name) AND again after it
+      // (parts.push(direction), below) said the same word twice --
+      // "Jumbo Right Beast Right." Dropped here, not at the end, so the
+      // side still reads naturally attached to the PLAY itself ("Jumbo
+      // Beast Right"), matching his own words exactly. Doesn't apply to
+      // directionOpposesWing (I's Sweep): direction is the OPPOSITE of
+      // wingSide there, so both words are real, distinct information
+      // ("I Right 4 Sweep Left"), not a repeat.
+      parts = combo.noDirection ? [formationLabel] : [`${formationLabel} ${wingSide}`];
+      // Nathan: "when overload is chosen on a play, it should be added
+      // to the play name after the formation call. So this play would
+      // be I Left Overload Left 4Sweep Right." Same slot RECIPES.i's own
+      // signal sequence already uses for Overload (right after the wing
+      // side, before the play card) -- matches this function's own
+      // "same order as the actual signal call" rule. Not hardcoded to
+      // Overload by name -- walks combo.alignmentToggles generically
+      // (the same data every toggle's real UI pill already reads) and
+      // names whichever one(s) are at a non-default value, so a future
+      // alignment toggle gets this for free. Capitalizes the value id
+      // ('right'/'left') to match wingSide/direction's own casing here --
+      // the signal sequence's own "Overload: right" label stays
+      // lowercase, a different, unrelated context.
+      (combo.alignmentToggles || []).forEach((toggle) => {
+        const value = alignmentValues[toggle.id] || toggle.values[0].id;
+        if (value !== toggle.values[0].id) {
+          parts.push(toggle.label, value.charAt(0).toUpperCase() + value.slice(1));
+        }
+      });
+      // Wing's own Overload (js/formations.js's older mechanism, no
+      // combo.alignmentToggles entry of its own to be picked up by the
+      // loop just above) -- same "name it right after the wing side"
+      // placement, guarded so this never double-adds "Overload" for a
+      // formation (I/I-Wing) whose OWN alignmentToggles already covers it
+      // via the loop above.
+      if (alignmentValues.overload && alignmentValues.overload !== 'off'
+          && !(combo.alignmentToggles || []).some((t) => t.id === 'overload')) {
+        parts.push('Overload', alignmentValues.overload.charAt(0).toUpperCase() + alignmentValues.overload.slice(1));
+      }
       if (motionOn) parts.push('Motion');
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
       parts.push(direction);
       if (bootOn) parts.push('Boot');
       if (counterOn) parts.push('Counter');
+      if (reverseOn) parts.push('Reverse');
     }
     titleBar.textContent = parts.join(' ');
     if (outer.classList.contains('flipped')) startSignalSequence();
@@ -2466,46 +4479,595 @@ function buildCard(combo) {
   outer.appendChild(inner);
   return outer;
 }
+window.buildCard = buildCard;
+// js/gameplan-builder.js's Playlist "Edit" panel's one real entry point --
+// buildCard doesn't take a raw DATA.playTypes entry, it takes the richer
+// "combo" shape buildPlayList() derives from one (playKey, noBoot,
+// noMotion, hasCounter, alignmentToggles, directionOpposesWing, etc. --
+// every field buildCard's own body reads) -- so this reuses that SAME
+// real transformation rather than partially re-deriving it a second time
+// (exactly the kind of drift this whole rebuild exists to avoid). Locks
+// the card to the SAME formation a saved entry (v1 or v2) actually
+// belongs to, using renderPlayDetail's own wing/split/custom-id
+// translation (line ~4162) so a custom-formation play (e.g. "I: Dive")
+// opens showing its own real geometry, not Wing's.
+window.buildGamePlanEditCard = function (entry, opts) {
+  if (!window.DATA || !window.DATA.playTypes) return null;
+  const combo = buildPlayList().find((c) => c.playKey === entry.key);
+  if (!combo) return null;
+  const lockFormation = (entry.v === 2 && entry.formation)
+    ? entry.formation
+    : (combo.authoredFormationId || 'shotgun');
+  return buildCard(combo, Object.assign({ lockFormation }, opts));
+};
 
-// ---- Build an accordion: list of play names, tap to open/close one card at a time ----
-let openAccordionItem = null;
+// ---- Formation-first browsing: pick a formation, see its plays as a
+// 2-column grid (run plays above pass, a RUN/PASS pill per tile), tap one
+// to open the existing rich detail card. Replaces the old flat accordion
+// of every play regardless of formation (Nathan: "once you choose the
+// formation you should see the plays like this 2 column list... ordered
+// with running plays on top, and pass plays on the bottom"). The detail
+// card itself (buildCard) is untouched and still opens showing
+// Shotgun/Split -- it doesn't yet know about registry formations like a
+// custom I-Heavy, only the browsing grid you tap it from does. Extending
+// buildCard's own toggle to start on/offer a custom formation is real,
+// separate follow-up work, not folded in here.
 function buildGrid() {
   const grid = document.getElementById('playCallsGrid');
   grid.innerHTML = '';
-  openAccordionItem = null;
-  buildPlayList().forEach(combo => {
-    const item = document.createElement('div');
-    item.className = 'accordion-item';
+  renderFormationPicker(grid);
+}
 
-    const header = document.createElement('button');
-    header.className = 'accordion-header';
-    header.innerHTML = `<span>${combo.label}</span><span class="accordion-chevron">&#9660;</span>`;
+function pcBackButton(label, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'pc-back-btn';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
 
-    const body = document.createElement('div');
-    body.className = 'accordion-body';
+// One box shared by every formation card, not a per-formation crop --
+// Nathan: "they need to match the placement and scale to one another with
+// the line being the common denominator." The line is drawn at the same
+// real coordinates in every formation (only the backfield/skill spread
+// actually changes one to the next), so a SHARED size is what makes it
+// read as the fixed anchor it actually is: same width/height on every
+// card, with only the skill dots moving to show what's different. Kept as
+// {minX, minY, width, height} rather than a viewBox string so each card
+// can re-pan (not re-scale) around its own Center -- see
+// buildFormationThumbnail.
+function computeSharedFormationViewBox(formationIds) {
+  const R = 30, PAD = 24;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  formationIds.forEach(id => {
+    const pos = window.Formations.positions(id, 'Right', {});
+    const slotList = window.Formations.slots(id);
+    if (!pos) return;
+    slotList.forEach(slot => {
+      const p = pos[slot];
+      if (!p) return;
+      minX = Math.min(minX, p[0] - R); maxX = Math.max(maxX, p[0] + R);
+      minY = Math.min(minY, p[1] - R); maxY = Math.max(maxY, p[1] + R);
+    });
+  });
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, width: 200, height: 40 };
+  minX -= PAD; maxX += PAD; minY -= PAD; maxY += PAD;
+  return { minX, minY, width: maxX - minX, height: maxY - minY };
+}
 
-    header.addEventListener('click', () => {
-      const isOpen = item.classList.contains('open');
-      if (openAccordionItem && openAccordionItem !== item) {
-        openAccordionItem.classList.remove('open');
-      }
-      if (isOpen) {
-        item.classList.remove('open');
-        openAccordionItem = null;
-      } else {
-        if (!body.dataset.built) {
-          body.dataset.built = '1';
-          body.appendChild(buildCard(combo));
-        }
-        item.classList.add('open');
-        openAccordionItem = item;
-      }
+// Just the 11 offensive dots at their real coordinates -- no defense, no
+// routes, no blocking labels. Nathan: seeing "Wing" and "Split" as plain
+// name buttons didn't answer the actual question (what does each one look
+// like); this does, deliberately simpler than a play card since a
+// formation itself has no assignments to show yet.
+//
+// sharedBox is {minX, minY, width, height} (see computeSharedFormationViewBox)
+// -- every card uses the same width/height so the scale matches across
+// formations, but Nathan: "center the center on the card for all except
+// split." So the horizontal pan re-centers on that formation's own Center
+// slot instead of reusing the shared box's own minX -- except for Split,
+// whose receivers (3/6) spread far enough right of Center that centering
+// on C would push slot 6 outside the shared width; Split keeps the plain
+// shared box so nothing gets clipped.
+function buildFormationThumbnail(formationId, sharedBox) {
+  const R = 30;
+  const pos = window.Formations ? window.Formations.positions(formationId, 'Right', {}) : null;
+  const slotList = window.Formations ? window.Formations.slots(formationId) : [];
+  let originX = sharedBox.minX;
+  if (formationId !== 'split' && pos && pos['C']) {
+    originX = pos['C'][0] - sharedBox.width / 2;
+  }
+  const viewBox = `${originX} ${sharedBox.minY} ${sharedBox.width} ${sharedBox.height}`;
+  const svg = svgEl('svg', { viewBox: viewBox });
+  if (!pos) return svg;
+  slotList.forEach(slot => {
+    const p = pos[slot];
+    if (!p) return;
+    // Nathan: "the formations are still not [bold] - it needs to be bold
+    // on the formations like the plays." This tile grid (buildFormationThumbnail)
+    // is a completely separate, simpler renderer from the real play
+    // diagrams (renderCardDiagram) -- it never picked up the same bold
+    // treatment when that one did. Same CIRCLE_STROKE_WIDTH constant for
+    // real consistency between the two, not a separately-tuned number.
+    svg.appendChild(svgEl('circle', { cx: p[0], cy: p[1], r: R, fill: '#fff', stroke: '#111', 'stroke-width': CIRCLE_STROKE_WIDTH }));
+    const t = svgEl('text', { x: p[0], y: p[1] + 7, 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 800, fill: '#111' });
+    t.textContent = slot;
+    svg.appendChild(t);
+  });
+  return svg;
+}
+
+function renderFormationPicker(container) {
+  container.innerHTML = '';
+  const formations = (window.Formations ? window.Formations.list() : []).filter(f => f.side === 'offense');
+  if (!formations.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.textContent = 'No formations available.';
+    container.appendChild(note);
+    return;
+  }
+  const sharedBox = computeSharedFormationViewBox(formations.map(f => f.id));
+  const wrap = document.createElement('div');
+  wrap.className = 'formation-picker';
+  formations.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'formation-card';
+    card.appendChild(buildFormationThumbnail(f.id, sharedBox));
+    const cap = document.createElement('div');
+    cap.className = 'formation-card-cap';
+    cap.textContent = f.name;
+    card.appendChild(cap);
+    card.addEventListener('click', () => renderFormationPlays(container, f.id, f.name));
+    wrap.appendChild(card);
+  });
+  container.appendChild(wrap);
+}
+
+// Serializes "Modify" screen removals (the X button, below) -- real bug,
+// found live: loadFormationPlays()/saveFormationPlays() reads and writes
+// the formation's WHOLE curated list, not one entry. Two X taps close
+// together (realistic -- confirm()'s own OK click gives no visible
+// feedback until 3 sequential network round trips finish, and nothing
+// disables the OTHER tiles' own X buttons meanwhile) can interleave: the
+// second tap's read can land before the first tap's write does, so its
+// own write -- built from data that still includes the play the first tap
+// already removed -- silently brings it back. Chaining every removal
+// through one promise, formation-agnostic (a coach only ever has one
+// Modify screen open at a time), makes each one wait for the previous to
+// fully land before it reads.
+let modifyRemovalChain = Promise.resolve();
+
+function renderFormationPlays(container, formationId, formationName, modifyMode) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← Formations', () => renderFormationPicker(container)));
+
+  const titleRow = document.createElement('div');
+  titleRow.className = 'formation-play-title-row';
+  const title = document.createElement('h3');
+  title.className = 'formation-play-title';
+  title.textContent = formationName;
+  titleRow.appendChild(title);
+  container.appendChild(titleRow);
+
+  const gridEl = document.createElement('div');
+  gridEl.className = 'formation-play-grid';
+  container.appendChild(gridEl);
+
+  const allCombos = buildPlayList();
+  window.AssignmentStore.loadFormationPlays().then(all => {
+    const curated = all[formationId];
+    const formationMeta = window.Formations.get(formationId);
+    // Wing/Split predate "which plays can this formation call" as a concept
+    // at all -- every play has always been available for them, so an empty
+    // curation falls back to every play, matching what Play Calls has
+    // always shown. A coach-created formation has no such history: Nathan,
+    // after adding one in Formation Builder: "it automatically assigned all
+    // plays to the formation without me verifying which plays I wanted to
+    // assign" -- so for anything that isn't built-in, empty curation means
+    // exactly that (nothing chosen yet), not "everything", until the coach
+    // actually picks some in Create a Play. The empty-note below already
+    // says the right thing for that case.
+    //
+    // "Every play" used to correctly mean "every Wing/Split play" because
+    // DATA.playTypes never held anything else. Once js/playbuilder/
+    // sync-custom-formations.js started merging Play Builder V2 plays
+    // (I's own Dive/Sweep/4-Sweep, authoredFormationId: 'i') into that
+    // SAME pool, this fallback started showing them under Wing/Split too --
+    // Nathan, live: "there are plays showing up in other formations that
+    // came from i-form. I don't have an easy way of removing those plays
+    // from the formations." Not a stray curation write (confirmed:
+    // formationPlays.wing is genuinely unset, only .i has entries) -- this
+    // filter is the actual fix, not a cleanup. A play with no
+    // authoredFormationId at all is a real, original Wing/Split play
+    // (that field is Play Builder V2-only) and always passes; one with a
+    // DIFFERENT formation's id is excluded; one that matches THIS
+    // formation's own id (not possible for Wing/Split today, but real the
+    // moment either is ever authored through Play Builder V2) still shows.
+    // Nathan: "pop pass needs to be removed from the Split formation, but
+    // it won't allow me to remove plays there." Modify is deliberately
+    // unavailable for Wing/Split (see the comment on that gate below) --
+    // Pop Pass showing up under Split at all was the actual bug, not a
+    // missing removal affordance. Pop Pass already carries noSplit:true
+    // (buildCard's own formation toggle already hides its "Split" pill for
+    // exactly this reason -- "Pop Pass has no Split formation data at
+    // all"), but this fallback never checked it, so it fell through to
+    // Split's grid anyway as one more "every play with no foreign
+    // authoredFormationId" match. Root-caused here rather than worked
+    // around with a curation write, same reasoning the authoredFormationId
+    // filter right above already established.
+    const list = (curated && curated.length)
+      ? curated.map(key => allCombos.find(c => c.playKey === key)).filter(Boolean)
+      : (formationMeta && formationMeta.builtIn
+          ? allCombos.filter(c => (!c.authoredFormationId || c.authoredFormationId === formationId) && !(formationId === 'split' && c.noSplit))
+          : []);
+    const sorted = list.slice().sort((a, b) => (a.isPass ? 1 : 0) - (b.isPass ? 1 : 0));
+
+    // "Modify" -- Nathan: "I should be able to go into Play > Formations >
+    // choose a formation > with all plays visible, click a Modify button...
+    // gives you the option of either selecting plays to remove... or a +
+    // spot to add a new play. Clicking there opens the play builder which
+    // then assigns the play into the correct formation." Custom formations
+    // only -- Wing/Split have no curation concept to modify (see the
+    // fallback-to-everything comment above); their plays are the real,
+    // shipped library, not something this quick affordance should touch.
+    // Coach-only, same gate as "+ Add to Game Plan" above -- found missing
+    // entirely while checking the real player-preview view: this button
+    // (and the "Done" path behind it) writes straight to production
+    // formationPlays curation with no other permission check anywhere in
+    // this chain, so without this gate any player could remove plays from
+    // the team's real curated list just by tapping around the Plays tab.
+    if (formationMeta && !formationMeta.builtIn && window.isApprovedCoachProfile && window.isApprovedCoachProfile()) {
+      const actionBtn = document.createElement('button');
+      actionBtn.className = 'pc-modify-btn';
+      actionBtn.textContent = modifyMode ? 'Done' : 'Modify';
+      actionBtn.addEventListener('click', () => {
+        // Nathan: "click modify then have a pencil on the play diagram to
+        // edit and an X to archive it." Both icons below act immediately
+        // (jump to Play Builder / archive on click) -- nothing to collect
+        // or diff here any more, so "Done" is just the way out of Modify
+        // mode, same as the "Cancel" it replaces used to be.
+        renderFormationPlays(container, formationId, formationName, !modifyMode);
+      });
+      titleRow.appendChild(actionBtn);
+    }
+
+    gridEl.innerHTML = '';
+    if (!sorted.length && !modifyMode) {
+      const note = document.createElement('p');
+      note.className = 'empty-note';
+      note.textContent = 'No plays configured for this formation yet.';
+      gridEl.appendChild(note);
+      return;
+    }
+
+    if (!modifyMode) {
+      sorted.forEach(combo => gridEl.appendChild(buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationName))));
+      return;
+    }
+
+    // Modify mode: every REAL, currently-curated play for this formation
+    // shows as a tile with two explicit actions overlaid on its diagram --
+    // Nathan: "have a pencil on the play diagram to edit and an X to
+    // archive it (remove from formation but keep it stored to recall
+    // later)." Reuses buildPlayTile's own diagram-drawing unchanged; the
+    // tile body itself isn't clickable here (onOpen is a no-op) since the
+    // two icons ARE the whole interaction now.
+    sorted.forEach((combo) => {
+      const tile = buildPlayTile(combo, formationId, () => {});
+      tile.dataset.playKey = combo.playKey;
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'pc-modify-edit-btn';
+      editBtn.title = 'Edit in Play Builder';
+      editBtn.textContent = '✏️';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Same real-play handoff "Copy a play" already proves out (this
+        // file, above) -- jumps straight into Play Builder with THIS
+        // exact play already loaded, not just the formation.
+        window.__pbPendingLoadPlayId = combo.playKey;
+        if (window.openCoachToolsTab) window.openCoachToolsTab('playbuilder');
+      });
+      tile.appendChild(editBtn);
+
+      const archiveBtn = document.createElement('button');
+      archiveBtn.type = 'button';
+      archiveBtn.className = 'pc-modify-archive-btn';
+      archiveBtn.title = 'Remove from this formation (keeps the play itself)';
+      archiveBtn.textContent = '✕';
+      archiveBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm(`Remove "${combo.label}" from ${formationName}? The play itself isn't deleted -- "+ Add a play" can bring it back later.`)) return;
+        archiveBtn.disabled = true;
+        modifyRemovalChain = modifyRemovalChain.then(async () => {
+          try {
+            // Curation-only removal -- js/playbuilder/store.js's own
+            // deletePlay() (the REAL, permanent delete, wired to Play
+            // Builder's own "Remove Play" button) is never called here.
+            const curated = await window.AssignmentStore.loadFormationPlays();
+            const existingList = curated[formationId] || [];
+            // loadFormationPlays() can come back {} on a failed/timed-out
+            // load (assignment-store.js's own non-OK-response and
+            // network-error fallbacks) -- writing that straight back would
+            // silently wipe every OTHER play still curated on this
+            // formation, not just this one. This tile only exists because
+            // it WAS just curated, so if the fresh read disagrees, treat
+            // it as a bad load and refuse rather than guess "nothing else
+            // is curated either."
+            if (existingList.indexOf(combo.playKey) === -1) {
+              throw new Error('Could not confirm the current play list (possible connection issue) -- nothing was changed. Try again.');
+            }
+            const list = existingList.filter((k) => k !== combo.playKey);
+            await window.AssignmentStore.saveFormationPlays(formationId, list);
+            renderFormationPlays(container, formationId, formationName, true);
+          } catch (err) {
+            console.error('[Modify -> archive] failed:', err);
+            alert('Could not remove that play: ' + err.message);
+            archiveBtn.disabled = false;
+          }
+        });
+      });
+      tile.appendChild(archiveBtn);
+
+      gridEl.appendChild(tile);
     });
 
-    item.appendChild(header);
-    item.appendChild(body);
-    grid.appendChild(item);
+    const addTile = document.createElement('div');
+    addTile.className = 'play-tile pc-add-play-tile';
+    addTile.innerHTML = '<span class="pc-add-play-plus">+</span><div class="play-tile-cap"><span class="play-tile-nm">Add a play</span></div>';
+    function openAddPlayChooser() {
+      addTile.removeEventListener('click', openAddPlayChooser);
+      renderAddPlayChooser(addTile, formationId, formationName);
+    }
+    addTile.addEventListener('click', openAddPlayChooser);
+    gridEl.appendChild(addTile);
   });
+}
+
+// Nathan: "when I go to add a play, I should be able to add one of my
+// existing plays from another formation but remake existing plays" --
+// the tile grows in place into: start blank (the original behavior), or
+// pick a real Wing play to import as a starting point (js/playbuilder/
+// legacy-import.js does the actual O-line/split-end carry-over; the
+// backfield always needs a real remake, since it depends on the whole
+// formation's shape, not any one player's anchor).
+function renderAddPlayChooser(addTile, formationId, formationName) {
+  addTile.innerHTML = '';
+  addTile.classList.add('pc-add-play-tile-open');
+
+  const blankBtn = document.createElement('button');
+  blankBtn.type = 'button';
+  blankBtn.className = 'navBtn secondary pc-add-play-blank-btn';
+  blankBtn.textContent = '+ Start a blank play';
+  blankBtn.addEventListener('click', () => {
+    window.__pbPendingNewPlayFormationId = formationId;
+    if (window.openCoachToolsTab) window.openCoachToolsTab('playbuilder');
+  });
+
+  const label = document.createElement('div');
+  label.className = 'hint pc-add-play-hint';
+  label.textContent = 'or copy an existing play to remake for ' + formationName + ':';
+
+  const select = document.createElement('select');
+  select.className = 'pc-add-play-source-select';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— choose a play —';
+  select.appendChild(placeholder);
+  buildPlayList().forEach((combo) => {
+    const playType = window.DATA.playTypes.find((p) => p.key === combo.playKey);
+    if (!playType || !playType.directions || !playType.directions.Right) return;
+    const opt = document.createElement('option');
+    opt.value = combo.playKey;
+    opt.textContent = combo.label + ' (Wing)';
+    select.appendChild(opt);
+  });
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'navBtn pc-add-play-copy-btn';
+  copyBtn.textContent = 'Copy';
+  copyBtn.disabled = true;
+  select.addEventListener('change', () => { copyBtn.disabled = !select.value; });
+
+  copyBtn.addEventListener('click', async () => {
+    const sourceKey = select.value;
+    if (!sourceKey) return;
+    const playType = window.DATA.playTypes.find((p) => p.key === sourceKey);
+    if (!playType) return;
+    const newId = prompt('New play id (letters/numbers/underscore, must be unique):', sourceKey + '_' + formationId);
+    if (!newId) return;
+    const newLabel = prompt('Play label (what a coach sees):', playType.label) || playType.label;
+    copyBtn.disabled = true;
+    select.disabled = true;
+    copyBtn.textContent = 'Copying…';
+    try {
+      const all = await window.PlayBuilderStore.loadAll();
+      const targetFormation = all.formations.find((f) => f.id === formationId);
+      if (!targetFormation) throw new Error('"' + formationId + '" hasn\'t been built in Play Builder yet.');
+      // Nathan: "I tried to add a play to an existing formation and got
+      // this message: Could not copy that play: 'Double Blast' has no
+      // Right-direction data to import." Real bug -- js/playbuilder/
+      // legacy-import.js's own resolver now auto-walks whatever nesting a
+      // play's real direction data actually has (read-toggle, inside/
+      // outside, counter, pop-variant, even two levels at once), so this
+      // no longer needs to pre-compute a variant-key hint here at all --
+      // see that file's own comment for the full story, including why a
+      // hint computed from window.playbookDefaultSubvariant() (tried
+      // first, briefly, before its Sweep-specific quirk surfaced) wasn't
+      // the right fix either.
+      const imported = window.PlayBuilderLegacyImport.importLegacyPlayToFormation(playType, targetFormation, newId, newLabel);
+      await window.PlayBuilderStore.savePlay(imported.play);
+      // Nathan: "That is what I originally wanted for the What's New
+      // section which would show any new plays you create." A copy always
+      // produces a brand-new play id (prompted above), so this always
+      // qualifies -- no "is this new" check needed here, unlike editor.js's
+      // own Save Play button.
+      if (window.logNewPlayToWhatsNew) window.logNewPlayToWhatsNew(imported.play.id, imported.play.label);
+      // Real bug, found in review: this curation step is the exact same
+      // load-whole-list/mutate/save-whole-list shape as the Modify screen's
+      // own X (remove) handler, on the SAME formation's curated list, but
+      // wasn't routed through that handler's modifyRemovalChain -- a coach
+      // tapping X on one play, then immediately "+ Add a play" -> Copy on
+      // this same formation, could race the two independent read/write
+      // cycles and silently reintroduce the just-removed play. Chaining
+      // through the same serialization the X handler already uses closes
+      // that off (loadFormationPlays()'s own non-OK-response gap is fixed
+      // at the source now too -- see assignment-store.js).
+      const curationAttempt = modifyRemovalChain.then(async () => {
+        const curated = await window.AssignmentStore.loadFormationPlays();
+        const list = (curated[formationId] || []).slice();
+        if (!list.includes(newId)) list.push(newId);
+        await window.AssignmentStore.saveFormationPlays(formationId, list);
+      });
+      // Keep the shared chain healthy for the NEXT click regardless of
+      // whether curation above succeeds -- this specific attempt's own
+      // real failure still reaches the outer catch below via the `await`,
+      // unswallowed (same split as js/gameplan.js's addEntryChain).
+      modifyRemovalChain = curationAttempt.catch(() => {});
+      await curationAttempt;
+      window.__pbPendingLoadPlayId = newId;
+      if (window.openCoachToolsTab) window.openCoachToolsTab('playbuilder');
+    } catch (err) {
+      console.error('[Modify -> Add a play] copy failed:', err);
+      alert('Could not copy that play: ' + err.message);
+      copyBtn.disabled = false;
+      select.disabled = false;
+      copyBtn.textContent = 'Copy';
+    }
+  });
+
+  addTile.appendChild(blankBtn);
+  addTile.appendChild(label);
+  addTile.appendChild(select);
+  addTile.appendChild(copyBtn);
+}
+
+function buildPlayTile(combo, formationId, onOpen) {
+  const tile = document.createElement('div');
+  tile.className = 'play-tile';
+
+  // Nathan: "If we add a new play, it should have a NEW badge in the play
+  // calls section." window.getNewPlayKeysCache() (js/whats-new.js) is a
+  // synchronous read of whatever it last fetched -- already populated by
+  // the time a coach/kid reaches this screen in the ordinary case (it's
+  // refreshed once a session is known, well before Play Calls), so this
+  // never has to await anything per-tile while building a whole grid at
+  // once. Clears itself the same moment the profile-menu badge does
+  // (opening What's New marks everything as seen), no separate tracking.
+  if (window.getNewPlayKeysCache && window.getNewPlayKeysCache().has(combo.playKey)) {
+    const newBadge = document.createElement('div');
+    newBadge.className = 'play-tile-new-badge';
+    newBadge.textContent = 'NEW';
+    tile.appendChild(newBadge);
+  }
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  try {
+    // Split isn't a renderCardDiagram formation at all -- rerenderDiagram
+    // above already branches on this same formation === 'split' check for
+    // the full card; this tile-sized preview skipped that branch entirely
+    // and always called renderCardDiagram, which drew Split's alignment
+    // through Shotgun's own route/defense logic. Nathan: "the preview image
+    // for the split formation seems all messed up, then when you click into
+    // the play the play diagram looks normal" -- that's exactly this: the
+    // opened card already went through rerenderDiagram's correct branch.
+    if (formationId === 'split') {
+      window.renderSplitDiagram(svg, combo.playKey, 'Left',
+        combo.hasInsideOutside ? 'Outside' : null, 'A', 'seattle', 'seattle', false, null, 'pocket');
+    } else {
+      // Nathan, on "I"'s own "4 Sweep" tile: "preview on the I left
+      // 4-sweep is wrong - match what is shown as the first default play
+      // when opened." This used to hardcode 'Right','Right' regardless of
+      // what buildCard's own real default actually is -- harmless for a
+      // play that looks roughly symmetric either way, but for a
+      // directionOpposesWing play, 'Right' direction WITH 'Right' wingSide
+      // is a combination the real, interactive card can never even reach
+      // (the toggle locks direction to always oppose wingSide) -- the tile
+      // was drawing a picture no coach would ever actually see. Same
+      // default computation as buildCard's own initial wingSide/direction
+      // state, so the tile always matches whatever the card opens to.
+      const tileWingSide = 'Left';
+      const tileDirection = (combo.directionOpposesWing || combo.directionDefaultsAwayFromWing) ? 'Right' : 'Left';
+      window.renderCardDiagram(svg, combo.playKey, tileDirection, tileWingSide, null, '4x4',
+        combo.hasInsideOutside ? 'Outside' : null, false, false, 'A', false, false, formationId);
+    }
+    // Same crop dev-preview's own tile uses -- drop the reserved defense
+    // band above the line so the tile reads at thumbnail size.
+    svg.setAttribute('viewBox', '0 250 1600 760');
+  } catch (e) {
+    svg.setAttribute('viewBox', '0 0 200 40');
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', 6); t.setAttribute('y', 25); t.setAttribute('font-size', 13);
+    t.setAttribute('fill', '#c0392b'); t.textContent = 'render failed';
+    svg.appendChild(t);
+  }
+  tile.appendChild(svg);
+
+  const cap = document.createElement('div');
+  cap.className = 'play-tile-cap';
+  const nm = document.createElement('span');
+  nm.className = 'play-tile-nm';
+  nm.textContent = combo.label;
+  const pill = document.createElement('span');
+  pill.className = 'play-tile-pill ' + (combo.isPass ? 'pass' : 'run');
+  pill.textContent = combo.isPass ? 'PASS' : 'RUN';
+  cap.appendChild(nm);
+  cap.appendChild(pill);
+  tile.appendChild(cap);
+
+  // Real bug, found live: Nathan -- "if I click on the image of the play,
+  // it doesn't do anything, I have to tap the name of the play." Root
+  // cause: renderCardDiagram (shared with the real, interactive card)
+  // unconditionally wires each player circle's own click handler to
+  // stopPropagation() and dispatch a "playerclick" event, for the
+  // interactive card's own "tap a player to highlight them" feature --
+  // this tile-sized preview never listens for that event, so a tap
+  // landing on one of the (fairly large, densely packed) circles just
+  // silently died there instead of ever reaching this tile's own click
+  // listener, while a tap on the empty diagram background or the name/
+  // caption (neither of which has a circle in the way) worked fine.
+  // Listening on the CAPTURE phase fires this handler on the way DOWN,
+  // before the event ever reaches a circle's own bubble-phase listener --
+  // so it always runs regardless of whether something deeper later calls
+  // stopPropagation(), without needing to touch renderCardDiagram itself
+  // (and risk the real card's own, actually-wanted player-select
+  // behavior) or thread a new "is this interactive" flag through every
+  // one of its many call sites.
+  tile.addEventListener('click', onOpen, true);
+  return tile;
+}
+
+function renderPlayDetail(container, combo, formationId, formationName) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← ' + formationName + ' plays', () => renderFormationPlays(container, formationId, formationName)));
+
+  // Same accordion-item/accordion-body wrapper the old flat list used,
+  // pre-opened -- buildCard's own flip-card CSS (.accordion-body .card-outer)
+  // is scoped to render correctly only inside this wrapper.
+  const item = document.createElement('div');
+  item.className = 'accordion-item open';
+  const body = document.createElement('div');
+  body.className = 'accordion-body';
+  // The card's own Shotgun/Split toggle exists because Play Calls used to
+  // have no other way to pick a formation. Opened from the formation-first
+  // picker the formation is already chosen -- Nathan: "each of the plays do
+  // not need the shotgun/split toggle as it only shows the play for the
+  // formation chosen" -- so lock it instead of leaving a second, independent
+  // formation control on screen. 'shotgun' is buildCard's OWN historical
+  // toggle-button label for the classic Wing pipeline (registry id 'wing') --
+  // preserved here so every existing Wing play opens exactly as before.
+  // Any OTHER real registry formationId (a custom formation like 'i',
+  // built through Play Builder V2 -- see js/playbuilder/sync-custom-
+  // formations.js) now passes straight through instead of being silently
+  // collapsed to Shotgun/Wing geometry, which buildCard previously had no
+  // way to represent at all (see its own formationLabel/
+  // registryFormationId() comments).
+  body.appendChild(buildCard(combo, { lockFormation: formationId === 'split' ? 'split' : (formationId === 'wing' ? 'shotgun' : formationId) }));
+  item.appendChild(body);
+  container.appendChild(item);
 }
 
 
@@ -2555,15 +5117,54 @@ function buildGrid() {
       // bare-array shape -- fetched alongside so coach-saved route edits
       // show up here too, not just in the builder tool.
       window.firebaseAuthed(`${FIREBASE_DB_URL}/splitRouteEdits.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null),
-    ]).then(([saved, savedSplitRoutes]) => {
+      // Per-alignment assignment overrides, on their own narrow key so a save
+      // touches one alignment rather than re-writing every play -- see
+      // js/assignment-store.js for why that matters here specifically.
+      window.AssignmentStore ? window.AssignmentStore.loadAll() : Promise.resolve(null),
+      window.AssignmentStore ? window.AssignmentStore.loadBallPaths() : Promise.resolve(null),
+    ]).then(async ([saved, savedSplitRoutes, savedAssignments, savedBallPaths]) => {
       let gotAny = false;
+      let replacedPlayTypes = false;
       if (saved && Array.isArray(saved) && saved.length) {
         DATA.playTypes = normalizePlayData(saved);
+        replacedPlayTypes = true;
         gotAny = true;
       }
       if (savedSplitRoutes && typeof savedSplitRoutes === 'object') {
         DATA.splitRoutes = repairStaleSplitRoutes(savedSplitRoutes);
         gotAny = true;
+      }
+      // Applied AFTER playEdits replaces DATA.playTypes above -- overrides
+      // hang off the play objects, so merging them into the old array would
+      // lose them the moment cloud data arrived.
+      if (savedAssignments && window.AssignmentStore) {
+        if (window.AssignmentStore.applyTo(DATA.playTypes, savedAssignments)) gotAny = true;
+      }
+      if (savedBallPaths && window.AssignmentStore) {
+        if (window.AssignmentStore.applyBallPaths(DATA.playTypes, savedBallPaths)) gotAny = true;
+      }
+      // Re-sync Play Builder V2's own formations/plays back in, AWAITED,
+      // before this resolves -- confirmed live as a real bug: replacing
+      // DATA.playTypes wholesale above (from playEdits.json, the OLD
+      // system's coach-save overlay) silently threw away every Play
+      // Builder V2 formation's plays that index.html's boot() had already
+      // merged in (js/playbuilder/sync-custom-formations.js), the moment a
+      // coach opened the real Plays screen for the first time (this whole
+      // function only runs once, lazily, right here). A saved play for "I"
+      // would exist in Firebase, sync correctly at boot, then vanish from
+      // what a coach actually sees the instant they opened Plays. Awaiting
+      // this (not fire-and-forget) matters -- the very first render right
+      // after this promise resolves needs it already merged in, not
+      // whatever's in DATA.playTypes a moment before an async re-sync
+      // finishes. Already idempotent/merge-by-key (see its own
+      // mergePlayType), so re-running it here is "re-apply the layer that
+      // goes on top," not a second, different mechanism.
+      if (replacedPlayTypes && window.PlayBuilderSyncCustomFormations) {
+        try {
+          await window.PlayBuilderSyncCustomFormations.syncCustomFormationsIntoData();
+        } catch (err) {
+          console.error('[loadLiveEditsIntoData] failed to re-sync Play Builder V2 formations (continuing anyway):', err);
+        }
       }
       liveEditsLoaded = true;
       return gotAny;

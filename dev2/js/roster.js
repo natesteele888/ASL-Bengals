@@ -15,6 +15,23 @@
   let roster = []; // [{id, num, name, position, loginPlayerId?}]
   let loaded = false;
 
+  // Found live (codebase audit, 2026-09-26): nothing anywhere validated a
+  // jersey # against the rest of the roster before this -- exactly the
+  // root cause game-stats-editor.js's own comment already documents as a
+  // real, already-happened incident ("Jaiden L / Dean A jersey-number
+  // collision" -- two players sharing a number silently pooled their
+  // stats onto one row, since every stat/profile lookup keys purely by
+  // number). That file's fix only guards against creating a NEW
+  // ambiguous stat row; it does nothing about the roster itself, where
+  // the duplicate number actually gets created in the first place. Shared
+  // by every place a # gets written below -- excludeId lets an entry
+  // check against every OTHER player without tripping over itself.
+  function numberTakenBy(num, excludeId) {
+    const n = (num || '').toString().trim();
+    if (!n) return null;
+    return roster.find(r => r.id !== excludeId && (r.num || '').toString().trim() === n) || null;
+  }
+
   // Nathan: "Quiz info isnt tied to kid profiles that have already logged
   // in... As the admin, I need the ability to link those kids to the
   // profiles that already exist." Quiz results are tagged with a
@@ -106,6 +123,25 @@
   window.isTeamRosterLoaded = function () { return loaded; };
   window.loadTeamRoster = loadRoster;
 
+  // The REVERSE of loginPlayerId's own established direction (roster row ->
+  // login account, already used by js/coachtools-dashboard.js/js/study-quiz.js) --
+  // "which real roster row is the CURRENTLY logged-in player," for anything
+  // that wants to personalize by roster identity (js/gameplan-builder.js's
+  // player-tagging, js/thisweek.js's "My Plays" filter). Prefers the real,
+  // coach-set loginPlayerId link; falls back to a case-insensitive name
+  // match (same fallback js/player-identity.js's own applyNum already
+  // uses for badge display) for a player a coach hasn't explicitly linked
+  // yet -- a guess, not a fact, same caveat that fallback already carries.
+  window.myRosterEntry = function () {
+    const session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+    if (!session) return null;
+    const byId = roster.find((r) => r.loginPlayerId === session.playerId);
+    if (byId) return byId;
+    const name = (session.name || '').trim().toLowerCase();
+    if (!name) return null;
+    return roster.find((r) => (r.name || '').trim().toLowerCase() === name) || null;
+  };
+
   // Nathan: "Each parent who claims their player, should be able to add a
   // picture or update their #." A parent edits from the player card
   // (player-profile.js), not the coach-only Roster manager above -- this
@@ -118,6 +154,11 @@
   window.updateRosterPlayerNum = function (rosterId, newNum, afterOk, afterFail) {
     const entry = roster.find(x => x.id === rosterId);
     if (!entry) { if (afterFail) afterFail('Player not found on roster'); return; }
+    // A parent isn't in a position to judge a team-wide numbering
+    // conflict the way a coach confirming a dialog is -- refuse outright
+    // rather than ask them to weigh in on someone else's kid's number.
+    const clash = numberTakenBy(newNum, rosterId);
+    if (clash) { if (afterFail) afterFail(`#${(newNum || '').toString().trim()} is already ${clash.name ? `used by ${clash.name}` : 'taken by another player'} -- ask a coach to sort out numbers before saving.`); return; }
     entry.num = newNum;
     persistRoster(afterOk, afterFail);
   };
@@ -144,6 +185,20 @@
       function updatePlayer(p, field, value) {
         const entry = roster.find(x => x.id === p.id);
         if (!entry) return;
+        // A coach is the right person to judge/override this (a real
+        // jersey reissue mid-season, briefly overlapping numbers, etc.),
+        // unlike the parent-facing path above which refuses outright --
+        // still needs a real, visible warning either way, not a silent
+        // collision. Re-renders on cancel too, so the input reverts to
+        // the entry's real, unchanged number instead of showing the
+        // rejected value.
+        if (field === 'num') {
+          const clash = numberTakenBy(value, p.id);
+          if (clash && !confirm(`#${(value || '').toString().trim()} is already used by ${clash.name || 'another player'}. Save anyway?`)) {
+            renderManager(wrap);
+            return;
+          }
+        }
         entry[field] = value;
         persistRoster(() => renderManager(wrap), msg => { statusMsg(wrap, `Save failed: ${msg}`); renderManager(wrap); });
       }
@@ -278,6 +333,8 @@
       function addPlayer() {
         const num = numInput.value.trim(), name = nameInput.value.trim(), position = posSelect.value;
         if (!name) return;
+        const clash = numberTakenBy(num, null);
+        if (clash && !confirm(`#${num} is already used by ${clash.name || 'another player'}. Add anyway?`)) return;
         roster.push({ id: genId(), num, name, position });
         numInput.value = ''; nameInput.value = ''; posSelect.value = '';
         persistRoster(() => renderManager(wrap), msg => { statusMsg(wrap, `Save failed: ${msg}`); renderManager(wrap); });

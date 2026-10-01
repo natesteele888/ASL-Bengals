@@ -35,7 +35,19 @@
   // own-read-only-copy pattern already used here for upcomingGames/
   // upcomingPractices below.
   const OPPONENT_LOGOS_URL = `${FIREBASE_DB_URL}/opponentLogos.json`;
-  const BUNDLED_LOGOS = { clinton: 'assets/images/opponents/clinton.png' };
+  const BUNDLED_LOGOS = {
+    clinton: 'assets/images/opponents/clinton.png',
+    grafton: 'assets/images/opponents/grafton.png',
+    oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+    merrimack: 'assets/images/opponents/merrimack.png',
+    milford: 'assets/images/opponents/milford.png',
+    tewksbury: 'assets/images/opponents/tewksbury.png',
+    wachusett: 'assets/images/opponents/wachusett.png',
+    westfordactonboxboroughlittleton: 'assets/images/opponents/westfordactonboxboroughlittleton.png',
+    hudson: 'assets/images/opponents/hudson.png',
+    worcester: 'assets/images/opponents/worcester.png',
+    northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
+  };
   let opponentLogos = {};
   const MAX_PLAYS = 15;
   const MIN_RECOMMENDED = 5;
@@ -69,6 +81,7 @@
   let upcomingGames = []; // light read-only copy of schedule.json for the game picker
   let upcomingPractices = []; // light read-only copy of practices.json for the Week Ahead write-up
   let loaded = false;
+  let myPlaysOnly = false; // "My Plays" filter toggle -- resets on reload, not persisted
 
   function loadUpcomingGames() {
     return window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -156,9 +169,11 @@
   // locally rather than reaching into that file's closure.
   // Same record math as js/schedule.js's bengalsRecord() -- including the
   // Scrimmage/Jamboree exclusion (Nathan: those are preseason and shouldn't
-  // count toward the regular season record).
+  // count toward the regular season record) and the Bye exclusion added to
+  // schedule.js's own copy afterward (found live, codebase audit,
+  // 2026-09-26 -- this copy had drifted, missing that third exclusion).
   function countsTowardRecord(g) {
-    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree';
+    return g.gameType !== 'Scrimmage' && g.gameType !== 'Jamboree' && g.gameType !== 'Bye';
   }
   function bengalsRecord(list) {
     let w = 0, l = 0, t = 0;
@@ -194,32 +209,47 @@
   // look (with real opponent logos) and js/practices.js's .practiceRow
   // look, rather than inventing new components, so this actually matches
   // the rest of the app instead of introducing a third visual style.
-  function buildWeekAheadData(games, practices) {
+  // Nathan: "Football typically has Sunday as part of the prior weekdays
+  // as prep. Monday through Sunday is the typical week." A plain
+  // "today through today+6" rolling window doesn't match that -- viewed
+  // on, say, a Wednesday, it spills a game on the following Tuesday into
+  // "this week" while still correctly catching Sunday; but viewed later
+  // in the week it can just as easily miss a Sunday game that's clearly
+  // still part of the current football week. Anchor explicitly to the
+  // most recent Monday through the following Sunday instead, so Sunday
+  // always counts as the close of *this* week no matter what day of the
+  // week this renders on. Exposed on window (not just used internally by
+  // buildWeekAheadData below) so js/schedule.js's own game list can mark
+  // "the current game for this week" with the same Mon-Sun math, rather
+  // than growing a second, driftable copy of this exact date logic --
+  // that's the precise class of bug the 2026-09-26 codebase audit just
+  // found and fixed twice elsewhere in this app.
+  function toDateOnly(dateStr) {
+    const parts = (dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  function currentWeekWindow() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    // Nathan: "Football typically has Sunday as part of the prior weekdays
-    // as prep. Monday through Sunday is the typical week." A plain
-    // "today through today+6" rolling window doesn't match that -- viewed
-    // on, say, a Wednesday, it spills a game on the following Tuesday into
-    // "this week" while still correctly catching Sunday; but viewed later
-    // in the week it can just as easily miss a Sunday game that's clearly
-    // still part of the current football week. Anchor explicitly to the
-    // most recent Monday through the following Sunday instead, so Sunday
-    // always counts as the close of *this* week no matter what day of the
-    // week this renders on.
     const dow = today.getDay(); // 0=Sun..6=Sat
     const mondayOffset = (dow + 6) % 7; // days since most recent Monday
     const start = new Date(today);
     start.setDate(start.getDate() - mondayOffset);
     const end = new Date(start);
     end.setDate(end.getDate() + 6); // Sunday
-    const toDateOnly = (dateStr) => {
-      const parts = (dateStr || '').split('-').map(Number);
-      if (parts.length !== 3 || parts.some(isNaN)) return null;
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    };
-    const inWindow = (d) => d && d >= start && d <= end;
+    return { start, end };
+  }
+  window.isDateInCurrentWeek = function (dateStr) {
+    const d = toDateOnly(dateStr);
+    if (!d) return false;
+    const { start, end } = currentWeekWindow();
+    return d >= start && d <= end;
+  };
 
+  function buildWeekAheadData(games, practices) {
+    const { start, end } = currentWeekWindow();
+    const inWindow = (d) => d && d >= start && d <= end;
     const gameEntries = [];
     const practiceEntries = [];
     (games || []).forEach(g => {
@@ -423,8 +453,12 @@
     // the stat cards above and the Games/Practices columns below) --
     // renderWeekAhead() finds them by these same ids right after setting
     // textEl.innerHTML to this return value and fills in href/text/visibility.
+    // thisweekWatchFootageWrap is a plain container, not the button itself
+    // -- renderWeekAhead() fills it with window.filmButtonHtml()'s own
+    // markup (js/schedule.js), same as every other Watch Game Film button
+    // in the app, so this one opens inline instead of jumping to a new tab.
     const footageHtml = `
-      <a href="#" target="_blank" rel="noopener" id="thisweekWatchFootageBtn" class="navBtn" style="display:none;width:100%;text-align:center;box-sizing:border-box;margin:0 0 4px;">🎥 Watch Game Film of our Upcoming Opponent</a>
+      <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
     `;
 
@@ -489,23 +523,28 @@
     // and fills in href/text/visibility from whichever game This Week is
     // currently linked to.
     const linkedGame = getLinkedWeekGame();
-    const watchFootageBtn = document.getElementById('thisweekWatchFootageBtn');
+    const watchFootageWrap = document.getElementById('thisweekWatchFootageWrap');
     const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
     const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
-    if (watchFootageBtn) {
-      if (linkedGame && linkedGame.opponentFilmUrl) {
-        watchFootageBtn.style.display = 'block';
-        watchFootageBtn.style.marginBottom = hasFootageNote ? '4px' : '12px';
-        watchFootageBtn.href = linkedGame.opponentFilmUrl;
-        // Nathan: "let me know who is watching film" -- js/film-views.js's
-        // document-level click listener reads this attribute off whatever
-        // was actually clicked, so it works here and on Schedule's own
-        // Watch Footage button (schedule.js) without either file needing to
-        // know about the other.
-        watchFootageBtn.dataset.filmGameId = linkedGame.id;
+    if (watchFootageWrap) {
+      if (linkedGame && linkedGame.opponentFilmUrl && window.filmButtonHtml) {
+        // Nathan: "I still hate that the google videos open in another
+        // screen - walk it to open in a local player." This used to be a
+        // bare <a target="_blank"> -- the one Watch Film button left in
+        // the app that still jumped to a new tab instead of using that
+        // fix. window.filmButtonHtml (js/schedule.js) is the exact same
+        // function every other Watch Game Film button already goes
+        // through, so this one now opens inline the same way. filmGameId
+        // still carries the same data-film-game-id attribute
+        // js/film-views.js's "let me know who is watching film" listener
+        // reads, unchanged.
+        watchFootageWrap.innerHTML = window.filmButtonHtml(linkedGame.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', {
+          filmGameId: linkedGame.id,
+          btnClass: 'navBtn',
+          btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${hasFootageNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}`,
+        });
       } else {
-        watchFootageBtn.style.display = 'none';
-        watchFootageBtn.removeAttribute('href');
+        watchFootageWrap.innerHTML = '';
       }
     }
     // Nathan: "include a write-in spot for the footage to say something
@@ -523,17 +562,16 @@
     }
   }
 
+  // js/gameplan.js (loads earlier in index.html's scripts array) now owns
+  // this numbering -- was a private copy here, byte-identical to the one
+  // that file needs anyway for describe()'s own v1 label/color lookup;
+  // delegating avoids maintaining two copies of the same logic. (js/
+  // call-sheet-pdf.js never had a copy of this at all -- it builds its own
+  // rows straight off window.DATA.playTypes; js/drivebuilder.js's own
+  // picker also no longer calls this, having since moved to sourcing
+  // straight from thisWeek.json's own plays via gamePlanEntries.)
   function numberedRows() {
-    if (!window.playbookLiveFamilies || !window.DATA || !window.DATA.playTypes) return [];
-    const families = window.playbookLiveFamilies();
-    let n = 1;
-    const rows = [];
-    families.forEach(fam => {
-      ['Left', 'Right'].forEach(direction => {
-        rows.push({ number: n++, key: fam.key, label: fam.label, color: fam.color, direction });
-      });
-    });
-    return rows;
+    return window.GamePlan ? window.GamePlan.numberedRows() : [];
   }
 
   function isSelected(row) {
@@ -588,7 +626,16 @@
         pendingGameId = saved.gameId || '';
         pendingCoachKeys = saved.coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
         if (statusEl) statusEl.textContent = '';
-        return Promise.all([loadUpcomingGames(), loadUpcomingPractices(), loadOpponentLogosForWeekAhead()]);
+        // Nathan: "assigning plays to study for a particular player." Real
+        // roster data (names/numbers for a spotlight badge, and for
+        // resolving "is this MY play" below) needs to be loaded BEFORE the
+        // first render, not lazily after -- unlike js/depth-chart.js's own
+        // getDefenseStarterNumbers (silent, shows up on whatever render
+        // happens next), a coach/kid's very first look at This Week should
+        // already be correct.
+        const rosterReady = (window.isTeamRosterLoaded && window.isTeamRosterLoaded())
+          ? Promise.resolve() : (window.loadTeamRoster ? window.loadTeamRoster() : Promise.resolve());
+        return Promise.all([loadUpcomingGames(), loadUpcomingPractices(), loadOpponentLogosForWeekAhead(), rosterReady]);
       })
       .then(() => {
         renderReadOnly();
@@ -610,13 +657,27 @@
     const coachKeys = pendingCoachKeys
       .map(c => ({ name: (c.name || '').trim(), keys: (c.keys || ['', '', '']).slice(0, NUM_KEYS).map(k => (k || '').trim()) }))
       .filter(c => c.name || c.keys.some(k => k));
-    const payload = { coachKeys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() };
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-    window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })).then(r => {
+    // Found live (codebase audit, 2026-09-26): this used to PUT straight
+    // from whatever pendingCoachKeys/pendingSelection/pendingGameId held
+    // from whenever loadThisWeek() last ran, with no re-fetch first --
+    // unlike js/gameplan.js's addEntry()/saveDraftAsGamePlan(), which both
+    // fetch current thisWeek.json right before writing specifically so a
+    // stale local copy can't silently clobber a save that landed from
+    // elsewhere (a different coach's device, or a "+ Add to Game Plan"
+    // tap on a real card) in the meantime. Same fetch-then-merge here now,
+    // for the same reason -- Object.assign over the fresh fetch keeps
+    // this editor narrowly responsible for coachKeys/plays/gameId/
+    // updatedAt without silently reverting some other field this file
+    // doesn't know about.
+    window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null).then(current => {
+      const payload = Object.assign({}, current, { coachKeys, plays: pendingSelection.slice(), gameId: pendingGameId || '', updatedAt: new Date().toISOString() });
+      return window.firebaseAuthed(THISWEEK_URL).then(url => fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })).then(r => ({ r, payload }));
+    }).then(({ r, payload }) => {
       if (r.ok) {
         saved = payload;
         pendingCoachKeys = coachKeys.map(c => ({ name: c.name, keys: c.keys.slice() }));
@@ -650,21 +711,74 @@
   }
 
   // ---- Read-only view: everyone sees this ----
-  function makeStaticCard(row) {
+  // Takes a SAVED entry (v1 `{key,direction}` or v2, the real, dialed-in
+  // call shape js/gameplan.js's "+ Add to Game Plan" button produces on the
+  // real play card) -- window.GamePlan.describe() resolves either shape to
+  // a label/color, and (for v1 only) the same generic `row` this function
+  // already rendered from before v2 existed. A v2 entry is rendered with
+  // its OWN full toggle state (wingSide independent of direction, Motion/
+  // Boot/Counter/PopVariant/alignmentToggles) instead of always the play's
+  // bare default -- this is the actual fix for "with the directions and
+  // toggles I want." A v1 entry's own rendering is byte-identical to
+  // before -- same def.io/def.rp lookup, same authoredFormationId check.
+  function makeStaticCard(entry) {
+    const info = window.GamePlan ? window.GamePlan.describe(entry) : { label: '', color: '#999', v2: null, row: null };
     const wrap = document.createElement('div');
     wrap.className = 'gameplanCard';
     const label = document.createElement('div');
     label.className = 'gameplanCardLabel';
-    label.style.color = row.color;
-    label.textContent = `#${row.number} · ${row.label} • ${row.direction}`;
+    label.style.color = info.color;
+    label.textContent = info.label;
     wrap.appendChild(label);
+    // Nathan: "create packages for certain players... assigning plays to
+    // study for a particular player." spotlightPlayers is additive to
+    // EITHER shape (v1 or v2), read off the raw entry, not info.v2 --
+    // js/gameplan-builder.js's own tag panel is the only place this ever
+    // gets set.
+    if (entry.spotlightPlayers && entry.spotlightPlayers.length && window.getTeamRosterCached) {
+      const byId = {};
+      window.getTeamRosterCached().forEach(p => { byId[String(p.id)] = p; });
+      const names = entry.spotlightPlayers.map(id => {
+        const p = byId[String(id)];
+        return p ? `#${p.num || '?'} ${p.name || ''}`.trim() : null;
+      }).filter(Boolean);
+      if (names.length) {
+        const tag = document.createElement('div');
+        tag.className = 'gameplanCardSpotlight';
+        tag.textContent = '🎯 ' + names.join(', ');
+        wrap.appendChild(tag);
+      }
+    }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'gameplanCardSvg');
     wrap.appendChild(svg);
     if (window.renderCardDiagram && window.DATA) {
-      const playType = window.DATA.playTypes.find(p => p.key === row.key);
-      const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
-      window.renderCardDiagram(svg, row.key, row.direction, row.direction, null, '4x4', def.io, false, false, def.rp);
+      if (info.v2) {
+        const e = info.v2;
+        const formationId = e.formation === 'shotgun' ? undefined : e.formation;
+        if (e.formation === 'split' && window.renderSplitDiagram) {
+          window.renderSplitDiagram(svg, e.key, e.splitSide, e.insideOutside, e.readPosition, e.leftCall, e.rightCall, e.passOn, null, e.protection);
+        } else {
+          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn, e.reverseOn);
+        }
+      } else if (info.row) {
+        const row = info.row;
+        const playType = window.DATA.playTypes.find(p => p.key === row.key);
+        const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
+        // A custom-formation play (authoredFormationId set by js/playbuilder/
+        // legacy-adapter.js, e.g. "i") is already resolved against its OWN
+        // real anchors, not Wing's -- renderCardDiagram defaults formationId
+        // to 'wing' when not passed, which would shift its points onto
+        // Wing's shotgun geometry and render nonsense. Every classic Wing
+        // play has no authoredFormationId, so this stays undefined ->
+        // 'wing' for them, unchanged.
+        // wingSide: a v1 row only ever stored ONE direction value -- wrong
+        // for I's Sweep (directionOpposesWing), whose real toggle always
+        // keeps wingSide opposite of direction. See js/gameplan.js's
+        // legacyWingSideFor for the full story; no-op for every other play.
+        const wingSide = window.GamePlan ? window.GamePlan.legacyWingSideFor(row.key, row.direction) : row.direction;
+        window.renderCardDiagram(svg, row.key, row.direction, wingSide, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
+      }
     }
     return wrap;
   }
@@ -721,11 +835,36 @@
       keysList.appendChild(ol);
     });
 
+    // Nathan: "assigning plays to study for a particular player." Only
+    // shown when the current session actually resolves to a real roster
+    // row (js/roster.js's new myRosterEntry()) -- no point offering a
+    // filter that can never match anyone (a coach profile, an unlinked
+    // guest, etc.).
+    const myPlaysBtn = document.getElementById('thisweekMyPlaysBtn');
+    const myEntry = window.myRosterEntry ? window.myRosterEntry() : null;
+    const myTaggedCount = myEntry ? (saved.plays || []).filter(p => p.spotlightPlayers && p.spotlightPlayers.map(String).includes(String(myEntry.id))).length : 0;
+    if (myPlaysBtn) {
+      if (myEntry && myTaggedCount) {
+        myPlaysBtn.style.display = '';
+        myPlaysBtn.textContent = myPlaysOnly ? '← Show everyone’s plays' : `🎯 Show just #${myEntry.num || '?'} ${myEntry.name}’s plays (${myTaggedCount})`;
+        myPlaysBtn.onclick = () => { myPlaysOnly = !myPlaysOnly; renderReadOnly(); };
+      } else {
+        myPlaysBtn.style.display = 'none';
+        myPlaysOnly = false;
+      }
+    }
+
     gridEl.innerHTML = '';
-    const rows = numberedRows();
-    (saved.plays || []).forEach(sel => {
-      const row = rows.find(r => r.key === sel.key && r.direction === sel.direction);
-      if (row) gridEl.appendChild(makeStaticCard(row));
+    // Pass each saved entry straight through -- makeStaticCard's own
+    // describe() call resolves v1 vs v2 now, so a v2 entry's real toggle
+    // state actually reaches the renderer (the old rows.find()-first lookup
+    // here only ever matched on key+direction, silently discarding
+    // everything a v2 entry adds).
+    const visiblePlays = (myPlaysOnly && myEntry)
+      ? (saved.plays || []).filter(p => p.spotlightPlayers && p.spotlightPlayers.map(String).includes(String(myEntry.id)))
+      : (saved.plays || []);
+    visiblePlays.forEach(sel => {
+      gridEl.appendChild(makeStaticCard(sel));
     });
   }
 
@@ -783,10 +922,66 @@
     });
   }
 
+  // The Game Plan's own review list -- every play a coach has actually
+  // added (via the picker chips above, OR via "+ Add to Game Plan" on the
+  // real play card, js/play-calls.js's buildCard -- the only path that
+  // captures a specific direction/wingSide/toggle combo, not just a play's
+  // bare default). One row per entry, in the order added, with a readable
+  // summary (window.GamePlan.describe()) and a Remove button. Kept
+  // separate from the chip grid above rather than replacing it -- the chip
+  // grid is still the fast "just add this play's default look" path, and
+  // an open-ended set of specific calls isn't flatly enumerable as chips
+  // the way ~16-32 default plays are.
+  function renderGamePlanList() {
+    const listEl = document.getElementById('thisweekGamePlanList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!pendingSelection.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lbSub';
+      empty.style.textAlign = 'center';
+      empty.textContent = 'Nothing added yet -- tap a play above, or browse to any play and tap "+ Add to Game Plan" for a specific direction/side/toggle combo.';
+      listEl.appendChild(empty);
+      return;
+    }
+    pendingSelection.forEach((sel, idx) => {
+      const info = window.GamePlan ? window.GamePlan.describe(sel) : { label: `${sel.key} • ${sel.direction}`, color: '#999' };
+      const row = document.createElement('div');
+      row.className = 'gameplanListRow';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'gameplanListLabel';
+      labelEl.style.color = info.color;
+      labelEl.textContent = info.label;
+      row.appendChild(labelEl);
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'gameplanListRemoveBtn';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => {
+        pendingSelection.splice(idx, 1);
+        renderEditor();
+      });
+      row.appendChild(removeBtn);
+      listEl.appendChild(row);
+    });
+  }
+
   function renderEditor() {
     const section = document.getElementById('thisweekEditSection');
     if (!section) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    // Nathan: "It should be right below the top box." Now lives outside
+    // #thisweekEditSection (see index.html) so it needs its own gate here,
+    // set before the early return below so a non-coach session (which
+    // returns early) still correctly hides it.
+    const buildBtnEl = document.getElementById('thisweekBuildGamePlanBtn');
+    // Nathan: "the Create Your Game Plan CTA is justified left, it should
+    // be centered under the other section." Setting display back to ''
+    // dropped the inline display:block a <button> needs for its own
+    // margin:0 auto centering to actually take effect (a <button>
+    // defaults to inline-block, which margin:auto doesn't center) --
+    // 'block' here is what index.html's own inline style already assumes.
+    if (buildBtnEl) buildBtnEl.style.display = approved ? 'block' : 'none';
     section.style.display = approved ? '' : 'none';
     if (!approved) return;
 
@@ -824,7 +1019,7 @@
           pendingSelection.splice(idx, 1);
         } else {
           if (pendingSelection.length >= MAX_PLAYS) {
-            alert(`Featured plays are capped at ${MAX_PLAYS} -- remove one first.`);
+            alert(`Game Plan is capped at ${MAX_PLAYS} -- remove one first.`);
             return;
           }
           pendingSelection.push({ key: row.key, direction: row.direction });
@@ -833,9 +1028,10 @@
       });
       pickerGrid.appendChild(chip);
     });
+    renderGamePlanList();
     if (countEl) {
       const n = pendingSelection.length;
-      countEl.textContent = `Featured plays — ${n} selected (aim for ${MIN_RECOMMENDED}-${MAX_PLAYS})`;
+      countEl.textContent = `Game Plan — ${n} selected (aim for ${MIN_RECOMMENDED}-${MAX_PLAYS})`;
       countEl.style.color = (n > MAX_PLAYS) ? '#e0201a' : '';
     }
   }
@@ -846,11 +1042,36 @@
   window.renderFeaturedPlayCards = function (wrapEl, plays) {
     if (!wrapEl) return;
     wrapEl.innerHTML = '';
-    const rows = numberedRows();
     (plays || []).forEach(sel => {
-      const row = rows.find(r => r.key === sel.key && r.direction === sel.direction);
-      if (row) wrapEl.appendChild(makeStaticCard(row));
+      wrapEl.appendChild(makeStaticCard(sel));
     });
+  };
+
+  // Two-way hook, same pattern Play Builder V2's own editor/formation-editor
+  // already established this session -- js/gameplan.js's addEntry() already
+  // saved the new play for real (see its own comment for why: an in-memory-
+  // only push here would be lost the next time This Week reloads) before
+  // calling this, so this is purely "reflect it on screen if this screen
+  // happens to already be open" -- guarded on `loaded` since neither
+  // saved/pendingSelection nor the DOM this renders into exist until
+  // initThisWeek() has actually run once.
+  window.ThisWeekGamePlan = {
+    onExternalAdd(entry) {
+      saved = Object.assign({}, saved, { plays: (saved.plays || []).concat([entry]) });
+      pendingSelection.push(entry);
+      if (loaded) { renderReadOnly(); renderEditor(); }
+    },
+    // Same two-way-sync idea as onExternalAdd, for the Game Plan Builder's
+    // own whole-list Save (js/gameplan-builder.js/js/gameplan.js's
+    // saveDraftAsGamePlan) -- already saved for real by the time this
+    // fires, so this is purely "reflect it on screen if This Week's own
+    // editor happens to already be open."
+    onReplace(gameId, plays) {
+      saved = Object.assign({}, saved, { plays: (plays || []).slice(), gameId: gameId || '' });
+      pendingSelection = (plays || []).slice();
+      pendingGameId = gameId || '';
+      if (loaded) { renderReadOnly(); renderEditor(); }
+    },
   };
 
   let controlsWired = false;
@@ -863,6 +1084,42 @@
     if (addCoachBtn) addCoachBtn.addEventListener('click', () => {
       pendingCoachKeys.push({ name: '', keys: ['', '', ''] });
       renderCoachEditorList(true);
+    });
+    // Nathan: "generate a call sheet for the week... a printable 1 page PDF
+    // with all the details." Prints pendingSelection (what's actually on
+    // screen right now) rather than only the last-saved list -- "print what
+    // I'm looking at" is the less surprising choice than a coach who just
+    // added a play wondering why it's missing from the sheet. Same
+    // disabled/originalLabel/try-catch-finally pattern js/coachtools-
+    // print.js's own PDF buttons already use.
+    const printBtn = document.getElementById('thisweekPrintCallSheetBtn');
+    if (printBtn) {
+      const originalLabel = printBtn.textContent;
+      printBtn.addEventListener('click', async () => {
+        if (printBtn.disabled || !window.generateGamePlanPDF) return;
+        if (!pendingSelection.length) { alert('Add at least one play to the Game Plan first.'); return; }
+        printBtn.disabled = true;
+        printBtn.textContent = '📋 Generating…';
+        try {
+          const doc = await window.generateGamePlanPDF(pendingSelection);
+          doc.save('ASL_Bengals_Game_Plan_Call_Sheet.pdf');
+          printBtn.textContent = '✅ Saved!';
+        } catch (err) {
+          console.error('Game Plan PDF generation failed:', err);
+          printBtn.textContent = '⚠️ Failed — tap to retry';
+        } finally {
+          setTimeout(() => { printBtn.textContent = originalLabel; printBtn.disabled = false; }, 2200);
+        }
+      });
+    }
+    // Nathan: "Lets have it so it opens full screen like the 2-min drill
+    // and you choose your opponent on the schedule to game plan
+    // against." js/gameplan-builder.js owns the overlay itself; this is
+    // just the entry point, same "check the global exists" guard the
+    // other buttons in this function use.
+    const buildBtn = document.getElementById('thisweekBuildGamePlanBtn');
+    if (buildBtn) buildBtn.addEventListener('click', () => {
+      if (window.openGamePlanBuilder) window.openGamePlanBuilder();
     });
   }
 

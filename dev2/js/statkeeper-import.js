@@ -307,10 +307,18 @@
       }
 
       if (p.type === 'score') {
-        if (p.scoreKind === 'PAT Good') ss.scoring.patGood += 1;
-        else if (p.scoreKind === 'PAT No Good') ss.scoring.patNoGood += 1;
-        else if (p.scoreKind === '2PT Good') ss.scoring.twoPtGood += 1;
-        else if (p.scoreKind === '2PT No Good') ss.scoring.twoPtNoGood += 1;
+        // Found live (codebase audit, 2026-09-26): this only ever matched
+        // the OLD scoreKind labels -- Stat Keeper's real entry form
+        // (stat-keeper.html) and Game Wizard have both used 'Kick (2 pt
+        // Good)'/'Kick (No Good)'/'Run/Pass Play (1 pt Good)'/'Run/Pass
+        // Play (No Good)' for a while now, so every real PAT/2pt import
+        // silently landed as 0 regardless of the actual count. Matches
+        // both forms now, same as stat-keeper.html's own read path
+        // (~line 3105) and game-playback.html (~line 686) already do.
+        if (p.scoreKind === 'Kick (2 pt Good)' || p.scoreKind === 'PAT Good') ss.scoring.patGood += 1;
+        else if (p.scoreKind === 'Kick (No Good)' || p.scoreKind === 'PAT No Good') ss.scoring.patNoGood += 1;
+        else if (p.scoreKind === 'Run/Pass Play (1 pt Good)' || p.scoreKind === '2PT Good') ss.scoring.twoPtGood += 1;
+        else if (p.scoreKind === 'Run/Pass Play (No Good)' || p.scoreKind === '2PT No Good') ss.scoring.twoPtNoGood += 1;
         else if (p.scoreKind === 'Safety') ss.scoring.safety += 1;
         // 'Touchdown' score entries aren't stored separately here -- each
         // scoring play's own td flag (rushing/passing/receiving/kickoffs/

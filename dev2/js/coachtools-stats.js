@@ -1038,16 +1038,12 @@
   // entered, not just the ones with a full statSheet -- a coach might log
   // the final score on Schedule the same night without ever opening Enter
   // Stats. Same result logic as schedule.js's own resultFor() (not exposed
-  // on window there, so duplicated here rather than reaching across
-  // modules for one three-line comparison).
-  function resultForGame(g) {
-    if (g.ourScore === null || g.ourScore === undefined || g.oppScore === null || g.oppScore === undefined || g.ourScore === '' || g.oppScore === '') return null;
-    const us = Number(g.ourScore), them = Number(g.oppScore);
-    if (isNaN(us) || isNaN(them)) return null;
-    if (us > them) return 'W';
-    if (us < them) return 'L';
-    return 'T';
-  }
+  // on window there). Was its own second copy of resultFor() (defined
+  // above, ~line 101) sitting in this exact same file/closure -- no
+  // scoping reason for a second copy the way there is a reason to
+  // duplicate it out to schedule.js -- found live (codebase audit,
+  // 2026-09-26) and consolidated onto the one already-existing local
+  // resultFor() instead.
 
   const TEAM_STAT_ROWS = [
     { key: 'offPlays', label: 'Offensive Plays' },
@@ -1072,7 +1068,7 @@
 
     let w = 0, l = 0, tcount = 0, pf = 0, pa = 0, scoredGames = 0;
     games.forEach(g => {
-      const r = resultForGame(g);
+      const r = resultFor(g);
       if (!r) return;
       scoredGames++;
       if (r === 'W') w++; else if (r === 'L') l++; else tcount++;
@@ -1117,7 +1113,7 @@
     const tbody = document.createElement('tbody');
     playedGames.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(g => {
       const t = gameTeamStats(g.statSheet);
-      const r = resultForGame(g);
+      const r = resultFor(g);
       const label = `${g.homeAway === 'Away' ? '@' : 'vs'} ${escapeHtml(g.opponent || 'TBD')}${g.date ? ' — ' + escapeHtml(g.date) : ''}`;
       const resultLabel = r ? `${r} ${escapeHtml(String(g.ourScore))}-${escapeHtml(String(g.oppScore))}` : '—';
       const tr = document.createElement('tr');
@@ -1354,5 +1350,25 @@
     } else {
       loadGames().then(renderAll); // cheap re-fetch so stats entered elsewhere show up
     }
+  };
+
+  // Nathan: "If a game has stats added to it, change the keep stats to
+  // see game stats and it links to the stats view from the game." First
+  // build of this sent a coach to the "Enter Stats" tab's own manual-entry
+  // form (subTab='enter') -- the same raw roster/rushing/passing keying-in
+  // UI used to originally record the game via StatKeeper. Nathan, after
+  // seeing that live: "it should not show me like this which is the manual
+  // entry document... I should see the stats like I do in the Game stats
+  // in the game itself." That's the REAL, read-only box score already
+  // built into a game's own detail page (js/schedule.js's renderDetail ->
+  // renderGameBoxScore/renderGameLeaders/renderScoringPlaysTimeline, fed
+  // by the SAME window.computeGamePlayerStats this file already exposes)
+  // -- so this now hands off to that page instead of Coach Tools' Stats
+  // tab. window.openScheduleGame (js/schedule.js) is the already-
+  // established, already-reused (thisweek.js, schedule-full.js,
+  // standings.js) entry point for "open this exact game's detail page
+  // from outside schedule.js."
+  window.openCoachStatsForGame = function (gameId) {
+    if (window.openScheduleGame) window.openScheduleGame(gameId);
   };
 })();

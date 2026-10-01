@@ -134,6 +134,24 @@
     // normalizeOpponentKey("Leicester/Spencer") -- no space in the name, so
     // the whole thing counts as one "word", then the slash gets stripped.
     leicesterspencer: 'assets/images/opponents/leicesterspencer.png',
+    grafton: 'assets/images/opponents/grafton.png',
+    // normalizeOpponentKey("Oxford/Webster") -- same no-space-before-the-
+    // slash reasoning as leicesterspencer above.
+    oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
+    // normalizeOpponentKey("Merrimack Valley") -- first word only.
+    merrimack: 'assets/images/opponents/merrimack.png',
+    milford: 'assets/images/opponents/milford.png',
+    tewksbury: 'assets/images/opponents/tewksbury.png',
+    wachusett: 'assets/images/opponents/wachusett.png',
+    // normalizeOpponentKey("Westford/Acton/Boxborough/Littleton") -- no
+    // space before the first slash, so the whole thing is one "word";
+    // this is the "Knights" logo/mascot.
+    westfordactonboxboroughlittleton: 'assets/images/opponents/westfordactonboxboroughlittleton.png',
+    hudson: 'assets/images/opponents/hudson.png',
+    worcester: 'assets/images/opponents/worcester.png',
+    // normalizeOpponentKey("Northboro/Southboro") -- same no-space-
+    // before-the-slash reasoning as leicesterspencer/oxfordwebster above.
+    northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
@@ -390,8 +408,61 @@
     }
 
     const base = `The Bengals${recordPart} ${verb} ${game.opponent} in a${/^[aeiou]/i.test(typeWord) ? 'n' : ''} ${typeWord} on ${dateStr}${timeStr}${locPart}.${openerPart}${seriesPart}`;
-    const statsText = teamLeadersAndAveragesText(allGames);
-    return statsText ? `${base} ${statsText}` : base;
+    const tendenciesText = bengalsScoringTendenciesText(allGames);
+    return tendenciesText ? `${base} ${tendenciesText}` : base;
+  }
+
+  // Nathan: "since you have game stats and history on all teams, we should
+  // be able to make the AI generated game previews more dynamic since you
+  // have points scored and allowed, opponents, and understand strengths."
+  // buildGamePreviewText above only ever draws on OUR OWN schedule/stats
+  // (head-to-head history, our own leaders/averages) -- it has no idea
+  // what the OPPONENT themselves has actually been doing this season.
+  // This pulls that from the same real, live CMYFCC data source already
+  // proved out for Standings' Team Pages and this page's own "[Opponent]'s
+  // Last 5" tab (window.fetchCmyfccRecentGamesFor) -- their real record,
+  // their own points scored/allowed, and a plain-language read on whether
+  // they've been a high-scoring team, a tough defense, or fairly even,
+  // plus who they've actually been playing. Async (a real network call),
+  // so renderGamePreview below shows the fast, local text immediately and
+  // appends this once it resolves, same progressive-enhancement pattern
+  // this file already uses for the completed-game recap
+  // (computeGameNarrativeSummary/buildGameContextRecap).
+  //
+  // The "strength" read is a plain, disclosed heuristic off their own
+  // scoring margin (avg points scored minus allowed per game), not a real
+  // scouting analysis -- there's no play-by-play/style data behind it,
+  // only box scores, so it stays limited to what those numbers can
+  // honestly support. The real PF/PA numbers are always shown alongside
+  // it, so a coach can judge for themselves rather than take the
+  // adjective on faith.
+  async function buildOpponentScoutingText(opponentName) {
+    if (!window.fetchCmyfccRecentGamesFor || !opponentName) return '';
+    let rows;
+    try {
+      rows = await window.fetchCmyfccRecentGamesFor(opponentName, 10);
+    } catch (e) {
+      return '';
+    }
+    if (!rows.length) return '';
+    let w = 0, l = 0, t = 0, pf = 0, pa = 0;
+    rows.forEach(g => {
+      pf += g.ourScore; pa += g.oppScore;
+      if (g.ourScore > g.oppScore) w++; else if (g.ourScore < g.oppScore) l++; else t++;
+    });
+    const gp = rows.length;
+    const avgPf = (pf / gp).toFixed(1);
+    const avgPa = (pa / gp).toFixed(1);
+    const recordStr = t ? `${w}-${l}-${t}` : `${w}-${l}`;
+    const avgMargin = (pf - pa) / gp;
+    let strengthPart;
+    if (avgMargin >= 8) strengthPart = 'a strong, high-scoring team';
+    else if (avgMargin <= -8) strengthPart = "a team that's struggled to find points";
+    else if (Number(avgPa) < 8) strengthPart = "a defense that's been tough to score on";
+    else strengthPart = "a team that's been fairly even with opponents";
+    const recentOpponents = rows.slice(0, 3).map(g => g.opponent).filter(Boolean);
+    const oppPart = recentOpponents.length ? ` Recent opponents include ${recentOpponents.join(', ')}.` : '';
+    return `${opponentName} enters at ${recordStr} this season, averaging ${avgPf} points scored and ${avgPa} allowed per game -- ${strengthPart}.${oppPart}`;
   }
 
   // Nathan: "Game previews should have team leaders and team stat averages
@@ -430,36 +501,33 @@
     const v = Number(n) || 0;
     return Number.isInteger(v) ? String(v) : v.toFixed(1);
   }
-  function teamLeadersAndAveragesText(allGames) {
-    const { byNum, playedGames, CATS } = teamSeasonAggregate(allGames);
-    const players = Object.values(byNum);
-    if (!players.length || !playedGames.length) return '';
-
-    // Lead with whichever offensive category the team has actually put up
-    // the most total yards in this season -- e.g. a run-heavy team gets a
-    // rushing leader/average called out, a pass-heavy team gets passing.
-    const offenseTotals = CATS.filter(c => c.key !== 'koYds').map(c => ({ ...c, total: players.reduce((s, p) => s + p[c.key], 0) }));
-    const topOffense = offenseTotals.sort((a, b) => b.total - a.total)[0];
-
-    const leaderLines = [];
-    if (topOffense && topOffense.total > 0) {
-      const leader = players.slice().sort((a, b) => b[topOffense.key] - a[topOffense.key])[0];
-      if (leader && leader[topOffense.key] > 0) {
-        leaderLines.push(`#${leader.num}${leader.name ? ' ' + escapeHtml(leader.name) : ''} leads the team in ${topOffense.label} (${formatNum(leader[topOffense.key])}).`);
-      }
-    }
-    const tacklesLeader = players.slice().sort((a, b) => b.tackles - a.tackles)[0];
-    if (tacklesLeader && tacklesLeader.tackles > 0) {
-      leaderLines.push(`#${tacklesLeader.num}${tacklesLeader.name ? ' ' + escapeHtml(tacklesLeader.name) : ''} leads the defense with ${formatNum(tacklesLeader.tackles)} tackles.`);
-    }
-
-    const avgParts = [];
-    if (topOffense && topOffense.total > 0) avgParts.push(`${formatNum(topOffense.total / playedGames.length)} ${topOffense.label}`);
-    const totalTackles = players.reduce((s, p) => s + p.tackles, 0);
-    if (totalTackles > 0) avgParts.push(`${formatNum(totalTackles / playedGames.length)} tackles`);
-    const avgLine = avgParts.length ? ` The Bengals are averaging ${avgParts.join(' and ')} per game this season.` : '';
-
-    return `${leaderLines.join(' ')}${avgLine}`.trim();
+  // Nathan: "for game previews don't mention stats as those have not been
+  // consistently kept. speak to the score tendencies, power rankings,
+  // matchups and all that to scope the game." Replaces the old
+  // teamLeadersAndAveragesText (removed) -- that one depended on every
+  // game's statSheet being filled in, which isn't reliable, so a preview
+  // could confidently name a "leader" who's actually just whoever's stats
+  // happened to get entered. Final score, by contrast, is exactly what a
+  // W-L record already needs, so it's tracked for every completed game
+  // without exception -- same math/wording as buildOpponentScoutingText's
+  // own read on the opponent (below), so the Bengals' own tendency reads
+  // as a direct, apples-to-apples comparison rather than a differently-
+  // shaped afterthought.
+  function bengalsScoringTendenciesText(allGames) {
+    const played = (allGames || []).filter(countsTowardRecord).filter(g => resultFor(g));
+    if (!played.length) return '';
+    let pf = 0, pa = 0;
+    played.forEach(g => { pf += Number(g.ourScore) || 0; pa += Number(g.oppScore) || 0; });
+    const gp = played.length;
+    const avgPf = (pf / gp).toFixed(1);
+    const avgPa = (pa / gp).toFixed(1);
+    const avgMargin = (pf - pa) / gp;
+    let strengthPart;
+    if (avgMargin >= 8) strengthPart = 'a strong, high-scoring team';
+    else if (avgMargin <= -8) strengthPart = "a team that's struggled to find points";
+    else if (Number(avgPa) < 8) strengthPart = "a defense that's been tough to score on";
+    else strengthPart = "a team that's been fairly even with opponents";
+    return `The Bengals are averaging ${avgPf} points scored and ${avgPa} allowed per game this season -- ${strengthPart}.`;
   }
 
   // Nathan: "make an AI write up of some of the game highlights based on
@@ -1348,44 +1416,129 @@
   // past-meetings filter buildGamePreviewText already computes for the
   // series-record sentence, just rendered as real rows instead of a line
   // of text. ----
-  function compactGameRowHtml(g) {
+  // opts.teamName/teamBadgeHtml let this same compact row render a game
+  // from any TEAM's own perspective, not just ours -- js/standings.js's
+  // Opponent Page reuses this (exposed on window just below) to show an
+  // opponent's own recent form, pulled live from CMYFCC, in the exact
+  // same compact style rather than a second, drifting copy of this row.
+  function compactGameRowHtml(g, opts) {
+    opts = opts || {};
+    const teamName = opts.teamName || 'Bengals';
+    const teamBadgeHtml = opts.teamBadgeHtml || bengalsBadgeHtml();
     const result = resultFor(g);
     const badge = result
       ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
       : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-    const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
-    const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+    // Nathan: "move the score to the left and right of the result pill" --
+    // same correction already made to the main Schedule list's own final-
+    // game row (see centerHtml there, and its own comment): the score is
+    // NOT grouped with the logo/name, it's its own column in the CENTER,
+    // flanking the pill (Logo ... Score [Pill] Score ... Logo). This row
+    // never got that same fix when it shipped, which is the real reason
+    // it rendered so much taller than the main list's own compact rows --
+    // .scheduleRowFinal's own tighter padding/gap never applied either,
+    // since the class itself was missing.
+    const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
+    const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
+    const centerHtml = result ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>` : `<span class="scheduleRowCenter">${badge}</span>`;
+    // Nathan: "if you click on a logo of one of the opponent's it should go
+    // to that teams page." A plain span (not a nested <button>) wrapping
+    // just the away-side badge -- row is already a <button>, and this
+    // codebase's own established pattern for "one clickable thing inside
+    // another" is a span + its own click listener that stops the tap from
+    // also firing the row's. This function only returns markup; it's up to
+    // each caller to actually wire the listener (see js/standings.js's
+    // loadOpponentRecentForm, the one place this was asked for) -- left
+    // inert everywhere else (this same row also renders schedule.js's own
+    // "Last 5 Games"/"Vs Opponent" panel, which keeps its existing
+    // click-the-whole-row-to-open-the-game behavior unchanged).
     return `
-      <button type="button" class="scheduleRow last5Row" data-game-id="${escapeHtml(g.id)}">
+      <button type="button" class="scheduleRow last5Row${result ? ' scheduleRowFinal' : ''}" data-game-id="${escapeHtml(g.id)}">
         <span class="scheduleRowDate">${fmtDate(g.date)}</span>
         <span class="scheduleRowMatchup">
-          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${usScore}</span>
-          <span class="scheduleRowCenter">${badge}</span>
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
+          <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
+          ${centerHtml}
+          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${opponentBadgeHtml(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
         </span>
       </button>`;
   }
-  function renderLast5Panel(tab) {
+  // Nathan, after seeing the first version of the "Vs [Opponent]" tab
+  // below (which showed OUR OWN head-to-head history against them):
+  // "It shouldn't show the last 5 games against that team, it should show
+  // your opponents last 5 games." Real correction, not a preference --
+  // head-to-head reads as "No games yet" for any opponent we haven't
+  // played before (the common case, since most Schedule games are a
+  // FIRST meeting), even though THEY'VE been playing a real season
+  // against everyone else. The 2nd tab now pulls exactly that -- the
+  // opponent's own real recent games, straight from CMYFCC (same real
+  // function js/standings.js already built/proved out for the Standings
+  // Team Page, exposed there as window.fetchCmyfccRecentGamesFor rather
+  // than a second, drifting copy of the same API-shape knowledge here).
+  // "Last 5 Games" (our own) is untouched -- a different, still-useful
+  // question ("how have WE been playing") Nathan never asked to change.
+  async function renderLast5Panel(tab) {
     const wrap = document.getElementById('schedLast5Wrap');
     if (!wrap || !current) return;
-    const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    const oppKey = normalizeOpponentKey(current.opponent);
-    const vsOpp = played.filter(g => normalizeOpponentKey(g.opponent) === oppKey);
-    const list = tab === 'vsopp' ? vsOpp : played.slice(0, 5);
-    const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
-    wrap.innerHTML = `
-      <div class="lbSectionHeader">📊 Recent Form</div>
+    const forOpponent = current.opponent;
+    // A Bye week stores the literal string 'Bye' as its own opponent
+    // field (see buildGamePreviewText's own comment above) -- truthy, so
+    // it would otherwise sail past the `!forOpponent` guard below and
+    // fire a real, pointless CMYFCC fetch for a team named "Bye", with a
+    // tab literally labeled "Bye's Last 5". Same exclusion
+    // renderGamePreview's own opponent-scouting fetch already has.
+    const isByeWeek = current.gameType === 'Bye';
+    const tabsHtml = `
       <div class="gameplanPickerGrid" style="margin-bottom:10px;">
         <button type="button" class="gameplanChip${tab === 'last5' ? ' active' : ''}" data-last5tab="last5">Last 5 Games</button>
-        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${current.opponent ? 'Vs ' + escapeHtml(current.opponent) : 'Vs This Opponent'}</button>
-      </div>
-      <div class="last5List">${rowsHtml}</div>`;
-    wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
-      btn.addEventListener('click', () => renderLast5Panel(btn.dataset.last5tab));
-    });
-    wrap.querySelectorAll('.last5Row').forEach(row => {
-      row.addEventListener('click', () => openDetail(row.dataset.gameId));
-    });
+        <button type="button" class="gameplanChip${tab === 'vsopp' ? ' active' : ''}" data-last5tab="vsopp">${(forOpponent && !isByeWeek) ? escapeHtml(forOpponent) + "'s Last 5" : 'Opponent Last 5'}</button>
+      </div>`;
+    const wireUp = () => {
+      wrap.querySelectorAll('[data-last5tab]').forEach(btn => {
+        btn.addEventListener('click', () => renderLast5Panel(btn.dataset.last5tab));
+      });
+      wrap.querySelectorAll('.last5Row').forEach(row => {
+        row.addEventListener('click', () => openDetail(row.dataset.gameId));
+      });
+    };
+    if (tab !== 'vsopp') {
+      const played = games.filter(g => g.id !== current.id && resultFor(g)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const list = played.slice(0, 5);
+      const rowsHtml = list.length ? list.map(compactGameRowHtml).join('') : '<div class="lbEmpty">No games yet.</div>';
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div>${tabsHtml}<div class="last5List">${rowsHtml}</div>`;
+      wireUp();
+      return;
+    }
+    wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div>${tabsHtml}<div class="last5List"><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
+    wireUp();
+    if (!window.fetchCmyfccRecentGamesFor || !forOpponent || isByeWeek) {
+      const listEl = wrap.querySelector('.last5List');
+      if (listEl) listEl.innerHTML = '<div class="lbEmpty">No games yet.</div>';
+      return;
+    }
+    // Same stale-response guard as standings.js's own loadOpponentRecentForm
+    // -- a slow response landing after the coach has already navigated to
+    // a DIFFERENT game (or switched back to the "Last 5 Games" tab)
+    // shouldn't clobber whatever's on screen now.
+    try {
+      const rows = await window.fetchCmyfccRecentGamesFor(forOpponent, 5);
+      const stillRelevant = document.getElementById('schedLast5Wrap') === wrap && wrap.isConnected && current && current.opponent === forOpponent && wrap.querySelector('[data-last5tab="vsopp"]').classList.contains('active');
+      if (!stillRelevant) return;
+      const listEl = wrap.querySelector('.last5List');
+      if (!listEl) return;
+      if (!rows.length) {
+        listEl.innerHTML = `<div class="lbEmpty">No completed games found for ${escapeHtml(forOpponent)} on CMYFCC yet.</div>`;
+        return;
+      }
+      // No click-wiring here, matching js/standings.js's own
+      // loadOpponentRecentForm -- these rows carry CMYFCC's own game ids,
+      // not one of OUR local Schedule game ids, and openDetail() silently
+      // opens a blank "new game" draft for any id it can't find, which
+      // would be a real, confusing bug here, not a graceful no-op.
+      listEl.innerHTML = rows.map(g => compactGameRowHtml(g, { teamName: forOpponent, teamBadgeHtml: opponentBadgeHtml(forOpponent) })).join('');
+    } catch (e) {
+      const listEl = wrap.querySelector('.last5List');
+      if (listEl) listEl.innerHTML = `<div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
   function renderGamePreview() {
@@ -1422,6 +1575,21 @@
         const narrative = buildGameContextRecap(summary, current);
         if (narrative) textEl.textContent = narrative;
       }).catch(err => console.error('[narrativeRecap] failed for', current.id, err));
+    } else if (!isFinal && current.opponent && current.gameType !== 'Bye') {
+      const forOpponent = current.opponent;
+      buildOpponentScoutingText(forOpponent).then(scouting => {
+        if (!scouting) return;
+        // Same stale-response guard as this file's own loadOppSeasonRecentForm/
+        // standings.js's loadOpponentRecentForm -- a slow CMYFCC response
+        // landing after the coach has navigated to a DIFFERENT game (or
+        // this one went final in the meantime) shouldn't clobber whatever
+        // text is on screen now.
+        const stillRelevant = document.getElementById('schedGamePreviewWrap') === wrap && wrap.isConnected
+          && current && current.opponent === forOpponent && !resultFor(current);
+        if (!stillRelevant) return;
+        const freshTextEl = document.getElementById('schedGamePreviewText');
+        if (freshTextEl) freshTextEl.textContent = `${text} ${scouting}`;
+      }).catch(err => console.error('[opponentScouting] failed for', forOpponent, err));
     }
   }
 
@@ -1700,6 +1868,21 @@
     if (!opts.sharedSlotId) html += `<div id="${slotId}" style="display:none;margin-top:8px;"></div>`;
     return html;
   }
+  // Exposed so js/thisweek.js's own Watch Footage button (Week Ahead box)
+  // can open film inline too, the same as every other film button in the
+  // app -- it used to be a bare <a target="_blank">, the one film link
+  // left that still jumped away to a new tab instead of using Nathan's
+  // own established "walk it to open in a local player" fix. The
+  // document-level click listener right below already handles any
+  // [data-embed-target] button on the page regardless of which file
+  // rendered it, so exposing this one function is enough.
+  window.filmButtonHtml = filmButtonHtml;
+  window.compactGameRowHtml = compactGameRowHtml;
+  window.opponentBadgeHtml = opponentBadgeHtml;
+  // Raw logo URL (not the wrapped badge <span>) -- js/standings.js's team
+  // page header needs the bare src to run it through canvas color
+  // extraction, not markup.
+  window.getOpponentLogoSrc = opponentLogoSrc;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;
@@ -1816,7 +1999,7 @@
   }
 
   // ---- Cloud load/save ----
-  function loadGames() {
+  function loadGames(scrollToCurrent) {
     const statusEl = document.getElementById('scheduleCloudStatus');
     if (statusEl) statusEl.textContent = 'Loading schedule…';
     const gamesFetch = window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -1824,7 +2007,7 @@
       .catch(err => { console.error('Could not load schedule:', err); if (statusEl) statusEl.textContent = 'Could not reach the cloud -- showing nothing saved yet.'; });
     return Promise.all([gamesFetch, loadOpponentLogos()]).then(() => {
       if (statusEl) statusEl.textContent = '';
-      renderList();
+      renderList(scrollToCurrent);
     });
   }
 
@@ -1847,7 +2030,20 @@
   }
 
   // ---- List view ----
-  function renderList() {
+  // Nathan: "the schedule is difficult to understand. When you open the
+  // schedule it shows you the jamboree results and you need to scroll way
+  // down... bring it to the top when the schedule is launched. You can
+  // then scroll back up to past games or down to future games." The list
+  // itself STAYS plain chronological (Nathan's own earlier, still-valid
+  // "list every game first to last" call, see the comment a few lines
+  // down) -- this only changes where the view LANDS when the Games tab is
+  // freshly opened, not the order. scrollToCurrent is true only from the
+  // real "opening/reopening this tab" call sites (loadGames()'s first-ever
+  // load, and initSchedule()'s "already loaded, tab reopened" branch) --
+  // NOT from closeDetail()'s own renderList() call, so returning from
+  // editing/reviewing some OTHER game doesn't yank the coach back to the
+  // current week and lose the spot they were just looking at.
+  function renderList(scrollToCurrent) {
     const listEl = document.getElementById('scheduleList');
     const addWrap = document.getElementById('scheduleAddWrap');
     if (!listEl) return;
@@ -1891,7 +2087,23 @@
       // the normal detail/edit view (e.g. to jot a note) like any other
       // entry.
       if (g.gameType === 'Bye') {
-        row.className = 'scheduleRow scheduleRowBye';
+        // Same current-week flag the real matchup card gets below -- a bye
+        // week is still "this week," and without this the auto-scroll-to-
+        // current-week behavior (see the bottom of this function) would
+        // have nothing to land on during a bye, defeating its own purpose.
+        const byeIsCurrentWeek = window.isDateInCurrentWeek && window.isDateInCurrentWeek(g.date);
+        // Nathan, live: "Bye week is still black - think it is still
+        // looking for results which it won't get." Correct diagnosis --
+        // scheduleRowFinal (the new lighter-background treatment) is only
+        // ever added once resultFor(g) finds a real score, and a bye has
+        // no score to find, by definition, so it stayed on the plain dark
+        // .scheduleRow background forever, even long after the week it
+        // covers has passed. A bye "completes" simply by its date passing,
+        // not by a score existing -- hasEventPassed with no time argument
+        // already means "end of that calendar day," the right bar for a
+        // bye, which has no kickoff time either.
+        const byeIsPast = hasEventPassed(g.date);
+        row.className = 'scheduleRow scheduleRowBye' + (byeIsPast ? ' scheduleRowFinal' : '') + (byeIsCurrentWeek ? ' scheduleRowCurrentWeek' : '');
         row.innerHTML = `${weekBadge}<span class="scheduleByeText">Bye Week</span>`;
         row.addEventListener('click', () => openDetail(g.id));
         listEl.appendChild(row);
@@ -1901,10 +2113,49 @@
       const badge = result
         ? `<span class="scheduleResultBadge ${result === 'W' ? 'win' : result === 'L' ? 'loss' : 'tie'}">${result}</span>`
         : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
-      const gameTime = to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field
-      const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
-      const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
+      // Nathan: "the game cards once the game is complete could be
+      // updated... to give some visual difference" + "the other cards for
+      // upcoming games let's add an orange stroke around the box to show
+      // that is the current game for that week." Two real, separate
+      // conditions -- scheduleRowFinal (a result exists) tightens the
+      // card and drops the now-moot kickoff time; scheduleRowCurrentWeek
+      // (still upcoming, AND its date falls in the real Mon-Sun window
+      // window.isDateInCurrentWeek already computes for This Week's own
+      // Week Ahead box, js/thisweek.js -- reused here rather than a
+      // second, driftable copy of that date math) only ever applies to
+      // one game at a time in practice, the one the team's actually
+      // gearing up for.
+      const isCurrentWeek = !result && window.isDateInCurrentWeek && window.isDateInCurrentWeek(g.date);
+      row.className = 'scheduleRow' + (result ? ' scheduleRowFinal' : '') + (isCurrentWeek ? ' scheduleRowCurrentWeek' : '');
+      const gameTime = result ? '' : to12h(g.gameTime || g.time || ''); // g.time is the pre-Arrive/Warmup/Game-split field -- final score already says everything a kickoff time would; drop it once the game's done
+      // Nathan: "the result pill needs to be dead center aligned between
+      // all cards... the left score is right justified and aligned,
+      // while the right score is left justified and aligned." Fixed-
+      // width slots (.home/.away, css/styles.css) so a 1-digit score next
+      // to a 2-digit score doesn't shift the pill off-center from one
+      // card to the next -- see that CSS rule's own comment for why.
+      const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
+      const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
+      // Nathan, with a reference screenshot: "instead of stacking score
+      // under the team, it should be next to the team allowing the card
+      // to be shorter. The date is moved up to the top line where it
+      // calls out the field." Completed games only -- the date joins the
+      // location line (matching the screenshot's "AWAY • WIRE VILLAGE
+      // SCHOOL • SUN, SEP 20"), freeing up the center column to hold just
+      // the W/L/T badge instead of date+time+badge stacked.
+      // Real bug, found in review: this used to append the date onto the
+      // END of one long, single-line-truncated string -- fine for a short
+      // location, but a real address (schedule-import.js stores
+      // "${fieldName}, ${address}", e.g. "Wire Village School, 100 Wire
+      // Village Rd, Spencer, MA 01562") or the game-type tag eating extra
+      // width meant the ellipsis usually landed BEFORE the date, so no
+      // date showed anywhere on the card at all -- confirmed, not just a
+      // narrow-phone edge case; it was cut on desktop too. Now built as
+      // two pieces: the location line still truncates, but the date gets
+      // its own non-shrinking span (see markup below) so it can't be the
+      // casualty of a long location.
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
+      const dateChip = result ? `<span class="scheduleRowDateChip">• ${escapeHtml(fmtDate(g.date))}</span>` : '';
       const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
       // Nathan (follow-up): "Teams on your schedule should also have their
@@ -1938,21 +2189,47 @@
         const name = session && session.name ? session.name.trim().toLowerCase() : '';
         return name === 'coach nate';
       })();
-      const keepStatsBtn = isCoachNate ? `<span class="scheduleKeepStatsBtn" data-keepstats="${g.id}">🎯 Keep Stats</span>` : '';
+      // Nathan: "If a game has stats added to it, change the keep stats to
+      // see game stats and it links to the stats view from the game."
+      // window.gameStatSheetHasAnything/normalizeGameStatSheet are the
+      // same real, already-established check coachtools-stats.js's own
+      // Team Stats table already uses to decide whether a game's
+      // statSheet is real data or just an unused blank one.
+      const normalizedSheet = g.statSheet && window.normalizeGameStatSheet ? window.normalizeGameStatSheet(g.statSheet) : null;
+      const hasStats = !!(normalizedSheet && window.gameStatSheetHasAnything && window.gameStatSheetHasAnything(normalizedSheet));
+      const keepStatsBtn = isCoachNate
+        ? (hasStats
+            ? `<span class="scheduleKeepStatsBtn scheduleSeeStatsBtn" data-seestats="${g.id}">👀 See Game Stats</span>`
+            : `<span class="scheduleKeepStatsBtn" data-keepstats="${g.id}">🎯 Keep Stats</span>`)
+        : '';
+      // Nathan, with a corrected reference screenshot: "close but the
+      // number is in the same block as the logo, needs to be more like
+      // this" -- the score is NOT grouped with the logo after all; it's
+      // its own column, sitting between the logo and the center result
+      // pill (Logo ... Score [Pill] Score ... Logo). Team side goes back
+      // to logo/name/record only (unchanged from before this whole round
+      // for upcoming games, which never render a score anyway); the two
+      // scores move into the center group, flanking the pill.
+      const homeSide = `<span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}</span>`;
+      const awaySide = `<span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span></span>`;
+      const centerHtml = result
+        ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>`
+        : `<span class="scheduleRowCenter">
+            <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
+            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
+            ${badge}
+          </span>`;
       row.innerHTML = `
         ${weekBadge}
         <div class="scheduleRowTop">
           ${gameTypeTag}
           <span class="scheduleRowDate">${locLine}</span>
+          ${dateChip}
         </div>
         <span class="scheduleRowMatchup">
-          <span class="scheduleTeamSide home">${bengalsBadgeHtml()}<span class="scheduleTeamName">Bengals</span>${recordHtml}${usScore}</span>
-          <span class="scheduleRowCenter">
-            <span class="scheduleRowCenterDate">${fmtDate(g.date)}</span>
-            ${gameTime ? `<span class="scheduleRowCenterTime">${escapeHtml(gameTime)}</span>` : ''}
-            ${badge}
-          </span>
-          <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="${oppRecordId}" style="display:none;"></span>${themScore}</span>
+          ${homeSide}
+          ${centerHtml}
+          ${awaySide}
         </span>
         <div class="scheduleRowWeatherCenter" id="${weatherId}" style="display:none;"></div>
         ${keepStatsBtn}`;
@@ -1963,7 +2240,11 @@
         if (ksBtn) {
           ksBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.location.href = 'game-wizard.html?game=' + encodeURIComponent(g.id);
+            if (hasStats) {
+              if (window.openCoachStatsForGame) window.openCoachStatsForGame(g.id);
+            } else {
+              window.location.href = 'game-wizard.html?game=' + encodeURIComponent(g.id);
+            }
           });
         }
       }
@@ -1982,6 +2263,22 @@
         window.loadCompactWeatherInto(document.getElementById(weatherId), g.location, g.date, g.gameTime || g.time || '');
       }
     });
+    if (scrollToCurrent) {
+      // rAF, not a plain synchronous call -- listEl was just rebuilt from
+      // innerHTML='' above, and scrollIntoView needs the new rows' real
+      // layout (heights/positions) to already be committed, not the stale
+      // pre-rebuild layout still in this same tick.
+      requestAnimationFrame(() => {
+        const target = listEl.querySelector('.scheduleRowCurrentWeek')
+          // No current-week game at all (off-season, or a gap between a
+          // finished game and the next one's own real "current week" not
+          // having started yet) -- land on the first genuinely upcoming
+          // game instead of leaving the coach stranded at the season
+          // opener's jamboree result.
+          || [...listEl.querySelectorAll('.scheduleRow')].find((row) => row.querySelector('.scheduleResultBadge.upcoming'));
+        if (target) target.scrollIntoView({ block: 'center' });
+      });
+    }
   }
 
   // ---- Detail view (read-only for everyone, edit inputs added on top for an approved coach) ----
@@ -2068,6 +2365,15 @@
     document.getElementById('scheduleListWrap').style.display = 'none';
     document.getElementById('scheduleDetail').style.display = '';
     renderDetail();
+    // Nathan: "when you click on a game to go to it, it opens the game at
+    // the middle of the page. It should open at the top." Real cause: the
+    // list can be scrolled well down (e.g. the current-week game's own
+    // auto-scroll, or just browsing) when a card is tapped, and swapping
+    // which panel is visible doesn't touch the page's own scroll position
+    // -- the coach lands on the detail view still scrolled exactly as far
+    // down as the list was, showing whatever section happens to fall at
+    // that same pixel offset instead of the hero at the top.
+    window.scrollTo(0, 0);
   }
 
   function closeDetail() {
@@ -2162,20 +2468,11 @@
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
           <div id="schedGamePreviewText" style="font-size:14px;font-weight:600;line-height:1.45;"></div>
         </div>
-        ${gameFootageTopCtaHtml(current)}
-        <div id="schedWeatherWrap" style="display:none;"></div>
-        <div id="schedH2HWrap" style="display:none;"></div>
-        <div id="schedGameLeadersWrap" style="margin-top:16px;"></div>
-        <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
-        <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
-        <div id="schedMomentumWrap" style="display:none;"></div>
-        <div id="schedLeadersWrap" style="margin-top:16px;"></div>
-        <div style="margin-top:16px;">
-          <div class="lbSectionHeader">🩹 Injury Report</div>
-          ${injuryReportReadOnlyHtml(current)}
-        </div>
-        <div id="schedLast5Wrap" style="margin-top:16px;"></div>
-        <div id="gameCancelSection"></div>
+        <!-- Nathan: "put location and game info right below the Game
+             preview." Moved as one intact block (was down near the bottom,
+             after Season Leaders/Injury Report/Last 5/Cancel) -- where +
+             when a coach/parent/player needs to be is more useful right
+             after the score/preview than buried below every stats section. -->
         <div class="lbSub" style="margin:16px 0 6px;text-align:center;">${escapeHtml(current.location || 'Location TBD')}</div>
         <div style="text-align:center;margin-bottom:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
           <button type="button" class="lbLinkBtn" id="schedAddToCalBtn">📅 Add to Calendar</button>
@@ -2186,6 +2483,19 @@
         ${current.gameDayNotes ? `
         <div class="lbSectionHeader" style="margin-top:16px;">🗒️ Game Day Info</div>
         <div class="scheduleWriteup">${escapeHtml(current.gameDayNotes).replace(/\n/g, '<br>')}</div>` : ''}
+        ${gameFootageTopCtaHtml(current)}
+        <div id="schedWeatherWrap" style="display:none;"></div>
+        <div id="schedH2HWrap" style="display:none;"></div>
+        <div id="schedGameLeadersWrap" style="margin-top:16px;"></div>
+        <div id="schedScoringPlaysWrap" style="margin-top:16px;"></div>
+        <div id="schedBoxScoreWrap" style="display:none;margin-top:16px;"></div>
+        <div id="schedMomentumWrap" style="display:none;"></div>
+        <div style="margin-top:16px;">
+          <div class="lbSectionHeader">🩹 Injury Report</div>
+          ${injuryReportReadOnlyHtml(current)}
+        </div>
+        <div id="schedLast5Wrap" style="margin-top:16px;"></div>
+        <div id="gameCancelSection"></div>
         <div id="schedGamePlanWrap" style="display:none;">
           <div class="lbSectionHeader" style="margin-top:16px;">🎯 This Week's Keys</div>
           <div id="schedGamePlanKeys"></div>
@@ -2195,6 +2505,10 @@
         <div class="scheduleWriteup">${current.scouting ? escapeHtml(current.scouting).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No scouting notes yet.</span>'}</div>
         <div class="lbSectionHeader" style="margin-top:16px;">📝 Game Write-Up</div>
         <div class="scheduleWriteup">${current.writeup ? escapeHtml(current.writeup).replace(/\n/g, '<br>') : '<span class="lbEmpty" style="padding:0;">No write-up yet.</span>'}</div>
+        <!-- Nathan: "move the season leaders section down." Was right after
+             Momentum, near the top of the stats stack -- now one of the
+             last things before Game Footage/fine print. -->
+        <div id="schedLeadersWrap" style="margin-top:16px;"></div>
         <div class="lbSectionHeader" style="margin-top:16px;">🎥 Game Footage</div>
         ${gameFootageReadOnlyHtml(current)}
         <div class="scheduleFinePrint">${gameIsFinal ? "Game Recap is auto-generated from this game's stats (Coach Tools &gt; Stats)." : "Game Preview is auto-generated from this game's Schedule info."}</div>`;
@@ -2533,6 +2847,24 @@
       .catch(err => console.error('Could not load linked This Week game plan:', err));
   }
 
+  // Narrow write path for js/drone-footage.js's Film Vault, which needs to
+  // tag a game's own footage clips with categoryIds without going through
+  // the full "Save Game" form (that button re-sends the whole game record
+  // -- writeup, scouting notes, injury report, everything -- for a change
+  // that's only ever a couple of clips' categoryIds). Same shape as
+  // practices.js's window.saveDroneClips: find the game by id in this
+  // module's own `games` array, set just its gameFootage, keep `current`
+  // in sync if it's the game currently open so a re-render doesn't show
+  // stale clips, and persist through the same whole-array PUT every other
+  // schedule save already uses.
+  window.saveGameFootage = function (gameId, gameFootage, afterOk, afterFail) {
+    const g = games.find(x => x.id === gameId);
+    if (!g) { if (afterFail) afterFail('Game not found'); return; }
+    g.gameFootage = gameFootage;
+    if (current && current.id === gameId) current.gameFootage = gameFootage;
+    persistGames(afterOk);
+  };
+
   // Lets other modules (This Week's "This week's game" link) jump straight
   // to a specific game's detail page from outside this file.
   window.openScheduleGame = function (gameId) {
@@ -2629,11 +2961,11 @@
     wireControls();
     if (!loaded) {
       loaded = true;
-      gamesReadyPromise = loadGames();
+      gamesReadyPromise = loadGames(true);
     } else {
       document.getElementById('scheduleDetail').style.display = 'none';
       document.getElementById('scheduleListWrap').style.display = '';
-      renderList();
+      renderList(true);
     }
   };
 

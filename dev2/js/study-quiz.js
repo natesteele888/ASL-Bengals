@@ -100,7 +100,15 @@ function dismissTwoMinuteNewBadge(){
    already knows how to show.
    ============================================================ */
 const topSectionsEl = document.getElementById('topSections');
-let lastPlaySubMode = 'study';
+// Nathan: "it should open to the new formations view instead of play
+// signals" -- index.html's own default active/show classes were swapped
+// from Signals to Plays, but this was still hardcoded to 'study': fine
+// for the very first render (nothing reads it before a real section
+// switch happens), but the moment a coach taps away to This Week/
+// Schedule/etc. and back to Play, setSection('play')'s else-branch below
+// calls setMode(lastPlaySubMode) -- silently reverting back to Signals
+// on the very first round trip. Matches the real default now.
+let lastPlaySubMode = 'playcalls';
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
   if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
@@ -182,12 +190,20 @@ window.refreshCoachToolsVisibility = function(){
   // now it's just "can this person open the tab at all."
   if (coachToolsBtn) coachToolsBtn.style.display = isCoach ? '' : 'none';
 
-  // Nathan: "make sure kids can't edit the plays or rename them." Same
-  // approvedCoach check as everything else here -- see the comment in
-  // auth.js's applyRole() and openEditPlaysGated() above for why this
-  // moved off the broader isCoachSession check.
-  const editPlaysBtn = document.getElementById('editPlaysTabBtn');
-  if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
+  // Retired (Phase 6 of the Play Builder V2 rebuild): Nathan: "we can't
+  // have two places - work to combine... formation creation, formation
+  // edits, play creation and play edits all in one." That's now Coach
+  // Tools' own Play Builder tab (js/coachtools-playbuilder.js), reachable
+  // through the SAME approvedCoach-gated Coach Tools surface this button
+  // used to need its own separate password-fallback gate to defend
+  // (openEditPlaysGated() below) -- that gate has nothing left to defend
+  // once this is the only way in, so it's left dead rather than deleted.
+  // editPlaysTabBtn itself, js/edit-plays.js, and editPlaysMode all stay
+  // exactly as they were -- unlinked, not removed, for instant rollback
+  // (just restore the line below) if Play Builder ever needs to be
+  // pulled back out.
+  // const editPlaysBtn = document.getElementById('editPlaysTabBtn');
+  // if (editPlaysBtn) editPlaysBtn.style.display = approvedCoach ? '' : 'none';
 
   // Nathan: "Parents should also see the play signals and play diagrams
   // but don't need the quizzes." Play used to be all-or-nothing for a
@@ -195,24 +211,37 @@ window.refreshCoachToolsVisibility = function(){
   // quiz-flavored sub-tabs (Quiz, Timed, Play Quiz) stay hidden for a
   // parent while Study (signals) and Play Calls (diagrams) stay open --
   // same split a coach/player already sees, just missing the quiz tabs.
+  //
+  // Nathan (2026-09-25): "The original plan was to have the coach app only
+  // include the Signals and Plays in the Play section and it wouldn't have
+  // Quiz, Timed, Play Quiz or 2 Min Drill." Same idea, a second role: a
+  // coach also gets Study/Play Calls only, PLUS 2 Min Drill hidden too --
+  // parents still see 2 Min Drill (never asked to change that, only the
+  // coach view). isCoach reflects the LIVE role, so entering Player
+  // Preview (js/auth.js's window.enterPlayerPreview, which flips
+  // isCoachSession to false for the preview's duration) correctly
+  // un-hides these again, showing exactly what a real player sees.
   const playBtn = document.getElementById('playSectionBtn');
   if (playBtn) playBtn.style.display = '';
   if (modeTabsEl) {
     modeTabsEl.querySelectorAll('.modeBtn').forEach(b => {
       const m = b.dataset.mode;
       if (m === 'quiz' || m === 'timed' || m === 'playcallsquiz') {
-        b.style.display = isParent ? 'none' : '';
+        b.style.display = (isParent || isCoach) ? 'none' : '';
+      } else if (m === 'twominute') {
+        b.style.display = isCoach ? 'none' : '';
       }
     });
   }
-  // If a coach/player switched into a parent profile (Switch Profile) while
-  // sitting on one of the now-hidden quiz tabs, lastPlaySubMode would still
-  // point at it -- clicking into Play would then land a parent on a panel
-  // whose own tab button is hidden. Fall back to Study for a parent in
-  // that case.
-  if (isParent && (lastPlaySubMode === 'quiz' || lastPlaySubMode === 'timed' || lastPlaySubMode === 'playcallsquiz')) {
-    lastPlaySubMode = 'study';
-  }
+  // If someone switched profiles (Switch Profile, or entering/exiting
+  // Player Preview) while sitting on a tab that's now hidden for their new
+  // role, lastPlaySubMode would still point at it -- clicking into Play
+  // would land on a panel whose own tab button is hidden. Fall back to
+  // Study in that case.
+  const hiddenPlayModes = new Set();
+  if (isParent || isCoach) { hiddenPlayModes.add('quiz'); hiddenPlayModes.add('timed'); hiddenPlayModes.add('playcallsquiz'); }
+  if (isCoach) hiddenPlayModes.add('twominute');
+  if (hiddenPlayModes.has(lastPlaySubMode)) lastPlaySubMode = 'study';
 
   // Study/Quiz/Play Calls have nothing to do with a parent account -- swap
   // the leaderboard and My Stats/My Position for a My Child shortcut
@@ -310,6 +339,22 @@ function wireCollapsibles(root){
   });
 }
 
+// Nathan: "For any recently added play signals, there should be a NEW
+// badge in the top right corner of the card that stays there for a
+// week." Date-based, not the tap-to-dismiss-forever shape the 2-Minute
+// Drill tab's own badge uses (dismissTwoMinuteNewBadge, above) -- this one
+// is meant to fade out on its own after 7 real days, same for every
+// coach/player, not per-device. A card saved before js/
+// coachtools-signals-admin.js started stamping addedAt has none, so it
+// never shows one -- correct, since there's no real way to know when an
+// existing card actually went up.
+const NEW_SIGNAL_BADGE_DAYS = 7;
+function isRecentlyAddedSignal(c){
+  if (!c || !c.addedAt) return false;
+  const addedMs = Date.parse(c.addedAt);
+  if (Number.isNaN(addedMs)) return false;
+  return (Date.now() - addedMs) < NEW_SIGNAL_BADGE_DAYS * 24 * 60 * 60 * 1000;
+}
 function renderStudyGrid(){
   const groups = {};
   ALL_CARDS.forEach(c=>{
@@ -326,6 +371,7 @@ function renderStudyGrid(){
     const bodyId = 'study-'+slug(g);
     const cardsHtml = cards.map(c=>`
       <div class="study-card">
+        ${isRecentlyAddedSignal(c) ? '<span class="studyCardNewBadge">NEW</span>' : ''}
         <img src="${c.img}" alt="signal ${c.id}">
         <div class="info">
           <div class="num">Signal #${c.id}</div>
@@ -543,9 +589,22 @@ function logQuizStart(kind){
 (function wireLogoPreviewHold(){
   const logo = document.getElementById('headerLogo');
   if (!logo) return;
+  logo.style.cursor = 'pointer';
   const HOLD_MS = 1400;
   let holdTimer = null;
-  function start(){ holdTimer = setTimeout(function(){ if (window.enterPlayerPreview) window.enterPlayerPreview(); }, HOLD_MS); }
+  // Nathan: "clicking the Bengals Logo or BENGALS wordmark should bring
+  // you back to the homepage." A plain click already does nothing here
+  // (the logo only ever had this hold gesture wired), so this is additive
+  // -- 'play' is the app's own real default/landing section (index.html's
+  // own boot sequence, and every nav tab's own click handler, already
+  // route through this exact same window.setSection('play') for "home").
+  // holdFired guards against the one real conflict: the browser still
+  // fires a click after a long-press's touchend/mouseup, which would
+  // otherwise navigate away the instant enterPlayerPreview() just turned
+  // it on -- skip navigating home that one time, since the coach clearly
+  // meant the hold gesture, not a tap home.
+  let holdFired = false;
+  function start(){ holdFired = false; holdTimer = setTimeout(function(){ holdFired = true; if (window.enterPlayerPreview) window.enterPlayerPreview(); }, HOLD_MS); }
   function cancel(){ if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; } }
   logo.addEventListener('touchstart', start, { passive: true });
   logo.addEventListener('touchend', cancel);
@@ -554,6 +613,27 @@ function logQuizStart(kind){
   logo.addEventListener('mousedown', start);
   logo.addEventListener('mouseup', cancel);
   logo.addEventListener('mouseleave', cancel);
+  logo.addEventListener('click', function(){
+    if (holdFired) { holdFired = false; return; }
+    if (typeof window.setSection === 'function') window.setSection('play');
+  });
+  // Nathan: "...or BENGALS wordmark..." -- with a screenshot of the real
+  // decal art (.hudWordmark, index.html's own <img>), confirming it's the
+  // one actually on screen for him, not the plain "ASL Bengals" h1 text
+  // this comment originally (and wrongly) assumed was "what every user
+  // actually sees" -- html.gameHudPreview (a real, per-device theme, see
+  // its own CSS block) hides the h1/p and shows this image INSTEAD, so
+  // wiring only the h1 left exactly this element unclickable for anyone
+  // on that theme. Both wired the same way, same handler, no hold gesture
+  // on either -- that's the logo image's own secret alone.
+  const headerRow = logo.closest('.headerRow');
+  [headerRow && headerRow.querySelector('h1'), headerRow && headerRow.querySelector('.hudWordmark')].forEach(function(el){
+    if (!el) return;
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', function(){
+      if (typeof window.setSection === 'function') window.setSection('play');
+    });
+  });
 })();
 
 function getLeaderboard(){
@@ -1277,12 +1357,19 @@ function hideGlobalCallout(){
   if(host){ host.style.display = 'none'; host.innerHTML = ''; }
 }
 window.hideGlobalCallout = hideGlobalCallout;
-function goToThisWeek(){ if(typeof setSection === 'function') setSection('thisweek'); }
 function openLeaderboardOverlay(){ const btn = document.getElementById('openLeaderboardBtn'); if(btn) btn.click(); }
 
 function gcEscapeHtml(s){ const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function gcTickerItemHtml(icon, text){
   return `<span class="gcTickerItem"><span class="gcTickerIcon">${icon}</span>${text}</span><span class="gcTickerSep">•</span>`;
+}
+// Nathan: "clickable to get to the game info" -- the game-info item
+// specifically, not a blanket "tap anywhere on the ticker" (that was
+// deliberately removed once already for the old leaderboard item -- see
+// gcSetupTicker's own host.onclick = null and its comment). data-open-game
+// is read by the click listener gcSetupTicker wires on the track itself.
+function gcTickerItemClickableHtml(icon, text, gameId){
+  return `<span class="gcTickerItem gcTickerItemClickable" data-open-game="${gcEscapeHtml(gameId)}"><span class="gcTickerIcon">${icon}</span>${text}</span><span class="gcTickerSep">•</span>`;
 }
 // Same "not yet happened" logic as schedule.js's own hasEventPassed (that
 // one's private to schedule.js's IIFE, so it's not reusable directly) --
@@ -1315,6 +1402,22 @@ function gcOrdinalSuffix(n){
   if(v >= 11 && v <= 13) return 'th';
   switch(n % 10){ case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
 }
+// Nathan: "I would rather use the scroll as this weeks info - we are we
+// playing, what time is the game, when do we have to be there, where is
+// it, clickable to get to the game info." Extended with arriveTime/
+// location (both real fields on the game record, schedule.js's own
+// {id, opponent, date, arriveTime, warmupTime, gameTime, homeAway,
+// location, ...} shape) -- each only appended when actually present, so
+// a game missing either still prints the exact original line, byte for
+// byte, rather than a dangling "Arrive " or "• " with nothing after it.
+function gcFmtTime(raw){
+  const tm = (raw || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if(!tm) return '';
+  let h = Number(tm[1]); const min = tm[2];
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if(h === 0) h = 12;
+  return `${h}:${min}${ap}`;
+}
 function gcFmtGameLine(next){
   const parts = (next.date || '').split('-').map(Number);
   let dateStr = next.date || '';
@@ -1324,16 +1427,13 @@ function gcFmtGameLine(next){
     const month = d.toLocaleDateString(undefined, { month: 'short' });
     dateStr = `${weekday}. ${month} ${parts[2]}${gcOrdinalSuffix(parts[2])}`;
   }
-  let timeStr = '';
-  const tm = (next.gameTime || '').trim().match(/^(\d{1,2}):(\d{2})/);
-  if(tm){
-    let h = Number(tm[1]); const min = tm[2];
-    const ap = h >= 12 ? 'pm' : 'am';
-    h = h % 12; if(h === 0) h = 12;
-    timeStr = `, ${h}:${min}${ap}`;
-  }
+  const kickoff = gcFmtTime(next.gameTime);
+  const arrive = gcFmtTime(next.arriveTime);
   const homeAway = next.homeAway === 'Away' ? 'Away' : 'Home';
-  return `${dateStr}${timeStr} ${homeAway} vs. ${gcEscapeHtml(next.opponent || 'TBD')}`;
+  let line = `${dateStr}${kickoff ? ', ' + kickoff : ''} ${homeAway} vs. ${gcEscapeHtml(next.opponent || 'TBD')}`;
+  if(arrive) line += ` • Arrive ${arrive}`;
+  if(next.location) line += ` • ${gcEscapeHtml(next.location)}`;
+  return line;
 }
 
 // Nathan: "how many kids watched film" -- js/film-views.js's
@@ -1424,25 +1524,39 @@ async function renderEngagementCallout(){
   // Nothing here is relevant to a parent session (Schedule is their whole
   // app -- see refreshCoachToolsVisibility's comment on isParentSession).
   if(window.isParentSession){ host.innerHTML = ''; host.style.display = 'none'; return; }
+  // Real, pre-existing script-load race, found live testing the game line
+  // above (now the ticker's PRIMARY content, not just one of several items,
+  // since the Top of the Leaderboard line was removed): player-identity.js's
+  // gate() can call this function before schedule.js has finished loading
+  // and defined window.ensureGamesLoaded. The code below silently treats
+  // "not defined yet" the same as "no games" -- which used to just mean one
+  // missing line among several, but now means the ticker can show NOTHING
+  // useful for the first few seconds of a session, until the 3-minute
+  // refresh timer eventually recovers it. Wait briefly (up to 3s) for it to
+  // actually become available rather than assuming it never will.
+  if(!window.ensureGamesLoaded){
+    for(let i = 0; i < 20 && !window.ensureGamesLoaded; i++) await new Promise(r => setTimeout(r, 150));
+  }
   const items = [];
   try {
-    const [{ players }, mostImproved, games, bestDrillToday] = await Promise.all([
-      computeOverallStandings(),
+    const [mostImproved, games, bestDrillToday] = await Promise.all([
       computeMostImproved().catch(() => null),
       Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
       computeBestDrillToday().catch(() => null),
     ]);
-    // "basic details of next game on schedule" -- exact format Nathan asked
-    // for: "Sat. Sep 5th, 12:45pm Home vs. Nipmuc" (see gcFmtGameLine).
+    // "basic details of next game on schedule... clickable to get to the
+    // game info" -- see gcFmtGameLine (now includes arrive time/location
+    // too) and gcTickerItemClickableHtml.
     const next = gcNextUpcomingGame(games || []);
     if(next){
-      items.push(gcTickerItemHtml('📅', gcFmtGameLine(next)));
+      items.push(gcTickerItemClickableHtml('📅', gcFmtGameLine(next), next.id));
     }
-    // "top 3 on the all time leaderboard"
-    if(players && players.length){
-      const top3 = players.slice(0,3).map((p,i)=> `${i+1}. ${gcEscapeHtml(p.name)} (${p.points} pt${p.points===1?'':'s'})`).join('   ');
-      items.push(gcTickerItemHtml('🏆', `Top of the Leaderboard: ${top3}`));
-    }
+    // "the leaderboard scroll bar shows the wrong info... I would rather
+    // use the scroll as this weeks info" -- the Top of the Leaderboard
+    // line (and its own computeOverallStandings() fetch above) is
+    // removed outright rather than re-tuned; the game-info line above is
+    // what replaces it. This Week's real Leaderboard overlay is still the
+    // correct, always-fresh place to check standings.
     // "weekly call out for weeks most improved"
     if(mostImproved){
       items.push(gcTickerItemHtml('📈', `This Week's Most Improved: ${gcEscapeHtml(mostImproved.name)} (+${mostImproved.gain} pt${mostImproved.gain===1?'':'s'})`));
@@ -1506,7 +1620,7 @@ function gcSetupTicker(host, track){
   if(!halfWidth){ return; } // nothing laid out yet (e.g. host hidden) -- no loop to run
   let pos = 0;
   let lastTs = null;
-  let dragging = false, dragStartX = 0, dragStartPos = 0;
+  let dragging = false, dragStartX = 0, dragStartPos = 0, dragMaxDelta = 0;
   const wrap = p => ((p % halfWidth) + halfWidth) % halfWidth;
   const apply = () => { track.style.transform = `translateX(${-pos}px)`; };
   // Nathan (follow-up): "no the banner needs to scroll" -- dropped the
@@ -1530,10 +1644,13 @@ function gcSetupTicker(host, track){
   function pointerDown(e){
     dragging = true;
     dragStartX = xOf(e); dragStartPos = pos;
+    dragMaxDelta = 0; // reset each press -- read by the click listener below
   }
   function pointerMove(e){
     if(!dragging) return;
-    pos = wrap(dragStartPos - (xOf(e) - dragStartX));
+    const dx = xOf(e) - dragStartX;
+    dragMaxDelta = Math.max(dragMaxDelta, Math.abs(dx));
+    pos = wrap(dragStartPos - dx);
     apply();
   }
   function pointerUp(){ dragging = false; }
@@ -1549,6 +1666,18 @@ function gcSetupTicker(host, track){
   // still works (that's a drag, not a click); it just no longer navigates
   // anywhere on a plain tap.
   host.onclick = null;
+  // Nathan (later): "clickable to get to the game info" -- a real, new,
+  // narrower ask for the game-info item specifically (gcTickerItemClickableHtml's
+  // data-open-game), not a return to "tap anywhere navigates." Gated on
+  // dragMaxDelta so releasing a finger after actually dragging the ticker
+  // doesn't also fire a stray navigation -- a real drag and a real tap are
+  // both a mousedown/touchstart then a mouseup/touchend on this same
+  // element, only distance tells them apart.
+  track.addEventListener('click', (e) => {
+    if(dragMaxDelta > 6) return;
+    const el = e.target.closest && e.target.closest('[data-open-game]');
+    if(el && window.openScheduleGame) window.openScheduleGame(el.dataset.openGame);
+  });
   // Keep the ticker's DATA catching up on its own for as long as this
   // tab/session stays open -- see the staleness explanation further above.
   if(!gcRefreshTimer){

@@ -53,7 +53,12 @@
   }
 
   showStep(0);
-  if(!alreadySeen()){
+  // The first thing a brand-new kid saw: a 6-step crash course over the login
+  // screen. It fires at module load rather than through player-identity.js's
+  // post-session chain, which is why it survived the first pass at clearing
+  // these -- it is not a maybeShow* call and never reached that block.
+  // Still reachable from the Help button like the rest. See js/launch-screen.js.
+  if(!alreadySeen() && window.LaunchScreen && window.LaunchScreen.allows('welcomeTour')){
     overlay.classList.add('show');
   }
 
@@ -167,6 +172,26 @@ window.isApprovedCoachProfile = function(){
   return window.COACH_PROFILE_NAMES.indexOf(name) !== -1;
 };
 
+// Nathan: "I honestly think the other coaches aren't going to use the
+// formation builder and play builder, that will likely be for me. I am
+// fine with you adding a toggle to enable those things for different
+// coaches so I can be the only one currently allowed to do it." A second,
+// narrower allowlist on top of COACH_PROFILE_NAMES above -- same
+// trimmed/lowercased-name-match convention, kept here for the same
+// "every coach-only feature needs the exact same check" reason, so
+// nav.js (which tab shows) and coachtools-playbuilder.js (what actually
+// builds if reached another way, e.g. the Play tab's "+ Add a play"/
+// "Modify" handoff) can't drift out of sync with each other. Granting
+// Play Builder access to another coach later is a one-line edit to this
+// array, not a rebuild.
+window.PLAYBUILDER_ADMIN_NAMES = ['coach nate'];
+window.isPlayBuilderAdmin = function(){
+  if (!window.isApprovedCoachProfile || !window.isApprovedCoachProfile()) return false;
+  var session = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+  var name = session && session.name ? session.name.trim().toLowerCase() : '';
+  return window.PLAYBUILDER_ADMIN_NAMES.indexOf(name) !== -1;
+};
+
 // Nathan: "Need a way on Coach Nate account to see the kids account view.
 // See how it looks to them. Maybe a press and hold on the logo." Reloads
 // the page with a sessionStorage flag set, which the boot-time role
@@ -234,12 +259,26 @@ window.exitPlayerPreview = function(){
   var roleErrorEl = document.getElementById('roleError');
 
   // Applies a chosen/restored role everywhere the rest of the app expects
-  // to find it, and persists it so a reload remembers it (same
-  // localStorage-flag spirit as STORAGE_KEY/bengalsCoachSession above).
-  function applyRole(role){
+  // to find it, and (unless persist===false) persists it so a reload
+  // remembers it (same localStorage-flag spirit as
+  // STORAGE_KEY/bengalsCoachSession above). persist:false is for Player
+  // Preview only (see the previewOn branch below) -- found live while
+  // checking this exact feature: this function always wrote ROLE_KEY to
+  // localStorage regardless of caller, so applyRole('player') during
+  // preview was silently overwriting the coach's real, persisted role
+  // with 'player' -- exactly what the comment on PREVIEW_KEY below says
+  // this feature must never do, and worse, nothing ever restored it:
+  // exitPlayerPreview() only clears the sessionStorage flag, so a coach
+  // who used Preview would find themselves permanently downgraded to a
+  // player on that device afterward. window.__previewRealRole was already
+  // being stashed for exactly this restoration and never read anywhere --
+  // the intent was always to keep this in-memory-only for preview.
+  function applyRole(role, persist){
+    if (persist === undefined) persist = true;
     window.userRole = role;
     window.isCoachSession = role === 'coach';
     window.isParentSession = role === 'parent';
+    if (!persist) return;
     try { localStorage.setItem(ROLE_KEY, role); } catch(e) {}
     if(role === 'coach'){
       try { localStorage.setItem('bengalsCoachSession', '1'); } catch(e) {}
@@ -258,7 +297,11 @@ window.exitPlayerPreview = function(){
     // behind the database data fetch), so don't assume it's ready the
     // instant this fires -- poll briefly.
     (function waitForPlayerIdentity(){
-      if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){ maybeShowTips(); }); }
+      if(window.PlayerIdentity){ window.PlayerIdentity.gate(function(){
+        // Bare-call safe: a missing policy file leaves the popup unshown,
+        // which is the right failure for an announcement.
+        if(window.LaunchScreen && window.LaunchScreen.allows('tipsOverlay')) maybeShowTips();
+      }); }
       else setTimeout(waitForPlayerIdentity, 50);
     })();
   }
@@ -293,7 +336,7 @@ window.exitPlayerPreview = function(){
       try { previewOn = sessionStorage.getItem(PREVIEW_KEY) === '1' && storedRole === 'coach'; } catch(e) {}
       if (previewOn){
         window.__previewRealRole = storedRole;
-        applyRole('player');
+        applyRole('player', false);
         // Nathan: "Need a way on Coach Nate account to see the kids
         // account view." Same DOM-is-already-parsed assumption the
         // screenEl/contentEl lookups above already rely on (this script

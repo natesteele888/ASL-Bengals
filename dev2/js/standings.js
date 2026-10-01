@@ -22,6 +22,179 @@
   let standingsData = null;
   let loaded = false;
 
+  // Nathan: "I just learned that the CMYFCC.app that the coaches use also
+  // has a public facing site with results and standings... it would be
+  // great if this could check for updates." This IS "the league site" the
+  // paste box above already expects text copied from (same "Team ·
+  // Division" / record shape) -- turns out it has a real, public,
+  // unauthenticated JSON API behind its own Standings/Results pages
+  // (confirmed live: no login, no API key, just a POST with an empty
+  // body), so this reads it directly instead of a coach copy-pasting.
+  // Chose the "Sync Now" button over a fully-unattended weekly job on
+  // Nathan's own call -- a truly unattended job needs its own stored
+  // Firebase credential (Firebase requires a real signed-in session for
+  // every write, same as this app's own saveStandings below), which is a
+  // real, separate decision; this reuses the coach's own already-logged-in
+  // session, so no new credentials anywhere.
+  const CMYFCC_API_URL = 'https://us-central1-project-f95863ee-dc3b-4ada-964.cloudfunctions.net/getPublicSeasonSchedule';
+  // CMYFCC's own name for our program -- confirmed live against the real
+  // API, not guessed. Matched case-insensitively in case they ever
+  // re-case it; there is no more stable id to key off of from outside
+  // their system (associationId is real but undocumented/could change).
+  const CMYFCC_OUR_ASSOCIATION_NAME = 'Ayer/Shirley/Lunenburg';
+  // Real, live bug found testing this live: Ayer/Shirley/Lunenburg fields
+  // a team in EVERY age division (9U through 13U, confirmed against the
+  // real API), not just ours -- matching on associationName alone grabbed
+  // whichever one happened to sort first (Tackle 10U), not this app's own
+  // 11U team. This app is (and has only ever been) the 11U team -- see
+  // index.html's own "11U Bengals" header -- so the division is pinned
+  // here too, not derived.
+  const CMYFCC_OUR_DIVISION_KEY = 'Tackle 11U';
+
+  async function fetchCmyfccStandings() {
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.standings)) {
+      throw new Error('CMYFCC response missing standings data');
+    }
+    const ourRow = payload.standings.find(s =>
+      (s.associationName || '').toLowerCase() === CMYFCC_OUR_ASSOCIATION_NAME.toLowerCase() &&
+      s.divisionKey === CMYFCC_OUR_DIVISION_KEY);
+    if (!ourRow) throw new Error(`Couldn't find "${CMYFCC_OUR_ASSOCIATION_NAME}" · "${CMYFCC_OUR_DIVISION_KEY}" in CMYFCC's standings -- their site may have renamed us or the division.`);
+    const divisionRows = payload.standings.filter(s => s.divisionKey === ourRow.divisionKey);
+    // CMYFCC's standings rows don't carry PF/PA -- summed straight from
+    // every COMPLETED game (result present) in the same division, home and
+    // away, rather than leaving pf/pa blank. This is actually MORE than
+    // the paste box's own current best case (see parseStandingsText's own
+    // comment: the league site's newer copy-paste shape dropped real PF/PA
+    // in favor of Win%/Diff only).
+    const pfpa = {};
+    (payload.games || []).forEach(g => {
+      if (g.divisionKey !== ourRow.divisionKey || !g.result || g.result.status !== 'final') return;
+      const h = g.homeTeamId, a = g.awayTeamId;
+      pfpa[h] = pfpa[h] || { pf: 0, pa: 0 };
+      pfpa[a] = pfpa[a] || { pf: 0, pa: 0 };
+      pfpa[h].pf += g.result.homeScore; pfpa[h].pa += g.result.awayScore;
+      pfpa[a].pf += g.result.awayScore; pfpa[a].pa += g.result.homeScore;
+    });
+    const teams = divisionRows.map(s => {
+      const isUs = s.associationId === ourRow.associationId;
+      const totals = pfpa[s.teamId] || { pf: null, pa: null };
+      return {
+        // Relabeled ONLY for our own row -- isBengalsRow() (below) matches
+        // on the word "Bengal" to highlight our row in the table, same as
+        // it already would for a coach's own manual paste; CMYFCC's raw
+        // name ("Ayer/Shirley/Lunenburg") never contained that word, so
+        // this was never actually highlighting before either.
+        team: isUs ? `${s.associationName} (Bengals)` : s.associationName,
+        division: s.divisionKey,
+        wins: s.wins, losses: s.losses, ties: s.ties,
+        pf: totals.pf, pa: totals.pa,
+        diff: totals.pf != null ? totals.pf - totals.pa : null,
+      };
+    });
+    const rawText = [
+      'Team\tRecord\tPF\tPA',
+      ...teams.map(t => `${t.team} · ${t.division}\t${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''}\t${t.pf ?? ''}\t${t.pa ?? ''}`),
+    ].join('\n');
+    return { teams, rawText, divisionKey: ourRow.divisionKey };
+  }
+
+  // Nathan: "CYMFCC site also has a playoff ladder that I want to
+  // incorporate." Same real, public, unauthenticated API as
+  // fetchCmyfccStandings above -- confirmed live (not guessed) that its
+  // response already carries a top-level playoffProjection array, one
+  // entry per division, each with a real seeded-bracket shape (seeds,
+  // byes, opening round, fixed semifinals, championship) rather than
+  // needing to be derived from the standings by hand. CMYFCC's own note
+  // field on this data is explicit that it's a live projection, not a
+  // locked bracket ("If the season ended today... This does not qualify,
+  // seed, or schedule any team") -- carried straight through to the UI
+  // rather than presented as final.
+  async function fetchCmyfccPlayoffProjection() {
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.playoffProjection)) {
+      throw new Error('CMYFCC response missing playoff projection data');
+    }
+    const ours = payload.playoffProjection.find(p => p.divisionKey === CMYFCC_OUR_DIVISION_KEY);
+    if (!ours) throw new Error(`No playoff projection posted yet for "${CMYFCC_OUR_DIVISION_KEY}".`);
+    return ours;
+  }
+
+  // Nathan (follow-up): "Can we also utilize the CMYFCC website to also
+  // pull in team game history for the other teams?" Same real API as
+  // fetchCmyfccStandings above -- its own .games array already has every
+  // completed game for every team in the league, home and away, so this
+  // needs no separate lookup, just a different filter/reshape of the same
+  // payload. Matched by fuzzy token overlap (teamTokens/matchScheduleOpponent's
+  // own convention, defined below) rather than an exact string, since a
+  // Schedule game's typed opponent name ("North Middlesex") and CMYFCC's
+  // own associationName aren't guaranteed to match exactly either. Scoped
+  // to CMYFCC_OUR_DIVISION_KEY specifically -- same real reason as
+  // fetchCmyfccStandings's own division pin: a town can field a
+  // same-named program in several age divisions, and every real opponent
+  // on OUR schedule only ever plays us within our own division anyway.
+  async function fetchCmyfccRecentGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.games)) {
+      throw new Error('CMYFCC response missing games data');
+    }
+    const tTokens = teamTokens(teamName);
+    if (!tTokens.length) return [];
+    const isMatch = (assocName) => {
+      const gTokens = teamTokens(assocName);
+      return gTokens.length && tTokens.some(t => gTokens.includes(t));
+    };
+    return payload.games
+      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY && g.result && g.result.status === 'final')
+      .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
+      .map(g => {
+        const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
+        return {
+          id: g.id,
+          date: g.logistics ? g.logistics.date : null,
+          opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
+          ourScore: isHome ? g.result.homeScore : g.result.awayScore,
+          oppScore: isHome ? g.result.awayScore : g.result.homeScore,
+        };
+      })
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, limit);
+  }
+  // Nathan: "recent games for our opponents are not showing" -- flagged
+  // against a Schedule game's own "Recent Form" section, which only ever
+  // showed OUR OWN past games (last 5, or head-to-head vs this opponent --
+  // see js/schedule.js's renderLast5Panel), never the opponent's OWN
+  // season, which is exactly what CMYFCC has real data for and is what a
+  // coach actually wants for an opponent they've never played yet.
+  // Exposed here (not duplicated) since js/schedule.js loads before this
+  // file but only ever CALLS this at real interaction time, by which
+  // point the whole app -- this file included -- has already parsed, same
+  // convention window.opponentBadgeHtml/window.getOpponentLogoSrc already
+  // establish in the other direction.
+  window.fetchCmyfccRecentGamesFor = fetchCmyfccRecentGamesFor;
+
   function escapeHtml(s) {
     const d = document.createElement('div');
     d.textContent = s || '';
@@ -174,8 +347,31 @@
     return t.wins + '-' + t.losses + (t.ties ? '-' + t.ties : '');
   }
 
+  // The /bengal/i check alone only catches OUR row after a "Sync from
+  // CMYFCC" save, which relabels it "<real name> (Bengals)" (see
+  // fetchCmyfccStandings above). A coach using the still-fully-supported
+  // manual paste box instead gets our row exactly as the league site
+  // names it -- e.g. "Ayer/Shirley/Lunenburg", no "bengal" substring at
+  // all -- which isBengalsRow would then wrongly say is NOT us, making
+  // our own row a clickable "opponent" link into a self-referential team
+  // page. Same fuzzy token-overlap match teamTokens/matchScheduleOpponent
+  // already use elsewhere in this file for exactly this "names aren't
+  // guaranteed to match exactly" reason, rather than a brittle exact
+  // string compare.
+  // teamTokens/IGNORED_TEAM_WORDS aren't declared until further down this
+  // file (both hoist as far as JS scoping goes, but IGNORED_TEAM_WORDS is
+  // a `const` -- calling teamTokens() up here at module-parse time would
+  // hit its temporal dead zone). Computed lazily inside the function
+  // instead, which also means it's always computed against the real,
+  // current CMYFCC_OUR_ASSOCIATION_NAME rather than a value snapshotted
+  // once at load time.
   function isBengalsRow(t) {
-    return /bengal/i.test(t.team || '');
+    const name = t.team || '';
+    if (/bengal/i.test(name)) return true;
+    const tTokens = teamTokens(name);
+    if (!tTokens.length) return false;
+    const ourTokens = teamTokens(CMYFCC_OUR_ASSOCIATION_NAME);
+    return ourTokens.some(tok => tTokens.includes(tok));
   }
 
   // ---- Opponent Page (Nathan: "I want to develop a opponent page where
@@ -318,11 +514,29 @@
       const diff = teamDiff(t);
       const diffStr = (diff > 0 ? '+' : '') + diff;
       const pctStr = (winPct(t) * 100).toFixed(1) + '%';
+      // Nathan: "Now that we have stats for all games played, we should be
+      // able to have team pages for all teams now" -- every real division
+      // team gets a clickable team page (real logo, record, CMYFCC recent
+      // form), not just the ones on our own Schedule. A team we've
+      // actually played ALSO gets film/scouting/a "View on Schedule" link,
+      // via its matched Schedule game -- showOpponentPage/opponentPageHtml
+      // already render correctly either way. Our own row stays plain text
+      // -- there's no "opponent" page for ourselves.
       const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
-      const nameCell = matchedGame
-        ? `<button type="button" class="standingsTeamLink" data-open-opponent="${escapeHtml(matchedGame.id)}">${escapeHtml(t.team)} ›</button>`
-        : escapeHtml(t.team);
-      html += `<tr class="${isBengalsRow(t) ? 'standingsRowUs' : ''}">` +
+      const isUs = isBengalsRow(t);
+      // Coach Tools' own paste-preview (initCoachToolsStandings) calls
+      // this with NO games arg at all -- it has no #standingsOpponentDetail/
+      // #standingsListPanel of its own for showOpponentPage to write into
+      // (those live in the separate, public #standingsMode panel), so a
+      // team-name link there would silently write into a hidden panel the
+      // coach can't see. `games` being genuinely absent (not just an
+      // empty array -- the real read-only tab always passes one, even
+      // empty) is exactly that call site; keep it plain text there.
+      const hasGamesContext = games !== undefined && games !== null;
+      const nameCell = (isUs || !hasGamesContext)
+        ? escapeHtml(t.team)
+        : `<button type="button" class="standingsTeamLink" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${escapeHtml(t.team)} ›</button>`;
+      html += `<tr class="${isUs ? 'standingsRowUs' : ''}">` +
         `<td class="standingsPowerCell">${powerRankCellHtml(t, i + 1)}</td>` +
         `<td>${nameCell}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +
         `<td>${escapeHtml(recordStr(t))}</td>` +
@@ -330,21 +544,129 @@
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
-    if (games) {
-      container.querySelectorAll('[data-open-opponent]').forEach(btn => {
-        btn.addEventListener('click', () => showOpponentPage(btn.dataset.openOpponent, data.teams, games));
-      });
-    }
+    container.querySelectorAll('[data-open-team]').forEach(btn => {
+      btn.addEventListener('click', () => showOpponentPage(btn.dataset.openOpponent || null, btn.dataset.openTeam, data.teams, games || []));
+    });
+  }
+
+  // Nathan: "The team logo can be used in place of the football in the
+  // team page header. Instead of the Orange header background for team
+  // pages, it should match the team logo color." hashHue is the exact
+  // same hash/mod computation js/schedule.js's own hashColor uses for its
+  // no-logo initials-badge fallback (duplicated locally, same convention
+  // as every other small cross-file helper in this app) -- using it here
+  // too means a team's header gradient and its initials-badge color (when
+  // it has no real logo) always agree. It's also what opponentPageHtml
+  // uses to color the header SYNCHRONOUSLY (name-hash, instant, no
+  // network/image dependency) so the page never flashes orange while a
+  // real logo's own dominant color is still being sampled -- see
+  // applyOpponentHeroColor below, which upgrades to the logo's real hue
+  // once that resolves.
+  function hashHue(str) {
+    let hash = 0;
+    for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    return Math.abs(hash) % 360;
+  }
+  function heroGradient(hue) {
+    return `linear-gradient(160deg, hsl(${hue}, 60%, 42%) 0%, hsl(${hue}, 66%, 24%) 100%)`;
+  }
+  function rgbToHue(r, g, b) {
+    const rf = r / 255, gf = g / 255, bf = b / 255;
+    const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
+    const d = max - min;
+    if (d === 0) return 0;
+    let h;
+    if (max === rf) h = ((gf - bf) / d) % 6;
+    else if (max === gf) h = (bf - rf) / d + 2;
+    else h = (rf - gf) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+    return Math.round(h);
+  }
+  // Samples a small offscreen render of the team's real logo and picks
+  // its most common non-white/non-black/non-gray color, converted down
+  // to just a hue -- everything else in this app's color system
+  // (hashColor/hashHue) only ever varies by hue at a fixed saturation/
+  // lightness, so a logo's real brand hue slots into that same,
+  // already-readable-for-white-text scheme rather than using the logo's
+  // own (often much lighter or unevenly-saturated) raw color directly.
+  // Bundled logos are same-origin static assets and Firebase-uploaded
+  // ones are already data: URLs, so neither taints the canvas.
+  function extractDominantHue(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 48;
+          const canvas = document.createElement('canvas');
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, size, size);
+          const data = ctx.getImageData(0, 0, size, size).data;
+          const buckets = {};
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+            if (a < 128) continue; // transparent -- not part of the logo art
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            const lightness = (max + min) / 2 / 255;
+            const sat = max === min ? 0 : (max - min) / (255 - Math.abs(max + min - 255));
+            // Skip near-white/near-black outline & background pixels and
+            // near-gray ones -- without this, white logo backgrounds
+            // dominate the count and every team ends up beige.
+            if (lightness > 0.9 || lightness < 0.08 || sat < 0.18) continue;
+            const qr = Math.round(r / 24) * 24, qg = Math.round(g / 24) * 24, qb = Math.round(b / 24) * 24;
+            const key = qr + ',' + qg + ',' + qb;
+            if (!buckets[key]) buckets[key] = { count: 0, r: qr, g: qg, b: qb };
+            buckets[key].count++;
+          }
+          let best = null;
+          Object.keys(buckets).forEach(k => { if (!best || buckets[k].count > best.count) best = buckets[k]; });
+          resolve(best ? rgbToHue(best.r, best.g, best.b) : null);
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+  // Upgrades the header from its instant name-hash color to the real
+  // logo's own dominant color, once a real logo exists and a confident
+  // dominant hue can be sampled from it -- silently keeps the name-hash
+  // color otherwise (no real logo on file yet, or a logo that's too
+  // white/black/gray to yield one). data-opponent guards against a coach
+  // tapping into a DIFFERENT opponent before this async work resolves.
+  async function applyOpponentHeroColor(opponentName) {
+    if (!window.getOpponentLogoSrc) return;
+    const src = window.getOpponentLogoSrc(opponentName);
+    if (!src) return;
+    const hue = await extractDominantHue(src);
+    if (hue == null) return;
+    const hero = document.getElementById('standingsOpponentHero');
+    if (!hero || hero.dataset.opponent !== opponentName) return;
+    hero.style.background = heroGradient(hue);
   }
 
   function opponentPageHtml(game, teamRow) {
     const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
     const hasFootage = !!game.opponentFilmUrl;
-    let html = `<div class="lbHeroHeader">
-        <div class="lbHeroTrophy">🏈</div>
+    // A real Schedule record exists for this team (we've actually played
+    // or are scheduled to play them) vs. a division-only team pulled
+    // straight from Standings with no Schedule game to pull film/
+    // scouting/a schedule-link from -- see showOpponentPage, which builds
+    // a plain {opponent: teamName} stand-in for that second case.
+    const hasGame = !!game.id;
+    const hue = hashHue(game.opponent);
+    const badgeHtml = window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '';
+    let html = `<div class="lbHeroHeader" id="standingsOpponentHero" data-opponent="${escapeHtml(game.opponent || '')}" style="background:${heroGradient(hue)};">
+        <div class="lbHeroTeamBadgeWrap">${badgeHtml}</div>
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
         ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
+    // Nathan: "utilize the CMYFCC website to also pull in team game
+    // history for the other teams" -- filled in asynchronously by
+    // showOpponentPage right below (real network call, shouldn't block
+    // this page's own first render), same progressive-render pattern
+    // js/schedule.js's own Game Recap narrative already uses.
+    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Games</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     if (hasFootage) {
       html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
       if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
@@ -354,33 +676,206 @@
         <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
     }
     if (!hasFootage && !game.scouting) {
-      html += '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>';
+      html += hasGame
+        ? '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
+        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season -- once they're on the Schedule, footage and scouting notes can be added there.</div>`;
     }
-    html += `<div style="text-align:center;margin-top:16px;">
-        <button type="button" class="lbLinkBtn" id="standingsOpponentScheduleLink">View this game on Schedule ›</button>
-      </div>`;
+    if (hasGame) {
+      html += `<div style="text-align:center;margin-top:16px;">
+          <button type="button" class="lbLinkBtn" id="standingsOpponentScheduleLink">View this game on Schedule ›</button>
+        </div>`;
+    }
     return html;
   }
 
-  function showOpponentPage(gameId, teams, games) {
+  function showOpponentPage(gameId, teamName, teams, games) {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
     const body = document.getElementById('standingsOpponentBody');
-    const game = (games || []).find(g => g.id === gameId);
-    if (!game || !listPanel || !detailPanel || !body) return;
-    const teamRow = (teams || []).find(t => matchScheduleOpponent(t.team, [game]));
+    if (!listPanel || !detailPanel || !body) return;
+    const realGame = gameId ? (games || []).find(g => g.id === gameId) : null;
+    // A team on our own Schedule gets its real game record (film link,
+    // scouting notes, "View this game on Schedule"); a division-only team
+    // we haven't played still gets a real page -- just without those
+    // sections, since there's no Schedule record to pull them from.
+    // opponentPageHtml's own hasGame check (and the empty-state text
+    // above) already render either case correctly.
+    const game = realGame || { opponent: teamName };
+    if (!game.opponent) return;
+    const teamRow = (teams || []).find(t => matchScheduleOpponent(t.team, [game]))
+      || (teams || []).find(t => t.team === teamName) || null;
     body.innerHTML = opponentPageHtml(game, teamRow);
     listPanel.style.display = 'none';
     detailPanel.style.display = '';
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
-    if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(gameId); });
+    if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
+    loadOpponentRecentForm(game.opponent, teams, games);
+    applyOpponentHeroColor(game.opponent);
+  }
+
+  async function loadOpponentRecentForm(opponentName, teams, games) {
+    const wrap = document.getElementById('standingsOpponentRecentForm');
+    if (!wrap) return;
+    if (!window.compactGameRowHtml || !window.opponentBadgeHtml) {
+      wrap.innerHTML = '';
+      return;
+    }
+    // Nathan: "if you are on a team page from the standings, and you see
+    // the 'recent form' let's change that to 'recent games' as form is
+    // more of a soccer term." Plain rename, same section, same data.
+    try {
+      const rows = await fetchCmyfccRecentGamesFor(opponentName, 5);
+      // A stale response landing after the coach has already navigated
+      // to a DIFFERENT opponent (or back to the list) shouldn't clobber
+      // whatever's on screen now -- re-check the container's still
+      // showing a loading state for the SAME opponent before writing.
+      const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
+      if (!stillOnThisOpponent) return;
+      if (!rows.length) {
+        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
+        return;
+      }
+      const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
+        teamName: opponentName,
+        teamBadgeHtml: window.opponentBadgeHtml(opponentName),
+      })).join('');
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtml}</div>`;
+      // Nathan: "if you click on a logo of one of the opponent's it should
+      // go to that teams page." Each row's own away-side badge (this
+      // team's opponent in THAT game) is wrapped by compactGameRowHtml in
+      // a .last5RowOpponentLogo span specifically so it can be made
+      // clickable independently of the row itself (which already opens
+      // that specific game). stopPropagation so tapping the logo doesn't
+      // also fire the row's own click. gameId is left null -- these rows
+      // come from CMYFCC, not our own Schedule, so there's usually no
+      // matching local game record; showOpponentPage already falls back
+      // to a real, name-only team page in exactly that case (same as a
+      // division-only team we've never played).
+      wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
+        const name = el.dataset.opponentName;
+        if (!name) return;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showOpponentPage(null, name, teams, games);
+        });
+      });
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  // ---- Playoff Picture (Nathan: "CYMFCC site also has a playoff ladder
+  // that I want to incorporate.") A round-by-round list rather than a
+  // graphical bracket tree -- matches this app's own established card
+  // language everywhere else (Schedule, Recent Games) instead of
+  // introducing a wide, hard-to-read-on-a-phone diagram, and every real
+  // element (byes, opening round, fixed semifinals, championship) already
+  // has a natural "round" to sit under. Both divisions render -- a coach
+  // reasonably wants to see the other bracket too, not just ours -- with
+  // OUR OWN row highlighted wherever it appears (playoffSeedUs), reusing
+  // isBengalsRow's own fuzzy-match logic against a synthetic {team:
+  // teamLabel} object since that's all it ever reads.
+  function playoffTeamShortName(teamLabel) {
+    return (teamLabel || '').split(' · ')[0].trim();
+  }
+  function playoffSeedChipHtml(seed) {
+    if (!seed) return '';
+    const name = playoffTeamShortName(seed.teamLabel);
+    const isUs = isBengalsRow({ team: seed.teamLabel });
+    // Nathan: "Use the Bengals logo for the Ayer/Shirley/Lunenburg team
+    // logo." opponentBadgeHtml has no idea "Ayer/Shirley/Lunenburg" is US
+    // (it's CMYFCC's own name for our program, not "Bengals") -- it fell
+    // through to the generic initials-circle fallback every OTHER
+    // unrecognized team gets. Same real logo asset js/schedule.js's own
+    // bengalsBadgeHtml uses everywhere else in the app (not exposed on
+    // window, so matched here directly rather than adding a new export
+    // for one line of markup).
+    const badge = isUs
+      ? '<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>'
+      : (window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '');
+    return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
+        <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
+        ${badge}
+        <span class="scheduleTeamName">${escapeHtml(name)}</span>
+        <span class="scheduleTeamRecord">${escapeHtml(seed.record || '')}</span>
+      </span>`;
+  }
+  function playoffTbdChipHtml(text) {
+    return `<span class="playoffTbdChip">${escapeHtml(text)}</span>`;
+  }
+  function playoffMatchupRowHtml(leftHtml, rightHtml) {
+    return `<div class="playoffMatchupRow">
+        <div class="playoffMatchupSide">${leftHtml}</div>
+        <div class="playoffMatchupVs">vs</div>
+        <div class="playoffMatchupSide">${rightHtml}</div>
+      </div>`;
+  }
+  function playoffWinnerOfHtml(bracket, seedNums) {
+    const label = (seedNums || []).map(n => {
+      const s = bracket.seeds.find(x => x.seed === n);
+      return s ? `#${n} ${playoffTeamShortName(s.teamLabel)}` : `#${n}`;
+    }).join(' / ');
+    return playoffTbdChipHtml(`Winner: ${label}`);
+  }
+  function playoffBracketHtml(bracket) {
+    const seedByNum = (n) => bracket.seeds.find(s => s.seed === n);
+    const byeRows = (bracket.byes || [])
+      .map(n => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(n)), playoffTbdChipHtml('BYE')))
+      .join('');
+    const openingRows = (bracket.openingRound || [])
+      .map(m => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(m.homeSeed)), playoffSeedChipHtml(seedByNum(m.awaySeed))))
+      .join('');
+    const semiRows = (bracket.semifinals || [])
+      .map(sf => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(sf.fixedSeed)), playoffWinnerOfHtml(bracket, sf.winnerOf)))
+      .join('');
+    const champHtml = bracket.championship
+      ? playoffMatchupRowHtml(playoffTbdChipHtml('Winner: Semifinal 1'), playoffTbdChipHtml('Winner: Semifinal 2'))
+      : '';
+    return `
+      <div class="playoffBracketCard">
+        <div class="lbSectionHeader">${escapeHtml(bracket.label || ('Division ' + bracket.division))}</div>
+        ${byeRows ? `<div class="playoffRoundLabel">First-Round Bye</div>${byeRows}` : ''}
+        ${openingRows ? `<div class="playoffRoundLabel">Opening Round</div>${openingRows}` : ''}
+        ${semiRows ? `<div class="playoffRoundLabel">Semifinals</div>${semiRows}` : ''}
+        ${champHtml ? `<div class="playoffRoundLabel">Championship</div>${champHtml}` : ''}
+      </div>`;
+  }
+  async function loadPlayoffPicture() {
+    const wrap = document.getElementById('standingsPlayoffBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="hint" style="text-align:center;">Loading from CMYFCC…</div>';
+    try {
+      const projection = await fetchCmyfccPlayoffProjection();
+      const brackets = Array.isArray(projection.brackets) ? projection.brackets : [];
+      if (!brackets.length) {
+        wrap.innerHTML = '<div class="lbEmpty">No playoff projection posted yet.</div>';
+        return;
+      }
+      wrap.innerHTML =
+        (projection.note ? `<div class="lbSub" style="text-align:center;margin-bottom:14px;">${escapeHtml(projection.note)}</div>` : '') +
+        brackets.map(playoffBracketHtml).join('');
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbEmpty">Couldn't load the playoff picture from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
   function showStandingsList() {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
+    const playoffPanel = document.getElementById('standingsPlayoffDetail');
     if (listPanel) listPanel.style.display = '';
     if (detailPanel) detailPanel.style.display = 'none';
+    if (playoffPanel) playoffPanel.style.display = 'none';
+  }
+
+  function showPlayoffPicture() {
+    const listPanel = document.getElementById('standingsListPanel');
+    const detailPanel = document.getElementById('standingsOpponentDetail');
+    const playoffPanel = document.getElementById('standingsPlayoffDetail');
+    if (listPanel) listPanel.style.display = 'none';
+    if (detailPanel) detailPanel.style.display = 'none';
+    if (playoffPanel) playoffPanel.style.display = '';
+    loadPlayoffPicture();
   }
 
   let backBtnWired = false;
@@ -392,6 +887,10 @@
     if (!backBtnWired) {
       const backBtn = document.getElementById('standingsOpponentBackBtn');
       if (backBtn) { backBtn.addEventListener('click', showStandingsList); backBtnWired = true; }
+      const playoffBackBtn = document.getElementById('standingsPlayoffBackBtn');
+      if (playoffBackBtn) { playoffBackBtn.addEventListener('click', showStandingsList); }
+      const playoffOpenBtn = document.getElementById('standingsPlayoffOpenBtn');
+      if (playoffOpenBtn) { playoffOpenBtn.addEventListener('click', showPlayoffPicture); }
     }
     showStandingsList();
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';
@@ -408,6 +907,8 @@
     if (!wrap) return;
     const data = await loadStandings();
     wrap.innerHTML =
+      '<button type="button" class="navBtn" id="standingsSyncBtn" style="display:block;width:100%;margin-bottom:8px;">🔄 Sync from CMYFCC</button>' +
+      '<div id="standingsSyncStatus" class="hint" style="text-align:center;margin-bottom:12px;"></div>' +
       '<textarea id="standingsPasteBox" placeholder="Paste the standings table here -- Team, Record, and either PF/PA or Win%/Diff columns" style="width:100%;min-height:220px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:monospace;white-space:pre;margin-bottom:8px;">' +
       escapeHtml((data && data.rawText) || '') +
       '</textarea>' +
@@ -416,6 +917,29 @@
       '<div id="standingsPreviewWrap" style="margin-top:16px;"></div>';
     const previewWrap = document.getElementById('standingsPreviewWrap');
     if (data && Array.isArray(data.teams) && data.teams.length) renderTable(previewWrap, data);
+    document.getElementById('standingsSyncBtn').addEventListener('click', async () => {
+      const syncBtn = document.getElementById('standingsSyncBtn');
+      const syncStatusEl = document.getElementById('standingsSyncStatus');
+      const pasteBox = document.getElementById('standingsPasteBox');
+      syncBtn.disabled = true;
+      syncStatusEl.textContent = 'Checking CMYFCC…';
+      try {
+        const { teams, rawText } = await fetchCmyfccStandings();
+        pasteBox.value = rawText;
+        const saveStatusEl = document.getElementById('standingsSaveStatus');
+        const result = await saveStandings(teams, rawText, saveStatusEl);
+        if (result.ok) {
+          syncStatusEl.textContent = `Synced -- ${teams.length} team${teams.length === 1 ? '' : 's'} pulled live from CMYFCC and saved.`;
+          renderTable(previewWrap, standingsData);
+        } else {
+          syncStatusEl.textContent = 'Pulled from CMYFCC, but the save failed -- see the message below the paste box.';
+        }
+      } catch (e) {
+        syncStatusEl.textContent = `Couldn't sync: ${e.message}`;
+      } finally {
+        syncBtn.disabled = false;
+      }
+    });
     document.getElementById('standingsSaveBtn').addEventListener('click', async () => {
       const text = document.getElementById('standingsPasteBox').value;
       const statusEl = document.getElementById('standingsSaveStatus');

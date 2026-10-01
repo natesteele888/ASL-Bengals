@@ -41,6 +41,17 @@
     ['sweep', '#0e7c7b'],
     // Nathan: new play, signal #23, "Wing Right, Shuffle Pass Right."
     ['shuffle_pass', '#455a64'],
+    // Found live, game-day morning check: pop_pass/qb_sneak are real,
+    // live, playable Wing calls (confirmed real Left/Right direction data,
+    // no directionFixed/noDirection flags) that were simply never added
+    // here -- meaning the printed Playbook PDF was silently missing both
+    // entirely, and This Week's Featured Plays/Game Plan Builder/Drive
+    // Scripts pickers (js/gameplan.js's numberedRows(), which reuses this
+    // exact list) couldn't offer either as an option. Same pattern as
+    // shuffle_pass just above -- a real play added after this list was
+    // last touched.
+    ['pop_pass', '#c0392b'],
+    ['qb_sneak', '#6d4c41'],
   ];
   // Sweep only ever exists as coach-edited cloud data, historically saved
   // with just one real (Outside) variant -- forcing a single sub-variant

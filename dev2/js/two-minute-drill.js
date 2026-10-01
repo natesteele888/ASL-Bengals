@@ -198,6 +198,15 @@
   // Copied from play-calls.js's renderCardDiagram (same name kept for
   // easy diffing against the original). DATA is the module-level
   // object populated in SECTION 4 below.
+  // Known, disclosed drift (found in a code-cleanup review, not fixed):
+  // play-calls.js's own renderCardDiagram/playCardAnimation have since
+  // gained 5 more trailing params (popVariantOn, formationId, overloadOn,
+  // alignmentValues, qbSneakOn) that this copy never picked up -- none of
+  // those concepts (custom formations, Overload, QB Sneak) exist in this
+  // standalone drill's own data/UI today, so the gap isn't reachable
+  // through the drill as it stands, but "kept in sync" is no longer
+  // literally true. Re-check this comment if the drill ever needs one of
+  // those toggles.
   let DATA = null;
   function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, defenseMode, insideOutside, motionOn, bootOn, readPosition, counterOn, twSweepOn) {
     stage.innerHTML = '';
@@ -615,10 +624,19 @@
   // "Option-style relative blocking isn't wired for Split yet" (same
   // caveat as play-calls.js) -- optionLine/dualSideBlock paths are
   // dropped rather than shown wrong.
+  // Who is split wide vs flexed, shared from js/play-calls.js (window.splitPersonnel)
+  // rather than kept as this file's own copy. This exact ternary used to be
+  // hardcoded here too, with the SAME mistake -- flexBackNum wrong for Right
+  // -- independently of play-calls.js's copy, which is how a personnel bug can
+  // ship fixed in one screen and still wrong in another. See play-calls.js's
+  // splitPersonnel for the full story and the data it is derived from.
+  function splitPersonnelFallback(splitSide) {
+    return { wideNum: splitSide === 'Right' ? 6 : 5, flexNum: 3 };
+  }
   function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
     const variant = getVariant(playType, splitSide, insideOutside, readPosition);
-    const wideNum = splitSide === 'Right' ? 6 : 5;
-    const flexBackNum = splitSide === 'Right' ? 2 : 3;
+    const { wideNum, flexNum: flexBackNum } = window.splitPersonnel
+      ? window.splitPersonnel(splitSide) : splitPersonnelFallback(splitSide);
     const excluded = new Set([wideNum, flexBackNum, 4]);
     return (variant.paths || []).filter(p => {
       if (p.optionLine || p.dualSideBlock) return false;
@@ -628,8 +646,10 @@
 
   function getSplitPassProtectionPaths(playType, splitSide, insideOutside, readPosition) {
     const pos = DATA.split[splitSide];
-    const tightNum = splitSide === 'Right' ? 5 : 6;
-    const companionNum = splitSide === 'Right' ? 3 : 2;
+    const { wideNum, flexNum } = window.splitPersonnel
+      ? window.splitPersonnel(splitSide) : splitPersonnelFallback(splitSide);
+    const tightNum = wideNum === 5 ? 6 : 5;
+    const companionNum = flexNum === 2 ? 3 : 2;
     const paths = [];
     ['LT', 'LG', 'C', 'RG', 'RT'].forEach(k => {
       const [x, y] = DATA.formation[k];
@@ -1474,7 +1494,11 @@
       }
     });
     playTypes.forEach(pt => {
-      if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
+      // Mirrors the same signalCardIdManual guard in play-calls.js's own
+      // normalizePlayData -- a coach's deliberate Signal-picker choice
+      // (js/edit-plays.js) needs to survive here too, not just in Play
+      // Calls.
+      if (PLAY_TYPE_SIGNAL_ID[pt.key] !== undefined && !pt.signalCardIdManual) pt.signalCardId = PLAY_TYPE_SIGNAL_ID[pt.key];
       const shippedFlags = SHIPPED_PLAY_FLAGS[pt.key];
       if (shippedFlags && shippedFlags.directionFixed && !pt.directionFixed) {
         repairStaleDirectionOrientation(pt);
@@ -1499,19 +1523,24 @@
         });
       }
       if (pt.key === 'option' || pt.key === 'outside_zone') {
-        const REPAIRED_COUNTER_P4_POINTS = {
-          'option|Left': [[360, 269], [480, 360], [520, 322], [650, 230]],
-          'option|Right': [[1251, 269], [1131, 360], [1091, 322], [961, 230]],
-          'outside_zone|Left': [[360, 269], [520, 340], [700, 309], [900, 220]],
-          'outside_zone|Right': [[1251, 269], [1091, 340], [911, 309], [711, 220]],
+        // Mirrors the fix in play-calls.js's own normalizePlayData -- see
+        // that file for the full root-cause explanation. Authored ONCE, in
+        // the Wing-Left canonical shape; a separately-hardcoded "Right"
+        // copy here double-mirrored at render time (this file's own
+        // p4Side === 'Right' branch, same as play-calls.js's), since
+        // Direction Right's Counter always renders with p4Side === 'Right'
+        // whenever Counter is actually eligible/on.
+        const REPAIRED_COUNTER_P4_POINTS_LEFT = {
+          option: [[360, 269], [480, 360], [520, 322], [650, 230]],
+          outside_zone: [[360, 269], [520, 340], [700, 309], [900, 220]],
         };
+        const basePoints = REPAIRED_COUNTER_P4_POINTS_LEFT[pt.key];
         ['Left', 'Right'].forEach(dirKey => {
           const counterVariant = pt.directions && pt.directions[dirKey] && pt.directions[dirKey].Counter;
           if (!counterVariant || !counterVariant.paths) return;
           const idx = counterVariant.paths.findIndex(p => p.player === 4 && p.isBlocking);
           if (idx === -1) return;
-          const points = REPAIRED_COUNTER_P4_POINTS[`${pt.key}|${dirKey}`];
-          if (points) counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(points)) };
+          counterVariant.paths[idx] = { player: 4, ball: false, width: 7, points: JSON.parse(JSON.stringify(basePoints)) };
         });
       }
       // Same "stale auto-grafted clone" repair as #4 above, one level
@@ -1623,11 +1652,29 @@
   }
 
   async function loadData() {
-    // No fetch, no network, nothing that can 404 or hang -- SHIPPED_PLAY_DATA
-    // is baked directly into this file (see the comment where it's defined,
-    // above). Deep-cloned so nothing downstream (normalizePlayData's
-    // repairs, etc.) ever mutates the shipped constant itself.
-    DATA = JSON.parse(JSON.stringify(SHIPPED_PLAY_DATA));
+    // No fetch, no network, nothing that can 404 or hang -- base data comes
+    // from a global already sitting in memory, never a request from here.
+    //
+    // Found live (codebase audit, 2026-09-26): the "prefer
+    // window.SHIPPED_PLAYS_JSON" fix below this comment (kept for
+    // history) has itself gone stale -- index.html's own real-app boot
+    // (the ONLY place window.DATA is ever set) fetches
+    // dev2PlayData/plays.json fresh from Firebase on every load
+    // (`window.DATA = await playsRes.json()`), while
+    // window.SHIPPED_PLAYS_JSON (js/shipped-defaults.js) is a static file
+    // regenerated by hand at some past point and NOT kept in sync with
+    // every live edit since. Confirmed drifted for real: shipped
+    // Split.Right['3'] is [1364,270], current live data has it at
+    // [638,438] -- not the accepted few-px hand-digitizing noise, a real
+    // few-hundred-px difference. So window.DATA (already fetched, already
+    // live, no extra network request needed) is now the more-current
+    // source, not shipped-defaults.js -- prefer it first. Still falls
+    // back to SHIPPED_PLAYS_JSON then the embedded SHIPPED_PLAY_DATA blob
+    // for two-minute-drill-test.html, which never runs index.html's own
+    // boot and so never has a real window.DATA to read. Deep-cloned
+    // either way so nothing downstream (normalizePlayData's repairs, etc.)
+    // ever mutates the shared source.
+    DATA = JSON.parse(JSON.stringify(window.DATA || window.SHIPPED_PLAYS_JSON || SHIPPED_PLAY_DATA));
 
     // Snapshot shipped flags/full play objects/dualSideBlock capability from
     // the shipped data we JUST loaded, before any cloud playEdits.json data
@@ -1641,6 +1688,9 @@
         directionFixed: !!pt.directionFixed,
         hasCounter: !!pt.hasCounter,
         counterAwayFromWing: !!pt.counterAwayFromWing,
+        // Mirrors the same fix in play-calls.js's own SHIPPED_PLAY_FLAGS --
+        // see that file for why.
+        isPass: !!pt.isPass,
       };
       SHIPPED_PLAY_TYPES_BY_KEY[pt.key] = pt;
       Object.entries(pt.directions || {}).forEach(([dirKey, dirVal]) => {

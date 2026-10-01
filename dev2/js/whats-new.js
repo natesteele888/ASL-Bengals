@@ -60,6 +60,20 @@
       .catch(err => { console.error('Could not load What\'s New:', err); return null; });
   }
 
+  // Nathan: "If we add a new play, it should have a NEW badge in the play
+  // calls section." js/play-calls.js's buildPlayTile() needs a SYNCHRONOUS
+  // yes/no per play (it builds a whole grid of tiles in one pass, no
+  // per-tile await) -- this cache is populated here, piggybacking on the
+  // SAME entries fetch refreshWhatsNewBadge() already does every time it's
+  // called (once a session is known, well before anyone reaches the Play
+  // tab), rather than a second network round-trip. "New" mirrors the exact
+  // same unread definition the badge/dot above already uses (addedAt >
+  // this device's own lastSeen) -- a play badge and the profile-menu
+  // unread count agree by construction, and opening What's New clears
+  // both at once.
+  let newPlayKeysCache = new Set();
+  window.getNewPlayKeysCache = function () { return newPlayKeysCache; };
+
   // Called once a name/session is known (player-identity.js's gate()
   // wrapper, same hook point as refreshCoachToolsVisibility) so the badge
   // is already accurate before anyone opens the menu, not just after.
@@ -69,10 +83,41 @@
     const entries = await loadEntries();
     if (!entries) return;
     const lastSeen = getLastSeen();
-    const unread = entries.filter(e => e.addedAt && e.addedAt > lastSeen).length;
+    const unreadEntries = entries.filter(e => e.addedAt && e.addedAt > lastSeen);
+    newPlayKeysCache = new Set(unreadEntries.map(e => e.key).filter(Boolean));
+    const unread = unreadEntries.length;
     if (dot) dot.style.display = unread ? '' : 'none';
     if (countEl) { countEl.textContent = unread ? String(unread) : ''; countEl.style.display = unread ? '' : 'none'; }
     maybeNotifyNewPlays(entries);
+  };
+
+  // Nathan: "That is what I originally wanted for the What's New section
+  // which would show any new plays you create." Reuses edit-plays.js's own
+  // established whatsNewEntry/logToWhatsNew shape (that file's own
+  // pendingNewPlays -> flushPendingNewPlaysToWhatsNew pipeline), exposed
+  // here so Play Builder V2's OWN save paths (js/playbuilder/editor.js's
+  // Save Play button, js/play-calls.js's "copy an existing play to
+  // remake" flow) can log a brand-new play too -- neither ever could
+  // before, since that pipeline only ever lived inside edit-plays.js, the
+  // now-largely-retired tool. No note/before/after needed for a genuinely
+  // new play -- same "always announce themselves" reasoning edit-plays.js
+  // already established for its own Duplicate flow.
+  window.logNewPlayToWhatsNew = async function (key, label) {
+    try {
+      const url = await window.firebaseAuthed(WHATS_NEW_URL);
+      const existing = await fetch(url).then(r => r.ok ? r.json() : null);
+      const list = Array.isArray(existing) ? existing : [];
+      const session = window.PlayerIdentity && window.PlayerIdentity.getSession ? window.PlayerIdentity.getSession() : null;
+      list.push({
+        id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        key, label, note: null, before: null, after: null,
+        addedAt: new Date().toISOString(), addedBy: (session && session.name) || null,
+      });
+      await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) });
+      if (window.refreshWhatsNewBadge) window.refreshWhatsNewBadge();
+    } catch (err) {
+      console.error('Could not log new play to What\'s New:', err);
+    }
   };
 
   // Shared by anything in this app that wants a real OS notification fired

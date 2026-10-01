@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play Calls regression harness</title>
+<!--
+  DEV ONLY -- a safety net for refactoring js/play-calls.js.
+
+  js/play-calls.js has no tests and 2,693 lines, and the formation work has to
+  rewrite its two hand-written rendering pipelines into one. The only
+  responsible way to do that is to prove the output did not change.
+
+  This page renders EVERY play, in every formation, on every side, across
+  every combination of that play's toggles, serializes each resulting SVG,
+  and hashes the lot. Run it before the refactor to capture a baseline, run
+  it after, and compare. Identical hash = identical diagrams.
+
+  It drives the three functions play-calls.js already exports on window
+  (renderCardDiagram, renderSplitDiagram, buildSignalSequence), rendering
+  into a detached SVG node -- so it needs no login, no Firebase and no real
+  Play Calls screen. The DOM stubs below exist only so play-calls.js can
+  finish loading; nothing in them is exercised.
+-->
+<style>
+  body{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:18px;
+       background:#0f0f0f;color:#e8e4dd}
+  h1{font:700 16px system-ui;margin:0 0 4px}
+  .sub{font:12px system-ui;color:#9a9a9a;margin-bottom:16px}
+  button{font:700 13px system-ui;padding:9px 16px;border-radius:8px;border:0;
+         background:#ff6a13;color:#fff;cursor:pointer;margin-right:8px}
+  button.alt{background:#2a2a2a;color:#e8e4dd}
+  #out{white-space:pre-wrap;margin-top:16px}
+  .ok{color:#5fd68a} .bad{color:#ff6b6b} .warn{color:#ffb454}
+  #stubs{display:none}
+</style>
+</head>
+<body>
+<h1>Play Calls regression harness</h1>
+<div class="sub">Renders every play × formation × side × toggle combination and fingerprints the output.</div>
+
+<button id="runBtn">Capture fingerprint</button>
+<button id="saveBtn" class="alt">Save as baseline</button>
+<button id="cmpBtn" class="alt">Compare to baseline</button>
+<button id="clrBtn" class="alt">Clear baseline</button>
+<div id="out"></div>
+
+<!-- DOM play-calls.js touches while loading. Never exercised by the harness. -->
+<div id="stubs">
+  <div id="playCallsGrid"></div>
+  <div id="playCallsCloudStatus"></div>
+  <div id="playCallsInfoOverlay"></div>
+  <div id="playCallsGate"></div>
+  <input id="pcGateInput">
+  <div id="pcGateError"></div>
+  <button id="pcGateSubmitBtn"></button>
+  <div id="pcTutorialSteps"></div>
+  <div id="pcTutorialDots"></div>
+  <button id="pcTutorialBackBtn"></button>
+  <button id="pcTutorialNextBtn"></button>
+  <button id="pcInfoBtn"></button>
+  <div id="studyGuideOverlay"></div><div id="studyGuideBody"></div>
+  <button id="studyGuideCloseBtn"></button>
+</div>
+
+<script src="js/shipped-defaults.js"></script>
+<script>
+  // play-calls.js reads these two globals at load time.
+  window.DATA = window.SHIPPED_PLAYS_JSON;
+  // Real deck, fetched synchronously before play-calls.js runs: signal
+  // fingerprints have to compare against the cards a kid actually sees.
+  window.ALL_CARDS = (function () {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', 'data/cards.json', false);
+      x.send(null);
+      return JSON.parse(x.responseText);
+    } catch (e) { return []; }
+  })();
+</script>
+<script>
+// cards.json is fetched rather than inlined so signal labels are real. Loaded
+// before play-calls.js, which snapshots ALL_CARDS into SIGNAL_CARDS on entry.
+document.write('<' + 'script src="js/formations.js"><' + '/script>');
+document.write('<' + 'script src="js/signals.js"><' + '/script>');
+document.write('<' + 'script src="js/ball-path.js"><' + '/script>');
+document.write('<' + 'script src="js/play-calls.js?harness=1" defer><' + '/script>');
+// Loaded so the harness can exercise the position-specific wording too -- it
+// reads the same play data and must not disagree with the diagram.
+document.write('<' + 'script src="js/study-guide.js?harness=1" defer><' + '/script>');
+</script>
+<script>
+(function(){
+  'use strict';
+  var out = document.getElementById('out');
+  function log(s, cls){
+    out.innerHTML += (cls ? '<span class="'+cls+'">'+s+'</span>' : s) + '\n';
+  }
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var LS_KEY = 'playCallsBaseline';
+
+  // FNV-1a: small, dependency-free, and good enough to detect any change in a
+  // serialized SVG. This is a tripwire, not a security hash.
+  function hash(str){
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++){
+      h ^= str.charCodeAt(i);
+      h = (h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24))) >>> 0;
+    }
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+
+  function freshStage(){
+    var s = document.createElementNS(SVG_NS, 'svg');
+    return s;
+  }
+
+  // Every combination of a custom formation's own alignment toggles
+  // (Heavy is the first -- pt.alignmentToggles, js/playbuilder/legacy-
+  // adapter.js), as a list of {toggleId: valueId, ...} maps -- [{}] for
+  // any PlayType with none (every existing one), so this multiplies the
+  // case count by exactly 1 for them.
+  function alignmentCombosFor(pt){
+    var toggles = pt.alignmentToggles || [];
+    var combos = [{}];
+    toggles.forEach(function(toggle){
+      var next = [];
+      combos.forEach(function(base){
+        toggle.values.forEach(function(v){
+          var c = {};
+          for (var k in base) c[k] = base[k];
+          c[toggle.id] = v.id;
+          next.push(c);
+        });
+      });
+      combos = next;
+    });
+    return combos;
+  }
+
+  // Every toggle combination that play-calls.js would let a coach reach for a
+  // given play, derived from the same flags buildPlayList() projects.
+  function shotgunCases(pt){
+    var io   = pt.hasInsideOutside ? ['Outside','Inside'] : [null];
+    var read = pt.hasReadToggle    ? ['A','B']            : ['A'];
+    var boot = pt.noBoot           ? [false]              : [false,true];
+    var ctr  = pt.hasCounter       ? [false,true]         : [false];
+    var pop  = pt.hasPopVariant    ? [false,true]         : [false];
+    var aligns = alignmentCombosFor(pt);
+    var cases = [];
+    ['Left','Right'].forEach(function(wing){
+    ['Left','Right'].forEach(function(dir){
+      io.forEach(function(i){ read.forEach(function(r){
+      [false,true].forEach(function(motion){ boot.forEach(function(b){
+      ctr.forEach(function(c){ pop.forEach(function(p){
+      // Overload is a Wing alignment call, so it multiplies out against every
+      // other Wing toggle -- especially Motion, since the two interact (a
+      // flanker pushed out by Overload then motioning away has to land on the
+      // far side's ORDINARY wing spot, not an overloaded one).
+      [false,true].forEach(function(ov){
+      aligns.forEach(function(align){
+        cases.push({wing:wing, dir:dir, io:i, read:r, motion:motion, boot:b, counter:c, pop:p, overload:ov, align:align});
+      });
+      });
+      });});});});});});
+    });});
+    return cases;
+  }
+
+  var ROUTE_CALLS = ['seattle','houston','florida','boston'];
+  function splitCases(pt){
+    if (pt.noSplit) return [];
+    var io   = pt.hasInsideOutside ? ['Outside','Inside'] : [null];
+    var read = pt.hasReadToggle    ? ['A','B']            : ['A'];
+    var cases = [];
+    ['Left','Right'].forEach(function(side){
+      io.forEach(function(i){ read.forEach(function(r){
+        ROUTE_CALLS.forEach(function(lc){ ROUTE_CALLS.forEach(function(rc){
+          [false,true].forEach(function(pass){
+            cases.push({side:side, io:i, read:r, left:lc, right:rc, pass:pass});
+          });
+        });});
+      });});
+    });
+    return cases;
+  }
+
+  function capture(){
+    if (!window.renderCardDiagram || !window.renderSplitDiagram) {
+      log('play-calls.js did not finish loading — check the console.', 'bad');
+      return null;
+    }
+    var playTypes = (window.DATA.playTypes || []);
+    var lines = [], total = 0, errors = 0;
+
+    playTypes.forEach(function(pt){
+      var perPlay = [];
+
+      shotgunCases(pt).forEach(function(c){
+        var stage = freshStage();
+        var alignKey = JSON.stringify(c.align);
+        try {
+          window.renderCardDiagram(stage, pt.key, c.dir, c.wing, null, '4x4',
+            c.io, c.motion, c.boot, c.read, c.counter, c.pop, undefined, c.overload, c.align);
+          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload,alignKey].join(',')
+            +'|'+hash(stage.innerHTML));
+        } catch(e){
+          errors++;
+          perPlay.push('SG|'+[c.wing,c.dir,c.io,c.read,c.motion,c.boot,c.counter,c.pop,c.overload,alignKey].join(',')
+            +'|THREW:'+e.message);
+        }
+        total++;
+      });
+
+      splitCases(pt).forEach(function(c){
+        var stage = freshStage();
+        try {
+          window.renderSplitDiagram(stage, pt.key, c.side, c.io, c.read,
+            c.left, c.right, c.pass, null);
+          perPlay.push('SP|'+[c.side,c.io,c.read,c.left,c.right,c.pass].join(',')
+            +'|'+hash(stage.innerHTML));
+        } catch(e){
+          errors++;
+          perPlay.push('SP|'+[c.side,c.io,c.read,c.left,c.right,c.pass].join(',')
+            +'|THREW:'+e.message);
+        }
+        total++;
+      });
+
+      // Signal sequences are part of the contract too -- a formation refactor
+      // that silently changed which cards flash would be just as wrong as one
+      // that moved a circle.
+      ['shotgun','split'].forEach(function(fm){
+        ['Left','Right'].forEach(function(side){
+          try {
+            var seq = window.buildSignalSequence(pt.key, side, side, null,
+              false, false, fm, side, false, false, false);
+            perPlay.push('SIG|'+fm+','+side+'|'
+              + hash(JSON.stringify((seq||[]).map(function(s){ return s.label; }))));
+          } catch(e){
+            errors++;
+            perPlay.push('SIG|'+fm+','+side+'|THREW:'+e.message);
+          }
+          total++;
+        });
+      });
+
+      lines.push(pt.key + ' :: ' + hash(perPlay.join('\n')) + '  (' + perPlay.length + ' cases)');
+      lines.push('  ' + perPlay.join('\n  '));
+    });
+
+    var body = lines.join('\n');
+    return { total: total, errors: errors, overall: hash(body), body: body,
+             perPlay: lines.filter(function(l){ return l.indexOf(' :: ') !== -1; }) };
+  }
+
+  var last = null;
+
+  document.getElementById('runBtn').addEventListener('click', function(){
+    out.innerHTML = '';
+    var t0 = performance.now();
+    last = capture();
+    if (!last) return;
+    // Exposed so a console session can diff at CASE level, not just per play --
+    // the page only prints the per-play summary, and "which 44 of 956 moved"
+    // is exactly the question worth asking after an intentional change.
+    window.__lastCapture = last;
+    var ms = Math.round(performance.now() - t0);
+    log('cases rendered : ' + last.total);
+    log('threw          : ' + last.errors, last.errors ? 'bad' : 'ok');
+    log('elapsed        : ' + ms + 'ms');
+    log('');
+    log('OVERALL FINGERPRINT: ' + last.overall, 'warn');
+    log('');
+    last.perPlay.forEach(function(l){ log(l); });
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    if (!last) { log('Capture first.', 'bad'); return; }
+    localStorage.setItem(LS_KEY, JSON.stringify({overall:last.overall, body:last.body}));
+    log('Baseline saved: ' + last.overall, 'ok');
+  });
+
+  document.getElementById('cmpBtn').addEventListener('click', function(){
+    var raw = localStorage.getItem(LS_KEY);
+    if (!raw) { log('No baseline saved.', 'bad'); return; }
+    if (!last) { log('Capture first.', 'bad'); return; }
+    var base = JSON.parse(raw);
+    if (base.overall === last.overall) {
+      log('IDENTICAL — every diagram and signal sequence matches the baseline. ('
+          + last.overall + ')', 'ok');
+      return;
+    }
+    log('DIFFERENT — baseline ' + base.overall + ' vs now ' + last.overall, 'bad');
+    var a = base.body.split('\n'), b = last.body.split('\n'), shown = 0;
+    for (var i = 0; i < Math.max(a.length, b.length) && shown < 60; i++){
+      if (a[i] !== b[i]) {
+        log('  line ' + i, 'warn');
+        log('    was: ' + (a[i] === undefined ? '(missing)' : a[i]));
+        log('    now: ' + (b[i] === undefined ? '(missing)' : b[i]));
+        shown++;
+      }
+    }
+    if (shown >= 60) log('  … more differences not shown', 'warn');
+  });
+
+  document.getElementById('clrBtn').addEventListener('click', function(){
+    localStorage.removeItem(LS_KEY);
+    log('Baseline cleared.', 'warn');
+  });
+})();
+</script>
+</body>
+</html>

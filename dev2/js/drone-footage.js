@@ -577,6 +577,84 @@
   // same Open Footage link schedule.js's own footage list uses.
   let vaultGamesCache = null;
 
+  // Nathan: "need the ability to group clips together under different user
+  // defined categories." One small, standalone list of coach-created labels
+  // (e.g. "Red Zone O", "Blitz Pickup") -- not tied to formations/plays,
+  // since a category here is about WHAT TO WATCH FOR across clips, not what
+  // play it is (that's already the clip's own title). Deliberately its own
+  // tiny Firebase node, same reasoning as droneVideos above: this list is
+  // read/written far more often than any individual clip's video, and
+  // keeping it separate means creating or renaming a category never has to
+  // touch practices.json or schedule.js's own whole-array saves.
+  const FILM_VAULT_CATEGORIES_URL = `${FIREBASE_DB_URL}/filmVaultCategories`;
+  let vaultCategories = [];       // [{id, name}], creation order
+  let vaultCategoriesLoaded = false;
+  let vaultCategoryFilter = null; // category id, or null for "All" (every group shown)
+
+  function genCategoryId() {
+    return 'fc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+  function loadVaultCategories() {
+    return window.firebaseAuthed(`${FILM_VAULT_CATEGORIES_URL}.json`).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
+      .then(data => {
+        // Firebase returns a sparse array as an object keyed "0","1",... --
+        // same defensive normalization every other list-shaped store in
+        // this app already needs.
+        vaultCategories = data ? Object.values(data).filter(c => c && c.id && c.name) : [];
+        vaultCategoriesLoaded = true;
+      })
+      .catch(err => { console.error('Could not load Film Vault categories:', err); vaultCategories = []; vaultCategoriesLoaded = true; });
+  }
+  function saveVaultCategories(afterOk, afterFail) {
+    window.firebaseAuthed(`${FILM_VAULT_CATEGORIES_URL}.json`).then(url => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vaultCategories),
+    })).then(r => { if (r.ok) { if (afterOk) afterOk(); } else if (afterFail) afterFail(`HTTP ${r.status}`); })
+      .catch(err => { if (afterFail) afterFail(err.message || String(err)); });
+  }
+  function categoryName(id) {
+    const c = vaultCategories.find(x => x.id === id);
+    return c ? c.name : null;
+  }
+  // Deleting a category shouldn't leave dangling ids sitting silently on
+  // clips -- sweeps every practice's droneClips and every game's
+  // gameFootage, strips the id from any clip that had it, and only
+  // re-saves the practices/games that actually changed (same "don't
+  // rewrite what didn't change" discipline as everywhere else in this
+  // file). Runs before the category itself is removed from vaultCategories
+  // so categoryName() above still resolves it for any in-flight render.
+  function stripCategoryFromAllClips(categoryId, afterDone) {
+    const practices = vaultPracticesCache || [];
+    const games = vaultGamesCache || [];
+    let pending = 0;
+    let started = false;
+    function maybeDone() { if (started && pending === 0 && afterDone) afterDone(); }
+    practices.forEach(practice => {
+      const clips = sortedClips(practice);
+      let changed = false;
+      clips.forEach(c => {
+        if (Array.isArray(c.categoryIds) && c.categoryIds.includes(categoryId)) {
+          c.categoryIds = c.categoryIds.filter(id => id !== categoryId);
+          changed = true;
+        }
+      });
+      if (changed) { started = true; pending++; saveClips(practice, clips, () => { pending--; maybeDone(); }, () => { pending--; maybeDone(); }); }
+    });
+    games.forEach(game => {
+      const footage = Array.isArray(game.gameFootage) ? game.gameFootage : [];
+      let changed = false;
+      footage.forEach(c => {
+        if (Array.isArray(c.categoryIds) && c.categoryIds.includes(categoryId)) {
+          c.categoryIds = c.categoryIds.filter(id => id !== categoryId);
+          changed = true;
+        }
+      });
+      if (changed && window.saveGameFootage) { started = true; pending++; window.saveGameFootage(game.id, footage, () => { pending--; maybeDone(); }, () => { pending--; maybeDone(); }); }
+    });
+    if (!started && afterDone) afterDone();
+  }
+
   function vaultAllPairs(practices) {
     const out = [];
     (practices || []).forEach(practice => {
@@ -594,9 +672,10 @@
     return out;
   }
 
-  function vaultFilterAndSort(pairs, term) {
+  function vaultFilterAndSort(pairs, term, categoryId) {
     const q = (term || '').trim().toLowerCase();
-    const filtered = q ? pairs.filter(({ clip }) => (clip.title || '').toLowerCase().includes(q)) : pairs.slice();
+    let filtered = q ? pairs.filter(({ clip }) => (clip.title || '').toLowerCase().includes(q)) : pairs.slice();
+    if (categoryId) filtered = filtered.filter(({ clip }) => Array.isArray(clip.categoryIds) && clip.categoryIds.includes(categoryId));
     filtered.sort((a, b) => (a.clip.title || '').localeCompare(b.clip.title || '', undefined, { sensitivity: 'base' }));
     return filtered;
   }
@@ -638,6 +717,20 @@
   // (alphabetical order here is derived from the title, not something to
   // reorder) and with a practice-date line added since a Vault row can come
   // from any practice, not just the one the coach currently has open.
+  // Shared between both card types below -- a clip's own categoryIds
+  // toggled via the same .gameplanChip convention Player Packages already
+  // uses for "which of these tags apply" (js/gameplan-builder.js's
+  // renderTagPanel). Returns '' when no categories exist yet at all, for
+  // either card type, so an uncategorized team sees no empty tag row.
+  function categoryChipsHtml(clip) {
+    if (!vaultCategories.length) return '';
+    const active = new Set(Array.isArray(clip.categoryIds) ? clip.categoryIds : []);
+    const chips = vaultCategories.map(c => `<button type="button" class="gameplanChip${active.has(c.id) ? ' active' : ''}" data-action="toggle-clip-category" data-clip-id="${clip.id}" data-category-id="${escapeHtml(c.id)}">${escapeHtml(c.name)}</button>`).join('');
+    return `
+      <div class="lbSub" style="text-align:center;margin:8px 0 4px;">🏷 Categories:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">${chips}</div>`;
+  }
+
   function filmVaultClipHtml(pair, approved) {
     const clip = pair.clip;
     const open = vaultOpenClipId === clip.id;
@@ -679,7 +772,8 @@
             </div>
             <div style="display:flex;gap:6px;margin-bottom:10px;justify-content:center;flex-wrap:wrap;">
               <button type="button" class="lbLinkBtn" data-action="delete-clip" data-clip-id="${clip.id}">🗑 Delete</button>
-            </div>` : ''}
+            </div>
+            ${categoryChipsHtml(clip)}` : ''}
           ${videoHtml}
           <div class="speed-toggle" style="margin:8px auto;">
             <button type="button" class="droneSpeedBtn active" data-speed="1">1x</button>
@@ -699,12 +793,15 @@
   // Nathan: "Game Clips should be available in Film Vault as well." Much
   // simpler card than the practice one above -- game footage is a Google
   // Drive link (schedule.js's gameFootage), not an uploaded blob, so
-  // there's no video-blob loading, no coach edit form (that already lives
-  // on the game's own Schedule page), and no comments here -- just the
-  // same Open link schedule.js's own read-only footage list already uses.
+  // there's no video-blob loading and no comments here -- just the same
+  // Open link schedule.js's own read-only footage list already uses. Still
+  // gets the same category chips a practice clip does (approved coaches
+  // only, matching the practice card's own gate) -- categorizing a game
+  // clip has no other home, since Schedule's own edit form doesn't know
+  // about categories at all.
   // (Nathan: "remove telestrator for now as it doesn't work" -- the
   // TeleStrator link that used to sit next to Open Footage is gone.)
-  function filmVaultGameClipHtml(pair) {
+  function filmVaultGameClipHtml(pair, approved) {
     const clip = pair.clip;
     const game = pair.game;
     const open = vaultOpenClipId === clip.id;
@@ -719,6 +816,7 @@
           <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
             <a href="${escapeHtml(clip.url)}" target="_blank" rel="noopener" class="lbLinkBtn">🎥 Open Footage</a>
           </div>
+          ${approved ? categoryChipsHtml(clip) : ''}
         </div>
       </div>`;
   }
@@ -757,6 +855,31 @@
       const action = actionBtn.dataset.action;
       const pair = vaultPairs.find(p => p.clip.id === clipId);
       if (!pair) return;
+
+      // Only action both card kinds share -- mutates the clip object found
+      // via vaultPairs directly (same in-place-then-save idiom the
+      // practice-only actions below already use), then saves through
+      // whichever store that clip actually lives in.
+      if (action === 'toggle-clip-category') {
+        const categoryId = actionBtn.dataset.categoryId;
+        const set = new Set(Array.isArray(pair.clip.categoryIds) ? pair.clip.categoryIds : []);
+        if (set.has(categoryId)) set.delete(categoryId); else set.add(categoryId);
+        pair.clip.categoryIds = Array.from(set);
+        if (pair.kind === 'game') {
+          if (window.saveGameFootage) window.saveGameFootage(pair.game.id, pair.game.gameFootage, () => renderFilmVaultList());
+        } else {
+          const clips = sortedClips(pair.practice);
+          const ci = clips.findIndex(c => c.id === clipId);
+          if (ci === -1) return;
+          clips[ci].categoryIds = pair.clip.categoryIds;
+          saveClips(pair.practice, clips, () => renderFilmVaultList());
+        }
+        return;
+      }
+
+      // Everything else here is practice-only -- game clips have no other
+      // actions (their own edit form lives on the game's Schedule page).
+      if (pair.kind !== 'practice') return;
       const practice = pair.practice;
       const clips = sortedClips(practice);
       const idx = clips.findIndex(c => c.id === clipId);
@@ -792,15 +915,116 @@
     });
   }
 
+  // Coach-only add/rename/delete for the category list itself -- separate
+  // from wireFilmVaultActions above since it lives in its own container
+  // (#filmVaultCategoriesPanel, outside #filmVaultList) and isn't
+  // clip-scoped at all.
+  function wireFilmVaultCategoryPanel(panelEl) {
+    panelEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      if (action === 'add-category') {
+        const input = document.getElementById('filmVaultNewCategoryInput');
+        const name = input ? input.value.trim() : '';
+        if (!name) return;
+        vaultCategories.push({ id: genCategoryId(), name });
+        saveVaultCategories(() => { renderVaultCategoriesPanel(); renderVaultCategoryFilterRow(); renderFilmVaultList(); });
+      } else if (action === 'rename-category') {
+        const cat = vaultCategories.find(c => c.id === btn.dataset.categoryId);
+        if (!cat) return;
+        const next = prompt('Rename category:', cat.name);
+        if (next === null) return;
+        const trimmed = next.trim();
+        if (!trimmed) return;
+        cat.name = trimmed;
+        saveVaultCategories(() => { renderVaultCategoriesPanel(); renderVaultCategoryFilterRow(); renderFilmVaultList(); });
+      } else if (action === 'delete-category') {
+        const id = btn.dataset.categoryId;
+        const cat = vaultCategories.find(c => c.id === id);
+        if (!cat) return;
+        if (!confirm(`Delete category "${cat.name}"? Clips tagged with it just lose the tag -- they aren't deleted.`)) return;
+        stripCategoryFromAllClips(id, () => {
+          vaultCategories = vaultCategories.filter(c => c.id !== id);
+          if (vaultCategoryFilter === id) vaultCategoryFilter = null;
+          saveVaultCategories(() => { renderVaultCategoriesPanel(); renderVaultCategoryFilterRow(); renderFilmVaultList(); });
+        });
+      }
+    });
+  }
+  // "All" + one chip per category, narrowing the grouped view down to a
+  // single group -- everyone sees this (browsing/filtering isn't
+  // sensitive), only creating/renaming/deleting is coach-only above.
+  function wireFilmVaultCategoryFilter(rowEl) {
+    rowEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action="filter-category"]');
+      if (!btn) return;
+      vaultCategoryFilter = btn.dataset.categoryId || null;
+      renderVaultCategoryFilterRow();
+      renderFilmVaultList();
+    });
+  }
+
+  function renderVaultCategoriesPanel() {
+    const panel = document.getElementById('filmVaultCategoriesPanel');
+    if (!panel) return;
+    const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    if (!approved) { panel.innerHTML = ''; return; }
+    const rows = vaultCategories.map(c => `
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+        <span style="flex:1;font-weight:700;font-size:13px;">${escapeHtml(c.name)}</span>
+        <button type="button" class="lbLinkBtn" data-action="rename-category" data-category-id="${escapeHtml(c.id)}">Rename</button>
+        <button type="button" class="statsRmBtnSmall" data-action="delete-category" data-category-id="${escapeHtml(c.id)}">✕</button>
+      </div>`).join('');
+    panel.innerHTML = `
+      <div class="lbSectionHeader" style="font-size:12px;">🏷 Categories</div>
+      ${vaultCategories.length ? rows : '<div class="lbEmpty">No categories yet -- add one below to start grouping clips.</div>'}
+      <div style="display:flex;gap:6px;margin:8px 0 14px;">
+        <input type="text" id="filmVaultNewCategoryInput" placeholder="New category name…" style="flex:1;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;">
+        <button type="button" class="navBtn" data-action="add-category" style="padding:8px 12px;flex:0 0 auto;">+ Add</button>
+      </div>`;
+  }
+
+  function renderVaultCategoryFilterRow() {
+    const row = document.getElementById('filmVaultCategoryFilterRow');
+    if (!row) return;
+    if (!vaultCategories.length) { row.style.display = 'none'; row.innerHTML = ''; return; }
+    row.style.display = 'flex';
+    const allChip = `<button type="button" class="gameplanChip${vaultCategoryFilter ? '' : ' active'}" data-action="filter-category" data-category-id="">All</button>`;
+    const chips = vaultCategories.map(c => `<button type="button" class="gameplanChip${vaultCategoryFilter === c.id ? ' active' : ''}" data-action="filter-category" data-category-id="${escapeHtml(c.id)}">${escapeHtml(c.name)}</button>`).join('');
+    row.innerHTML = allChip + chips;
+  }
+
+  // Splits an already filtered+sorted pair list into per-category groups
+  // (plus a trailing "Uncategorized" group for anything with none) --
+  // a clip tagged with more than one category legitimately shows up under
+  // each of them, same as any other multi-tag browsing UI.
+  function groupPairsByCategory(pairs) {
+    const groups = vaultCategories.map(c => ({ id: c.id, name: c.name, pairs: [] }));
+    const byId = new Map(groups.map(g => [g.id, g]));
+    const uncategorized = [];
+    pairs.forEach(p => {
+      const ids = Array.isArray(p.clip.categoryIds) ? p.clip.categoryIds : [];
+      const matched = ids.filter(id => byId.has(id));
+      if (!matched.length) { uncategorized.push(p); return; }
+      matched.forEach(id => byId.get(id).pairs.push(p));
+    });
+    const nonEmpty = groups.filter(g => g.pairs.length);
+    if (uncategorized.length) nonEmpty.push({ id: null, name: 'Uncategorized', pairs: uncategorized });
+    return nonEmpty;
+  }
+
   function renderFilmVaultList() {
     const listEl = document.getElementById('filmVaultList');
     const countEl = document.getElementById('filmVaultCount');
     if (!listEl) return;
     const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
+    renderVaultCategoriesPanel();
+    renderVaultCategoryFilterRow();
     const searchInput = document.getElementById('filmVaultSearch');
     const term = searchInput ? searchInput.value : '';
     const all = vaultAllPairs(vaultPracticesCache || []).concat(vaultAllGamePairs(vaultGamesCache || []));
-    vaultPairs = vaultFilterAndSort(all, term);
+    vaultPairs = vaultFilterAndSort(all, term, vaultCategoryFilter);
 
     if (countEl) countEl.textContent = all.length ? `${vaultPairs.length} of ${all.length} clip${all.length !== 1 ? 's' : ''}` : '';
 
@@ -812,7 +1036,22 @@
       listEl.innerHTML = `<div class="lbEmpty">No clips match "${escapeHtml(term)}".</div>`;
       return;
     }
-    listEl.innerHTML = `<div class="play-grid">${vaultPairs.map(p => p.kind === 'game' ? filmVaultGameClipHtml(p) : filmVaultClipHtml(p, approved)).join('')}</div>`;
+    const cardHtml = p => p.kind === 'game' ? filmVaultGameClipHtml(p, approved) : filmVaultClipHtml(p, approved);
+    // Grouped-by-category browsing is the default view; a search term
+    // narrows to one flat, cross-category list instead (the whole point of
+    // search is cutting across groups), and so does picking one specific
+    // category from the filter row above (that filter IS the group -- no
+    // header needed to say so again).
+    const shouldGroup = !term.trim() && !vaultCategoryFilter && vaultCategories.length > 0;
+    if (!shouldGroup) {
+      listEl.innerHTML = `<div class="play-grid">${vaultPairs.map(cardHtml).join('')}</div>`;
+      return;
+    }
+    const groups = groupPairsByCategory(vaultPairs);
+    listEl.innerHTML = groups.map(g => `
+      <div class="lbSectionHeader">${escapeHtml(g.name)} (${g.pairs.length})</div>
+      <div class="play-grid">${g.pairs.map(cardHtml).join('')}</div>
+    `).join('');
   }
 
   // Entry point -- js/coachtools-nav.js calls this every time the Film
@@ -830,11 +1069,22 @@
       listEl.dataset.wired = '1';
       wireFilmVaultActions(listEl);
     }
+    const categoriesPanel = document.getElementById('filmVaultCategoriesPanel');
+    if (categoriesPanel && !categoriesPanel.dataset.wired) {
+      categoriesPanel.dataset.wired = '1';
+      wireFilmVaultCategoryPanel(categoriesPanel);
+    }
+    const filterRow = document.getElementById('filmVaultCategoryFilterRow');
+    if (filterRow && !filterRow.dataset.wired) {
+      filterRow.dataset.wired = '1';
+      wireFilmVaultCategoryFilter(filterRow);
+    }
     if (!window.ensurePracticesLoaded) return;
     if (listEl && !vaultPracticesCache && !vaultGamesCache) listEl.innerHTML = '<div class="lbEmpty">Loading…</div>';
     Promise.all([
       window.ensurePracticesLoaded(),
       window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
+      vaultCategoriesLoaded ? Promise.resolve() : loadVaultCategories(),
     ]).then(([practices, games]) => {
       vaultPracticesCache = practices;
       vaultGamesCache = games;

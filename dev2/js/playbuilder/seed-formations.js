@@ -7,10 +7,23 @@
 // These are seed data for a first save, not hardcoded forever -- once
 // saved to Firestore/RTDB a coach edits them like any other formation.
 // ============================================================
+//
+// IIFE-wrapped so SHOTGUN_FORMATION/SPLIT_FORMATION/DEFAULT_DEFENSE_LOOK
+// don't leak into the shared classic-script global scope -- nothing
+// outside this file references them by bare name, only via
+// window.PlayBuilderSeeds.
+(function () {
 
 const SHOTGUN_FORMATION = {
   id: 'shotgun',
-  label: 'Shotgun',
+  // Nathan, correcting an earlier call from the same session: "you are
+  // calling the wing formation (which is in shotgun) the shotgun
+  // formation. It should be the wing formation." Shotgun is the
+  // backfield/snap depth (stays the internal id/type -- matches
+  // js/formations.js's own 'wing' registry entry, which keeps the same
+  // 'shotgun' id/alias for the identical reason), not the formation's
+  // own name -- that comes from the wing position (#4).
+  label: 'Wing',
   type: 'shotgun',
   wingPositionIds: [4],
   positions: [
@@ -37,6 +50,17 @@ const SPLIT_FORMATION = {
   label: 'Split',
   type: 'split',
   wingPositionIds: [4],
+  // Confirmed against dev2's real split.Left/split.Right data: 5 and 6 are
+  // NOT each their own local reflection -- Left's 5 is the reflection of
+  // Right's 6, and vice versa (whichever number is "wide" swaps with
+  // whichever is "flex" when the formation runs the other way). See
+  // schema.js's Formation.mirrorSwapPairs doc and mirror.js.
+  mirrorSwapPairs: [[5, 6]],
+  // Also confirmed against real data: player 3 relocates across the whole
+  // formation on Left (a straight center reflection of its Right anchor/
+  // route), not a local reflection the way a genuinely fixed position
+  // like the O-line is. See schema.js's Formation.centerMirrorPositionIds.
+  centerMirrorPositionIds: [3],
   positions: [
     { id: 'LT', label: 'LT', x: 577, y: 204 },
     { id: 'LG', label: 'LG', x: 692, y: 204 },
@@ -78,3 +102,5 @@ window.PlayBuilderSeeds = {
   viewBox: [1600, 1030],
   topPad: 400,
 };
+
+})();
