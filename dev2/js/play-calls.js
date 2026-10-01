@@ -1528,6 +1528,29 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
     return (assignment && assignment.reverseDelayMs != null) ? assignment.reverseDelayMs : null;
   };
+  // Jet Sweep's own "only comes across on Reverse" block route -- Nathan:
+  // "The 6 should only come across when Reverse is called... the 6 goes
+  // out to block for the runner [by default]." A non-carrying player on a
+  // play like this has two real jobs depending on Reverse: block in place
+  // (default) or come across to receive the reverse pitch (Reverse on).
+  // PlayerAssignment.blockRoute/wingLeftBlockRoute (new fields) are the
+  // SHORT default block shape -- the player's own normal points/
+  // wingLeftRoute stays the long crossing route, now only actually used
+  // when it's needed: this player IS the active carrier for the current
+  // direction (hasBall already true, keeps his own long route untouched),
+  // or Reverse is on and he's the one coming across for it. Same live-read
+  // pattern as wingLeftRouteFor/reverseDelayMsFor just above -- depends on
+  // reverseOn, not something the adapter's per-direction bake can
+  // anticipate. Returns null (caller keeps its current points) otherwise,
+  // so this is safe to call unconditionally.
+  const blockRouteFor = (positionId, hasBall) => {
+    if (reverseOn || positionId == null || hasBall) return null;
+    const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
+    const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
+    if (!assignment) return null;
+    const route = (wingSide === 'Left' && assignment.wingLeftBlockRoute) ? assignment.wingLeftBlockRoute : assignment.blockRoute;
+    return route ? route.map((pt) => [pt.x, pt.y]) : null;
+  };
   // "5 Guys": WHO'S featured (has the ball) rotates to a DIFFERENT player
   // when Wing flips, not just where the same player is drawn. Nathan:
   // "the target refers to the 1st position going from receivers left to
@@ -2107,6 +2130,9 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
     const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+
+    const blockPoints = p.player != null ? blockRouteFor(p.player, effectiveBall) : null;
+    if (blockPoints) points = blockPoints;
 
     // Nathan: "when the 4 goes by the red line, he needs to switch to
     // having the ball and his line changes to red." handoffIndex (set via
