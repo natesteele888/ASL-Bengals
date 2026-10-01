@@ -1145,6 +1145,7 @@ function buildSignalSequence(playKey, wingSide, direction, insideOutside, motion
     alignmentValues: alignmentValues || {},
     directionOpposesWing: !!(playType && playType.directionOpposesWing),
     noDirection: !!(playType && playType.noDirection),
+    isPass: !!(playType && playType.isPass),
     playSignalId: playSignalIdFor(playType, playKey),
     playSignalLabel: playSignalLabelFor(playType, playKey),
   });
