@@ -90,6 +90,16 @@
     // no-op the moment Firebase's own cards.json actually has 36, same
     // fallback pattern as those three.
     { id: 36, group: 'Formation', meaning: 'JUMBO' },
+    // Same situation, same day (2026-09-30): Nathan: "37.png will be Jet
+    // signal" -- real photo already dropped at assets/cards/37.png, added
+    // for real to Firebase via the Signal Cards admin tool (no separate
+    // commit/deploy needed for the photo itself, see
+    // js/coachtools-signals-admin.js). This PENDING entry is a harmless
+    // no-op the moment Firebase already has it, same fallback pattern as
+    // every entry above. The play it belongs to ("Jet Sweep," under 5
+    // Guys) hadn't been saved yet as of this entry -- wiring the card
+    // into that play's own signalCardId is a separate step once it is.
+    { id: 37, group: 'Play Call', meaning: 'JET SWEEP' },
   ];
 
   var byId = {};
