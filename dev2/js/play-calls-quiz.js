@@ -221,7 +221,18 @@
     submitBtn.style.display = 'none';
     const r = currentRound();
     const io = r.insideOutside || 'Outside';
-    const signals = buildSignalSequence(r.playKey, r.wingSide, r.direction, io, r.motionOn, r.bootOn);
+    // formation: never threaded through before -- ELIGIBLE_PLAY_KEYS is
+    // hardcoded to the 8 classic Wing plays today, which happen to
+    // resolve correctly anyway (buildSignalSequence's own fallback is
+    // 'wing' when formation is falsy), so this was never actually wrong
+    // YET -- but a latent bug the moment any custom-formation play
+    // (i_dive, a "5 Guys" call, Jumbo/Beast...) is ever added to that
+    // pool, since it would silently flash Wing's own touch/location
+    // cards instead of its real formation's. Found auditing every real
+    // signal-sequence consumer, not just buildSignalSequence's own
+    // recipes, per Nathan: "the signals need to be correct."
+    const pt = ((window.DATA && DATA.playTypes) || []).find(p => p.key === r.playKey);
+    const signals = buildSignalSequence(r.playKey, r.wingSide, r.direction, io, r.motionOn, r.bootOn, pt && pt.authoredFormationId);
     progressEl.innerHTML = '';
     signals.forEach(() => { const d = document.createElement('div'); d.className = 'dot'; progressEl.appendChild(d); });
     const BASE_STEP_MS = 950, EXTRA_MS_PER_SIGNAL = 120, MAX_LOOPS = 2;
