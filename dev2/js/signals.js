@@ -407,13 +407,28 @@
     ],
 
     // "5 Guys": Nathan, verbatim -- "the only signals are 5 guys > Left or
-    // 5 Guys > Right, thats it." No play card (the QB calls the 1-5 number
-    // himself, verbally, at the line -- never a hand signal from the
-    // sideline) and no direction step (every "5 Guys" play is noDirection;
-    // Wing side IS the only call this formation ever needs).
+    // 5 Guys > Right, thats it." The numbered 1-5 calls have no play card
+    // (the QB calls the number himself, verbally, at the line -- never a
+    // hand signal from the sideline) and no direction step (every one of
+    // them is noDirection; Wing side IS the only call they need).
+    //
+    // A NAMED play under this same formation (Jet Sweep, not one of the
+    // 1-5 calls) is a genuinely different kind of call -- Nathan: "5 Guys
+    // Left Jet Sweep Left should be the correct signal sequence" -- it
+    // DOES get its own play card, plus a trailing side confirmation
+    // (restating c.wingFinger, the same photo already shown), the same
+    // "touch, side, play, side" shape RECIPES.i/.jumbo already use. Both
+    // steps are no-ops for every numbered play (none sets signalCardId at
+    // all, so the play-card step's id resolves to null and the trailing
+    // step's own `when` guard never fires) -- one recipe correctly serves
+    // both kinds of play, no special-casing by play id.
     '5-guys': [
       { card: FIVE_GUYS_TOUCH, label: '5 Guys' },
-      { card: function (c) { return pickFinger(c.wingSide); },
+      { card: function (c) { return (c.wingFinger = pickFinger(c.wingSide)); },
+        label: function (c) { return '5 Guys: ' + c.wingSide; } },
+      { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
+      { when: function (c) { return c.playSignalId != null; },
+        card: function (c) { return c.wingFinger; },
         label: function (c) { return '5 Guys: ' + c.wingSide; } },
     ],
 
