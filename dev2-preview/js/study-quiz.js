@@ -62,7 +62,13 @@ function setMode(mode){
 // lastPlaySubMode like every other tab.
 modeTabsEl.querySelectorAll('.modeBtn').forEach(btn=>{
   btn.addEventListener('click', ()=> {
-    hideGlobalCallout(); // Nathan: "goes away when you go to another screen"
+    // Nathan (2026-10-01): "the top scroll bar with lights should always
+    // appear at the top of the page when you are on the homepage" -- these
+    // are Play's own sub-tabs (Signals/Plays/Quiz/Timed/etc.), which stay
+    // ON the homepage, so switching between them no longer touches the
+    // ticker at all (it used to hide it here too). See setSection below
+    // for where it actually shows/hides now -- only a real top-level
+    // section change (Play <-> This Week/Schedule/etc.) does that.
     if (btn.dataset.mode === 'twominute') {
       dismissTwoMinuteNewBadge(); // Nathan: "call out 2 min drill as a new game" -- only until they've actually tried it once
       if (window.openTwoMinDrillOverlay) window.openTwoMinDrillOverlay();
@@ -109,19 +115,29 @@ const topSectionsEl = document.getElementById('topSections');
 // calls setMode(lastPlaySubMode) -- silently reverting back to Signals
 // on the very first round trip. Matches the real default now.
 let lastPlaySubMode = 'playcalls';
+// Nathan (2026-10-01): "the top scroll bar with lights should always appear
+// at the top of the page when you are on the homepage" -- supersedes the
+// earlier "goes away when you go to another screen, never comes back"
+// design (see hideGlobalCallout's own comment). Now tied directly to which
+// top-level section is active: leaving Play hides it (still "out of the
+// way" on This Week/Schedule/Standings/Coach Tools, the original ask),
+// landing back on Play rebuilds and shows it again every time, not just
+// once per session.
 function setSection(section){
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
   if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
     modeTabsEl.style.display = 'none';
+    hideGlobalCallout();
     setMode(section);
   } else {
     modeTabsEl.style.display = '';
     setMode(lastPlaySubMode);
+    if (typeof renderEngagementCallout === 'function') renderEngagementCallout();
   }
 }
 if (topSectionsEl) {
   topSectionsEl.querySelectorAll('.modeBtn').forEach(btn=>{
-    btn.addEventListener('click', ()=> { hideGlobalCallout(); setSection(btn.dataset.section); });
+    btn.addEventListener('click', ()=> { setSection(btn.dataset.section); });
   });
 }
 
@@ -1346,12 +1362,18 @@ if(overallLbRangeToggleEl){
 // clickable, colorful carousel visible on every section, below the header.
 // Nathan: "The rotating banner is too big and in the way, should only be
 // visible to start and then goes away when you go to another screen."
-// Wired into the topSections/modeTabs click handlers above (function
-// declarations hoist, so it's callable from earlier in the file even
-// though it's defined down here next to the rest of the callout code) --
-// a real tap on a nav tab dismisses it for the rest of the session; it
-// does NOT come back on its own, since the ask was "goes away", not
-// "reappears every time you're back on the home screen".
+// Wired into setSection above (function declarations hoist, so it's
+// callable from earlier in the file even though it's defined down here
+// next to the rest of the callout code) -- called only when actually
+// LEAVING the Play/home section now, not on every nav tap.
+// Nathan (2026-10-01), follow-up: "the top scroll bar with lights should
+// always appear at the top of the page when you are on the homepage" --
+// reverses the second half of the original ask above (it used to dismiss
+// for the rest of the session and never come back; now setSection's own
+// else-branch calls renderEngagementCallout() again every time you land
+// back on Play, and the periodic refresh timer below only actually shows
+// it while Play is still the active section -- see renderEngagementCallout's
+// own onHomeSection check).
 function hideGlobalCallout(){
   const host = document.getElementById('globalCallout');
   if(host){ host.style.display = 'none'; host.innerHTML = ''; }
@@ -1579,7 +1601,19 @@ async function renderEngagementCallout(){
     // leaderboard/schedule fetch (offline sideline wifi, etc.).
   }
   if(!items.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
-  host.style.display = '';
+  // Nathan: "should always appear at the top of the page when you are on
+  // the homepage" -- the periodic refresh timer (gcSetupTicker, below)
+  // calls this function every 3 minutes regardless of which top-level
+  // section is active, to keep the DATA from going stale whenever the
+  // ticker next becomes visible. Without this check, that same timer
+  // would also silently pop the strip back up over This Week/Schedule/
+  // etc. the moment it fires, contradicting "goes away when you go to
+  // another screen" -- so it only actually shows while Play is still the
+  // active section; setSection's own else-branch already calls this
+  // function directly the instant a coach/player lands back on Play.
+  const activeBtn = topSectionsEl && topSectionsEl.querySelector('.modeBtn.active');
+  const onHomeSection = !activeBtn || activeBtn.dataset.section === 'play';
+  host.style.display = onHomeSection ? '' : 'none';
   // Rendered twice back-to-back so the loop can wrap seamlessly -- the
   // instant the first copy has scrolled fully offscreen, the second copy is
   // sitting exactly where the first started.
