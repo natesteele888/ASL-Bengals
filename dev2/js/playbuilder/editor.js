@@ -420,6 +420,19 @@ function hasBallHolder(assignment, playerId) {
       set: (v) => { assignment.wingLeftHasBall = v; },
     };
   }
+  // Jet Sweep: Nathan, on who carries -- "Direction=Right -> 5 carries.
+  // Direction=Left -> 6 carries," independent of wing side (which only
+  // moves where everyone lines up, via the existing wingLeftRoute
+  // mechanism above). The same per-case pattern as wingLeft/alignment,
+  // just keyed by direction instead -- directionLeft already exists for
+  // route POINTS (assignment.overrides.left), hasBall needed the same
+  // sibling field routeHolder's own 'directionLeft' case already reads.
+  if (kase.key === 'directionLeft') {
+    return {
+      get: () => (assignment.directionLeftHasBall != null ? assignment.directionLeftHasBall : !!assignment.hasBall),
+      set: (v) => { assignment.directionLeftHasBall = v; },
+    };
+  }
   return { get: () => !!assignment.hasBall, set: (v) => { assignment.hasBall = v; } };
 }
 // Which assignment's OWN flags (hasBall, endType) actually apply to a

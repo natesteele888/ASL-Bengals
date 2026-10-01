@@ -354,6 +354,19 @@
           && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
+      // Found auditing every real play's signal sequence against its own
+      // toggles (Nathan: "the signals need to be correct... I don't want
+      // kids doing quizzes when the info is broken"): RECIPES.i/.['i-wing']
+      // never had Motion or Boot steps at all, even though several real
+      // plays here (i_dive, i_sweep, option_i, option_i-wing...) allow
+      // both -- toggling either silently produced the exact same sequence,
+      // meaning a coach who called Boot or went in Motion would flash a
+      // card sequence that didn't actually say so. Same slot/card
+      // RECIPES.wing already uses (Motion before the play card, Boot
+      // tacked on at the very end with Counter) -- matches this whole
+      // function's own "same order as the actual signal call" rule.
+      { when: function (c) { return c.motionOn; },
+        card: function () { return pickFrom(MOTION_IDS); }, label: 'Motion' },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       // I's Sweep: Nathan: "There is no sweep left handing off to the 4,
       // with the wing in heavy on the left side" -- direction is never
@@ -375,16 +388,18 @@
       { when: function (c) { return !c.noDirection; },
         card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
+      { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
+      { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
     ],
 
     // "I Wing" formation: Nathan: "We should break the formation into I
     // formation with the 4 in the heavy position, then call 'I wing' the
     // one with the wing off the end of the line." Structurally identical
     // to RECIPES.i -- same touch card (still recognizably "I"), same
-    // Overload steps, same play-card/direction steps -- except the "Wing"
-    // modifier ALWAYS fires here (no `when` guard): this formation has no
-    // Heavy state to gate it on, the wing-out alignment isn't a toggle
-    // any more, it's the formation's own whole identity.
+    // Overload/Motion/Boot/Counter steps, same play-card/direction steps --
+    // except the "Wing" modifier ALWAYS fires here (no `when` guard): this
+    // formation has no Heavy state to gate it on, the wing-out alignment
+    // isn't a toggle any more, it's the formation's own whole identity.
     'i-wing': [
       { card: I_TOUCH, label: 'I' },
       { card: function () { return pickFrom(I_WING_IDS); }, label: 'Wing' },
@@ -399,11 +414,16 @@
           && c.alignmentValues.overload !== (c.wingSide || '').toLowerCase(); },
         card: function (c) { return pickFinger(c.alignmentValues.overload === 'right' ? 'Right' : 'Left'); },
         label: function (c) { return 'Overload: ' + c.alignmentValues.overload; } },
+      // Same Motion/Boot gap fix as RECIPES.i -- see its own comment.
+      { when: function (c) { return c.motionOn; },
+        card: function () { return pickFrom(MOTION_IDS); }, label: 'Motion' },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
       // Same noDirection guard as RECIPES.i above -- see its own comment.
       { when: function (c) { return !c.noDirection; },
         card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
+      { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
+      { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
     ],
 
     // "5 Guys": Nathan, verbatim -- "the only signals are 5 guys > Left or
