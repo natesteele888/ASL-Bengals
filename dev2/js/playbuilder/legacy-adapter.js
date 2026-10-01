@@ -308,6 +308,13 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // that distinction.
   if (play.isPass) result.isPass = true;
   if (play.hasQbSneak) { result.hasQbSneak = true; result.qbSneakRoute = play.qbSneakRoute; }
+  // Jet Sweep's own Boot: Nathan -- "a boot option... for the 1 (QB) to
+  // take the ball on a carry likely up the middle after faking the
+  // handoff with the rest of the play looking exactly the same." Same
+  // shape as hasQbSneak/qbSneakRoute just above, just for Boot -- a
+  // single, play-level alternate route for #1 only, swapped in by
+  // js/play-calls.js's renderCardDiagram purely while Boot is on.
+  if (play.bootRoute) result.bootRoute = play.bootRoute;
   if (play.noDirection) result.noDirection = true;
   // Jet Sweep: Nathan -- "5 Guys Right Sweep Right goes to the 5. 5 Guys
   // Left Sweep Left goes to the 6" -- the real title convention for this
