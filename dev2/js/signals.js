@@ -402,7 +402,16 @@
       // no run/pass choice at all -- always a pass, every time it's
       // called. No protection distinction of its own (unlike Split's
       // Pocket/Straight), so a single PASS_1 card, not PASS_1/PASS_2.
-      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
+      //
+      // Nathan, on I Wing's own Pop Pass (same isPass:true flag, but its
+      // own identity card already reads "Pop Pass"): "We don't need to
+      // have the pass signal after the pop pass signal. Pop pass is
+      // enough." The extra confirmation only earns its place when the
+      // play's own card DOESN'T already say pass (Double Blast's own
+      // card reads just "DOUBLE BLAST", genuinely ambiguous without
+      // it) -- also correctly skips Option Pass/Shuffle Pass, whose own
+      // cards are self-evident the same way Pop Pass's is.
+      { when: function (c) { return c.isPass && !/pass/i.test(c.playSignalLabel || ''); }, card: PASS_1, label: 'Pass' },
     ],
 
     // "I Wing" formation: Nathan: "We should break the formation into I
@@ -438,8 +447,10 @@
         label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
-      // Same Pass gap fix as RECIPES.i -- see its own comment.
-      { when: function (c) { return c.isPass; }, card: PASS_1, label: 'Pass' },
+      // Same Pass gap fix as RECIPES.i -- see its own comment, including
+      // the "skip it when the play's own card already says pass" rule
+      // (I Wing's own Pop Pass is exactly that case).
+      { when: function (c) { return c.isPass && !/pass/i.test(c.playSignalLabel || ''); }, card: PASS_1, label: 'Pass' },
     ],
 
     // "5 Guys": Nathan, verbatim -- "the only signals are 5 guys > Left or
