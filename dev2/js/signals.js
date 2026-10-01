@@ -99,7 +99,12 @@
     // every entry above. The play it belongs to ("Jet Sweep," under 5
     // Guys) hadn't been saved yet as of this entry -- wiring the card
     // into that play's own signalCardId is a separate step once it is.
-    { id: 37, group: 'Play Call', meaning: 'JET SWEEP' },
+    { id: 37, group: 'Play Call', meaning: 'JET' },
+    // Nathan: "card 38 is Beast which is in the play call category right
+    // after Jet Sweep." Real photo added for real to Firebase via the
+    // Signal Cards admin tool the same day. No-op the moment Firebase
+    // already has it, same fallback pattern as every entry above.
+    { id: 38, group: 'Play Call', meaning: 'BEAST' },
   ];
 
   var byId = {};
