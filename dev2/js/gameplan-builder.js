@@ -241,7 +241,11 @@
       } else {
         const playType = window.DATA.playTypes.find((p) => p.key === entry.key);
         const def = (window.playbookDefaultSubvariant && playType) ? window.playbookDefaultSubvariant(playType) : { io: null, rp: null };
-        window.renderCardDiagram(svg, entry.key, entry.direction, entry.direction, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
+        // wingSide: a v1 entry only ever stored ONE direction value -- wrong
+        // for I's Sweep (directionOpposesWing). See js/gameplan.js's
+        // legacyWingSideFor; no-op for every other play.
+        const wingSide = window.GamePlan ? window.GamePlan.legacyWingSideFor(entry.key, entry.direction) : entry.direction;
+        window.renderCardDiagram(svg, entry.key, entry.direction, wingSide, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
       }
     }
     return svg;

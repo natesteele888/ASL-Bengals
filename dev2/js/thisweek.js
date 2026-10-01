@@ -772,7 +772,12 @@
         // Wing's shotgun geometry and render nonsense. Every classic Wing
         // play has no authoredFormationId, so this stays undefined ->
         // 'wing' for them, unchanged.
-        window.renderCardDiagram(svg, row.key, row.direction, row.direction, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
+        // wingSide: a v1 row only ever stored ONE direction value -- wrong
+        // for I's Sweep (directionOpposesWing), whose real toggle always
+        // keeps wingSide opposite of direction. See js/gameplan.js's
+        // legacyWingSideFor for the full story; no-op for every other play.
+        const wingSide = window.GamePlan ? window.GamePlan.legacyWingSideFor(row.key, row.direction) : row.direction;
+        window.renderCardDiagram(svg, row.key, row.direction, wingSide, null, '4x4', def.io, false, false, def.rp, false, false, playType && playType.authoredFormationId);
       }
     }
     return wrap;
