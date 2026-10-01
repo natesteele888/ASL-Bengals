@@ -368,15 +368,17 @@
       { when: function (c) { return c.motionOn; },
         card: function () { return pickFrom(MOTION_IDS); }, label: 'Motion' },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
-      // I's Sweep: Nathan: "There is no sweep left handing off to the 4,
-      // with the wing in heavy on the left side" -- direction is never
-      // independently callable for a directionOpposesWing play (it's
-      // always the opposite of wing, implied, same reason the real card
-      // hides its own Dir L/R toggle for one). The final card restates
-      // the WING side instead of naming a separate "direction" -- Nathan's
-      // own example: "I > Wing > Right > Overload > Right > Sweep >
-      // Right" (the trailing side matches Wing/Overload's own Right, not
-      // an opposite value).
+      // I's Sweep: direction is never independently callable for a
+      // directionOpposesWing play (it's always the opposite of wing,
+      // implied, same reason the real card hides its own Dir L/R toggle
+      // for one) -- but the SIGNAL still needs to say which way the ball
+      // actually goes, same as every other play's own trailing direction
+      // card. Nathan: "Play call was I left Sweep Right, and it showed
+      // I > Left > Sweep > Left" -- restating wingSide here instead of the
+      // real, resolved direction was wrong; reverted back to the same
+      // `pickFinger(c.direction, c.wingFinger)` every other recipe step
+      // below already uses, now consistent regardless of
+      // directionOpposesWing.
       // Nathan: "I Wing Left Pop Pass doesn't need to have left or right as
       // a direction on the play. It's just choosing the wing side" -- a
       // noDirection play (Play.noDirection, real card's own Dir L/R toggle
@@ -386,8 +388,8 @@
       // just restate the wing-side card that already fired a few steps
       // earlier in this same sequence.
       { when: function (c) { return !c.noDirection; },
-        card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
-        label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
+        card: function (c) { return pickFinger(c.direction, c.wingFinger); },
+        label: function (c) { return 'Direction: ' + c.direction; } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
       // Nathan, on I's "Double Blast Pass" (internal id pop_pass_i, a
@@ -441,10 +443,12 @@
       { when: function (c) { return c.motionOn; },
         card: function () { return pickFrom(MOTION_IDS); }, label: 'Motion' },
       { card: function (c) { return c.playSignalId; }, label: function (c) { return c.playSignalLabel; }, isPlayCard: true },
-      // Same noDirection guard as RECIPES.i above -- see its own comment.
+      // Same noDirection guard, and same directionOpposesWing fix (show the
+      // real, resolved direction, not a restated wing side) as RECIPES.i
+      // above -- see its own comment.
       { when: function (c) { return !c.noDirection; },
-        card: function (c) { return c.directionOpposesWing ? c.wingFinger : pickFinger(c.direction, c.wingFinger); },
-        label: function (c) { return c.directionOpposesWing ? ('I: ' + c.wingSide) : ('Direction: ' + c.direction); } },
+        card: function (c) { return pickFinger(c.direction, c.wingFinger); },
+        label: function (c) { return 'Direction: ' + c.direction; } },
       { when: function (c) { return c.bootOn; }, card: BOOT, label: 'Boot' },
       { when: function (c) { return c.counterOn; }, card: COUNTER, label: 'Counter' },
       // Same Pass gap fix as RECIPES.i -- see its own comment, including
