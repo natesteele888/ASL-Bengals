@@ -460,6 +460,7 @@
     const footageHtml = `
       <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
+      <div id="thisweekOpponentScoutingWrap"></div>
     `;
 
     return `
@@ -558,6 +559,28 @@
       } else {
         watchFootageNoteEl.style.display = 'none';
         watchFootageNoteEl.textContent = '';
+      }
+    }
+    // Nathan: "The team we are playing that week should also have the
+    // film visible in the WEEK AHEAD section so kids can see film on the
+    // opponent ahead." Separate from the single opponentFilmUrl button
+    // right above (which stays exactly as it was) -- these are the
+    // richer, multi-clip js/opponent-film.js entries for this week's
+    // opponent, fetched fresh each render (cheap, small document) rather
+    // than cached, since a coach could add one mid-week.
+    const scoutingWrap = document.getElementById('thisweekOpponentScoutingWrap');
+    if (scoutingWrap) {
+      scoutingWrap.innerHTML = '';
+      if (linkedGame && linkedGame.opponent && window.OpponentFilm && window.filmButtonHtml) {
+        window.OpponentFilm.load().then((entries) => {
+          if (!scoutingWrap.isConnected) return;
+          const clips = window.OpponentFilm.clipsForTeam(entries, linkedGame.opponent);
+          if (!clips.length) return;
+          scoutingWrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">🔭 Scouting Film: ${escapeHtml(linkedGame.opponent)}</div>` + clips.map((c) => window.filmButtonHtml(c.url, escapeHtml(c.title || `🎥 Watch ${linkedGame.opponent} Film`), {
+            btnClass: 'navBtn',
+            btnStyle: 'display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;',
+          })).join('') + '<div style="margin-bottom:10px;"></div>';
+        }).catch(() => {});
       }
     }
   }

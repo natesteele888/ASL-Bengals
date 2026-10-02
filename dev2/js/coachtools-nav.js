@@ -65,6 +65,15 @@
     // list." See js/drone-footage.js's Film Vault section for the render/
     // search/sort logic -- this just gives it a tab like everything else here.
     { key: 'filmvault', label: '🎬 Film Vault', category: 'library', panel: 'coachFilmVaultPanel', init: () => window.initFilmVault && window.initFilmVault() },
+    // Nathan: "we need the ability to store game footage of upcoming
+    // opponents... Make it accessible in the coach tools section to
+    // upload in library. Choose the team/teams, add the link and
+    // upload." Distinct from Film Vault above (that's OUR OWN practice/
+    // game clips) -- this is scouting material about an opponent, keyed
+    // by team name. See js/opponent-film.js (the shared store, also read
+    // by This Week's Week Ahead and a team's own Standings page) and
+    // js/coachtools-opponentfilm.js (this tab's own authoring UI).
+    { key: 'opponentfilm', label: '🔭 Opponent Film', category: 'library', panel: 'coachOpponentFilmPanel', init: () => window.initOpponentFilmAdmin && window.initOpponentFilmAdmin() },
     // Nathan: "make sure that the notes that were added to the What's New
     // can be added at any time by a coach in the Coach Tools block" -- the
     // Houston route note was a one-off migration script; this tab is the

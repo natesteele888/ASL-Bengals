@@ -701,6 +701,23 @@
     hero.style.background = heroGradient(hue);
   }
 
+  // Builds the combined film section's inner markup from a plain list of
+  // {label, url, note?} clips -- the single legacy game.opponentFilmUrl
+  // (if any) plus every js/opponent-film.js clip for this team, already
+  // merged by the caller. Returns '' (section renders empty/absent) when
+  // there's nothing at all -- most team pages won't have scouting film,
+  // and an empty box on every one of those would just be clutter.
+  function opponentFilmSectionHtml(clips) {
+    if (!clips || !clips.length) return '';
+    const items = clips.map((c) => {
+      const btn = window.filmButtonHtml
+        ? window.filmButtonHtml(c.url, escapeHtml(c.label), { btnClass: 'navBtn', btnStyle: 'display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;' })
+        : `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;">${escapeHtml(c.label)}</a>`;
+      return `${btn}${c.note ? `<div class="lbSub" style="text-align:center;margin:0 0 10px;">${escapeHtml(c.note)}</div>` : ''}`;
+    }).join('');
+    return `<div class="lbSectionHeader">🎥 Opponent Film</div>${items}<div style="margin-bottom:10px;"></div>`;
+  }
+
   function opponentPageHtml(game, teamRow) {
     const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
     const hasFootage = !!game.opponentFilmUrl;
@@ -717,24 +734,36 @@
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
         ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
+    // Nathan: "Right at the top below the header and before previous game
+    // results, I want to have CTAs to footage where teams can play it
+    // back." Moved up from below Recent Games (where the single legacy
+    // opponentFilmUrl link used to render) to right here -- shows the
+    // legacy link immediately (synchronous, no fetch needed), then
+    // showOpponentPage's own loadOpponentFilmSection() rebuilds this same
+    // div with the legacy link PLUS every js/opponent-film.js clip for
+    // this team once that fetch resolves.
+    const legacyClips = hasFootage ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+    html += `<div id="standingsOpponentFilm">${opponentFilmSectionHtml(legacyClips)}</div>`;
     // Nathan: "utilize the CMYFCC website to also pull in team game
     // history for the other teams" -- filled in asynchronously by
     // showOpponentPage right below (real network call, shouldn't block
     // this page's own first render), same progressive-render pattern
     // js/schedule.js's own Game Recap narrative already uses.
     html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Games</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
-    if (hasFootage) {
-      html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
-      if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
-    }
     if (game.scouting) {
       html += `<div class="lbSectionHeader">🔎 Scouting Report</div>
         <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
     }
     if (!hasFootage && !game.scouting) {
+      // Opponent-film.js clips may still turn this from "nothing" into
+      // "something" once the async fetch above resolves -- this synchronous
+      // empty note is about SCOUTING specifically now (not footage, which
+      // has its own section with its own independent empty/non-empty
+      // state), so there's no contradiction once film shows up a moment
+      // later.
       html += hasGame
-        ? '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
-        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season -- once they're on the Schedule, footage and scouting notes can be added there.</div>`;
+        ? '<div class="lbEmpty">No scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
+        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season.</div>`;
     }
     if (hasGame) {
       html += `<div style="text-align:center;margin-top:16px;">
@@ -742,6 +771,26 @@
         </div>`;
     }
     return html;
+  }
+
+  // Rebuilds #standingsOpponentFilm with the legacy single link (if any)
+  // PLUS every js/opponent-film.js clip for this team, once that fetch
+  // resolves. Matches loadOpponentRecentForm's own async-fill shape right
+  // below. A no-op if OpponentFilm isn't loaded for some reason (script
+  // load failure) -- the legacy link, already rendered synchronously by
+  // opponentPageHtml above, stays exactly as it is.
+  function loadOpponentFilmSection(game) {
+    const wrap = document.getElementById('standingsOpponentFilm');
+    if (!wrap || !window.OpponentFilm) return;
+    window.OpponentFilm.load().then((entries) => {
+      if (!wrap.isConnected) return;
+      const stored = window.OpponentFilm.clipsForTeam(entries, game.opponent).map((c) => ({
+        label: c.title || `🎥 Watch${game.opponent ? ' ' + game.opponent : ''} Film`,
+        url: c.url,
+      }));
+      const legacyClips = game.opponentFilmUrl ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+      wrap.innerHTML = opponentFilmSectionHtml(legacyClips.concat(stored));
+    }).catch(() => {});
   }
 
   function showOpponentPage(gameId, teamName, teams, games) {
@@ -766,6 +815,7 @@
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent, teams, games);
+    loadOpponentFilmSection(game);
     applyOpponentHeroColor(game.opponent);
   }
 
