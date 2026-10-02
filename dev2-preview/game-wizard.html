@@ -104,6 +104,15 @@
        video on every save. This host is built once and just shown/hidden
        from then on; the same iframe, mid-playback, stays alive underneath. -->
   <div id="filmPanelHost" style="display:none;"></div>
+  <!-- Nathan: "our games are now being recorded in snippets for each
+       play... load in the playlist with the individual files in order so
+       I can match up what happened on the play to the clip of the play."
+       Separate from filmPanelHost above (one continuous video with
+       timestamp markers) -- this is a genuinely different model, one
+       clip PER PLAY, so there's no timestamp to capture, just "which
+       clip is showing right now." Same built-once-per-game, shown/hidden
+       (never torn down) convention as filmPanelHost. -->
+  <div id="playClipsPanelHost" style="display:none;"></div>
   <div class="stepDots" id="stepDots"></div>
   <div id="stepArea"></div>
 </div>
@@ -425,6 +434,17 @@
     } else {
       wiz.step = 0;
     }
+    // Nathan: "load in the playlist... match up what happened on the play
+    // to the clip of the play." playClipIndex has to pick up where a
+    // PRIOR session left off (reopening the wizard mid-game, or after a
+    // phone restart), not restart at 0 -- otherwise the next play logged
+    // would silently claim a clip that already belongs to an earlier one.
+    playClipIndex = 0;
+    if (existingGameState && Array.isArray(existingGameState.plays)){
+      existingGameState.plays.forEach(function(p){
+        if (typeof p.filmClipIndex === 'number') playClipIndex = Math.max(playClipIndex, p.filmClipIndex + 1);
+      });
+    }
     renderWizard();
   }
 
@@ -452,6 +472,12 @@
     const wantsFilm = (wiz.step === 'audit' || wiz.step === 'quickEdit' || (typeof wiz.step === 'number' && wiz.step === 3));
     if (wantsFilm && selectedGame) ensureFilmPanelBuilt();
     filmHost.style.display = wantsFilm ? '' : 'none';
+    // Same shown/hidden-only (never torn down mid-play) convention as
+    // filmHost above, for the separate per-play clip playlist.
+    const playClipsHost = document.getElementById('playClipsPanelHost');
+    const wantsPlayClips = wantsFilm && selectedGame && Array.isArray(selectedGame.playClips) && selectedGame.playClips.length > 0;
+    if (wantsPlayClips) ensurePlayClipsPanelBuilt();
+    playClipsHost.style.display = wantsPlayClips ? '' : 'none';
     if (wiz.step === 'resume') renderResumeStep(area);
     else if (wiz.step === 'audit') renderAuditStep(area);
     else if (wiz.step === 'quickEdit') renderQuickEditStep(area);
@@ -829,6 +855,7 @@
       kickTeam: isUsKick ? 'Us' : 'Opponent', onside: false,
       startSide: isUsKick ? 'OWN' : 'OPP', startYard: 40, // fixed kickoff spot, same convention Stat Keeper already uses
       catchSide: k.catchSide, catchYard: k.catchYard, endSide: k.endSide, endYard: k.endYard,
+      filmClipIndex: currentPlayClipIndexForStamp(),
     };
     if (isUsKick) entry.oppReturner = k.returner || ''; else entry.returner = k.returner || '';
 
@@ -889,6 +916,7 @@
       wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
+    advancePlayClipIndex();
     wiz.step = 3;
     renderWizard();
   }
@@ -1244,6 +1272,112 @@
       try { const t = ytPlayer.getCurrentTime(); return (typeof t === 'number' && !isNaN(t)) ? t : null; } catch(e){ return null; }
     }
     return null;
+  }
+
+  // Nathan: "our games are now being recorded in snippets for each play.
+  // I would like to load in the playlist with the individual files in
+  // order so I can match up what happened on the play to the clip of the
+  // play." A genuinely different model from filmPanelHost above (one
+  // continuous video, a timestamp captured per play) -- here, one FILE
+  // IS one play, so there's nothing to seek or auto-capture; the only
+  // thing that needs tracking is WHICH clip is currently showing.
+  // playClipIndex auto-advances by one every time a play commits (see
+  // stampAndAdvancePlayClip, used by commitCurrentPlay/commitExtraPoint/
+  // commitPostScoreKickoff -- a PAT attempt and a kickoff are their own
+  // real plays too, so they each consume a clip the same way a run or
+  // pass does), with manual Prev/Next/Jump as the correction mechanism
+  // for whenever a play didn't get its own clip (no play, a presnap
+  // penalty) or the count drifts for any other reason.
+  let playClipIndex = 0;
+  let playClipsPanelBuiltForGameId = null;
+  let playClipsPanelCollapsed = false;
+  function ensurePlayClipsPanelBuilt(){
+    if (playClipsPanelBuiltForGameId === selectedGame.id) return;
+    playClipsPanelBuiltForGameId = selectedGame.id;
+    // playClipIndex is NOT reset here -- unlike filmClipIndex (just "which
+    // clip the coach is currently viewing," safe to reset), this one
+    // tracks real play progress and is already initialized correctly
+    // (from existing plays' own filmClipIndex, or 0 for a fresh game)
+    // back when the game was first selected. Resetting it here would
+    // wipe out whatever the opening kickoff (or a resumed game's prior
+    // plays) already advanced it to.
+    renderPlayClipsPanelContent();
+  }
+  function renderPlayClipsPanelContent(){
+    const host = document.getElementById('playClipsPanelHost');
+    if (!host) return;
+    const clips = (selectedGame && Array.isArray(selectedGame.playClips)) ? selectedGame.playClips.filter(function(c){ return c && c.url; }) : [];
+    host.innerHTML = '';
+    if (!clips.length) return;
+    if (playClipIndex > clips.length - 1) playClipIndex = clips.length - 1;
+    if (playClipIndex < 0) playClipIndex = 0;
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
+    const headRow = document.createElement('div'); headRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    const title = document.createElement('div'); title.style.cssText = 'font-weight:800;font-size:13px;'; title.textContent = '🎬 Play Clips';
+    const toggleLbl = document.createElement('span'); toggleLbl.style.cssText = 'font-size:12px;color:var(--dim);cursor:pointer;';
+    toggleLbl.textContent = playClipsPanelCollapsed ? 'Show ▾' : 'Hide ▴';
+    toggleLbl.addEventListener('click', function(){ playClipsPanelCollapsed = !playClipsPanelCollapsed; renderPlayClipsPanelContent(); });
+    headRow.appendChild(title); headRow.appendChild(toggleLbl);
+    wrap.appendChild(headRow);
+    if (!playClipsPanelCollapsed){
+      const navRow = document.createElement('div'); navRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
+      const prevBtn = document.createElement('button'); prevBtn.className = 'primaryBtn'; prevBtn.style.cssText = 'margin:0;flex:0 0 auto;padding:8px 14px;'; prevBtn.textContent = '◀';
+      prevBtn.disabled = playClipIndex === 0;
+      prevBtn.addEventListener('click', function(){ if (playClipIndex > 0){ playClipIndex--; renderPlayClipsPanelContent(); } });
+      const counter = document.createElement('div'); counter.style.cssText = 'flex:1;text-align:center;font-weight:800;font-size:13px;';
+      counter.textContent = 'Clip ' + (playClipIndex + 1) + ' of ' + clips.length;
+      const nextBtn = document.createElement('button'); nextBtn.className = 'primaryBtn'; nextBtn.style.cssText = 'margin:0;flex:0 0 auto;padding:8px 14px;'; nextBtn.textContent = '▶';
+      nextBtn.disabled = playClipIndex === clips.length - 1;
+      nextBtn.addEventListener('click', function(){ if (playClipIndex < clips.length - 1){ playClipIndex++; renderPlayClipsPanelContent(); } });
+      navRow.appendChild(prevBtn); navRow.appendChild(counter); navRow.appendChild(nextBtn);
+      wrap.appendChild(navRow);
+      const clip = clips[playClipIndex];
+      const embed = embeddableFilmSrc(clip.url);
+      if (embed && (embed.kind === 'youtube' || embed.kind === 'drive')){
+        const iframe = document.createElement('iframe');
+        iframe.src = embed.kind === 'youtube' ? ('https://www.youtube.com/embed/' + embed.videoId) : embed.previewUrl;
+        iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+        iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+        wrap.appendChild(iframe);
+      } else {
+        const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
+        openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;margin-top:8px;';
+        openLink.textContent = '▶️ Open Clip ' + (playClipIndex + 1) + ' in a New Tab';
+        wrap.appendChild(openLink);
+      }
+      // Nathan: a play that didn't get its own clip (no play, a presnap
+      // penalty) or a miscount needs a fast way back in sync, not just
+      // one-at-a-time Prev/Next.
+      const jumpRow = document.createElement('div'); jumpRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;align-items:center;';
+      const jumpLbl = document.createElement('span'); jumpLbl.style.cssText = 'font-size:12px;color:var(--dim);'; jumpLbl.textContent = 'Jump to clip #:';
+      const jumpInput = document.createElement('input'); jumpInput.type = 'number'; jumpInput.min = '1'; jumpInput.max = String(clips.length);
+      jumpInput.style.cssText = 'width:70px;padding:6px;border:2px solid #ccc;border-radius:8px;font-size:13px;';
+      jumpInput.addEventListener('change', function(){
+        const n = Math.max(1, Math.min(clips.length, Number(jumpInput.value || 1)));
+        playClipIndex = n - 1;
+        renderPlayClipsPanelContent();
+      });
+      jumpRow.appendChild(jumpLbl); jumpRow.appendChild(jumpInput);
+      wrap.appendChild(jumpRow);
+    }
+    host.appendChild(wrap);
+  }
+  // Read at base-object construction time (before the save), so a failed
+  // save doesn't desync the clip count -- advancePlayClipIndex (below) is
+  // the separate, deliberate step that only runs after a successful save.
+  function currentPlayClipIndexForStamp(){
+    if (!selectedGame || !Array.isArray(selectedGame.playClips) || !selectedGame.playClips.length) return undefined;
+    return playClipIndex;
+  }
+  // Called once per SUCCESSFULLY committed play (run/pass/penalty/
+  // turnover/punt, and separately for a PAT attempt and a post-score/
+  // safety kickoff -- each is its own real play with its own clip).
+  // No-op when this game has no playClips, so every other game's commit
+  // path is unaffected.
+  function advancePlayClipIndex(){
+    if (!selectedGame || !Array.isArray(selectedGame.playClips) || !selectedGame.playClips.length) return;
+    playClipIndex = Math.min(playClipIndex + 1, selectedGame.playClips.length - 1);
+    renderPlayClipsPanelContent();
   }
 
   // Nathan: "I am only worried about what we ran as going forward, the
@@ -1852,6 +1986,7 @@
       id: genId(), type:'score', side: wiz.play.side, quarter: g.quarter,
       scoreKind: (wiz.play.xpType === 'kick' ? 'Kick' : 'Run/Pass Play') + ' (' + (good ? points + ' pt Good' : 'No Good') + ')',
       scoreTeam: scoringTeam,
+      filmClipIndex: currentPlayClipIndexForStamp(),
     };
     loadStatus.textContent = 'Saving…';
     try {
@@ -1867,6 +2002,7 @@
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
+    advancePlayClipIndex();
     // Nathan: a touchdown+extra point is always followed by a real
     // kickoff -- reuses the same idea as the opening kickoff (a real
     // 'kick' play, possession flips, down/distance resets to 1st & 10)
@@ -1914,7 +2050,7 @@
     const g = wiz.game;
     const isUsKick = wiz.play.kickingTeam === 'Us';
     const entry = { id: genId(), type:'kick', side: isUsKick ? 'offense' : 'defense', quarter: g.quarter,
-      kickTeam: wiz.play.kickingTeam, onside: !!wiz.play.onside };
+      kickTeam: wiz.play.kickingTeam, onside: !!wiz.play.onside, filmClipIndex: currentPlayClipIndexForStamp() };
     let newSpot = 50, newPossession = isUsKick ? 'Opponent' : 'Us';
     if (wiz.play.onside){
       entry.recoveredByTeam = wiz.play.recoveredByTeam;
@@ -1943,6 +2079,7 @@
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
+    advancePlayClipIndex();
     startNextPlay();
   }
 
@@ -2107,7 +2244,7 @@
     // (Run, Pass, Penalty, Turnover, Punt) gets it the same way. null on
     // anything that isn't a YouTube video (Drive/Hudl links, or no film at
     // all) rather than a fake/misleading number.
-    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter, filmTimestamp: getCurrentFilmTime() };
+    const base = { id: genId(), side: onOffense ? 'offense' : 'defense', quarter: g.quarter, filmTimestamp: getCurrentFilmTime(), filmClipIndex: currentPlayClipIndexForStamp() };
     let startAbs = g.spot, endAbs = g.spot;
     let converted = false;
     let possessionFlips = false;
@@ -2290,6 +2427,7 @@
       if (!putRes.ok) throw new Error('HTTP ' + putRes.status);
     } catch(e){ loadStatus.textContent = '⚠️ Could not save: ' + e.message; return; }
     loadStatus.textContent = '';
+    advancePlayClipIndex();
 
     // Nathan: "when a run is called and its a touchdown - I need to be
     // able to set if the PAT is good." The score bug never actually

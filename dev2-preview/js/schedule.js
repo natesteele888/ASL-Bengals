@@ -2326,7 +2326,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '', scoutingNotes: [] };
+      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], playClips: [], opponentFilmUrl: '', opponentFilmNote: '', scoutingNotes: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -2913,6 +2913,23 @@
     if (!g) { if (afterFail) afterFail('Game not found'); return; }
     g.gameFootage = gameFootage;
     if (current && current.id === gameId) current.gameFootage = gameFootage;
+    persistGames(afterOk);
+  };
+
+  // Nathan: "our games are now being recorded in snippets for each play.
+  // I would like to load in the playlist with the individual files in
+  // order so I can match up what happened on the play to the clip of the
+  // play." A real, SEPARATE field from gameFootage (which is for
+  // Film Vault/general viewing, not a per-play sync source) -- array
+  // ORDER is the play order, so a coach reordering clips is just
+  // reordering this array. Same narrow write path as saveGameFootage,
+  // used by js/coachtools-playclips.js (the bulk-paste admin UI) and
+  // read directly by game-wizard.html's own play-clip playlist panel.
+  window.savePlayClips = function (gameId, playClips, afterOk, afterFail) {
+    const g = games.find(x => x.id === gameId);
+    if (!g) { if (afterFail) afterFail('Game not found'); return; }
+    g.playClips = playClips;
+    if (current && current.id === gameId) current.playClips = playClips;
     persistGames(afterOk);
   };
 
