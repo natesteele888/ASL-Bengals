@@ -303,6 +303,17 @@
             row.fum += 1;
             if (p.td) row.td = true;
           }
+        } else if (p.toType === 'Interception' && p.recoveredBy) {
+          // Audit (workflow): this import path had a Fumble branch but no
+          // Interception one at all -- a pick-six imported this way got
+          // neither INT nor TD credit, even though the box score's own
+          // scoring.touchdowns count was unaffected (team-level only).
+          const num = numFor(p.recoveredBy);
+          if (num != null) {
+            const row = ensureDefExtraRow(num);
+            row.int += 1;
+            if (p.td) row.td = true;
+          }
         }
       }
 

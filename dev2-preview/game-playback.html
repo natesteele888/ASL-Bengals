@@ -705,6 +705,14 @@
     else if (p.type === 'kick' && !p.onside){ us += 6; }
     else if (p.type === 'punt'){ if (p.puntTeam !== 'Opponent') opp += 6; else us += 6; }
     else if (p.type === 'defextra'){ us += 6; }
+    // Audit (workflow): missing entirely -- a Bengals pick-six/scoop-and-
+    // score fell through every branch above (delta stayed {0,0}), and the
+    // tdBanner below picks "BENGALS" vs "OPPONENT" off delta.us > 0, so our
+    // own defensive TD was rendering as an OPPONENT touchdown banner.
+    // side='defense' means WE were on D when the ball changed hands, i.e.
+    // WE recovered and scored -- same direction as stat-keeper.html's
+    // identical fix and js/schedule.js's own already-correct version.
+    else if (p.type === 'turnover'){ if (p.side === 'defense') us += 6; else opp += 6; }
     return { us, opp };
   }
 
