@@ -50,9 +50,17 @@
       .then((data) => (Array.isArray(data) ? data : []));
   }
 
+  // Nathan: "upload of video only allows to choose one opponent while
+  // there are 2 teams on the film. Need to pick both teams playing in
+  // the game." A clip's game film naturally shows TWO teams (whoever
+  // played each other), useful scouting for either one -- so a clip
+  // carries `teamNames` (an array), not a single `teamName`. No real
+  // data existed under the old singular shape yet (confirmed live before
+  // making this change), so this is a clean schema change, not a
+  // migration -- nothing to carry forward.
   function clipsForTeam(entries, teamName) {
     if (!teamName) return [];
-    return (entries || []).filter((e) => e && teamsMatch(e.teamName, teamName));
+    return (entries || []).filter((e) => e && Array.isArray(e.teamNames) && e.teamNames.some((t) => teamsMatch(t, teamName)));
   }
 
   // Every real opponent name already on the Schedule, deduplicated --
@@ -103,14 +111,14 @@
     return attempt;
   }
 
-  function addClip({ teamName, title, url }) {
-    teamName = (teamName || '').trim();
+  function addClip({ teamNames, title, url }) {
+    teamNames = (teamNames || []).map((t) => (t || '').trim()).filter(Boolean);
     url = (url || '').trim();
-    if (!teamName) return Promise.reject(new Error('Pick a team first.'));
+    if (!teamNames.length) return Promise.reject(new Error('Pick at least one team first.'));
     if (!url) return Promise.reject(new Error('Paste a film link first.'));
     const entry = {
       id: 'of' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      teamName,
+      teamNames,
       title: (title || '').trim(),
       url,
       addedAt: new Date().toISOString(),
