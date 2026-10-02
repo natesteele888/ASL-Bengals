@@ -170,7 +170,23 @@
     return `${url}${sep}auth=${encodeURIComponent(token)}`;
   }
   async function ensureCoachAuth(){
-    if (hasGateSession()){ try { await getFirebaseIdToken(); return true; } catch(e){} }
+    // Nathan: "verify kids won't see the keep stats button... I don't
+    // want them having the ability to hit that and add stats." The real
+    // gap found checking this: hasGateSession() is true for ANY valid
+    // gate session, including a PLAYER's own real one (cloud-auth.js's
+    // GATE_EMAILS has both 'player' and 'coach' kinds -- any kid who's
+    // already logged into the main app has a real, persisted
+    // bengalsGateSession, kind:'player', same localStorage key/origin
+    // this standalone page reads). The old check let that skip the
+    // coach-code prompt entirely if this page was ever reached directly
+    // (a shared link, browser history, a guessed URL) -- the Keep Stats
+    // BUTTON itself is correctly hidden from anyone but Coach Nate
+    // (js/schedule.js), but this page never checked who was actually
+    // asking. Now requires the saved session to specifically be
+    // kind:'coach' -- a player's own real session no longer satisfies
+    // this at all, the same as if nothing were saved here yet.
+    const savedGate = loadGateSession();
+    if (savedGate && savedGate.kind === 'coach'){ try { await getFirebaseIdToken(); return true; } catch(e){} }
     let code = null;
     try { code = prompt('Enter the coach code to set up this game:'); } catch(e){ return false; }
     if (!code) return false;

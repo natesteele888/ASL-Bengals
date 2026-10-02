@@ -2488,7 +2488,7 @@
                    only applies once the game's actually final, since the time element still does that spacing job for an upcoming game. -->
               <div style="${resultFor(current) ? 'margin-top:6px;' : ''}">${badgeHtml}</div>
             </span>
-            <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
+            <span class="scheduleTeamSide away"${(current.opponent && current.gameType !== 'Bye') ? ` data-open-opponent-page="${escapeHtml(current.opponent)}" data-open-opponent-game="${escapeHtml(current.id || '')}" style="cursor:pointer;" title="View ${escapeHtml(current.opponent)}'s team page"` : ''}>${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
           </div>
         </div>`;
     })();
@@ -2553,6 +2553,19 @@
       fillHeroOpponentRecord(current.opponent);
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
+      // Nathan: "When I am looking at an upcoming game, I should be able
+      // to click on the opponent logo and have it take me to their team
+      // page." window.openStandingsTeamPage (js/standings.js) is the
+      // same real entry path tapping the Standings tab + their row
+      // already takes -- reused here rather than duplicated, so the page
+      // this lands on (including a working "‹ Back" button) is
+      // byte-identical either way.
+      const oppLogoLink = body.querySelector('[data-open-opponent-page]');
+      if (oppLogoLink) {
+        oppLogoLink.addEventListener('click', () => {
+          if (window.openStandingsTeamPage) window.openStandingsTeamPage(oppLogoLink.dataset.openOpponentPage, oppLogoLink.dataset.openOpponentGame || null);
+        });
+      }
       wireAddToCalendar();
       loadLinkedGamePlan();
       renderGamePreview();
