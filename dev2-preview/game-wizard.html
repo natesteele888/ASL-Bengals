@@ -1315,6 +1315,7 @@
     else if (phase === 'tackler') renderPhaseTackler(card);
     else if (phase === 'extraPoint') renderPhaseExtraPoint(card);
     else if (phase === 'postScoreKickoff') renderPhasePostScoreKickoff(card);
+    else if (phase === 'otSetup') renderPhaseOtSetup(card);
     else if (phase === 'touchdown') renderPhaseTouchdown(card);
     area.appendChild(card);
 
@@ -1571,6 +1572,14 @@
     wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
     wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
     card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    // Nathan: wizard audit -- a QB sacked in his own end zone is a
+    // Safety too, same gap as Run/Pass's own result-kind chips.
+    const safetyRow = document.createElement('div'); safetyRow.className = 'chipRow'; safetyRow.style.marginTop = '10px';
+    const safetyChip = document.createElement('div'); safetyChip.className = 'optChip' + (wiz.play.safety ? ' active' : '');
+    safetyChip.textContent = '🛑 Safety (sacked in own end zone)';
+    safetyChip.addEventListener('click', function(){ wiz.play.safety = !wiz.play.safety; renderWizard(); });
+    safetyRow.appendChild(safetyChip);
+    card.appendChild(safetyRow);
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Sack & Continue';
     next.addEventListener('click', function(){ commitCurrentPlay(); });
     card.appendChild(next);
@@ -1709,10 +1718,32 @@
     card.innerHTML = '<h2>🦵 Punt</h2><div class="sub">4th down -- ' + (isUs ? 'we\'re' : 'they\'re') + ' punting it away.</div>';
     if (isUs) renderPlayerChooser(card, 'Punter', wiz.play, 'punter');
     else renderPlayerChooser(card, 'Opponent Punter', wiz.play, 'oppPunter', {optional:true, opponent:true});
-    chipGroupField(card, 'Result', wiz.play, 'puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']);
+    // Nathan: wizard audit -- blocked punts had no option at all. Who
+    // recovers it determines everything downstream the same way a
+    // Turnover's lostBy/recoveredBy does: if the PUNTING team recovers
+    // their own block, the play just dies there (4th down is already
+    // spent either way, so possessionFlips below needs no change for
+    // this case); if the RECEIVING team recovers it, it's functionally a
+    // return -- including, rarely, a touchdown -- same shape as a muffed/
+    // returned punt, reusing the exact same Touchdown mechanism Turnover
+    // already has.
+    chipGroupField(card, 'Result', wiz.play, 'puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned','Blocked']);
+    const receivingTeam = isUs ? 'Opponent' : 'Us', puntingTeam = isUs ? 'Us' : 'Opponent';
     if (wiz.play.puntResult === 'Returned'){
       if (isUs) renderPlayerChooser(card, 'Returned By (opponent)', wiz.play, 'oppReturner', {optional:true, opponent:true});
       else renderPlayerChooser(card, 'Returned By', wiz.play, 'returner');
+    } else if (wiz.play.puntResult === 'Blocked'){
+      chipGroupField(card, 'Recovered By', wiz.play, 'blockRecoveredByTeam', [puntingTeam, receivingTeam]);
+      if (wiz.play.blockRecoveredByTeam === receivingTeam){
+        if (isUs) renderPlayerChooser(card, 'Returned By (opponent)', wiz.play, 'oppReturner', {optional:true, opponent:true});
+        else renderPlayerChooser(card, 'Returned By', wiz.play, 'returner');
+        const tdRow = document.createElement('div'); tdRow.className = 'chipRow'; tdRow.style.marginTop = '10px';
+        const tdChip = document.createElement('div'); tdChip.className = 'optChip' + (wiz.play.td ? ' active' : '');
+        tdChip.textContent = '🏆 Returned for a Touchdown';
+        tdChip.addEventListener('click', function(){ wiz.play.td = !wiz.play.td; renderWizard(); });
+        tdRow.appendChild(tdChip);
+        card.appendChild(tdRow);
+      }
     }
     wiz.play.startSide = wiz.play.startSide || sideYardFromAbs(wiz.game.spot).side;
     wiz.play.startYard = wiz.play.startYard != null ? wiz.play.startYard : sideYardFromAbs(wiz.game.spot).yard;
@@ -1724,7 +1755,11 @@
       card.appendChild(spotPicker(wiz.play, 'catchSide', 'catchYard', wiz.play.catchYard, renderWizard));
     }
     wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
-    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - (wiz.play.puntResult === 'Returned' ? 20 : 30));
+    // Blocked punts die near the line of scrimmage, not 20-30 yards
+    // downfield like a clean punt -- defaulting to the same spot it was
+    // snapped from (the coach adjusts from there) beats a default that
+    // assumes the kick actually traveled.
+    wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : (wiz.play.puntResult === 'Blocked' ? sideYardFromAbs(wiz.game.spot).yard : Math.max(0, sideYardFromAbs(wiz.game.spot).yard - (wiz.play.puntResult === 'Returned' ? 20 : 30)));
     card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot'; return l; })());
     card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Punt & Continue';
@@ -1741,12 +1776,20 @@
     wiz.play.endSide = wiz.play.endSide || sideYardFromAbs(wiz.game.spot).side;
     wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : sideYardFromAbs(wiz.game.spot).yard;
     card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
-    chipGroupField(card, 'How did it end?', wiz.play, 'resultKind', ['Tackled','Out of Bounds','Touchdown']);
+    // Nathan: wizard audit -- a ball carrier tackled in their own end
+    // zone had no way to get logged as a Safety at all. 'Safety' already
+    // exists as a full, working concept everywhere ELSE in this app
+    // (compileStatSheet, computeRunningScore, game-playback.html's
+    // scoreDeltaFor all already handle a type:'score',scoreKind:'Safety'
+    // entry correctly) -- it just had no live path to actually create
+    // one, same class of gap Turnover's own Touchdown toggle closed.
+    chipGroupField(card, 'How did it end?', wiz.play, 'resultKind', ['Tackled','Out of Bounds','Touchdown','Safety']);
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Play & Continue';
     next.addEventListener('click', function(){
       if (!wiz.play.resultKind){ alert('Pick how the play ended.'); return; }
       wiz.play.td = wiz.play.resultKind === 'Touchdown';
       wiz.play.oob = wiz.play.resultKind === 'Out of Bounds';
+      wiz.play.safety = wiz.play.resultKind === 'Safety';
       // Nathan: "if tackle is chosen, pick the tackler" -- only meaningful
       // on DEFENSE (we only track OUR players' tackle credit; there's no
       // tackler to name when it's our own guy getting tackled).
@@ -1836,7 +1879,9 @@
   function renderPhasePostScoreKickoff(card){
     const g = wiz.game;
     const isUsKick = wiz.play.kickingTeam === 'Us';
-    const heading = wiz.play.isHalftime ? '🏈 Halftime — ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off to Start the 2nd Half' : '🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off';
+    const heading = wiz.play.isHalftime ? '🏈 Halftime — ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off to Start the 2nd Half'
+      : wiz.play.isSafetyKick ? '🏈 Safety! ' + escapeHtml(wiz.play.kickingTeam) + ' Free Kicks From the 20'
+      : '🏈 ' + escapeHtml(wiz.play.kickingTeam) + ' Kicks Off';
     card.innerHTML = '<h2>' + heading + '</h2><div class="sub">Same as the opening kickoff -- where it was caught, and where the return ended.</div>';
     if (wiz.play.isHalftime){
       // Nathan: "confirming the side we were defending." Pre-picked from
@@ -1876,7 +1921,7 @@
       newPossession = wiz.play.recoveredByTeam;
       newSpot = g.spot; // onside kicks don't carry their own spot math -- same simplification stat-keeper.html already makes
     } else {
-      entry.startSide = isUsKick ? 'OWN' : 'OPP'; entry.startYard = 40;
+      entry.startSide = isUsKick ? 'OWN' : 'OPP'; entry.startYard = wiz.play.isSafetyKick ? 20 : 40;
       entry.catchSide = wiz.play.catchSide; entry.catchYard = wiz.play.catchYard;
       entry.endSide = wiz.play.endSide; entry.endYard = wiz.play.endYard;
       entry.returner = wiz.play.returner; entry.oppReturner = wiz.play.oppReturner;
@@ -1904,6 +1949,44 @@
   function startNextPlay(){
     wiz.play = { phase: (wiz.game.possession === 'Us' && !filmReviewMode) ? 'callCheck' : 'playType' };
     renderWizard();
+  }
+
+  // Nathan: wizard audit -- overtime was entirely unhandled (see the
+  // enteringOvertime check in logEvent). This is a reasonable DEFAULT
+  // procedure, not a rulebook -- short field, alternating single
+  // possessions, same spirit as PENALTY_RULES above -- not every league
+  // runs OT the same way, so the starting spot is editable and who starts
+  // with the ball is a plain, explicit choice rather than an automated
+  // coin toss.
+  function renderPhaseOtSetup(card){
+    const g = wiz.game;
+    card.innerHTML = '<div class="handoffIcon">⏱️</div><h2 style="text-align:center;">Overtime!</h2>' +
+      '<div class="sub" style="text-align:center;">Tied ' + g.scoreUs + '-' + g.scoreOpp + ' after regulation.</div>';
+    chipGroupField(card, 'Who starts with the ball?', wiz.play, 'otPossession', ['Us','Opponent']);
+    if (wiz.play.otYards == null) wiz.play.otYards = 10;
+    const yardsWrap = document.createElement('div'); yardsWrap.innerHTML = '<div class="fieldLabel">Starting Spot (yards from the goal line)</div>';
+    const yr = document.createElement('div'); yr.className = 'yardRow';
+    const minus = document.createElement('div'); minus.className = 'stepBtn'; minus.textContent = '−';
+    const input = document.createElement('input'); input.type = 'number'; input.value = wiz.play.otYards;
+    const plus = document.createElement('div'); plus.className = 'stepBtn'; plus.textContent = '+';
+    minus.addEventListener('click', function(){ wiz.play.otYards = Math.max(1, wiz.play.otYards-1); renderWizard(); });
+    plus.addEventListener('click', function(){ wiz.play.otYards = Math.min(50, wiz.play.otYards+1); renderWizard(); });
+    input.addEventListener('change', function(){ wiz.play.otYards = Math.max(1, Math.min(50, Number(input.value||10))); });
+    yr.appendChild(minus); yr.appendChild(input); yr.appendChild(plus);
+    yardsWrap.appendChild(yr); card.appendChild(yardsWrap);
+    const hint = document.createElement('div'); hint.className = 'sub'; hint.style.marginTop = '6px';
+    hint.textContent = '💡 Reasonable default (short field, alternating possessions) -- adjust if this league runs overtime differently.';
+    card.appendChild(hint);
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Start Overtime';
+    next.addEventListener('click', function(){
+      if (!wiz.play.otPossession){ alert('Pick who starts with the ball.'); return; }
+      const yards = wiz.play.otYards;
+      g.spot = clampSpot(wiz.play.otPossession === 'Us' ? (100 - yards) : yards);
+      g.down = 1; g.distance = Math.max(1, Math.min(10, yards));
+      g.possession = wiz.play.otPossession;
+      startNextPlay();
+    });
+    card.appendChild(next);
   }
 
   // Nathan: "we need a way of Logging a timeout to a team as an event...
@@ -1946,6 +2029,15 @@
       // with the quarter that just ended (not the new one), fixes both.
       const endingQuarter = wiz.game.quarter;
       const wasHalftime = endingQuarter === 2;
+      // Nathan: wizard audit -- overtime was completely unhandled before
+      // this. Ending Q4 (or any OT period) used to just increment the
+      // quarter number and flip ends, silently carrying over whatever
+      // spot/down/distance/possession regulation ended with -- wrong for
+      // entering a fresh, short-field OT possession. Tied is the only
+      // real signal available here (there's no "declare final" button in
+      // the live wizard); if the score differs, ending the quarter is
+      // just a normal quarter change, same as always.
+      const enteringOvertime = endingQuarter >= 4 && wiz.game.scoreUs === wiz.game.scoreOpp;
       wiz.game.quarter = endingQuarter + 1;
       await pushPlayEntry({ type:'quarterEnd', id: genId(), quarter: endingQuarter });
       // Nathan: "end of 2nd and 3rd quarters? It will automatically flip
@@ -1968,7 +2060,9 @@
       // the OPENING kickoff now kicks (receiving doesn't carry over
       // between halves, by rule), and the end each team defends gets a
       // real confirm step here instead of just being silently flipped.
-      if (wasHalftime && wiz.state.receivingTeam){
+      if (enteringOvertime){
+        wiz.play = { phase: 'otSetup' };
+      } else if (wasHalftime && wiz.state.receivingTeam){
         wiz.play = { phase: 'postScoreKickoff', kickingTeam: wiz.state.receivingTeam, isHalftime: true };
       }
     }
@@ -2051,6 +2145,7 @@
         // (stat-keeper.html's compileStatSheet/translatePlaysForLive,
         // both already check this flag -- no changes needed there).
         fumbledExchange: !!wiz.play.fumbledExchange,
+        safety: !!wiz.play.safety,
       }));
     } else if (type === 'Pass'){
       if (wiz.play.result === 'Incomplete'){
@@ -2081,7 +2176,7 @@
           startSide: sy.side, startYard: sy.yard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, yards: yards,
           formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir,
           coachFormation: wiz.play.coachFormation, coachFormationDir: wiz.play.coachFormationDir, coachCall: wiz.play.coachCall, coachCallDir: wiz.play.coachCallDir,
-          down: g.down, distance: g.distance,
+          down: g.down, distance: g.distance, safety: !!wiz.play.safety,
         }));
       } else {
         const sy = sideYardFromAbs(g.spot);
@@ -2121,7 +2216,9 @@
       entries.push(Object.assign({}, base, { type:'punt', puntTeam: onOffense ? 'Us' : 'Opponent', puntResult: wiz.play.puntResult,
         punter: wiz.play.punter, oppPunter: wiz.play.oppPunter, returner: wiz.play.returner, oppReturner: wiz.play.oppReturner,
         startSide: sy.side, startYard: sy.yard, catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard,
-        endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
+        endSide: wiz.play.endSide, endYard: wiz.play.endYard,
+        blockRecoveredByTeam: wiz.play.puntResult === 'Blocked' ? wiz.play.blockRecoveredByTeam : undefined,
+        td: !!wiz.play.td }));
       possessionFlips = true;
     }
 
@@ -2202,11 +2299,14 @@
     // is worth 6 regardless of who scored it (offense, or a defensive/
     // special-teams TD), credited to whichever team just had the ball --
     // EXCEPT a Turnover's own `td` (wizard audit: a pick-six/scoop-and-
-    // score had no way to get credited at all, see renderPhaseTurnoverDetail),
-    // where the team that scores is whoever RECOVERED it, the opposite of
-    // whoever was on offense when the ball was lost.
+    // score had no way to get credited at all, see renderPhaseTurnoverDetail)
+    // or a BLOCKED punt returned for a TD (same shape -- the receiving
+    // team scores, not the punting team), where the team that scores is
+    // whoever RECOVERED it, the opposite of whoever was on offense when
+    // the ball was lost/kicked away.
+    const isRecoveryTd = type === 'Turnover' || (type === 'Punt' && wiz.play.puntResult === 'Blocked');
     if (entries.some(function(e){ return e.td; })){
-      const weScored = type === 'Turnover' ? !onOffense : onOffense;
+      const weScored = isRecoveryTd ? !onOffense : onOffense;
       if (weScored) g.scoreUs += 6; else g.scoreOpp += 6;
       // wiz.play still holds the just-committed play's fields (formation,
       // carrier, etc.) -- side was never one of them (it lives on the entry's
@@ -2214,6 +2314,21 @@
       // renderPhaseExtraPoint to read who actually scored.
       wiz.play.side = weScored ? 'offense' : 'defense';
       wiz.play.phase = 'extraPoint';
+      renderWizard();
+      return;
+    }
+    // Nathan: wizard audit -- a ball carrier/QB downed in their own end
+    // zone had no live path to a Safety at all. 2 points go to the
+    // DEFENSE (the opposite credit direction from a touchdown), followed
+    // by a real free kick FROM the team that just gave up the safety TO
+    // the team that scored -- the reverse of a normal post-score kickoff,
+    // where the scoring team is the one that kicks. Reuses the exact same
+    // postScoreKickoff screen (isSafetyKick just changes the starting
+    // yard line and heading text), same reuse the halftime kickoff and
+    // PAT kickoff already established.
+    if (entries.some(function(e){ return e.safety; })){
+      if (onOffense) g.scoreOpp += 2; else g.scoreUs += 2;
+      wiz.play = { phase: 'postScoreKickoff', kickingTeam: onOffense ? 'Us' : 'Opponent', isSafetyKick: true };
       renderWizard();
       return;
     }

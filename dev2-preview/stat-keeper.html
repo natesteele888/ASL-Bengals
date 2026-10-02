@@ -1672,7 +1672,13 @@
       const retYds = (catchAbs != null && endAbs != null) ? (isUs ? (catchAbs - endAbs) : (endAbs - catchAbs)) : null;
       const puntGloss = isUs ? (p.punter||'?') : ('Opponent' + (p.oppPunter ? ' ('+p.oppPunter+')' : ''));
       let base = (isUs ? '' : '🚩 Forced Punt — ') + 'Punt — ' + puntGloss;
-      if (p.puntResult === 'Returned'){
+      // Audit (wizard): a Blocked punt that got returned (even for a TD)
+      // used to fall into the plain "(Blocked)" branch below with no
+      // returner/TD text at all -- same "returned" shape as a clean punt
+      // return whenever there's actually a returner OR a TD on it (a fast
+      // return-for-six doesn't always get a name captured in time).
+      const wasReturned = p.puntResult === 'Returned' || (p.puntResult === 'Blocked' && (p.returner || p.oppReturner || p.td));
+      if (wasReturned){
         if (isUs){
           const puntAssists = asList(p.assist);
           const tackleTxt = p.tackler ? ' · tackled by '+p.tackler+(puntAssists.length?' + '+puntAssists.join(' + ')+' (assist)':'') : '';
@@ -1688,7 +1694,7 @@
         if (puntDist != null) base += ' · '+puntDist+' yd punt';
         if (retYds != null) base += ' · '+retYds+' return yds';
       } else {
-        base += ' (' + (p.puntResult||'?') + ')';
+        base += ' (' + (p.puntResult||'?') + (p.puntResult === 'Blocked' && p.blockRecoveredByTeam ? ', recovered by '+p.blockRecoveredByTeam : '') + ')';
       }
       if (net != null) base += ' · net ' + net + ' yds';
       return base;
@@ -2339,14 +2345,25 @@
       }
       if (p.type==='punt'){
         const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
+        // Audit (wizard): scoring.touchdowns++ used to live ONLY inside
+        // the named-returner branch below, and only on OUR OWN return --
+        // so a punt-return TD with no name captured in time undercounted
+        // the team-wide Scoring Summary, and the opponent returning OUR
+        // punt for a TD never counted at all, named or not. Team-wide
+        // credit is now unconditional on p.td alone, same pattern as the
+        // Turnover block's own fix; individual return credit below still
+        // needs a name, same as it always did.
+        if (p.td) scoring.touchdowns++;
         if (p.puntTeam === 'Opponent'){
           forcedPunts++;
-          if (p.puntResult === 'Returned' && p.returner){
+          // A blocked punt that WE recovered and ran back is functionally
+          // a return -- same credit as a clean punt return, including TD.
+          if ((p.puntResult === 'Returned' || p.puntResult === 'Blocked') && p.returner){
             const pr = puntReturns[p.returner] || (puntReturns[p.returner] = {name:p.returner, ret:0, yds:0, td:0});
             pr.ret++;
             const retYds = (catchAbs != null && endAbs != null) ? (endAbs - catchAbs) : null;
             if (retYds != null) pr.yds += retYds;
-            if (p.td){ pr.td++; scoring.touchdowns++; }
+            if (p.td) pr.td++;
           }
         } else if (p.punter){
           const pt = punting[p.punter] || (punting[p.punter] = {name:p.punter, punts:0, touchback:0, fairCatch:0, downed:0, returned:0, muffed:0, netYds:0, netCount:0, grossYds:0, grossCount:0});
@@ -3034,7 +3051,8 @@
         const startAbs = absoluteSpot(p.startSide, p.startYard), catchAbs = absoluteSpot(p.catchSide, p.catchYard), endAbs = absoluteSpot(p.endSide, p.endYard);
         if (!isUs){
           ss.forcedPunts += 1;
-          if (p.puntResult==='Returned' && p.returner){
+          // Audit (wizard): same blocked-and-returned fix as compileStatSheet.
+          if ((p.puntResult==='Returned' || p.puntResult==='Blocked') && p.returner){
             const num = numFor(p.returner);
             if (num != null){
               const row = ensurePuntReturnRow(num);
