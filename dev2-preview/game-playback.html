@@ -152,6 +152,15 @@
        stepping through plays auto-seeks this to whatever moment that play
        was logged at (see renderStep's use of ytPlayer.seekTo). -->
   <div id="filmPanelHost"></div>
+  <!-- Nathan: "our games are now being recorded in snippets for each
+       play... load in the playlist with the individual files in order so
+       I can match up what happened on the play to the clip of the play."
+       Separate from filmPanelHost above (one continuous video, auto-
+       seeked by filmTimestamp) -- this is the playback side of the
+       per-play clip model game-wizard.html now writes: each play's own
+       filmClipIndex picks a different clip out of game.playClips as you
+       step through, instead of seeking one shared video. -->
+  <div id="playClipsPanelHost"></div>
   <div class="scoreBug">
     <div class="teamSide us">
       <img class="teamLogo" id="usLogo" src="assets/images/header-logo.png" alt="ASL Bengals">
@@ -434,6 +443,55 @@
       const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
       hint.textContent = "Auto-seek isn't available for this film -- use the video's own controls above to find each play.";
       wrap.appendChild(hint);
+    }
+    host.appendChild(wrap);
+  }
+  // Nathan: "our games are now being recorded in snippets for each play.
+  // I would like to load in the playlist with the individual files in
+  // order so I can match up what happened on the play to the clip of the
+  // play." Playback side of the per-play clip model: instead of seeking
+  // ONE shared video (the mechanism above, still used for games that
+  // have gameFootage/filmTimestamp instead), each play's own
+  // filmClipIndex picks a different file out of game.playClips --
+  // stepping through plays swaps the embed rather than seeking it.
+  let playClipsList = [];
+  let shownPlayClipIndex = null; // which playClips[] index the iframe is currently showing -- rebuilding on every render (even to the SAME clip) would restart playback on every scrub tick
+  function renderPlaybackPlayClipsPanel(game){
+    const host = document.getElementById('playClipsPanelHost');
+    host.innerHTML = '';
+    playClipsList = (game && Array.isArray(game.playClips)) ? game.playClips.filter(function(c){ return c && c.url; }) : [];
+    shownPlayClipIndex = null;
+    // Deliberately no "nothing linked" placeholder here (same convention
+    // as renderPlaybackFilmPanel) -- a game using the older gameFootage
+    // model shouldn't show an empty per-play-clip panel underneath its
+    // real film.
+  }
+  function showPlayClipForIndex(index){
+    const host = document.getElementById('playClipsPanelHost');
+    if (!playClipsList.length) { host.innerHTML = ''; shownPlayClipIndex = null; return; }
+    if (index === shownPlayClipIndex) return; // already showing it -- don't restart the iframe
+    shownPlayClipIndex = index;
+    host.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'card'; wrap.style.padding = '10px';
+    if (typeof index !== 'number' || index < 0 || index >= playClipsList.length){
+      wrap.innerHTML = '<div class="sub" style="margin:0;">No clip linked to this play.</div>';
+      host.appendChild(wrap);
+      return;
+    }
+    const clip = playClipsList[index];
+    wrap.innerHTML = '<div style="font-weight:800;font-size:13px;margin-bottom:6px;">🎬 Clip ' + (index + 1) + ' of ' + playClipsList.length + '</div>';
+    const embed = embeddableFilmSrc(clip.url);
+    if (embed && (embed.kind === 'youtube' || embed.kind === 'drive')){
+      const iframe = document.createElement('iframe');
+      iframe.src = embed.kind === 'youtube' ? ('https://www.youtube.com/embed/' + embed.videoId) : embed.previewUrl;
+      iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
+      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
+      wrap.appendChild(iframe);
+    } else {
+      const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
+      openLink.className = 'primaryBtn'; openLink.style.cssText = 'display:block;text-align:center;text-decoration:none;';
+      openLink.textContent = '▶️ Open Clip ' + (index + 1) + ' in a New Tab';
+      wrap.appendChild(openLink);
     }
     host.appendChild(wrap);
   }
@@ -779,6 +837,7 @@
     const game = liveGamesCache.find(function(g){ return g.id === gameId; });
     applyOpponentIdentity(game);
     renderPlaybackFilmPanel(game);
+    renderPlaybackPlayClipsPanel(game);
     loadStatus.textContent = 'Loading this game\'s log…';
     let gs = null;
     try {
@@ -880,6 +939,7 @@
       currentLine.style.display = 'none';
       document.getElementById('tdBanner').classList.remove('show');
       renderBoxScore(-1);
+      showPlayClipForIndex(playClipsList.length ? 0 : null);
       return;
     }
 
@@ -902,6 +962,10 @@
         if (current == null || Math.abs(current - p.filmTimestamp) > 1.5) ytPlayer.seekTo(p.filmTimestamp, true);
       } catch(e){ /* player not fully ready yet -- next step's render will just try again */ }
     }
+    // Per-play clip model (see renderPlaybackPlayClipsPanel above) -- a
+    // no-op when this game has no playClips at all (playClipsList stays
+    // empty, showPlayClipForIndex's own guard clears/skips the panel).
+    showPlayClipForIndex(typeof p.filmClipIndex === 'number' ? p.filmClipIndex : null);
     document.getElementById('scoreUs').textContent = after.us;
     document.getElementById('scoreOpp').textContent = after.opp;
     document.getElementById('quarterLabel').textContent = quarterLabel(after.quarter);
