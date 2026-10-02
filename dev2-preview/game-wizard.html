@@ -799,15 +799,10 @@
     card.appendChild(spotPicker(k, 'endSide', 'endYard', isUsKick ? 30 : 40, renderWizard));
 
     if (isUsKick){
-      const lbl3 = document.createElement('div'); lbl3.className = 'fieldLabel'; lbl3.textContent = 'Returner (optional, opponent -- if known)';
-      card.appendChild(lbl3);
-      // Opponent returner -- not on our roster, so a plain write-in field
-      // is the right tool here, not roster pills.
-      const input = document.createElement('input'); input.className = 'writeIn'; input.type = 'text';
-      input.placeholder = "Opponent's returner, if known";
-      input.value = k.returner || '';
-      input.addEventListener('input', function(){ k.returner = input.value; });
-      card.appendChild(input);
+      // Opponent returner -- not on our roster, so this uses the chooser's
+      // opponent mode (recent-opponent-name chips + free text) rather than
+      // our own roster pills.
+      renderPlayerChooser(card, 'Returner (opponent, if known)', k, 'returner', {optional:true, opponent:true});
     } else {
       // Nathan: "as I start to enter the name in the field, it should auto
       // recommend players on the roster. Or give me some pills under the
@@ -922,12 +917,36 @@
   // the ability to choose whomever." Same starters-first-then-full-roster-
   // with-a-filter shape as the Confirm Starters swap picker -- confirmed
   // starters are the fast path, but nobody's locked out.
+  //
+  // Nathan: "upload of video only allows to choose one opponent..." is a
+  // different feature; the relevant gap here was found scoring a real
+  // game: every "opponent" field (oppCarrier, oppPasser, oppPunter,
+  // oppReturner, and whichever side of a turnover is the other team) was
+  // showing OUR OWN roster as quick-pick chips and searching OUR OWN
+  // roster as you typed -- the opponent is never on liveRoster, so those
+  // chips/matches could never be right. Fixed by giving this chooser a
+  // real opponent mode (opts.opponent) instead of leaving the free-text
+  // field as the only working part: quick-pick chips now come from
+  // opponent names already typed THIS game (wiz.state.oppNames, recorded
+  // by recordOppName below) so a defender who keeps making plays doesn't
+  // need to be retyped every time, and the full-roster search is skipped
+  // entirely in this mode since there's no opponent roster to search.
+  function recordOppName(name){
+    name = (name || '').trim();
+    if (!name) return;
+    const list = wiz.state.oppNames || (wiz.state.oppNames = []);
+    const i = list.indexOf(name);
+    if (i !== -1) list.splice(i, 1);
+    list.unshift(name);
+    if (list.length > 8) list.length = 8;
+  }
   function renderPlayerChooser(container, label, stateObj, key, opts){
     opts = opts || {};
     const multi = !!opts.multi;
+    const isOpp = !!opts.opponent;
     const wrap = document.createElement('div');
     wrap.innerHTML = '<div class="fieldLabel">' + escapeHtml(label) + (opts.optional ? ' (optional)' : '') + '</div>';
-    const quick = getQuickPickPlayers();
+    const quick = isOpp ? (wiz.state.oppNames || []).map(function(n){ return { name: n }; }) : getQuickPickPlayers();
     // Nathan: "it should auto recommend players on the roster, or give me
     // pills under the bar with common players." Stores the player's NAME
     // (not their number) -- same as Stat Keeper's own playerPicker, since
@@ -942,14 +961,14 @@
         const chip = document.createElement('div');
         chip.className = 'optChip' + (selected().indexOf(p.name) !== -1 ? ' active' : '');
         chip.style.cssText = 'flex:0 0 auto;min-width:auto;padding:8px 12px;font-size:12px;';
-        chip.textContent = playerLabel(p);
+        chip.textContent = isOpp ? p.name : playerLabel(p);
         chip.addEventListener('click', function(){ togglePick(p.name); });
         hotRow.appendChild(chip);
       });
       wrap.appendChild(hotRow);
     }
     const filterInput = document.createElement('input'); filterInput.className = 'writeIn';
-    filterInput.placeholder = '🔍 Search full roster, or type a name…';
+    filterInput.placeholder = isOpp ? "Opponent's player, if known" : '🔍 Search full roster, or type a name…';
     // Nathan: "as I start to enter the name in the field, it should auto
     // recommend players." Typing now does double duty: it filters the
     // roster into matching pills below AND, on anyone not on the roster
@@ -962,6 +981,7 @@
     const fullWrap = document.createElement('div'); fullWrap.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;';
     wrap.appendChild(fullWrap);
     function renderMatches(){
+      if (isOpp) return; // no opponent roster exists to search -- recent-name chips + free text only
       const ft = filterInput.value.trim().toLowerCase();
       fullWrap.innerHTML = '';
       if (!ft) return;
@@ -986,10 +1006,10 @@
     }
     filterInput.addEventListener('input', renderMatches);
     if (!multi){
-      filterInput.addEventListener('blur', function(){ stateObj[key] = filterInput.value.trim() || null; });
-      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); stateObj[key] = filterInput.value.trim() || null; renderWizard(); } });
+      filterInput.addEventListener('blur', function(){ stateObj[key] = filterInput.value.trim() || null; if (isOpp && stateObj[key]) recordOppName(stateObj[key]); });
+      filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); stateObj[key] = filterInput.value.trim() || null; if (isOpp && stateObj[key]) recordOppName(stateObj[key]); renderWizard(); } });
     } else {
-      filterInput.placeholder = '🔍 Search, or type a name and press Enter…';
+      filterInput.placeholder = isOpp ? "Opponent's player -- type a name and press Enter…" : '🔍 Search, or type a name and press Enter…';
       filterInput.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); const v = filterInput.value.trim(); if (v) togglePick(v); filterInput.value = ''; fullWrap.innerHTML = ''; } });
     }
     function togglePick(name){
@@ -1000,6 +1020,7 @@
       } else {
         stateObj[key] = name;
       }
+      if (isOpp) recordOppName(name);
       renderWizard();
     }
     container.appendChild(wrap);
@@ -1336,6 +1357,56 @@
     card.appendChild(next);
     backBtn(card, 'callCheck');
   }
+  // Nathan: "look through the game recap wizard logistically to see if
+  // obvious things are missing, make the process super easy. Games
+  // haven't been updated recently because it's too difficult to use."
+  // Biggest, clearest friction found: Formation/Play got asked twice on
+  // every single offensive play where the call was known -- once on the
+  // Coach's Call screen above (what was signaled in), then AGAIN on the
+  // Run/Pass detail screen (what actually happened) -- even though the
+  // overwhelming majority of plays run exactly as called. Pre-fills the
+  // "what happened" fields from the call the first time the detail
+  // screen renders for this play (never runs again once the coach has
+  // picked anything here, so it can't clobber a correction) -- a play
+  // that ran as called now needs zero extra taps on these fields, and
+  // busting out of it is just tapping the one chip that's actually
+  // different, not re-picking all four from scratch.
+  function seedDetailFromCoachCall(){
+    if (wiz.play.formation === undefined && wiz.play.coachFormation){
+      wiz.play.formation = wiz.play.coachFormation;
+      wiz.play.formationDir = wiz.play.coachFormationDir;
+    }
+    if (wiz.play.playCall === undefined && wiz.play.coachCall){
+      wiz.play.playCall = wiz.play.coachCall;
+      wiz.play.playCallDir = wiz.play.coachCallDir;
+    }
+  }
+  // Nathan: same "make the process super easy" audit -- when the coach
+  // picked "No, I can't see the call," Formation/Play/Direction had to be
+  // re-picked from scratch even for a play run back-to-back (hurry-up, or
+  // just running a play that's working). wiz.state.lastOffCall is
+  // recorded in commitCurrentPlay whenever we're actually on offense with
+  // a real formation/play logged, so this only ever offers a real,
+  // just-used call -- never shown once seedDetailFromCoachCall above has
+  // already filled formation from a known sideline call, and tapping it
+  // is a deliberate, visible choice rather than a silent guess (unlike
+  // the coach-call seed, there's no sideline confirmation backing this).
+  function renderSameAsLastPlayHint(card){
+    if (wiz.play.formation !== undefined) return;
+    const last = wiz.state.lastOffCall;
+    if (!last || !last.formation) return;
+    const row = document.createElement('div'); row.className = 'chipRow'; row.style.marginBottom = '8px';
+    const c = document.createElement('div'); c.className = 'optChip';
+    c.textContent = '🔁 Same as last play (' + last.formation + (last.formationDir ? ' ' + last.formationDir : '') +
+      (last.playCall ? ' — ' + last.playCall : '') + (last.playCallDir ? ' ' + last.playCallDir : '') + ')';
+    c.addEventListener('click', function(){
+      wiz.play.formation = last.formation; wiz.play.formationDir = last.formationDir;
+      wiz.play.playCall = last.playCall; wiz.play.playCallDir = last.playCallDir;
+      renderWizard();
+    });
+    row.appendChild(c);
+    card.appendChild(row);
+  }
 
   // Nathan: "You choose Run, Pass, Penalty, Turnover... On 4th down, it
   // should display an option for Punt... On defense, we won't have
@@ -1401,6 +1472,8 @@
     const onOffense = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>🏃 Run</h2>';
     if (onOffense){
+      seedDetailFromCoachCall();
+      renderSameAsLastPlayHint(card);
       chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
       if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
       chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
@@ -1428,7 +1501,7 @@
       // on defense too. It lived only in the onOffense branch above;
       // added here as well rather than moved, since offense still needs
       // its own copy alongside the ball carrier field there.
-      renderPlayerChooser(card, 'Opponent Ball Carrier', wiz.play, 'oppCarrier', {optional:true});
+      renderPlayerChooser(card, 'Opponent Ball Carrier', wiz.play, 'oppCarrier', {optional:true, opponent:true});
       chipGroupField(card, 'Direction', wiz.play, 'dir', ['Left','Middle','Right']);
     }
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
@@ -1441,6 +1514,8 @@
     const onOffense = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>🎯 Pass</h2>';
     if (onOffense){
+      seedDetailFromCoachCall();
+      renderSameAsLastPlayHint(card);
       chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
       if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
       chipGroupField(card, 'Play', wiz.play, 'playCall', PLAYBOOK);
@@ -1448,8 +1523,8 @@
       renderPlayerChooser(card, 'Passer', wiz.play, 'passer');
       renderPlayerChooser(card, 'Target', wiz.play, 'target');
     } else {
-      renderPlayerChooser(card, 'Opponent Passer', wiz.play, 'oppPasser', {optional:true});
-      wiz.play.oppTarget = wiz.play.oppTarget || '';
+      renderPlayerChooser(card, 'Opponent Passer', wiz.play, 'oppPasser', {optional:true, opponent:true});
+      renderPlayerChooser(card, 'Opponent Target', wiz.play, 'oppTarget', {optional:true, opponent:true});
     }
     chipGroupField(card, 'Result', wiz.play, 'result', ['Complete','Incomplete','Sacked']);
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
@@ -1562,8 +1637,15 @@
   function renderPhaseTurnoverDetail(card){
     card.innerHTML = '<h2>🔄 Turnover</h2>';
     chipGroupField(card, 'Type', wiz.play, 'toType', ['Fumble','Interception']);
-    renderPlayerChooser(card, 'Lost By (offense)', wiz.play, 'lostBy', {optional:true});
-    renderPlayerChooser(card, 'Recovered By (defense)', wiz.play, 'recoveredBy', {optional: true});
+    // Nathan: found scoring a real game -- "Lost By (offense)"/"Recovered
+    // By (defense)" were hardcoded regardless of who's actually on
+    // offense, AND both fields showed OUR roster even when the opponent
+    // was the one on offense (or the one recovering). Whoever's on
+    // offense right now is losing the ball; the other side recovers it --
+    // wire both the label and the roster-vs-free-text mode to that.
+    const weAreOffense = wiz.game.possession === 'Us';
+    renderPlayerChooser(card, weAreOffense ? 'Lost By (us)' : 'Lost By (opponent)', wiz.play, 'lostBy', {optional:true, opponent: !weAreOffense});
+    renderPlayerChooser(card, weAreOffense ? 'Recovered By (opponent)' : 'Recovered By (us)', wiz.play, 'recoveredBy', {optional:true, opponent: weAreOffense});
     // Nathan: "Marked an interception but it didn't say where he caught it
     // and where he was tackled. I put it at the 16 but it showed us with
     // 1st and 10 at the 27 which was the previous spot." Two real, related
@@ -1582,6 +1664,22 @@
     wiz.play.endYard = wiz.play.endYard != null ? wiz.play.endYard : wiz.play.catchYard;
     card.appendChild((function(){ const l=document.createElement('div'); l.className='fieldLabel'; l.textContent='Final Spot (after any return -- same as above if no return)'; return l; })());
     card.appendChild(spotPicker(wiz.play, 'endSide', 'endYard', wiz.play.endYard, renderWizard));
+    // Nathan: wizard audit -- a pick-six or scoop-and-score had no way to
+    // get credited live at all; the turnover screen had no Touchdown
+    // option and the entry never carried a `td` flag, so the generic
+    // "a touchdown is worth 6, go to the PAT screen" check further down in
+    // commitCurrentPlay (which already explicitly accounts for defensive/
+    // special-teams TDs in its own comment) could never actually fire for
+    // one. The recovering team is always the side that WASN'T on offense
+    // when the ball was lost, so this is the one play type where "who
+    // scored" and "who was on offense" are opposite -- handled in
+    // commitCurrentPlay, not here.
+    const tdRow = document.createElement('div'); tdRow.className = 'chipRow'; tdRow.style.marginTop = '10px';
+    const tdChip = document.createElement('div'); tdChip.className = 'optChip' + (wiz.play.td ? ' active' : '');
+    tdChip.textContent = '🏆 Returned for a Touchdown';
+    tdChip.addEventListener('click', function(){ wiz.play.td = !wiz.play.td; renderWizard(); });
+    tdRow.appendChild(tdChip);
+    card.appendChild(tdRow);
     const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = '✅ Log Turnover & Continue';
     next.addEventListener('click', function(){ if (!wiz.play.toType){ alert('Pick Fumble or Interception.'); return; } commitCurrentPlay(); });
     card.appendChild(next);
@@ -1592,10 +1690,10 @@
     const isUs = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>🦵 Punt</h2><div class="sub">4th down -- ' + (isUs ? 'we\'re' : 'they\'re') + ' punting it away.</div>';
     if (isUs) renderPlayerChooser(card, 'Punter', wiz.play, 'punter');
-    else renderPlayerChooser(card, 'Opponent Punter', wiz.play, 'oppPunter', {optional:true});
+    else renderPlayerChooser(card, 'Opponent Punter', wiz.play, 'oppPunter', {optional:true, opponent:true});
     chipGroupField(card, 'Result', wiz.play, 'puntResult', ['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']);
     if (wiz.play.puntResult === 'Returned'){
-      if (isUs) renderPlayerChooser(card, 'Returned By (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      if (isUs) renderPlayerChooser(card, 'Returned By (opponent)', wiz.play, 'oppReturner', {optional:true, opponent:true});
       else renderPlayerChooser(card, 'Returned By', wiz.play, 'returner');
     }
     wiz.play.startSide = wiz.play.startSide || sideYardFromAbs(wiz.game.spot).side;
@@ -1734,7 +1832,7 @@
     if (wiz.play.onside){
       chipGroupField(card, 'Recovered By', wiz.play, 'recoveredByTeam', ['Us','Opponent']);
     } else {
-      if (isUsKick) renderPlayerChooser(card, 'Returner (opponent, optional)', wiz.play, 'oppReturner', {optional:true});
+      if (isUsKick) renderPlayerChooser(card, 'Returner (opponent)', wiz.play, 'oppReturner', {optional:true, opponent:true});
       else renderPlayerChooser(card, 'Returner', wiz.play, 'returner');
       wiz.play.catchSide = wiz.play.catchSide != null ? wiz.play.catchSide : (isUsKick ? 'OPP' : 'OWN');
       wiz.play.catchYard = wiz.play.catchYard != null ? wiz.play.catchYard : 15;
@@ -1983,14 +2081,22 @@
           assist: (!onOffense && wiz.play.resultKind === 'Tackled') ? (wiz.play.assist || []) : undefined,
         }));
       }
-    } else if (type === 'Penalty'){
+    }
+    // Nathan: "make the process super easy" -- feeds renderSameAsLastPlayHint
+    // above, so a coach running the same formation/play again (hurry-up, or
+    // just repeating something that's working) doesn't have to re-pick it
+    // from scratch when the sideline call wasn't visible to seed it instead.
+    if (onOffense && (type === 'Run' || type === 'Pass') && wiz.play.formation){
+      wiz.state.lastOffCall = { formation: wiz.play.formation, formationDir: wiz.play.formationDir, playCall: wiz.play.playCall, playCallDir: wiz.play.playCallDir };
+    }
+    if (type === 'Penalty'){
       entries.push(Object.assign({}, base, { type:'penalty', penTeam: wiz.play.penTeam, penType: wiz.play.penType, penOther: wiz.play.penOther,
         penYards: wiz.play.penYards, declined: !!wiz.play.declined, firstDown: !!wiz.play.firstDown,
         spotSide: wiz.play.spotSide, spotYard: wiz.play.spotYard, penPlayer: wiz.play.penPlayer }));
       converted = !!wiz.play.firstDown;
     } else if (type === 'Turnover'){
       entries.push(Object.assign({}, base, { type:'turnover', toType: wiz.play.toType, lostBy: wiz.play.lostBy, recoveredBy: wiz.play.recoveredBy,
-        catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard, endSide: wiz.play.endSide, endYard: wiz.play.endYard }));
+        catchSide: wiz.play.catchSide, catchYard: wiz.play.catchYard, endSide: wiz.play.endSide, endYard: wiz.play.endYard, td: !!wiz.play.td }));
       possessionFlips = true;
     } else if (type === 'Punt'){
       const sy = sideYardFromAbs(g.spot);
@@ -2076,14 +2182,19 @@
     // they were initialized and finalUs/finalOpp only ever got set by
     // hand elsewhere (Stat Keeper's own Final Score Check). A touchdown
     // is worth 6 regardless of who scored it (offense, or a defensive/
-    // special-teams TD), credited to whichever team just had the ball.
+    // special-teams TD), credited to whichever team just had the ball --
+    // EXCEPT a Turnover's own `td` (wizard audit: a pick-six/scoop-and-
+    // score had no way to get credited at all, see renderPhaseTurnoverDetail),
+    // where the team that scores is whoever RECOVERED it, the opposite of
+    // whoever was on offense when the ball was lost.
     if (entries.some(function(e){ return e.td; })){
-      if (onOffense) g.scoreUs += 6; else g.scoreOpp += 6;
-      // wiz.play still holds the just-committed run/pass's fields (formation,
+      const weScored = type === 'Turnover' ? !onOffense : onOffense;
+      if (weScored) g.scoreUs += 6; else g.scoreOpp += 6;
+      // wiz.play still holds the just-committed play's fields (formation,
       // carrier, etc.) -- side was never one of them (it lives on the entry's
       // `base` object, not the draft), so it's set explicitly here for
       // renderPhaseExtraPoint to read who actually scored.
-      wiz.play.side = onOffense ? 'offense' : 'defense';
+      wiz.play.side = weScored ? 'offense' : 'defense';
       wiz.play.phase = 'extraPoint';
       renderWizard();
       return;
@@ -2121,7 +2232,7 @@
       {key:'dir', label:'Run Direction', kind:'chip', options:['Left','Middle','Right']},
       {key:'tags', label:'Motion/Add-Ons', kind:'tagsMulti', optional:true},
       {key:'carrier', label:'Carrier (us)', kind:'player'},
-      {key:'oppCarrier', label:'Carrier (opponent)', kind:'player', optional:true},
+      {key:'oppCarrier', label:'Carrier (opponent)', kind:'player', optional:true, opponent:true},
       {key:'spot', label:'Start / End Spot', kind:'spotPair'},
       {key:'downdist', label:'Down & Distance', kind:'downdist'},
       {key:'firstDown', label:'First Down', kind:'toggle'},
@@ -2135,7 +2246,8 @@
       {key:'playCallDir', label:'Play Direction', kind:'chip', options:['Left','Right']},
       {key:'passer', label:'Passer (us)', kind:'player'},
       {key:'target', label:'Target (us)', kind:'player'},
-      {key:'oppPasser', label:'Passer (opponent)', kind:'player', optional:true},
+      {key:'oppPasser', label:'Passer (opponent)', kind:'player', optional:true, opponent:true},
+      {key:'oppTarget', label:'Target (opponent)', kind:'player', optional:true, opponent:true},
       {key:'spot', label:'Start / End Spot', kind:'spotPair'},
       {key:'downdist', label:'Down & Distance', kind:'downdist'},
       {key:'firstDown', label:'First Down', kind:'toggle'},
@@ -2150,16 +2262,16 @@
     ],
     kick: [
       {key:'returner', label:'Returner (us)', kind:'player', optional:true},
-      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true, opponent:true},
       {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
       {key:'td', label:'Touchdown', kind:'toggle'},
     ],
     punt: [
       {key:'puntResult', label:'Result', kind:'chip', options:['Downed','Fair Catch','Touchback','Out of Bounds','Muffed','Returned']},
       {key:'punter', label:'Punter (us)', kind:'player', optional:true},
-      {key:'oppPunter', label:'Punter (opponent)', kind:'player', optional:true},
+      {key:'oppPunter', label:'Punter (opponent)', kind:'player', optional:true, opponent:true},
       {key:'returner', label:'Returner (us)', kind:'player', optional:true},
-      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true},
+      {key:'oppReturner', label:'Returner (opponent)', kind:'player', optional:true, opponent:true},
       {key:'spotTriple', label:'Start / Caught / End Spot', kind:'spotTriple'},
     ],
     penalty: [
@@ -2173,8 +2285,12 @@
     ],
     turnover: [
       {key:'toType', label:'Type', kind:'chip', options:['Fumble','Interception']},
-      {key:'lostBy', label:'Lost By', kind:'player', optional:true},
-      {key:'recoveredBy', label:'Recovered By', kind:'player', optional:true},
+      // base.side ('offense'/'defense', set when the play was committed)
+      // records which side WE were on -- whoever was on offense is the one
+      // who lost the ball, so that's the field that needs opponent mode
+      // when we were on defense, and vice versa for Recovered By.
+      {key:'lostBy', label:'Lost By', kind:'player', optional:true, opponent: function(d){ return d.side !== 'offense'; }},
+      {key:'recoveredBy', label:'Recovered By', kind:'player', optional:true, opponent: function(d){ return d.side === 'offense'; }},
       {key:'spot', label:'Recovered At / Final Spot', kind:'catchEndPair'},
     ],
     kneel: [
@@ -2240,7 +2356,7 @@
   function renderAuditFieldEditor(container, f){
     const wrap = document.createElement('div'); wrap.style.cssText = 'margin-bottom:4px;';
     if (f.kind === 'chip') chipGroupField(wrap, f.label, auditDraft, f.key, f.options);
-    else if (f.kind === 'player') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {optional: f.optional});
+    else if (f.kind === 'player') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {optional: f.optional, opponent: typeof f.opponent === 'function' ? f.opponent(auditDraft) : !!f.opponent});
     else if (f.kind === 'playerMulti') renderPlayerChooser(wrap, f.label, auditDraft, f.key, {multi:true, optional:true});
     else if (f.kind === 'tagsMulti'){
       const l = document.createElement('div'); l.className = 'fieldLabel'; l.textContent = f.label;
