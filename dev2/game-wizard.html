@@ -1284,6 +1284,7 @@
     else if (wiz.game.possession === 'Us' && phase === 'calledPlay') renderPhaseCalledPlay(card);
     else if (phase === 'playType') renderPhasePlayType(card);
     else if (phase === 'runDetail') renderPhaseRunDetail(card);
+    else if (phase === 'badSnapDetail') renderPhaseBadSnapDetail(card);
     else if (phase === 'passDetail') renderPhasePassDetail(card);
     else if (phase === 'penaltyDetail') renderPhasePenaltyDetail(card);
     else if (phase === 'turnoverDetail') renderPhaseTurnoverDetail(card);
@@ -1343,20 +1344,57 @@
   function renderPhasePlayType(card){
     const onOffense = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>' + (onOffense ? '🏈 Choose the Play' : '🛡️ What Did They Run?') + '</h2>';
-    const opts = onOffense ? ['Run','Pass','Penalty','Turnover'] : ['Run','Pass','Punt','Penalty','Turnover'];
+    // Nathan: "this is 11U football so there are a lot of bad snaps. I
+    // don't want to credit a ball carrier with a 12 yard loss on a bad
+    // snap." A real peer choice here (not a checkbox buried inside Run),
+    // matching how a coach actually thinks about it in the moment --
+    // under the hood it's still a 'Run' entry (same spot/down/distance
+    // handling, zero changes needed there or in stat-keeper.html/
+    // game-playback.html's own box-score math), just flagged
+    // fumbledExchange:true -- the exact convention stat-keeper.html's own
+    // manual entry form already uses to keep a botched exchange out of a
+    // player's rushing attempts/yards while still counting the down and
+    // moving the ball. See renderPhaseBadSnapDetail below.
+    const opts = onOffense ? ['Run','Pass','Penalty','Turnover','Bad Snap'] : ['Run','Pass','Punt','Penalty','Turnover','Bad Snap'];
     if (onOffense && wiz.game.down === 4) opts.push('Punt');
     const row = document.createElement('div'); row.className = 'chipRow';
     opts.forEach(function(t){
       const c = document.createElement('div'); c.className = 'optChip'; c.textContent = t;
       c.addEventListener('click', function(){
-        wiz.play.type = t;
-        wiz.play.phase = t === 'Run' ? 'runDetail' : t === 'Pass' ? 'passDetail' : t === 'Penalty' ? 'penaltyDetail' : t === 'Turnover' ? 'turnoverDetail' : 'puntDetail';
+        // fumbledExchange is set/cleared on EVERY tap (not just Bad
+        // Snap's own) so backing out of Bad Snap and picking a real Run
+        // instead doesn't leave the flag incorrectly set on it.
+        wiz.play.fumbledExchange = (t === 'Bad Snap');
+        wiz.play.type = (t === 'Bad Snap') ? 'Run' : t;
+        wiz.play.phase = t === 'Run' ? 'runDetail' : t === 'Pass' ? 'passDetail' : t === 'Penalty' ? 'penaltyDetail' : t === 'Turnover' ? 'turnoverDetail' : t === 'Bad Snap' ? 'badSnapDetail' : 'puntDetail';
         renderWizard();
       });
       row.appendChild(c);
     });
     card.appendChild(row);
     if (onOffense) backBtn(card, wiz.play.coachCall !== undefined || wiz.play.calledSkipped ? 'calledPlay' : 'callCheck');
+  }
+
+  // Nathan: "Need to add bad snap as an option after choosing the play
+  // formation... I need to be able to say what the formation is, then
+  // choose the result. where is the ball spotted now?" Deliberately
+  // thinner than renderPhaseRunDetail -- no Play/Play Direction (there
+  // was no real call that happened as designed) and no Ball Carrier (the
+  // whole point is NOT crediting one) -- just Formation, then straight
+  // into the same shared "Where It Ended" spot picker Run/Pass already
+  // use, which is exactly how "where is the ball spotted now" gets
+  // answered without building a second spot-tracking UI.
+  function renderPhaseBadSnapDetail(card){
+    const onOffense = wiz.game.possession === 'Us';
+    card.innerHTML = '<h2>🫳 Bad Snap</h2><div class="sub">A botched snap or exchange -- moves the ball and counts the down, but won\'t be credited as a rushing attempt to any player.</div>';
+    if (onOffense){
+      chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
+      if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
+    }
+    const next = document.createElement('button'); next.className = 'primaryBtn'; next.textContent = 'Continue →';
+    next.addEventListener('click', function(){ wiz.play.phase = 'resultSpot'; renderWizard(); });
+    card.appendChild(next);
+    backBtn(card, 'playType');
   }
 
   function renderPhaseRunDetail(card){
@@ -1604,7 +1642,7 @@
       commitCurrentPlay();
     });
     card.appendChild(next);
-    backBtn(card, wiz.play.type === 'Run' ? 'runDetail' : 'passDetail');
+    backBtn(card, wiz.play.fumbledExchange ? 'badSnapDetail' : (wiz.play.type === 'Run' ? 'runDetail' : 'passDetail'));
   }
 
   function renderPhaseTackler(card){
@@ -1888,6 +1926,15 @@
         firstDown: converted, td: !!wiz.play.td, oob: wiz.play.resultKind === 'Out of Bounds', down: g.down, distance: g.distance,
         tackler: (!onOffense && wiz.play.resultKind === 'Tackled') ? wiz.play.tackler : undefined,
         assist: (!onOffense && wiz.play.resultKind === 'Tackled') ? (wiz.play.assist || []) : undefined,
+        // Nathan: "I don't want to credit a ball carrier with a 12 yard
+        // loss on a bad snap." Same fumbledExchange convention stat-
+        // keeper.html's own manual entry already uses -- still counts the
+        // down, still moves the spot (both handled generically above,
+        // keyed only on type==='Run'), just excluded from rushing
+        // attempts/yards wherever the box score is compiled
+        // (stat-keeper.html's compileStatSheet/translatePlaysForLive,
+        // both already check this flag -- no changes needed there).
+        fumbledExchange: !!wiz.play.fumbledExchange,
       }));
     } else if (type === 'Pass'){
       if (wiz.play.result === 'Incomplete'){
