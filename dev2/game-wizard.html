@@ -1372,14 +1372,32 @@
   // busting out of it is just tapping the one chip that's actually
   // different, not re-picking all four from scratch.
   function seedDetailFromCoachCall(){
+    let seeded = false;
     if (wiz.play.formation === undefined && wiz.play.coachFormation){
       wiz.play.formation = wiz.play.coachFormation;
       wiz.play.formationDir = wiz.play.coachFormationDir;
+      seeded = true;
     }
     if (wiz.play.playCall === undefined && wiz.play.coachCall){
       wiz.play.playCall = wiz.play.coachCall;
       wiz.play.playCallDir = wiz.play.coachCallDir;
+      seeded = true;
     }
+    return seeded;
+  }
+  // Audit (workflow, coachtools-stats.js's Play Call Report): the report
+  // has no concept of "confirmed vs. just pre-filled" -- it counts any play
+  // with a playCall, full stop. Before this screen auto-filled, a coach who
+  // tapped straight through without looking left formation/playCall blank
+  // (excluded from the report, incomplete but never WRONG); now the same
+  // tap-through silently saves "ran as called" even on a real bust. Rather
+  // than teach the report a new confidence concept, this keeps the pre-fill
+  // visible instead of silent -- the one thing standing between "matches
+  // the call" and "nobody looked."
+  function renderCallMatchHint(card){
+    const hint = document.createElement('div'); hint.className = 'sub'; hint.style.marginBottom = '8px';
+    hint.textContent = '✓ Pre-filled to match the call below -- tap a different chip if the play actually broke down.';
+    card.appendChild(hint);
   }
   // Nathan: same "make the process super easy" audit -- when the coach
   // picked "No, I can't see the call," Formation/Play/Direction had to be
@@ -1472,7 +1490,7 @@
     const onOffense = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>🏃 Run</h2>';
     if (onOffense){
-      seedDetailFromCoachCall();
+      if (seedDetailFromCoachCall()) renderCallMatchHint(card);
       renderSameAsLastPlayHint(card);
       chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
       if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);
@@ -1514,7 +1532,7 @@
     const onOffense = wiz.game.possession === 'Us';
     card.innerHTML = '<h2>🎯 Pass</h2>';
     if (onOffense){
-      seedDetailFromCoachCall();
+      if (seedDetailFromCoachCall()) renderCallMatchHint(card);
       renderSameAsLastPlayHint(card);
       chipGroupField(card, 'Formation', wiz.play, 'formation', FORMATIONS);
       if (wiz.play.formation) chipGroupField(card, 'Formation Direction', wiz.play, 'formationDir', ['Left','Right']);

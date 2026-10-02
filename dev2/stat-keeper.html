@@ -473,13 +473,15 @@
   finalScoreOpp.addEventListener('input', function(){ persist(); updateScoreboard(); });
 
   // Touchdowns are read straight off the scoring play's own td flag (run/
-  // pass/kick/punt/defextra) using the exact same team logic describePlay()
-  // uses for each of those types -- so marking "🏆 Touchdown" on the play
-  // itself is enough, no separate log entry needed. Only PAT/2PT/Safety
-  // still need their own 'score' entry, since there's no other play type
-  // that represents them. (Turnover-return TDs aren't team-tagged in this
-  // schema -- see the turnover type's fields -- so they're not counted here;
-  // log a 'score' entry by hand if a scoop-and-score happens.)
+  // pass/kick/punt/defextra/turnover) using the exact same team logic
+  // describePlay() uses for each of those types -- so marking "🏆
+  // Touchdown" on the play itself is enough, no separate log entry needed.
+  // Only PAT/2PT/Safety still need their own 'score' entry, since there's
+  // no other play type that represents them. (Audit, workflow: turnover
+  // entries now DO carry `side` + `td` -- game-wizard.html's live wizard
+  // sets both -- so a scoop-and-score/pick-six counts here like everything
+  // else; this comment used to say the opposite and told a coach to log a
+  // 'score' entry by hand instead, which would have double-counted it.)
   function computeRunningScore(){
     let us = 0, opp = 0;
     plays.forEach(function(p){
@@ -509,6 +511,7 @@
       else if (p.type === 'kick' && !p.onside){ us += 6; } // kick return type is always us returning
       else if (p.type === 'punt'){ if (p.puntTeam !== 'Opponent') opp += 6; else us += 6; } // TD on our punt = their return; TD on their punt = our return
       else if (p.type === 'defextra'){ us += 6; }
+      else if (p.type === 'turnover'){ if (p.side === 'defense') us += 6; else opp += 6; } // side='defense' means WE were on D when the ball changed hands, i.e. WE recovered and scored
     });
     return { us: us, opp: opp };
   }
@@ -2399,6 +2402,12 @@
         if (p.recoveredBy && p.side === 'defense' && (p.toType === 'Fumble' || p.toType === 'Interception')){
           const d = defExtra[p.recoveredBy] || (defExtra[p.recoveredBy] = {name:p.recoveredBy, int:0, pbu:0, sack:0, fum:0, td:0});
           if (p.toType === 'Fumble') d.fum++; else d.int++;
+          // Audit (workflow): the team-wide scoring.touchdowns++ above
+          // already fires for a turnover's own `td` flag, but the
+          // RECOVERING PLAYER's own defExtra.td never did -- same field
+          // the 'defextra' entry type already uses for a hand-logged
+          // pick-six, just never wired up for a live-wizard-logged one.
+          if (p.td) d.td++;
         }
       }
       if (p.type==='score'){
