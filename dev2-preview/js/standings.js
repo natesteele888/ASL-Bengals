@@ -1034,6 +1034,27 @@
     renderTable(container, data, games);
   };
 
+  // Nathan: "When I am looking at an upcoming game, I should be able to
+  // click on the opponent logo and have it take me to their team page."
+  // Called from js/schedule.js's own game detail hero. Runs through
+  // initStandingsNav() first rather than loading data and calling
+  // showOpponentPage directly -- that's where the Standings screen's own
+  // one-time "‹ Back" button wiring and list-view setup happen
+  // (backBtnWired, above), so a player who's never opened the Standings
+  // tab this session still lands on a fully-working team page, not one
+  // with a dead Back button.
+  window.openStandingsTeamPage = async function (teamName, gameId) {
+    if (!teamName) return;
+    if (typeof window.setSection === 'function') window.setSection('standings');
+    await window.initStandingsNav();
+    const [data, games] = await Promise.all([
+      loadStandings(),
+      window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
+    ]);
+    const teams = (data && data.teams) || [];
+    showOpponentPage(gameId || null, teamName, teams, games);
+  };
+
   // ---- Coach Tools paste box ----
   window.initCoachToolsStandings = async function () {
     const wrap = document.getElementById('coachStandingsWrap');

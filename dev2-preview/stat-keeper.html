@@ -2805,7 +2805,18 @@
   }
 
   async function ensureCoachAuth(){
-    if (hasGateSession()){
+    // Nathan: "verify kids won't see the keep stats button... I don't
+    // want them having the ability to hit that and add stats." Same real
+    // gap found/fixed in game-wizard.html: hasGateSession() is true for
+    // ANY valid gate session, including a PLAYER's own real one
+    // (cloud-auth.js's GATE_EMAILS has both 'player' and 'coach' kinds --
+    // any kid already logged into the main app has a real, persisted
+    // bengalsGateSession, kind:'player', same localStorage key/origin
+    // this standalone page reads) -- that let a kid's own session skip
+    // the coach-code prompt entirely if this page was ever reached
+    // directly. Now requires kind:'coach' specifically.
+    const savedGate = loadGateSession();
+    if (savedGate && savedGate.kind === 'coach'){
       try { await getFirebaseIdToken(); return true; }
       catch(e){ /* saved session no longer valid -- fall through to re-prompt */ }
     }
