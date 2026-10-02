@@ -662,15 +662,24 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    gone; touch-action:pan-y leaves vertical page scrolling alone but stops
    the browser's own horizontal swipe handling (e.g. iOS's edge back-swipe)
    from fighting the drag. */
+/* Nathan: "letters are a little hard to see - make them bigger within the
+   same size bar and soften the letter glow." font-size 11px->13px; padding
+   trimmed by roughly the same amount the taller line-height adds, so the
+   strip's own overall height barely moves. The glow itself was two stacked
+   shadows (a tight bright one plus a big, nearly-opaque far blur) -- the
+   far blur is what was turning letterforms into a soft blob at this size;
+   softened by shrinking its radius and dropping its opacity well below the
+   tight shadow's, everywhere this same two-shadow "LED" recipe is used
+   (item text, separators, and the brighter featured-game line). */
 .gcTickerTrack{display:flex;align-items:center;width:max-content;white-space:nowrap;
-  padding:9px 0 8px;touch-action:pan-y;user-select:none;-webkit-user-select:none;
+  padding:7px 0 6px;touch-action:pan-y;user-select:none;-webkit-user-select:none;
   font-family:'Courier New',Courier,monospace}
 .gcTickerItem{display:inline-flex;align-items:center;gap:5px;padding:0 20px;flex-shrink:0;
-  font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-  color:#ffb266;text-shadow:0 0 4px rgba(255,150,70,.9),0 0 11px rgba(255,106,19,.5)}
-.gcTickerIcon{font-size:13px;line-height:1;filter:drop-shadow(0 0 3px rgba(255,170,90,.6))}
-.gcTickerSep{padding:0 4px;color:#ffb266;
-  text-shadow:0 0 5px rgba(255,150,70,1),0 0 10px rgba(255,106,19,.6);
+  font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  color:#ffb266;text-shadow:0 0 2px rgba(255,150,70,.7),0 0 6px rgba(255,106,19,.3)}
+.gcTickerIcon{font-size:14px;line-height:1;filter:drop-shadow(0 0 2px rgba(255,170,90,.5))}
+.gcTickerSep{padding:0 4px;color:#ffb266;font-size:13px;
+  text-shadow:0 0 3px rgba(255,150,70,.8),0 0 7px rgba(255,106,19,.35);
   animation:gcBulbTwinkle 1.8s ease-in-out infinite}
 .gcTickerSep:nth-of-type(3n+1){animation-delay:0ms}
 .gcTickerSep:nth-of-type(3n+2){animation-delay:600ms}
@@ -681,7 +690,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    as the "featured attraction," instead of an underline; cursor:pointer
    for anyone on a mouse. */
 .gcTickerItemClickable{cursor:pointer;color:#ffdab3;
-  text-shadow:0 0 6px rgba(255,210,150,1),0 0 15px rgba(255,150,70,.75)}
+  text-shadow:0 0 3px rgba(255,210,150,.85),0 0 8px rgba(255,150,70,.4)}
 .gcTickerItemClickable:hover,.gcTickerItemClickable:active{color:#fff3e0}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
@@ -2830,6 +2839,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .statsSmallBtn { border: 1.5px solid var(--bengal-orange); background: #fff; color: var(--bengal-orange-dark); border-radius: 5px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
 .statsSmallBtn:active { background: var(--bengal-orange); color: #fff; }
 .statsRmBtnSmall { border: none; background: none; color: #c0342a; font-size: 11px; cursor: pointer; padding: 1px 4px; }
+#playClipsList .statsRmBtnSmall { min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
 .statsAddRowWrap { display: flex; gap: 8px; align-items: center; margin: 8px 0 16px; }
 .statsRosterPicker { padding: 6px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 12.5px; }
 

@@ -147,8 +147,35 @@
   // fetchCmyfccStandings's own division pin: a town can field a
   // same-named program in several age divisions, and every real opponent
   // on OUR schedule only ever plays us within our own division anyway.
-  async function fetchCmyfccRecentGamesFor(teamName, limit) {
-    limit = limit || 5;
+  // Same "not yet happened" date-only logic as js/schedule.js's own
+  // hasEventPassed (private to that file's own IIFE, same reason every
+  // other small cross-file helper in this app gets its own local copy
+  // instead of reaching into another file's closure) -- CMYFCC's
+  // logistics block for a game doesn't reliably carry a kickoff time the
+  // way our own Schedule records do, so this only ever compares by
+  // calendar date (a same-day game stays "not passed" through the end of
+  // that day, same fallback behavior hasEventPassed uses when it has no
+  // time either).
+  function cmyfccEventPassed(dateStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
+  }
+  // Nathan: "when clicking on another team in the standings, don't just
+  // show their finished games but use the master schedule to show their
+  // upcoming games as well." CMYFCC's getPublicSeasonSchedule payload
+  // (CMYFCC_API_URL) IS the division's real master schedule -- every game
+  // for every team, played or not -- so this is the one real fetch+match
+  // both fetchCmyfccRecentGamesFor (final games only) and
+  // fetchCmyfccUpcomingGamesFor (below) now build on, instead of each
+  // issuing its own separate network call for the same payload.
+  // ourScore/oppScore are left undefined for a game with no final result
+  // yet -- compactGameRowHtml (js/schedule.js) already renders that
+  // correctly as an "Upcoming" pill with no score, the exact same
+  // convention it already uses for our own not-yet-played Schedule games.
+  async function fetchCmyfccGamesFor(teamName) {
     const res = await fetch(CMYFCC_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,19 +194,41 @@
       return gTokens.length && tTokens.some(t => gTokens.includes(t));
     };
     return payload.games
-      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY && g.result && g.result.status === 'final')
+      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY)
       .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
       .map(g => {
         const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
+        const isFinal = !!(g.result && g.result.status === 'final');
         return {
           id: g.id,
           date: g.logistics ? g.logistics.date : null,
           opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
-          ourScore: isHome ? g.result.homeScore : g.result.awayScore,
-          oppScore: isHome ? g.result.awayScore : g.result.homeScore,
+          ourScore: isFinal ? (isHome ? g.result.homeScore : g.result.awayScore) : undefined,
+          oppScore: isFinal ? (isHome ? g.result.awayScore : g.result.homeScore) : undefined,
+          isFinal,
         };
-      })
+      });
+  }
+  async function fetchCmyfccRecentGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const all = await fetchCmyfccGamesFor(teamName);
+    return all
+      .filter(g => g.isFinal)
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, limit);
+  }
+  // The other half of the same master schedule -- games with no final
+  // result yet. Soonest-first (not furthest-out-first), matching how a
+  // coach actually thinks about "what's next" for a team; also excludes
+  // anything whose date has already passed without a posted result (a
+  // postponed/cancelled game, or a final score CMYFCC just hasn't entered
+  // yet) rather than mislabeling it "Upcoming."
+  async function fetchCmyfccUpcomingGamesFor(teamName, limit) {
+    limit = limit || 5;
+    const all = await fetchCmyfccGamesFor(teamName);
+    return all
+      .filter(g => !g.isFinal && !cmyfccEventPassed(g.date))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
       .slice(0, limit);
   }
   // Nathan: "recent games for our opponents are not showing" -- flagged
@@ -194,6 +243,7 @@
   // convention window.opponentBadgeHtml/window.getOpponentLogoSrc already
   // establish in the other direction.
   window.fetchCmyfccRecentGamesFor = fetchCmyfccRecentGamesFor;
+  window.fetchCmyfccUpcomingGamesFor = fetchCmyfccUpcomingGamesFor;
 
   function escapeHtml(s) {
     const d = document.createElement('div');
@@ -365,8 +415,14 @@
   // instead, which also means it's always computed against the real,
   // current CMYFCC_OUR_ASSOCIATION_NAME rather than a value snapshotted
   // once at load time.
+  // js/schedule.js's isBengalsTeamName is the same check (built later,
+  // reusing this function's own logic, for compactGameRowHtml's own
+  // right-column badge -- see its comment) -- delegate to it so the two
+  // never drift, falling back to the original inline logic only if
+  // schedule.js somehow hasn't loaded yet.
   function isBengalsRow(t) {
     const name = t.team || '';
+    if (window.isBengalsTeamName) return window.isBengalsTeamName(name);
     if (/bengal/i.test(name)) return true;
     const tTokens = teamTokens(name);
     if (!tTokens.length) return false;
@@ -645,6 +701,23 @@
     hero.style.background = heroGradient(hue);
   }
 
+  // Builds the combined film section's inner markup from a plain list of
+  // {label, url, note?} clips -- the single legacy game.opponentFilmUrl
+  // (if any) plus every js/opponent-film.js clip for this team, already
+  // merged by the caller. Returns '' (section renders empty/absent) when
+  // there's nothing at all -- most team pages won't have scouting film,
+  // and an empty box on every one of those would just be clutter.
+  function opponentFilmSectionHtml(clips) {
+    if (!clips || !clips.length) return '';
+    const items = clips.map((c) => {
+      const btn = window.filmButtonHtml
+        ? window.filmButtonHtml(c.url, escapeHtml(c.label), { btnClass: 'navBtn', btnStyle: 'display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;' })
+        : `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" class="navBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;">${escapeHtml(c.label)}</a>`;
+      return `${btn}${c.note ? `<div class="lbSub" style="text-align:center;margin:0 0 10px;">${escapeHtml(c.note)}</div>` : ''}`;
+    }).join('');
+    return `<div class="lbSectionHeader">🎥 Opponent Film</div>${items}<div style="margin-bottom:10px;"></div>`;
+  }
+
   function opponentPageHtml(game, teamRow) {
     const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
     const hasFootage = !!game.opponentFilmUrl;
@@ -655,30 +728,42 @@
     // a plain {opponent: teamName} stand-in for that second case.
     const hasGame = !!game.id;
     const hue = hashHue(game.opponent);
-    const badgeHtml = window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '';
+    const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(game.opponent) : (window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '');
     let html = `<div class="lbHeroHeader" id="standingsOpponentHero" data-opponent="${escapeHtml(game.opponent || '')}" style="background:${heroGradient(hue)};">
         <div class="lbHeroTeamBadgeWrap">${badgeHtml}</div>
         <h3>${escapeHtml(game.opponent || 'Opponent')}</h3>
         ${teamRow ? `<div class="lbSub">${escapeHtml(recordStr(teamRow))} &middot; Diff ${escapeHtml(diffStr)}${teamRow.powerRank != null ? ` &middot; Power Rank #${teamRow.powerRank}` : ''}</div>` : ''}
       </div>`;
+    // Nathan: "Right at the top below the header and before previous game
+    // results, I want to have CTAs to footage where teams can play it
+    // back." Moved up from below Recent Games (where the single legacy
+    // opponentFilmUrl link used to render) to right here -- shows the
+    // legacy link immediately (synchronous, no fetch needed), then
+    // showOpponentPage's own loadOpponentFilmSection() rebuilds this same
+    // div with the legacy link PLUS every js/opponent-film.js clip for
+    // this team once that fetch resolves.
+    const legacyClips = hasFootage ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+    html += `<div id="standingsOpponentFilm">${opponentFilmSectionHtml(legacyClips)}</div>`;
     // Nathan: "utilize the CMYFCC website to also pull in team game
     // history for the other teams" -- filled in asynchronously by
     // showOpponentPage right below (real network call, shouldn't block
     // this page's own first render), same progressive-render pattern
     // js/schedule.js's own Game Recap narrative already uses.
     html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Games</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
-    if (hasFootage) {
-      html += `<a href="${escapeHtml(game.opponentFilmUrl)}" target="_blank" rel="noopener" class="navBtn" data-film-game-id="${escapeHtml(game.id)}" style="display:block;width:100%;text-align:center;box-sizing:border-box;${game.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:14px;'}">🎥 Watch Game Film of ${escapeHtml(game.opponent || 'this Opponent')}</a>`;
-      if (game.opponentFilmNote) html += `<div class="lbSub" style="text-align:center;margin:0 0 14px;">${escapeHtml(game.opponentFilmNote)}</div>`;
-    }
     if (game.scouting) {
       html += `<div class="lbSectionHeader">🔎 Scouting Report</div>
         <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
     }
     if (!hasFootage && !game.scouting) {
+      // Opponent-film.js clips may still turn this from "nothing" into
+      // "something" once the async fetch above resolves -- this synchronous
+      // empty note is about SCOUTING specifically now (not footage, which
+      // has its own section with its own independent empty/non-empty
+      // state), so there's no contradiction once film shows up a moment
+      // later.
       html += hasGame
-        ? '<div class="lbEmpty">No footage or scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
-        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season -- once they're on the Schedule, footage and scouting notes can be added there.</div>`;
+        ? '<div class="lbEmpty">No scouting notes added for this opponent yet -- a coach can add them from this game\'s Schedule page.</div>'
+        : `<div class="lbEmpty">We haven't played ${escapeHtml(game.opponent || 'this team')} yet this season.</div>`;
     }
     if (hasGame) {
       html += `<div style="text-align:center;margin-top:16px;">
@@ -686,6 +771,26 @@
         </div>`;
     }
     return html;
+  }
+
+  // Rebuilds #standingsOpponentFilm with the legacy single link (if any)
+  // PLUS every js/opponent-film.js clip for this team, once that fetch
+  // resolves. Matches loadOpponentRecentForm's own async-fill shape right
+  // below. A no-op if OpponentFilm isn't loaded for some reason (script
+  // load failure) -- the legacy link, already rendered synchronously by
+  // opponentPageHtml above, stays exactly as it is.
+  function loadOpponentFilmSection(game) {
+    const wrap = document.getElementById('standingsOpponentFilm');
+    if (!wrap || !window.OpponentFilm) return;
+    window.OpponentFilm.load().then((entries) => {
+      if (!wrap.isConnected) return;
+      const stored = window.OpponentFilm.clipsForTeam(entries, game.opponent).map((c) => ({
+        label: c.title || `🎥 Watch${game.opponent ? ' ' + game.opponent : ''} Film`,
+        url: c.url,
+      }));
+      const legacyClips = game.opponentFilmUrl ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+      wrap.innerHTML = opponentFilmSectionHtml(legacyClips.concat(stored));
+    }).catch(() => {});
   }
 
   function showOpponentPage(gameId, teamName, teams, games) {
@@ -710,6 +815,7 @@
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent, teams, games);
+    loadOpponentFilmSection(game);
     applyOpponentHeroColor(game.opponent);
   }
 
@@ -723,23 +829,44 @@
     // Nathan: "if you are on a team page from the standings, and you see
     // the 'recent form' let's change that to 'recent games' as form is
     // more of a soccer term." Plain rename, same section, same data.
+    //
+    // Nathan (follow-up): "don't just show their finished games but use
+    // the master schedule to show their upcoming games as well." One
+    // shared fetchCmyfccGamesFor call (the real master schedule payload)
+    // instead of two separate network round-trips for what's really one
+    // dataset split two ways -- Recent Games stays exactly as it was,
+    // Upcoming Games is new, appended below it.
     try {
-      const rows = await fetchCmyfccRecentGamesFor(opponentName, 5);
+      const all = await fetchCmyfccGamesFor(opponentName);
       // A stale response landing after the coach has already navigated
       // to a DIFFERENT opponent (or back to the list) shouldn't clobber
       // whatever's on screen now -- re-check the container's still
       // showing a loading state for the SAME opponent before writing.
       const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
       if (!stillOnThisOpponent) return;
-      if (!rows.length) {
-        wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
-        return;
-      }
-      const rowsHtml = rows.map(g => window.compactGameRowHtml(g, {
+      const recent = all
+        .filter(g => g.isFinal)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .slice(0, 5);
+      const upcoming = all
+        .filter(g => !g.isFinal && !cmyfccEventPassed(g.date))
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .slice(0, 5);
+      const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponentName) : window.opponentBadgeHtml(opponentName);
+      const rowsHtmlFor = (rows) => rows.map(g => window.compactGameRowHtml(g, {
         teamName: opponentName,
-        teamBadgeHtml: window.opponentBadgeHtml(opponentName),
+        teamBadgeHtml: badgeHtml,
       })).join('');
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtml}</div>`;
+      const recentHtml = recent.length
+        ? `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtmlFor(recent)}</div>`
+        : `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
+      // Omitted entirely (not an empty-state line) when there genuinely
+      // are none left -- a team with no games remaining this season
+      // doesn't need a section telling you so.
+      const upcomingHtml = upcoming.length
+        ? `<div class="lbSectionHeader" style="margin-top:16px;">📅 Upcoming Games</div><div class="last5List">${rowsHtmlFor(upcoming)}</div>`
+        : '';
+      wrap.innerHTML = recentHtml + upcomingHtml;
       // Nathan: "if you click on a logo of one of the opponent's it should
       // go to that teams page." Each row's own away-side badge (this
       // team's opponent in THAT game) is wrapped by compactGameRowHtml in
@@ -750,7 +877,8 @@
       // come from CMYFCC, not our own Schedule, so there's usually no
       // matching local game record; showOpponentPage already falls back
       // to a real, name-only team page in exactly that case (same as a
-      // division-only team we've never played).
+      // division-only team we've never played). Wired once over the whole
+      // wrap, so it covers both the Recent and Upcoming sections' rows.
       wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
         const name = el.dataset.opponentName;
         if (!name) return;
@@ -783,15 +911,20 @@
     const name = playoffTeamShortName(seed.teamLabel);
     const isUs = isBengalsRow({ team: seed.teamLabel });
     // Nathan: "Use the Bengals logo for the Ayer/Shirley/Lunenburg team
-    // logo." opponentBadgeHtml has no idea "Ayer/Shirley/Lunenburg" is US
-    // (it's CMYFCC's own name for our program, not "Bengals") -- it fell
-    // through to the generic initials-circle fallback every OTHER
-    // unrecognized team gets. Same real logo asset js/schedule.js's own
-    // bengalsBadgeHtml uses everywhere else in the app (not exposed on
-    // window, so matched here directly rather than adding a new export
-    // for one line of markup).
-    const badge = isUs
-      ? '<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>'
+    // logo." Now goes through the same shared teamBadgeHtmlFor every
+    // other badge site in the app uses (js/schedule.js) instead of its
+    // own separate isUs branch + hardcoded markup -- this was the
+    // original, first-found instance of this bug class; consolidated
+    // once the other 3 sites needed the identical fix, so there's one
+    // real place left to ever update the logo markup.
+    // teamBadgeHtmlFor's own Bengals check tolerates the full label (extra
+    // tokens like "Tackle"/"11U" don't cause a false match either way),
+    // but the non-Bengals logo lookup needs the SHORT name -- same value
+    // the original, pre-consolidation code here already passed -- since
+    // opponentLogos/BUNDLED_LOGOS are keyed off a team's first word, not
+    // the full "Team · Division" label.
+    const badge = window.isBengalsTeamName && window.isBengalsTeamName(seed.teamLabel)
+      ? (window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '')
       : (window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '');
     return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
         <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
@@ -899,6 +1032,27 @@
       window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
     ]);
     renderTable(container, data, games);
+  };
+
+  // Nathan: "When I am looking at an upcoming game, I should be able to
+  // click on the opponent logo and have it take me to their team page."
+  // Called from js/schedule.js's own game detail hero. Runs through
+  // initStandingsNav() first rather than loading data and calling
+  // showOpponentPage directly -- that's where the Standings screen's own
+  // one-time "‹ Back" button wiring and list-view setup happen
+  // (backBtnWired, above), so a player who's never opened the Standings
+  // tab this session still lands on a fully-working team page, not one
+  // with a dead Back button.
+  window.openStandingsTeamPage = async function (teamName, gameId) {
+    if (!teamName) return;
+    if (typeof window.setSection === 'function') window.setSection('standings');
+    await window.initStandingsNav();
+    const [data, games] = await Promise.all([
+      loadStandings(),
+      window.ensureGamesLoaded ? window.ensureGamesLoaded() : Promise.resolve([]),
+    ]);
+    const teams = (data && data.teams) || [];
+    showOpponentPage(gameId || null, teamName, teams, games);
   };
 
   // ---- Coach Tools paste box ----

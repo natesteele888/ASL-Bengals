@@ -83,6 +83,22 @@ const state = {
 const PLAYER_R = 34;
 const HANDLE_R = 14;
 
+// Nathan: "I need a way to make the defense look a little more different
+// than the offense... I want the colors to easily identify what that
+// player is doing on the play." Same role-color language as the real
+// card (js/play-calls.js's own DEFENSE_COLOR/BALL_COLOR/BLOCK_COLOR/
+// NOBALL_COLOR, kept in sync by value since this file can't reach that
+// one's own private constants) -- defense green, ball-carrier red,
+// blocking orange, everyone else navy, so a coach previewing a play here
+// sees the exact colors it'll actually render with on the real card.
+// Previously: defense circles were hardcoded orange (literally
+// BLOCK_COLOR's own hex) and this file had no blocking color at all --
+// an O-line route and a receiver's route rendered in the identical blue.
+const PB_DEFENSE_COLOR = '#1a7a4a';
+const PB_BALL_COLOR = '#e0201a';
+const PB_BLOCK_COLOR = '#e8720c';
+const PB_NOBALL_COLOR = '#123a8c';
+
 // Optional per-player recolor (Nathan, re: footballplaybook.com's own
 // COLOR swatch row) -- same 7-color palette, referenced by id from
 // PlayerAssignment.color. Ball-carrier red always wins regardless (see
@@ -908,7 +924,7 @@ function render() {
   // into the real card.
   const defensePositions = defenseLook?.positions || [];
   defensePositions.forEach((d) => {
-    defenseLayer.appendChild(drawCircle(d.x, d.y, d.label, '#e8720c', 26));
+    defenseLayer.appendChild(drawCircle(d.x, d.y, d.label, PB_DEFENSE_COLOR, 26));
   });
 
   // Routes (behind circles, so a player's number stays readable). Iterates
@@ -933,10 +949,19 @@ function render() {
     // Nathan, re: footballplaybook.com: "you can recolor the player."
     // Ball-carrier red still wins unconditionally (the app-wide "red =
     // has the ball" convention every real card/PDF/etc. already relies
-    // on) -- a custom color only replaces the default blue for a player
-    // who ISN'T currently carrying.
+    // on) -- a custom color only replaces the default for a player who
+    // ISN'T currently carrying. Blocking orange (assignment.endType ===
+    // 'block', the real O-line/TE-block signal -- same field js/
+    // playbuilder/legacy-adapter.js already translates into the real
+    // card's own isBlocking flag) sits between those two: a real,
+    // meaningful default a coach can still override with an explicit
+    // custom color pick, same precedence the plain navy default always
+    // had. Previously this branch only ever knew ball vs. not-ball, so
+    // every O-line/blocking route in this editor rendered the exact same
+    // blue as a receiver's -- the real card already told the two apart.
     const customColor = assignment && assignment.color ? PB_PLAYER_COLORS[assignment.color] : null;
-    const color = hasBall ? '#e0201a' : (customColor || '#123a8c');
+    const isBlockingAssignment = assignment && assignment.endType === 'block';
+    const color = hasBall ? PB_BALL_COLOR : (customColor || (isBlockingAssignment ? PB_BLOCK_COLOR : PB_NOBALL_COLOR));
     const pathEl = svgEl('path', {
       d: curvedPathD(points), fill: 'none', stroke: color, 'stroke-width': 7, 'stroke-linecap': 'round',
     });

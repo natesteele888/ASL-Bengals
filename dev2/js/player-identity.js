@@ -1353,20 +1353,21 @@
       launchGate('gameDaySplash', function () {
         if (typeof window.maybeShowGameDaySplash === 'function') window.maybeShowGameDaySplash();
       });
-      // Nathan (in-season): "hey this is what is new this week for play
-      // calls, pay attention." Same trigger point as the other post-session
-      // checks here -- gates itself internally (only fires when there's a
-      // real unseen entry in the plays feed). Replaces two earlier popups
-      // that used to fire here (the coach's daily activity digest -- now a
-      // permanent section in Coach Tools > Dashboard instead, see
-      // js/coachtools-dashboard.js's yesterdayActivityHtml -- and a one-time
-      // app-features/gamification tour) once Nathan flagged both as reading
-      // like "who's been on, or something pointless" stacked on login right
-      // when a coach needs the play-call callout instead. See
-      // js/whats-new.js's maybeAutoShowWhatsNew.
-      launchGate('whatsNew', function () {
-        if (typeof window.maybeAutoShowWhatsNew === 'function') window.maybeAutoShowWhatsNew();
-      });
+      // Nathan: "this needs to go away, hate the way it functions and
+      // looks" -- the auto-popup itself is now disabled (third popup to
+      // get killed at this exact trigger point, after the coach's daily
+      // activity digest and a one-time feature tour, both removed
+      // earlier for the same "stacked on login, reads as noise" reason).
+      // js/whats-new.js's own feed/data (whatsNew.json, the Coach Tools >
+      // Updates posting panel, the green NEW badge on a changed play
+      // tile) are all left completely alone -- only this automatic,
+      // interrupting popup is gone. A real replacement ("completely new
+      // opening messaging" covering Formations/Signals/Plays/Schedule/
+      // Team pages, Nathan's own separate, still-open request) is a
+      // bigger rebuild, not a quick revert of this one.
+      // launchGate('whatsNew', function () {
+      //   if (typeof window.maybeAutoShowWhatsNew === 'function') window.maybeAutoShowWhatsNew();
+      // });
       // Nathan: "Parents should get notifications of how many times their
       // player signed in and used the app... pop up notifications of when
       // the last time their player signed in." Same trigger point as the

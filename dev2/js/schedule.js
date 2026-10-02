@@ -191,6 +191,38 @@
     if (logo) return `<span class="scheduleTeamBadge hasLogo"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
     return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
   }
+  // Nathan: "make sure the bengals logo is used in other teams games" --
+  // compactGameRowHtml's right column always ran g.opponent through the
+  // generic opponentBadgeHtml lookup, which has no idea "Ayer/Shirley/
+  // Lunenburg" (CMYFCC's own registered name for OUR program, not
+  // "Bengals") is actually us -- it fell through to the same colored-
+  // initials placeholder any other unrecognized team gets. Invisible
+  // until this component started being reused for a THIRD-PARTY team's
+  // own recent-games list (js/standings.js's loadOpponentRecentForm),
+  // where we can legitimately show up as someone else's opponent --
+  // every row on our OWN schedule never has this problem, since we're
+  // never listed as our own opponent there. Same real logo asset
+  // bengalsBadgeHtml() already uses everywhere else -- the identical fix
+  // already proven once for this exact failure mode, in a different
+  // component (js/standings.js's own playoffSeedChipHtml / isBengalsRow).
+  // Token-overlap, not an exact string match, for the same reason that
+  // precedent uses it -- a coach's own typed Schedule opponent ("Ayer
+  // Shirley") won't exactly match CMYFCC's own registered name either.
+  const BENGALS_NAME_TOKENS = ['ayer', 'shirley', 'lunenburg'];
+  function isBengalsTeamName(name) {
+    const s = (name || '').toLowerCase();
+    if (/bengal/.test(s)) return true;
+    const tokens = s.split(/[^a-z0-9]+/).filter(Boolean);
+    return BENGALS_NAME_TOKENS.some((t) => tokens.includes(t));
+  }
+  // The one shared "which badge does this team name actually get" entry
+  // point -- used by compactGameRowHtml's own right column below, and
+  // exported so js/standings.js's 3 other badge sites (loadOpponentRecentForm,
+  // opponentPageHtml, playoffSeedChipHtml) can all go through the same
+  // check instead of each re-deciding it their own way.
+  function teamBadgeHtmlFor(name) {
+    return isBengalsTeamName(name) ? bengalsBadgeHtml() : opponentBadgeHtml(name);
+  }
 
   function loadOpponentLogos() {
     return window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url)).then(r => r.ok ? r.json() : null)
@@ -1458,7 +1490,7 @@
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
           ${centerHtml}
-          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${opponentBadgeHtml(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
+          <span class="scheduleTeamSide away"><span class="last5RowOpponentLogo" data-opponent-name="${escapeHtml(g.opponent || '')}">${teamBadgeHtmlFor(g.opponent)}</span><span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span></span>
         </span>
       </button>`;
   }
@@ -1883,6 +1915,12 @@
   // page header needs the bare src to run it through canvas color
   // extraction, not markup.
   window.getOpponentLogoSrc = opponentLogoSrc;
+  // For js/standings.js's own 3 other badge sites (loadOpponentRecentForm,
+  // opponentPageHtml, playoffSeedChipHtml) -- see teamBadgeHtmlFor's own
+  // comment, above.
+  window.bengalsBadgeHtml = bengalsBadgeHtml;
+  window.isBengalsTeamName = isBengalsTeamName;
+  window.teamBadgeHtmlFor = teamBadgeHtmlFor;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-embed-target]');
     if (!btn) return;
@@ -2288,7 +2326,7 @@
       current = existing ? { ...existing } : null;
     }
     if (!current) {
-      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], opponentFilmUrl: '', opponentFilmNote: '', scoutingNotes: [] };
+      current = { id: genId(), opponent: '', week: null, date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', gameType: 'Regular Season', ourScore: '', oppScore: '', writeup: '', scouting: '', gameDayNotes: '', statSheet: window.blankGameStatSheet(), updatedAt: null, fieldPhoto: null, infoUrl: '', oppYards: '', ourTurnovers: '', oppTurnovers: '', oppFirstDowns: '', injuryReport: [], gameFootage: [], gameFootageAnnotations: [], playClips: [], opponentFilmUrl: '', opponentFilmNote: '', scoutingNotes: [] };
     }
     if (current.statSheet) current.statSheet = window.normalizeGameStatSheet(current.statSheet); // older saved games predate this field / had the old shape
     if (typeof current.scouting !== 'string') current.scouting = '';
@@ -2450,7 +2488,7 @@
                    only applies once the game's actually final, since the time element still does that spacing job for an upcoming game. -->
               <div style="${resultFor(current) ? 'margin-top:6px;' : ''}">${badgeHtml}</div>
             </span>
-            <span class="scheduleTeamSide away">${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
+            <span class="scheduleTeamSide away"${(current.opponent && current.gameType !== 'Bye') ? ` data-open-opponent-page="${escapeHtml(current.opponent)}" data-open-opponent-game="${escapeHtml(current.id || '')}" style="cursor:pointer;" title="View ${escapeHtml(current.opponent)}'s team page"` : ''}>${opponentBadgeHtml(current.opponent)}<span class="scheduleTeamName">${escapeHtml(current.opponent || 'TBD')}</span><span class="scheduleTeamRecord" id="scheduleHeroOppRecord" style="display:none;"></span>${themScore}</span>
           </div>
         </div>`;
     })();
@@ -2515,6 +2553,19 @@
       fillHeroOpponentRecord(current.opponent);
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
+      // Nathan: "When I am looking at an upcoming game, I should be able
+      // to click on the opponent logo and have it take me to their team
+      // page." window.openStandingsTeamPage (js/standings.js) is the
+      // same real entry path tapping the Standings tab + their row
+      // already takes -- reused here rather than duplicated, so the page
+      // this lands on (including a working "‹ Back" button) is
+      // byte-identical either way.
+      const oppLogoLink = body.querySelector('[data-open-opponent-page]');
+      if (oppLogoLink) {
+        oppLogoLink.addEventListener('click', () => {
+          if (window.openStandingsTeamPage) window.openStandingsTeamPage(oppLogoLink.dataset.openOpponentPage, oppLogoLink.dataset.openOpponentGame || null);
+        });
+      }
       wireAddToCalendar();
       loadLinkedGamePlan();
       renderGamePreview();
@@ -2862,6 +2913,23 @@
     if (!g) { if (afterFail) afterFail('Game not found'); return; }
     g.gameFootage = gameFootage;
     if (current && current.id === gameId) current.gameFootage = gameFootage;
+    persistGames(afterOk);
+  };
+
+  // Nathan: "our games are now being recorded in snippets for each play.
+  // I would like to load in the playlist with the individual files in
+  // order so I can match up what happened on the play to the clip of the
+  // play." A real, SEPARATE field from gameFootage (which is for
+  // Film Vault/general viewing, not a per-play sync source) -- array
+  // ORDER is the play order, so a coach reordering clips is just
+  // reordering this array. Same narrow write path as saveGameFootage,
+  // used by js/coachtools-playclips.js (the bulk-paste admin UI) and
+  // read directly by game-wizard.html's own play-clip playlist panel.
+  window.savePlayClips = function (gameId, playClips, afterOk, afterFail) {
+    const g = games.find(x => x.id === gameId);
+    if (!g) { if (afterFail) afterFail('Game not found'); return; }
+    g.playClips = playClips;
+    if (current && current.id === gameId) current.playClips = playClips;
     persistGames(afterOk);
   };
 

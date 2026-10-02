@@ -834,11 +834,25 @@ function animatePathDraw(pathEl, arrowEl, durationMs, delayMs, circleEl, textEl,
 }
 
 const GAME_HUD_PREVIEW = !!(window.isGameHudPreview && window.isGameHudPreview());
-// Nathan, screenshot: "the defensive players are too bright, I want them to
-// be reduced by about 10% just so there is some visual difference between
-// the offense and defense." Was #1a3fae (26,63,174) -- each channel x0.9.
-const DEFENSE_COLOR = '#17399d';
-const READKEY_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
+// Nathan, screenshot (earlier): "the defensive players are too bright, I
+// want them to be reduced by about 10% just so there is some visual
+// difference between the offense and defense." Was #1a3fae (26,63,174) --
+// each channel x0.9, landing on #17399d -- still the same navy HUE as
+// NOBALL_COLOR below, just dimmer, so the actual confusion (two different
+// "roles" sharing one color family) was never really fixed, only muted.
+// Nathan (later, direct): "I need a way to make the defense look a little
+// more different than the offense so it's less confusing... as called out
+// several times, I want the colors to easily identify what that player is
+// doing on the play." A genuinely different hue (green, not used by any
+// offensive role below) rather than another shade of the same blue.
+// READKEY_COLOR had the same real problem, worse -- it was IDENTICAL to
+// BALL_COLOR, so the one defender a coach is told to watch read as "the
+// ball carrier" at a glance. Now a distinct gold, matching the same
+// "highlighted/watch this" meaning BALLSTART_COLOR's own gold already
+// carries on the offensive side, without being the same color as it
+// (defense gold is darker/more muted so the two don't read as one thing).
+const DEFENSE_COLOR = GAME_HUD_PREVIEW ? '#22c55e' : '#1a7a4a';
+const READKEY_COLOR = GAME_HUD_PREVIEW ? '#f1c40f' : '#b8860b';
 const BALL_COLOR = GAME_HUD_PREVIEW ? '#ff4136' : '#e0201a';
 const NOBALL_COLOR = GAME_HUD_PREVIEW ? '#3b6bd6' : '#123a8c';
 const BLOCK_COLOR = GAME_HUD_PREVIEW ? '#ff6a13' : '#e8720c';
@@ -932,7 +946,7 @@ function buildPlayList() {
     .filter(Boolean);
   const extras = DATA.playTypes.filter(p => !BASE_PLAY_ORDER.includes(p.key));
   return base.concat(extras)
-    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse }));
+    .map(playType => ({ playKey: playType.key, label: playType.label, isPass: !!playType.isPass, hasInsideOutside: !!playType.hasInsideOutside, hasReadToggle: !!playType.hasReadToggle, noBoot: !!playType.noBoot, noMotion: !!playType.noMotion, noOverload: !!playType.noOverload, hasCounter: !!playType.hasCounter, counterAwayFromWing: !!playType.counterAwayFromWing, hasPopVariant: !!playType.hasPopVariant, noSplit: !!playType.noSplit, alignmentToggles: playType.alignmentToggles || null, authoredFormationId: playType.authoredFormationId || null, hasQbSneak: !!playType.hasQbSneak, qbSneakRoute: playType.qbSneakRoute || null, noDirection: !!playType.noDirection, directionOpposesWing: !!playType.directionOpposesWing, directionDefaultsAwayFromWing: !!playType.directionDefaultsAwayFromWing, altCallCardId: playType.altCallCardId != null ? playType.altCallCardId : null, altCallLabel: playType.altCallLabel || null, hasReverse: !!playType.hasReverse, repeatWingSideBeforePlay: !!playType.repeatWingSideBeforePlay }));
 }
 
 // Universal rule: 0/2/4 fingers = right, 1/3/5 fingers = left (not play-specific).
@@ -1545,6 +1559,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // so this is safe to call unconditionally.
   const blockRouteFor = (positionId, hasBall) => {
     if (reverseOn || positionId == null || hasBall) return null;
+    // Boot: the ONE player whose handoff actually got faked (bootFakePath's
+    // own carrier, computed just above this closure) keeps running his
+    // real, full motion route to sell the fake -- Nathan's own Boot spec,
+    // "the rest of the play looking exactly the same." Scoped to that one
+    // player specifically, not bootOn generally -- the OTHER non-carrying
+    // player (the reverse-eligible teammate who was never part of this
+    // fake at all) is unaffected and still follows the normal, reverseOn-
+    // gated block rule just below, exactly as before Boot existed.
+    if (bootOn && bootFakePath && String(positionId) === String(bootFakePath.player)) return null;
     const pbPlay = window.PlayBuilderPlaysById && window.PlayBuilderPlaysById[playKey];
     const assignment = pbPlay && pbPlay.variants[0].players.find((p) => p.player === positionId);
     if (!assignment) return null;
@@ -1633,6 +1656,57 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     return (override && override.points) ? override.points.map((pt) => [pt.x, pt.y]) : null;
   };
 
+  // Jet Sweep: Nathan -- "The pre snap motion needs to look like the
+  // motion on other plays. It's a dotted line that the runner goes along
+  // and then it is snapped when he gets to the end of the line and he
+  // continues along the red line." The carrier's own pre-snap jog from
+  // his real, wide formation anchor up to the line needs an actual drawn
+  // indicator on the STATIC diagram (not just an animation-time nudge --
+  // see the playCardAnimation block below this, a separate concern: how
+  // the motion is ANIMATED, not whether it's ever actually drawn). Same
+  // live carrier resolution playCardAnimation's own pre-snap block
+  // already uses (resolveBallPathForWing's 2nd leg), computed here too
+  // since renderCardDiagram never needed it before this. Returns null
+  // (no-op) for every play without Play.carrierPreSnapMotion set --
+  // nothing else in the app uses this field.
+  const carrierPreSnapCarrierId = (playType && playType.carrierPreSnapMotion)
+    ? (() => {
+        const bp = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, bootOn, reverseOn);
+        return (bp && bp[1]) ? bp[1].player : null;
+      })()
+    : null;
+  // Where the dashed (motion) segment hands off to the solid (real route)
+  // segment: the near-side tackle's own x -- "when they get in line with
+  // the LT" (Nathan's own words, for a carrier starting left of center;
+  // generalized to RT for one starting right of center, the mirror case,
+  // rather than hardcoding LT specifically). Sampled numerically off the
+  // carrier's OWN authored curve (same quadratic-bezier-by-fraction
+  // technique already used elsewhere this project to land precisely on a
+  // curved route) rather than guessing a coordinate -- works for any
+  // route shape, not just a 3-point quadratic.
+  const motionSplitPointFor = (points) => {
+    if (!points || points.length < 2) return null;
+    const startX = points[0][0];
+    const centerX = (wingAlign && wingAlign.C) ? wingAlign.C[0] : 806;
+    const targetX = (wingAlign && wingAlign.LT && wingAlign.RT)
+      ? (startX < centerX ? wingAlign.LT[0] : wingAlign.RT[0])
+      : centerX;
+    const d = routeDForRange(points);
+    const tmpPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    tmpPath.setAttribute('d', d);
+    const len = tmpPath.getTotalLength();
+    if (!len) return null;
+    const movingRight = points[points.length - 1][0] >= startX;
+    let bestFrac = null;
+    for (let f = 0.02; f <= 0.98; f += 0.01) {
+      const pt = tmpPath.getPointAtLength(f * len);
+      if (movingRight ? pt.x >= targetX : pt.x <= targetX) { bestFrac = f; break; }
+    }
+    if (bestFrac == null) return null;
+    const splitPt = tmpPath.getPointAtLength(bestFrac * len);
+    return { x: splitPt.x, y: splitPt.y, frac: bestFrac };
+  };
+
   const authoredVariant = getVariant(playType, direction, insideOutside, readPosition, counterOn, popVariantOn, alignmentValues);
   // Present the play at the alignment the players are ACTUALLY standing in by
   // moving each authored route as far as its owner moved. That covers both a
@@ -1663,7 +1737,20 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // Option), there's nothing to swap and the toggle is a no-op.
   let bootBallPath = null, bootFakePath = null;
   if (bootOn) {
-    const realBallPath = variant.paths.find(p => p.ball && !p.optionLine);
+    // Jet Sweep: real bug, found building its own Boot -- a raw p.ball
+    // check only ever finds whoever's baked as the carrier for the
+    // RIGHT/default direction (variant.paths is baked once per render,
+    // before any live per-player override applies). Fine for a play
+    // whose carrier never changes by direction, but Jet Sweep's own
+    // carrier DOES (directionLeftHasBall -- #5 on Right, #6 on Left) --
+    // a raw check left bootFakePath pointed at #5 even on a Left-
+    // direction card, so #6 (the real Left-direction carrier) never got
+    // recolored and still showed red alongside #1. Same resolution
+    // precedence the per-player loop's own effectiveBall uses below,
+    // applied here too so Boot finds whoever ACTUALLY carries for this
+    // specific direction/wingSide/alignment, not just the raw default.
+    const realBallPath = variant.paths.find(p => !p.optionLine && p.player !== 1
+      && alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
     const qbPath = variant.paths.find(p => p.player === 1 && !p.optionLine && !p.ball);
     if (realBallPath && qbPath) { bootBallPath = qbPath; bootFakePath = realBallPath; }
   }
@@ -2120,6 +2207,19 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     if (p.player === 1 && qbSneakOn && playType.hasQbSneak && playType.qbSneakRoute) {
       points = playType.qbSneakRoute.map((pt) => [pt.x, pt.y]);
     }
+    // Jet Sweep's own Boot: Nathan -- "take the ball on a carry likely up
+    // the middle after faking the handoff with the rest of the play
+    // looking exactly the same." Same "swap ONLY #1's own drawn path"
+    // shape as QB Sneak just above -- #1's normal points (the short
+    // fake/mesh step) stay exactly as authored for the boot-off render;
+    // playType.bootRoute (optional) is a real, distinct alternate only
+    // swapped in while Boot is actually on. No-op for every play without
+    // one -- the generic Boot mechanism just above (bootBallPath/
+    // bootFakePath) still recolors whichever path #1 already has as the
+    // real one either way, this just gives that path real shape to draw.
+    if (p.player === 1 && bootOn && playType.bootRoute) {
+      points = playType.bootRoute.map((pt) => [pt.x, pt.y]);
+    }
     if (p.optionLine) {
       const [[x1,y1],[x2,y2]] = p.points;
       const path = svgEl('path', { d: `M ${x1} ${y1} L ${x2} ${y2}`, fill: 'none', stroke: '#555', 'stroke-width': p.width, 'stroke-linecap': 'round', 'stroke-dasharray': '9 7' });
@@ -2129,7 +2229,21 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     }
 
     const effectiveBall = p === bootBallPath ? true : (p === bootFakePath ? false : alignmentHasBall(p.player, directionLeftHasBall(p.player, wingLeftHasBall(p.player, p.ball))));
-    const color = p.isBlocking ? BLOCK_COLOR : (effectiveBall ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    // Real bug, found live: a position whose role genuinely SWITCHES
+    // between blocker and ball carrier depending on a live toggle (Jet
+    // Sweep's own #5/#6, via directionLeftHasBall/wingLeftHasBall) can
+    // have isBlocking baked true (his own default, non-carrying role)
+    // while effectiveBall is ALSO true for this specific render (he's
+    // the one actually carrying it right now) -- isBlocking checked
+    // first meant he showed blocking-orange even while actively
+    // carrying the ball, exactly the "colors should say what the player
+    // is doing" bug this whole pass exists to fix. Ball-carrier status
+    // is the more specific, more currently-true fact about a player on
+    // ANY given render, so it now wins outright; isBlocking only ever
+    // applies to whoever ISN'T credited with the ball on this exact
+    // combination of toggles -- a pure no-op for every position (O-line
+    // included) that never carries in the first place.
+    const color = effectiveBall ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
 
     const blockPoints = p.player != null ? blockRouteFor(p.player, effectiveBall) : null;
     if (blockPoints) points = blockPoints;
@@ -2147,6 +2261,15 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
     const handoffIdx = Number.isInteger(p.handoffIndex) ? p.handoffIndex : null;
     const hasHandoffSplit = handoffIdx !== null && handoffIdx >= 1 && handoffIdx <= points.length - 1
       && !p.isBlocking && !p.fake;
+
+    // The dashed-motion/solid-route split for a carrierPreSnapMotion
+    // play's own live carrier (see motionSplitPointFor's own comment,
+    // above the per-player loop) -- same preconditions hasHandoffSplit
+    // already checks (not a block/fake line), deferring to an authored
+    // handoffIndex split if a play somehow had both.
+    const preSnapCarrier = !hasHandoffSplit && !p.isBlocking && !p.fake && p.player != null
+      && carrierPreSnapCarrierId != null && String(p.player) === String(carrierPreSnapCarrierId);
+    const motionSplit = preSnapCarrier ? motionSplitPointFor(points) : null;
 
     let arrowEl = null;
     let ownerCircle = null;
@@ -2198,6 +2321,48 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
           circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
           startFrac: startFracRight, lenFrac: 1 - startFracRight, handoffFraction: startFracRight });
       }
+    } else if (motionSplit) {
+      // Jet Sweep's own pre-snap motion, drawn for real (see
+      // motionSplitPointFor's own comment above the per-player loop) --
+      // same leftPath/rightPath, startFrac/lenFrac shape as
+      // hasHandoffSplit just above, so playCardAnimation's own generic
+      // reveal loop (reads lastRenderedPaths, has no idea this isn't a
+      // handoff split) animates it correctly for free: dashed motion
+      // segment, timed first, then the real, solid route continuing from
+      // exactly where it left off.
+      const motionPt = [motionSplit.x, motionSplit.y];
+      const dashedPts = [points[0], motionPt];
+      const solidPts = [motionPt, ...points.slice(1)];
+      const dashedPath = svgEl('path', { d: routeDForRange(dashedPts), fill: 'none', stroke: NOBALL_COLOR, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round', 'stroke-dasharray': '10 8' });
+      wrap.appendChild(dashedPath);
+      const solidPath = svgEl('path', { d: routeDForRange(solidPts), fill: 'none', stroke: color, 'stroke-width': ROUTE_STROKE_WIDTH, 'stroke-linecap': 'round' });
+      wrap.appendChild(solidPath);
+      pathsLayer.appendChild(wrap);
+
+      const dashedLen = dashedPath.getTotalLength();
+      const solidLen = solidPath.getTotalLength();
+      const totalLen = dashedLen + solidLen;
+      const startFracSolid = totalLen > 0 ? dashedLen / totalLen : 1;
+
+      arrowEl = buildEndCapEl(endTypeFor(p), color, ROUTE_STROKE_WIDTH);
+      wrap.appendChild(arrowEl);
+      placeArrowAtFraction(arrowEl, solidPath, 1);
+
+      // isPreSnapMotion: playCardAnimation pulls this ONE entry out of
+      // lastRenderedPaths and animates it standalone, BEFORE the snap
+      // sequence (not timed together with the solid segment below, the
+      // way a handoff-split's two halves share one animMs) -- Nathan:
+      // "the 5 should slowly motion towards the 1... when they get in
+      // line with the LT, the ball will snap." The solid segment's own
+      // startFrac/lenFrac are plain 0/1 (a normal, standalone route) for
+      // the same reason -- by the time it plays, the dashed segment has
+      // already finished and isn't sharing animMs with it.
+      lastRenderedPaths.push({ el: dashedPath, arrowEl: null, player: p.player, id: p.id, isBall: false, isBlocking: false, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+        startFrac: 0, lenFrac: 1, isPreSnapMotion: true });
+      lastRenderedPaths.push({ el: solidPath, arrowEl, player: p.player, id: p.id, isBall: effectiveBall, isBallStart: !!p.ballStart, isBlocking: false, delayMs: p.delayMs || 0,
+        circleEl: ownerCircle ? ownerCircle.circleEl : null, textEl: ownerCircle ? ownerCircle.textEl : null,
+        startFrac: 0, lenFrac: 1, points: solidPts });
     } else {
       // Nathan: "if i remove 3 or more points from a route in play edits it
       // gets rid of the entire play, it all goes blank." Root cause:
@@ -2252,6 +2417,62 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // assignment finished needs this instead. Used by the assignment editor to
   // place its handles on the real end points.
   stage._resolvedPaths = variant.paths;
+
+  // Jet Sweep's Boot: Nathan -- "Boot needs to be delayed until the 5 or
+  // 6 runs by the 1 (QB). The 1 can't take off until the fake hand off
+  // is made." Player 1's own drawn boot route (playType.bootRoute, swap
+  // applied earlier in the per-player loop above) always starts
+  // revealing at delayMs 0, in lockstep with every other path, so his
+  // run upfield visibly starts well before the sweeper has actually
+  // gotten anywhere near him.
+  //
+  // First attempt tried to hold him mid-route, right at the authored
+  // mesh point, only delaying the keep-and-run portion -- wrong in a way
+  // that took real digging to find: a 4-point route here renders via
+  // chainedCurvePathD (routeDForRange), which treats every ODD index as
+  // a Bezier CONTROL coordinate, never actually touched by the drawn
+  // curve -- the mesh point (index 1) is exactly one of those, so the
+  // circle never passed anywhere near it, on-curve-index-based AND
+  // nearest-point-on-the-real-curve approaches both landed the "hold" at
+  // a position that didn't read as "at the mesh." Rather than reshape
+  // the already-approved boot route's own visual curve just to create a
+  // genuine on-curve waypoint there, this delays the WHOLE path instead
+  // (same mechanism reverseDelayMsFor already uses, just computed, not
+  // authored) -- he stands still at the snap spot, then runs his entire
+  // boot route (the brief mesh step and the break upfield together, one
+  // continuous motion) the instant the real exchange would have
+  // happened. Simpler, and sidesteps the curve-geometry trap entirely.
+  //
+  // The real exchange timing: resolveBallPathForWing (called with
+  // bootOn forced false so its own "QB keeps it" truncation -- a
+  // ball-ICON concern -- doesn't hide the real handoff leg from this
+  // calculation) finds who actually receives the fake and where; the
+  // exact same fractionAlongPath/elapsedMsForFraction math
+  // BallPath.schedule() already uses for a real (non-Boot) exchange
+  // gives how long the sweeper's own route-reveal takes to reach that
+  // point. A plain nominal (1x-speed) ms value, same convention as
+  // reverseDelayMs -- it gets its own speedMultiplier scaling later, in
+  // the shared pathPromises/pathFracAt code every delayMs already runs
+  // through, so computing it pre-scaled here would double it at any
+  // speed but 1x. A no-op for every other play (no bootRoute) and a
+  // no-op the moment this one can't resolve a real exchange leg -- never
+  // throws, just leaves the route animating at its old, unpaused rate.
+  if (bootOn && playType && playType.bootRoute && playType.bootRoute.length) {
+    const bootEntry = lastRenderedPaths.find((e) => e.player === 1);
+    if (bootEntry) {
+      const fullBp = resolveBallPathForWing(playType, wingSide, formationId, alignmentValues, direction, false, reverseOn);
+      const realLeg = fullBp && fullBp[1];
+      if (realLeg && realLeg.at && realLeg.player != null) {
+        const receiverEntry = lastRenderedPaths.find((e) => String(e.player) === String(realLeg.player));
+        const exchangeFrac = (receiverEntry && Array.isArray(receiverEntry.points) && window.BallPath)
+          ? window.BallPath.fractionAlongPath(receiverEntry.points, realLeg.at) : null;
+        if (exchangeFrac != null) {
+          const nominalHoldMs = Math.max(0, (receiverEntry.delayMs || 0) + elapsedMsForFraction(receiverEntry.points, 1400, exchangeFrac, 1));
+          if (nominalHoldMs > 0) bootEntry.delayMs = nominalHoldMs;
+        }
+      }
+    }
+  }
   // What seekCardAnimation (below) needs to reproduce the ball's position
   // deterministically at an arbitrary instant -- wingSide for the QB/center
   // anchor, playType for its authored ballPath if any. bootOn included so
@@ -2644,7 +2865,12 @@ function renderSplitDiagram(stage, playKey, splitSide, insideOutside, readPositi
 
   const lastRenderedPaths = [];
   function drawPath(p) {
-    const color = p.isBlocking ? BLOCK_COLOR : (p.ball ? BALL_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
+    // Same priority fix as renderCardDiagram's own color formula above --
+    // ball-carrier status wins over a static isBlocking flag, not the
+    // other way around. A no-op for Split's own data today (no position
+    // there currently swaps roles the way Jet Sweep's #5/#6 do), kept in
+    // sync so the same rule holds if one ever does.
+    const color = p.ball ? BALL_COLOR : (p.isBlocking ? BLOCK_COLOR : (p.ballStart ? BALLSTART_COLOR : NOBALL_COLOR));
     const points = p.points;
     // Nathan: see the matching guard/comment in renderCardDiagram above --
     // same fix, same reason (a lineThenCurve route whose point count has
@@ -2982,50 +3208,50 @@ async function playCardAnimation(stage, playKey, direction, wingSide, speedMulti
     }
   }
 
-  // Jet Sweep: Nathan -- "he can't start moving when the ball is snapped.
-  // he needs to start motioning over then the ball is snapped." A real
-  // pre-snap motion, same idea as #4's own Motion toggle just above, but
-  // generalized to WHOEVER the live, wingSide/direction-resolved carrier
-  // actually is (wingAwareBallPath's own 2nd leg -- the 1st is always just
-  // the snap-holder, {player:1}) instead of a hardcoded position id, and
-  // using HIS OWN authored route's own direction rather than a fixed
-  // wing-side swap (#4's own model has no route of his own to extrapolate
-  // from, just two static spots).
-  // Gated on Play.carrierPreSnapMotion so this is a no-op for every other
-  // play (nothing else sets it) -- ends EXACTLY at the carrier's own real,
-  // unchanged points[0], so the main reveal just below picks him up
-  // mid-stride with zero jump/glitch, rather than needing any change to
-  // the shared reveal/exchange-timing machinery every other play also
-  // relies on.
-  if (playType && playType.carrierPreSnapMotion && wingAwareBallPath && wingAwareBallPath[1]) {
-    const carrierId = wingAwareBallPath[1].player;
-    const carrierEntry = lastRenderedPaths.find(p => String(p.player) === String(carrierId) && p.circleEl && p.points && p.points.length > 1);
-    if (carrierEntry) {
-      const [p0x, p0y] = carrierEntry.points[0];
-      const [p1x, p1y] = carrierEntry.points[1];
-      // A modest head start along his own first leg's own direction,
-      // reversed -- he's already moving, arriving at his real lined-up
-      // spot (points[0], untouched) right as the ball is snapped, so the
-      // main route-reveal's own draw (starting there) reads as a
-      // continuation of the same motion, not a second, separate start.
-      const startPos = { x: p0x - (p1x - p0x) * 0.15, y: p0y - (p1y - p0y) * 0.15 };
-      const endPos = { x: p0x, y: p0y };
-      carrierEntry.circleEl.setAttribute('cx', startPos.x); carrierEntry.circleEl.setAttribute('cy', startPos.y);
-      if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', startPos.x); carrierEntry.textEl.setAttribute('y', startPos.y + 12); }
-      await tweenPoint(startPos, endPos, 900 * speedMultiplier, pt => {
-        carrierEntry.circleEl.setAttribute('cx', pt.x); carrierEntry.circleEl.setAttribute('cy', pt.y);
-        if (carrierEntry.textEl) { carrierEntry.textEl.setAttribute('x', pt.x); carrierEntry.textEl.setAttribute('y', pt.y + 12); }
-      });
-    }
-  }
-
-  await wait(250 * speedMultiplier);
-  if (playType && playType.delayedSnapBall) {
-    ball.style.opacity = '0';
+  // Jet Sweep's pre-snap motion, drawn for real by renderCardDiagram (a
+  // dashed segment from the carrier's true anchor to the near-tackle
+  // crossing point, then a solid segment for his real route -- see
+  // motionSplitPointFor there). Nathan, after seeing the first version of
+  // this: "looks good - only thing I don't like is that the motion guy
+  // comes to a stop. I want him to be in continuous motion and the ball
+  // is snapped right as he transitions from presnap motion to run." The
+  // original version played the motion segment, THEN sequentially waited
+  // + snapped the ball + waited again before the main reveal (the solid
+  // segment) started -- a real stop at the crossing point. Fixed by
+  // running the ball-snap tween CONCURRENTLY with the tail end of the
+  // motion segment (timed to finish exactly when it does, via
+  // snapStartDelay below) and removing the two wait()s entirely for this
+  // play -- the main reveal (his own solid segment included) now starts
+  // the instant the motion segment's own animation promise resolves, so
+  // his circle never stops moving, and the ball visibly arrives at the
+  // QB right at that same transition instant.
+  const preSnapMotionIdx = lastRenderedPaths.findIndex(p => p.isPreSnapMotion);
+  if (preSnapMotionIdx !== -1) {
+    const [preSnapEntry] = lastRenderedPaths.splice(preSnapMotionIdx, 1);
+    const motionDurationMs = 1800 * speedMultiplier;
+    const snapDurationMs = 450 * speedMultiplier;
+    const snapStartDelayMs = Math.max(0, motionDurationMs - snapDurationMs);
+    const ballSnapPromise = (async () => {
+      await wait(snapStartDelayMs);
+      if (playType && playType.delayedSnapBall) {
+        ball.style.opacity = '0';
+      } else {
+        await tweenPoint(centerPos, qbPos, snapDurationMs, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+      }
+    })();
+    await Promise.all([
+      animatePathDraw(preSnapEntry.el, null, motionDurationMs, 0, preSnapEntry.circleEl, preSnapEntry.textEl, null),
+      ballSnapPromise,
+    ]);
   } else {
-    await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    await wait(250 * speedMultiplier);
+    if (playType && playType.delayedSnapBall) {
+      ball.style.opacity = '0';
+    } else {
+      await tweenPoint(centerPos, qbPos, 450 * speedMultiplier, pt => { ball.setAttribute('cx', pt.x); ball.setAttribute('cy', pt.y); });
+    }
+    await wait(150 * speedMultiplier);
   }
-  await wait(150 * speedMultiplier);
 
   // startFrac/lenFrac (set on a handoff split's two segments -- see
   // renderCardDiagram) scale a segment's own share of animMs by its share
@@ -3944,6 +4170,7 @@ function buildCard(combo, opts) {
   const bootSlot = document.createElement('div');
   bootSlot.className = 'toggle-slot';
   let bootToggle = null;
+  let reverseToggle = null;
   // "QB Sneak" (5 Guys) takes over this SAME slot instead of Boot --
   // mutually exclusive concepts, see combo.hasQbSneak's own doc.
   if (combo.hasQbSneak) {
@@ -3951,12 +4178,26 @@ function buildCard(combo, opts) {
     bootSlot.appendChild(qbSneakToggle);
   } else if (combo.hasReverse) {
     // Jet Sweep: same "reuse the slot that's otherwise empty for THIS
-    // play" convention Overload already uses on ioSlot -- Jet Sweep is
-    // noBoot (the mesh-exchange carrier already has his own built-in
-    // fake, same reasoning Option/Double Blast skip Boot) so this slot
-    // would just be blank otherwise.
-    const reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
+    // play" convention Overload already uses on ioSlot -- the mesh-
+    // exchange carrier already has his own built-in fake, so Boot would
+    // just leave this slot blank on top of Reverse otherwise.
+    reverseToggle = buildSwitchToggle('Reverse', reverseOn, (v) => { if (isPlayingRef.value) return; reverseOn = v; onComboChanged(); });
     bootSlot.appendChild(reverseToggle);
+    // Nathan: "add a boot option... for the 1 (QB) to take the ball on a
+    // carry likely up the middle after faking the handoff with the rest
+    // of the play looking exactly the same. We can't do a boot on the
+    // reverse but we can on the sweep itself." Boot and Reverse now share
+    // this one slot -- noBoot still lets a hasReverse play opt all the
+    // way out (leaving just Reverse, the original behavior) for any
+    // future reverse-style play that doesn't want a Boot option at all.
+    // The two lock each other off live (updateBootAvailability/
+    // updateReverseAvailability below), not statically, since whether
+    // Boot makes sense depends on Reverse's CURRENT state, not the play's
+    // own fixed data.
+    if (!combo.noBoot) {
+      bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
+      bootSlot.appendChild(bootToggle);
+    }
   } else if (!combo.noBoot) {
     bootToggle = buildSwitchToggle('Boot', bootOn, (v) => { if (isPlayingRef.value) return; bootOn = v; onComboChanged(); });
     bootSlot.appendChild(bootToggle);
@@ -4072,9 +4313,13 @@ function buildCard(combo, opts) {
     // doesn't involve the backside TE surface Overload creates, unlike
     // every other Wing play, so it's excluded here the same way Split
     // itself is, rather than teaching Formations.supportsOverload about
-    // individual plays inside a formation it does support.
+    // individual plays inside a formation it does support. combo.noOverload
+    // generalizes this to any other play with the same kind of gap --
+    // Nathan: Shuffle Pass, Option Pass, and QB Sneak also "can't have the
+    // overload button available" (none of their own route concepts involve
+    // the backside TE surface Overload creates either).
     overloadWrap.style.display =
-      (!isSplit && !combo.hasPopVariant && window.Formations.supportsOverload(formation)) ? '' : 'none';
+      (!isSplit && !combo.hasPopVariant && !combo.noOverload && window.Formations.supportsOverload(formation)) ? '' : 'none';
     if (motionToggle) motionToggle.style.display = (isSplit || isQbSneak) ? 'none' : '';
     leftCallWrap.style.display = isSplit ? '' : 'none';
     if (bootToggle) bootToggle.style.display = isSplit ? 'none' : '';
@@ -4361,10 +4606,14 @@ function buildCard(combo, opts) {
   // Mirrors updateCounterAvailability above, in the other direction: Boot
   // locks off (and grey out) while Counter is on. No wing/dir concept
   // applies to Boot itself, so this is a straight one-condition check.
+  // Jet Sweep: also locks off while Reverse is on -- Nathan: "We can't do
+  // a boot on the reverse but we can on the sweep itself." reverseOn is
+  // false for every play without combo.hasReverse, so this extra
+  // condition is a no-op everywhere else.
   function updateBootAvailability() {
     if (!bootToggle) return;
     const btn = bootToggle.querySelector('.switch-toggle');
-    if (counterOn) {
+    if (counterOn || reverseOn) {
       if (bootOn) {
         bootOn = false;
         if (btn) btn.setAttribute('aria-pressed', 'false');
@@ -4379,9 +4628,33 @@ function buildCard(combo, opts) {
     }
   }
 
+  // Mirrors updateBootAvailability above, in the other direction: Reverse
+  // locks off (and greys out) while Boot is on -- the QB keeping the ball
+  // himself means there's no exchange left for #5 to hand to #6 (or vice
+  // versa) on a reverse. No-op (reverseToggle is null) for every play
+  // without combo.hasReverse.
+  function updateReverseAvailability() {
+    if (!reverseToggle) return;
+    const btn = reverseToggle.querySelector('.switch-toggle');
+    if (bootOn) {
+      if (reverseOn) {
+        reverseOn = false;
+        if (btn) btn.setAttribute('aria-pressed', 'false');
+      }
+      if (btn) btn.disabled = true;
+      reverseToggle.style.opacity = '0.35';
+      reverseToggle.style.pointerEvents = 'none';
+    } else {
+      if (btn) btn.disabled = false;
+      reverseToggle.style.opacity = '';
+      reverseToggle.style.pointerEvents = '';
+    }
+  }
+
   function onComboChanged() {
     updateCounterAvailability();
     updateBootAvailability();
+    updateReverseAvailability();
     selectedPlayer = defaultHighlightForSignedInPlayer();
     rerenderDiagram();
     let parts;
@@ -4419,18 +4692,32 @@ function buildCard(combo, opts) {
       // above -- so this reads "I Right Inside Zone Right", matching how
       // a coach would actually call it, not always "Wing ...".
       //
-      // Nathan, on "Jumbo": "Jumbo doesn't have a direction independent
-      // of Beast. So it's just Jumbo - then Beast Right or Left." A
-      // noDirection play's direction always EQUALS wingSide, so naming
-      // the side here (before the play's own name) AND again after it
-      // (parts.push(direction), below) said the same word twice --
-      // "Jumbo Right Beast Right." Dropped here, not at the end, so the
-      // side still reads naturally attached to the PLAY itself ("Jumbo
-      // Beast Right"), matching his own words exactly. Doesn't apply to
+      // Nathan (correction): "play should be called the same as the
+      // signals Jumbo Left Beast. not Jumbo Beast Left." The earlier
+      // version of this comment put the side word AFTER the play name
+      // for a noDirection play (reasoning it read more naturally
+      // attached to the play), but that doesn't match RECIPES.jumbo's
+      // (and RECIPES.i's, for double_blast_i/pop_pass_i/pop_pass_i-wing
+      // -- the same real gap, just not yet noticed there) own actual,
+      // already-shipped signal order: touch, wing-side finger card,
+      // THEN the play card, with no trailing repeat at all for a
+      // noDirection play (its own `when: !c.noDirection` guard on the
+      // trailing direction step). So the side word now goes in the
+      // SAME prefix slot every other formation already uses, and simply
+      // isn't repeated at the end for this case. Doesn't apply to
       // directionOpposesWing (I's Sweep): direction is the OPPOSITE of
       // wingSide there, so both words are real, distinct information
-      // ("I Right 4 Sweep Left"), not a repeat.
-      parts = combo.noDirection ? [formationLabel] : [`${formationLabel} ${wingSide}`];
+      // ("I Right 4 Sweep Left"), not a repeat -- that play isn't
+      // noDirection, so the trailing push below still fires for it.
+      //
+      // Jet Sweep (5 Guys): Nathan -- "5 Guys Right Sweep Right goes to
+      // the 5. 5 Guys Left Sweep Left goes to the 6" -- the SAME word
+      // repeated IS the real, intended call for this specific
+      // noDirection play (Play.repeatWingSideBeforePlay, opt-in -- see
+      // legacy-adapter.js's own comment) -- still gets BOTH the prefix
+      // (now unconditional, same as every other play) AND the trailing
+      // repeat (its own condition below), unchanged from before.
+      parts = [`${formationLabel} ${wingSide}`];
       // Nathan: "when overload is chosen on a play, it should be added
       // to the play name after the formation call. So this play would
       // be I Left Overload Left 4Sweep Right." Same slot RECIPES.i's own
@@ -4463,7 +4750,13 @@ function buildCard(combo, opts) {
       if (motionOn) parts.push('Motion');
       if (combo.hasInsideOutside) parts.push(insideOutside);
       parts.push(combo.label);
-      parts.push(direction);
+      // Skipped for a noDirection play UNLESS it opts into repeating the
+      // side word (Jet Sweep) -- direction always equals wingSide here,
+      // already said once in the prefix above, so repeating it blindly
+      // would read "Jumbo Left Beast Left" instead of the real call,
+      // "Jumbo Left Beast." Every other play (independent direction, or
+      // directionOpposesWing's real opposite value) still gets it.
+      if (!combo.noDirection || combo.repeatWingSideBeforePlay) parts.push(direction);
       if (bootOn) parts.push('Boot');
       if (counterOn) parts.push('Counter');
       if (reverseOn) parts.push('Reverse');
@@ -4515,7 +4808,201 @@ window.buildGamePlanEditCard = function (entry, opts) {
 function buildGrid() {
   const grid = document.getElementById('playCallsGrid');
   grid.innerHTML = '';
-  renderFormationPicker(grid);
+  renderBallCarrierFilterBar(grid);
+  // renderFormationPicker does its own container.innerHTML = '' -- a
+  // second, nested host keeps that from wiping the filter bar just
+  // added above it (both would otherwise be fighting over the same
+  // top-level container).
+  const formationHost = document.createElement('div');
+  grid.appendChild(formationHost);
+  renderFormationPicker(formationHost);
+}
+
+// ---- "Who carries it?" filter (Nathan: "a way to filter all plays that
+// go to a certain position. Like, all plays that give the 3 back a hand
+// off. Or all plays designed to have the 6 run it"). A cross-formation
+// search, not a per-formation one -- #3 might carry on Inside Zone
+// (Wing), Dive (I), or a 5 Guys numbered call, so this can't live inside
+// any one formation's own grid.
+//
+// "Does this play ever hand #6 the ball" has to mean under ANY of the
+// play's own real toggle combinations, not just the one its tile happens
+// to open on -- Jet Sweep hands off to a different player depending on
+// Wing side alone, and I's "4 Sweep" depends on its own Heavy toggle too.
+// Brute-forces every reachable combination of direction/wingSide/
+// alignment values/Boot/Reverse/QB Sneak/Counter/Pop Pass 2 (the real
+// axes that can actually change WHO carries -- Motion/In-Out/Read A-B
+// never do, in any mechanism this whole rebuild has ever used, so
+// they're left out to keep this from blowing up combinatorially for no
+// real benefit) and records every position stage._lastRenderedPaths ever
+// credits with the ball (the exact same isBall flag that colors a route
+// red) across all of them. Capped in practice by there only being ~30
+// real plays with a handful of toggles each -- not cached, since this
+// only ever runs on an explicit tap, not on every page load.
+function cartesianBoolDims(dims) {
+  return dims.reduce((acc, dim) => {
+    const next = [];
+    acc.forEach((combo) => {
+      next.push(Object.assign({}, combo, { [dim]: false }));
+      next.push(Object.assign({}, combo, { [dim]: true }));
+    });
+    return next;
+  }, [{}]);
+}
+function cartesianAlignmentCombos(toggles) {
+  return (toggles || []).reduce((acc, toggle) => {
+    const next = [];
+    acc.forEach((combo) => {
+      (toggle.values || []).forEach((v) => {
+        next.push(Object.assign({}, combo, { [toggle.id]: v.id }));
+      });
+    });
+    return next.length ? next : acc;
+  }, [{}]);
+}
+// A Play Builder V2 play belongs to exactly one formation
+// (authoredFormationId), but a classic play has never worked that way --
+// "every play has always been available for" both Wing AND Split (see
+// renderFormationPlays' own built-in fallback), each with its own
+// completely separate rendering function/geometry (renderCardDiagram vs.
+// renderSplitDiagram). Nathan: "pop pass needs to be removed from the
+// Split formation" -- noSplit is the one real exception, a classic play
+// that opts OUT of the Split side specifically. Checked here so a
+// classic play's carrier set gets computed once per formation it's
+// ACTUALLY reachable from, not assumed to be the same under both.
+function reachableFormationIdsFor(combo) {
+  if (combo.authoredFormationId) return [combo.authoredFormationId];
+  return combo.noSplit ? ['wing'] : ['wing', 'split'];
+}
+function computeBallCarrierPositions(combo, formationId) {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const carriers = new Set();
+  const record = (stage) => {
+    (stage._lastRenderedPaths || []).forEach((p) => {
+      if (p.isBall && p.player != null) carriers.add(p.player);
+    });
+  };
+  if (formationId === 'split') {
+    // Split has its own, simpler toggle set (no direction/wingSide/
+    // alignment/Boot/Reverse at all -- see renderSplitDiagram's own
+    // signature) -- splitSide and the run/pass switch are the two axes
+    // that could plausibly change who carries; leftCall/rightCall are
+    // the OUTSIDE RECEIVERS' own route picks, left at buildPlayTile's
+    // same fixed default ('seattle') rather than enumerated, since
+    // neither ever reassigns who's credited with the snap/run itself.
+    ['Left', 'Right'].forEach((splitSide) => {
+      [false, true].forEach((passOn) => {
+        const stage = document.createElementNS(svgNS, 'svg');
+        document.body.appendChild(stage);
+        try {
+          window.renderSplitDiagram(stage, combo.playKey, splitSide,
+            combo.hasInsideOutside ? 'Outside' : null, 'A', 'seattle', 'seattle', passOn, null, 'pocket');
+          record(stage);
+        } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
+        document.body.removeChild(stage);
+      });
+    });
+    return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+  }
+  const alignmentCombos = cartesianAlignmentCombos(combo.alignmentToggles);
+  const boolDims = [];
+  if (!combo.noBoot) boolDims.push('boot');
+  if (combo.hasReverse) boolDims.push('reverse');
+  if (combo.hasQbSneak) boolDims.push('qbSneak');
+  if (combo.hasCounter) boolDims.push('counter');
+  if (combo.hasPopVariant) boolDims.push('popVariant');
+  const boolCombos = cartesianBoolDims(boolDims);
+  ['Right', 'Left'].forEach((direction) => {
+    ['Right', 'Left'].forEach((wingSide) => {
+      alignmentCombos.forEach((alignmentValues) => {
+        boolCombos.forEach((bools) => {
+          const stage = document.createElementNS(svgNS, 'svg');
+          document.body.appendChild(stage);
+          try {
+            window.renderCardDiagram(stage, combo.playKey, direction, wingSide, null, false, null,
+              false, !!bools.boot, null, !!bools.counter, !!bools.popVariant, formationId, false,
+              alignmentValues, !!bools.qbSneak, !!bools.reverse);
+            record(stage);
+          } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
+          document.body.removeChild(stage);
+        });
+      });
+    });
+  });
+  return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+}
+
+function renderBallCarrierFilterBar(container) {
+  const wrap = document.createElement('div');
+  wrap.className = 'pc-carrier-filter';
+  const toggleLink = document.createElement('button');
+  toggleLink.type = 'button';
+  toggleLink.className = 'lbLinkBtn';
+  toggleLink.textContent = '🔍 Filter plays by who carries it';
+  const pillGrid = document.createElement('div');
+  pillGrid.className = 'posPillGrid pc-carrier-pills';
+  pillGrid.style.display = 'none';
+  pillGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  for (let n = 1; n <= 6; n++) {
+    const pill = document.createElement('div');
+    pill.className = 'posPill';
+    pill.textContent = '#' + n;
+    pill.addEventListener('click', () => renderBallCarrierResults(container, n));
+    pillGrid.appendChild(pill);
+  }
+  toggleLink.addEventListener('click', () => {
+    const show = pillGrid.style.display === 'none';
+    pillGrid.style.display = show ? '' : 'none';
+    toggleLink.textContent = show ? '🔍 Hide ball-carrier filter' : '🔍 Filter plays by who carries it';
+  });
+  wrap.appendChild(toggleLink);
+  wrap.appendChild(pillGrid);
+  container.appendChild(wrap);
+}
+
+function renderBallCarrierResults(container, positionNum) {
+  container.innerHTML = '';
+  container.appendChild(pcBackButton('← Formations', () => buildGrid()));
+  const title = document.createElement('h3');
+  title.className = 'formation-play-title';
+  title.textContent = `Plays that can give #${positionNum} the ball`;
+  container.appendChild(title);
+  const hint = document.createElement('p');
+  hint.className = 'empty-note';
+  hint.style.marginTop = '0';
+  hint.textContent = 'Across every formation, under any toggle that reaches it -- not just each play’s own default look.';
+  container.appendChild(hint);
+  const gridEl = document.createElement('div');
+  gridEl.className = 'formation-play-grid';
+  container.appendChild(gridEl);
+  // One entry per (play, formation) PAIR, not per play -- a classic play
+  // reachable from both Wing and Split (see reachableFormationIdsFor)
+  // gets its own carrier set computed separately for each, since they're
+  // two completely different renderers/geometries; a Play Builder V2
+  // play only ever has the one formation it was authored for.
+  const matches = [];
+  buildPlayList().forEach((combo) => {
+    reachableFormationIdsFor(combo).forEach((formationId) => {
+      if (computeBallCarrierPositions(combo, formationId).includes(positionNum)) {
+        matches.push({ combo, formationId });
+      }
+    });
+  });
+  if (!matches.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.textContent = `No plays currently give #${positionNum} the ball.`;
+    gridEl.replaceWith(note);
+    return;
+  }
+  matches.forEach(({ combo, formationId }) => {
+    const formationMeta = window.Formations.get(formationId);
+    const formationLabel = (formationMeta && formationMeta.name) || 'Wing';
+    const tile = buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationLabel));
+    const nm = tile.querySelector('.play-tile-nm');
+    if (nm) nm.textContent = `${formationLabel} — ${combo.label}`;
+    gridEl.appendChild(tile);
+  });
 }
 
 function pcBackButton(label, onClick) {

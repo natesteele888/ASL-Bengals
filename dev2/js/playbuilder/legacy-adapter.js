@@ -308,7 +308,25 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // that distinction.
   if (play.isPass) result.isPass = true;
   if (play.hasQbSneak) { result.hasQbSneak = true; result.qbSneakRoute = play.qbSneakRoute; }
+  // Jet Sweep's own Boot: Nathan -- "a boot option... for the 1 (QB) to
+  // take the ball on a carry likely up the middle after faking the
+  // handoff with the rest of the play looking exactly the same." Same
+  // shape as hasQbSneak/qbSneakRoute just above, just for Boot -- a
+  // single, play-level alternate route for #1 only, swapped in by
+  // js/play-calls.js's renderCardDiagram purely while Boot is on.
+  if (play.bootRoute) result.bootRoute = play.bootRoute;
   if (play.noDirection) result.noDirection = true;
+  // Jet Sweep: Nathan -- "5 Guys Right Sweep Right goes to the 5. 5 Guys
+  // Left Sweep Left goes to the 6" -- the real title convention for this
+  // play states the wing side TWICE (formation call, then the play's own
+  // direction, same word both times: "5 Guys Right Jet Sweep Right"), not
+  // once like Jumbo/Beast's own noDirection play ("Jumbo Beast Right" --
+  // Nathan explicitly didn't want that one repeated). A play-level opt-in
+  // rather than keying play-calls.js's title builder off noDirection
+  // generically, so Jumbo and 5 Guys' own numbered calls (also
+  // noDirection, no reason to assume they want the same treatment) are
+  // completely unaffected.
+  if (play.repeatWingSideBeforePlay) result.repeatWingSideBeforePlay = true;
   // I's Sweep: Nathan: "If wing is Left, then the sweep has to go right.
   // There is no sweep left handing off to the 4, with the wing in heavy
   // on the left side." Direction isn't independently callable at all for
