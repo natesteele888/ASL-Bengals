@@ -1321,12 +1321,12 @@
     wrap.appendChild(headRow);
     if (!playClipsPanelCollapsed){
       const navRow = document.createElement('div'); navRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
-      const prevBtn = document.createElement('button'); prevBtn.className = 'primaryBtn'; prevBtn.style.cssText = 'margin:0;flex:0 0 auto;padding:8px 14px;'; prevBtn.textContent = '◀';
+      const prevBtn = document.createElement('button'); prevBtn.className = 'primaryBtn'; prevBtn.style.cssText = 'margin:0;flex:0 0 auto;width:auto;padding:8px 14px;'; prevBtn.textContent = '◀';
       prevBtn.disabled = playClipIndex === 0;
       prevBtn.addEventListener('click', function(){ if (playClipIndex > 0){ playClipIndex--; renderPlayClipsPanelContent(); } });
       const counter = document.createElement('div'); counter.style.cssText = 'flex:1;text-align:center;font-weight:800;font-size:13px;';
       counter.textContent = 'Clip ' + (playClipIndex + 1) + ' of ' + clips.length;
-      const nextBtn = document.createElement('button'); nextBtn.className = 'primaryBtn'; nextBtn.style.cssText = 'margin:0;flex:0 0 auto;padding:8px 14px;'; nextBtn.textContent = '▶';
+      const nextBtn = document.createElement('button'); nextBtn.className = 'primaryBtn'; nextBtn.style.cssText = 'margin:0;flex:0 0 auto;width:auto;padding:8px 14px;'; nextBtn.textContent = '▶';
       nextBtn.disabled = playClipIndex === clips.length - 1;
       nextBtn.addEventListener('click', function(){ if (playClipIndex < clips.length - 1){ playClipIndex++; renderPlayClipsPanelContent(); } });
       navRow.appendChild(prevBtn); navRow.appendChild(counter); navRow.appendChild(nextBtn);
