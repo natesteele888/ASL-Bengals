@@ -2839,6 +2839,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .statsSmallBtn { border: 1.5px solid var(--bengal-orange); background: #fff; color: var(--bengal-orange-dark); border-radius: 5px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
 .statsSmallBtn:active { background: var(--bengal-orange); color: #fff; }
 .statsRmBtnSmall { border: none; background: none; color: #c0342a; font-size: 11px; cursor: pointer; padding: 1px 4px; }
+#playClipsList .statsRmBtnSmall { min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
 .statsAddRowWrap { display: flex; gap: 8px; align-items: center; margin: 8px 0 16px; }
 .statsRosterPicker { padding: 6px; border: 1.5px solid #ccc; border-radius: 6px; font-size: 12.5px; }
 
