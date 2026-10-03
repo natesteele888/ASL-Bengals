@@ -2650,27 +2650,43 @@ function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition)
   const variant = getVariant(playType, splitSide, insideOutside, readPosition);
   // Nathan: "before the snap it shows the 6 on the correct left side of
   // the play then at snap, he jumps over to the same spot as the 4" --
-  // real bug, found reading the raw data directly. In Split, today's real
-  // wide/flex numbers (5/3 on a Left call, 6/2 on a Right call -- see
+  // real bug, found reading the raw data directly. The CURRENT call's own
+  // wide/flex pair (5/3 on a Left call, 6/2 on a Right call -- see
   // splitPersonnel) are ALWAYS receiver-only: their real positions/routes
-  // come entirely from getSplitRoutePaths, never from here. This used to
-  // exclude only the pair ACTIVE for the current side (just {5,3} for
-  // Left) -- so the OTHER side's own wide/flex number (6, on a Left call)
-  // still matched classic Wing's own raw blocking-path data for that
-  // number, unfiltered. Wing's own geometry for #6 sits at its own
-  // anchor (often the opposite side of the field from Split's own #6
-  // spot), so the player's circle -- drawn at Split's own, completely
-  // different position -- animated toward that stray Wing coordinate
-  // instead. For #6 specifically that coordinate happened to land right
-  // on top of Split's own #4. Excluding BOTH sides' real wide/flex
-  // numbers, always, closes this off regardless of which side is active.
-  const left = splitPersonnel('Left');
-  const right = splitPersonnel('Right');
-  const excluded = new Set([left.wideNum, left.flexNum, right.wideNum, right.flexNum, 4]);
-  return (variant.paths || []).filter(p => {
-    if (p.optionLine || p.dualSideBlock) return false; // Option-style relative blocking isn't wired for Split yet
-    return p.player === null || !excluded.has(p.player);
-  });
+  // come entirely from getSplitRoutePaths, never from here. Player 4 is
+  // the same -- always a receiver, never reused here.
+  //
+  // The INACTIVE side's own wide/flex pair (6/2 on a Left call) are
+  // different: in Split's real personnel they're the players who stay in
+  // as blockers/backfield on a call to the OTHER side, and Wing's own
+  // canonical data often gives them a real technique for this exact play
+  // (a real lead block, a real carry). An earlier fix here excluded them
+  // outright to stop them jumping to a stray spot -- which did stop the
+  // jump, but also silently erased that real, intended movement on every
+  // play that had it: "the TE is now not moving on any plays they were
+  // previously designed to move on." The jump wasn't caused by the
+  // technique itself, it was caused by reusing Wing's raw, formation-
+  // unrelated absolute endpoint -- so reanchoring (the same technique
+  // reanchorRoute already uses for player 4's own receiver route) is the
+  // real fix: it keeps the technique's real SHAPE while starting it from
+  // Split's own real anchor for that number instead of Wing's.
+  const active = splitPersonnel(splitSide);
+  const inactiveSide = splitSide === 'Right' ? 'Left' : 'Right';
+  const inactive = splitPersonnel(inactiveSide);
+  const excluded = new Set([active.wideNum, active.flexNum, 4]);
+  const pos = alignment('split', splitSide);
+  return (variant.paths || []).reduce((out, p) => {
+    if (p.optionLine || p.dualSideBlock) return out; // Option-style relative blocking isn't wired for Split yet
+    if (p.player == null) { out.push(p); return out; } // O-line and other unowned paths -- unaffected
+    if (excluded.has(p.player)) return out;
+    if (p.player === inactive.wideNum || p.player === inactive.flexNum) {
+      const anchor = pos[p.player];
+      if (anchor) out.push({ ...p, points: reanchorRoute(p.points, anchor) });
+      return out;
+    }
+    out.push(p);
+    return out;
+  }, []);
 }
 
 // When Pass is on, the play isn't a run anymore -- Nathan: "the lineman
