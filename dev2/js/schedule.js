@@ -2512,6 +2512,12 @@
       body.innerHTML = `
         ${approved ? `<div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="schedEditToggleBtn">✏️ Edit This Game</button></div>` : ''}
         ${heroHtml}
+        <!-- Nathan: "add a plays counts tab here on the Game preview page.
+             The tracking is per game... independent to each game so we can
+             go back to check it out." Coach-only (same gate as Edit This
+             Game) -- opens the real full-screen tracker pre-scoped to this
+             exact game, see js/playcount-tracker.js. -->
+        ${approved ? `<button type="button" class="navBtn secondary" id="schedPlayCountBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:12px;">🎯 Play Counts</button>` : ''}
         ${current.opponentFilmUrl ? filmButtonHtml(current.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', { filmGameId: current.id, btnClass: 'navBtn', btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}` }) : ''}
         ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
         ${scoutingNotesReadOnlyHtml(current)}
@@ -2566,6 +2572,13 @@
       fillHeroOpponentRecord(current.opponent);
       const editToggleBtn = document.getElementById('schedEditToggleBtn');
       if (editToggleBtn) editToggleBtn.addEventListener('click', () => { editMode = true; renderDetail(); });
+      const playCountBtn = document.getElementById('schedPlayCountBtn');
+      if (playCountBtn) playCountBtn.addEventListener('click', () => {
+        if (window.openPlayCountTracker) {
+          const label = `${current.homeAway === 'Away' ? '@' : 'vs'} ${current.opponent || 'TBD'} — ${current.date || ''}`;
+          window.openPlayCountTracker(current.id, label);
+        }
+      });
       // Nathan: "When I am looking at an upcoming game, I should be able
       // to click on the opponent logo and have it take me to their team
       // page." window.openStandingsTeamPage (js/standings.js) is the

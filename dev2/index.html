@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261002u">
+<link rel="stylesheet" href="css/styles.css?v=20261002w">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -761,11 +761,11 @@
        to be tracked... add players with numbers... say there are in on a
        snap and log it with a confirmation step... a bar of how many they
        need with a red yellow or green status." js/playcount-tracker.js. -->
-  <div id="coachPlayCountPanel" class="coachToolsPanel" style="display:none;">
-    <div class="lbSectionHeader" style="text-align:center;">🎯 Play Count</div>
-    <div class="hint" style="max-width:600px;margin:6px auto 14px;text-align:center;">Track live, in-game snap counts for kids who need a guaranteed minimum -- set the target, add the players, then log each one in during the game.</div>
-    <div id="pctBody" style="max-width:500px;margin:0 auto;"></div>
-  </div>
+  <!-- Nathan: "I also want the Play Counts tab to open full screen with
+       an X to close out of it." This tab's own init just opens that real
+       overlay (#playCountOverlay, below) -- nothing renders in here, so
+       there's no second #pctBody to collide with the overlay's own. -->
+  <div id="coachPlayCountPanel" class="coachToolsPanel" style="display:none;"></div>
 
   <!-- ---- Drive Scripts ---- -->
   <div id="coachDriveScriptsPanel" class="coachToolsPanel" style="display:none;">
@@ -2352,6 +2352,55 @@
 </div>
 </div>
 
+<!-- Nathan: "The tracking is per game and changes per week... make sure
+     it's independent to each game so we can go back to check it out...
+     I also want the Play Counts tab to open full screen with an X to
+     close out of it." Copies .gamePlanBuilderOverlay's own convention
+     exactly -- a fixed, inset:0 overlay stacked above the normal
+     tab-panel system, entered from either a specific game's own detail
+     page (js/schedule.js) or the Coach Tools entry (no game pre-chosen,
+     shows the picker screen first). Each game's own target/players/log
+     is its own independent Firebase record -- see js/playcount-tracker.js. -->
+<div class="playCountOverlay" id="playCountOverlay" style="display:none; position:fixed; inset:0; z-index:1910; overflow-y:auto; background:#f4f2ee;">
+<div class="gpbWrap">
+  <button class="lbXClose" id="pctCloseBtn" aria-label="Close">&times;</button>
+  <div class="gpbHeader">
+    <h1>🎯 Play Count</h1>
+    <div class="gpbSubtitle" id="pctSubtitle"></div>
+  </div>
+
+  <div class="gpbScreen" id="pctGameScreen">
+    <div class="lbSub" style="text-align:center;margin-bottom:10px;">Which game are you tracking plays for?</div>
+    <div class="gpbOpponentList" id="pctGameList"></div>
+  </div>
+
+  <div class="gpbScreen" id="pctTrackerScreen" style="display:none;">
+    <div style="text-align:center;margin-bottom:10px;"><button type="button" class="lbLinkBtn" id="pctSwitchGameBtn">‹ Switch Game</button></div>
+    <div id="pctBody"></div>
+  </div>
+</div>
+</div>
+
+<!-- Nathan: "If you exit the app and you want to keep doing the play
+     counts - there should be a pop up window that asks the person...
+     do you want to continue? Yes or No." Shown once at boot (never mid-
+     session) when a coach's device still has an in-progress tracking
+     session from last time -- see js/playcount-tracker.js's own
+     checkPlayCountResume(), called from boot() below. -->
+<div class="lbOverlay" id="pctResumeOverlay">
+  <div class="lbCard" style="max-width:360px;">
+    <div class="lbHeroHeader" style="text-align:center;padding:22px 18px 4px;">
+      <div class="lbHeroTrophy">🎯</div>
+      <h3>Still counting plays?</h3>
+      <div class="lbSub" id="pctResumeText" style="margin-top:4px;"></div>
+    </div>
+    <div style="display:flex;gap:8px;padding:16px 18px 18px;">
+      <button type="button" class="navBtn secondary" id="pctResumeNoBtn" style="flex:1;">No, Home</button>
+      <button type="button" class="navBtn" id="pctResumeYesBtn" style="flex:1;">Continue ›</button>
+    </div>
+  </div>
+</div>
+
 <audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
 <audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
 <audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
@@ -2423,7 +2472,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261002v';
+  const BUILD_V = '20261002w';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2654,6 +2703,16 @@ if (window.ResizeObserver) {
     if (elapsed < minDisplayMs) await new Promise(r => setTimeout(r, minDisplayMs - elapsed));
     appLoadingOverlay.style.opacity = '0';
     setTimeout(() => { appLoadingOverlay.style.display = 'none'; }, 400);
+  }
+  // Nathan: "If you exit the app and you want to keep doing the play
+  // counts - there should be a pop up window that asks the person... do
+  // you want to continue?" Once per real app launch (this is boot(), not
+  // an in-app navigation), after everything else is ready -- see
+  // js/playcount-tracker.js's own checkPlayCountResume().
+  try {
+    if (window.checkPlayCountResume) window.checkPlayCountResume();
+  } catch (err) {
+    console.error('[boot] Play Count resume check failed (continuing anyway):', err);
   }
 })();
 </script>

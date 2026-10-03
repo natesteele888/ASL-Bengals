@@ -2978,6 +2978,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .gpbTagList { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
 [data-theme="dark"] .gpbOpponentBtn { background: var(--card); border-color: var(--line); color: var(--ink); }
 [data-theme="dark"] .gpbPlaylistRow { background: var(--card); border-color: var(--line); }
+
+/* ===== Play Count -- same full-screen overlay convention as
+   .gamePlanBuilderOverlay directly above, reusing its .gpbWrap/.gpbHeader/
+   .gpbOpponentList chrome for the game picker. See js/playcount-tracker.js. ===== */
+.playCountOverlay { position: fixed; inset: 0; z-index: 1910; display: none; overflow-y: auto; background: var(--paper); }
+.playCountOverlay.show { display: block; }
+.playCountOverlay .lbXClose { background: rgba(0,0,0,.08); color: #1a1a1a; }
+.playCountOverlay .lbXClose:active { background: rgba(0,0,0,.16); }
 .twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
 
 /* ---- start / end screens ---- */
