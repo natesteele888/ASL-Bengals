@@ -144,16 +144,37 @@ let lastPlaySubMode = 'playcalls';
 // way" on This Week/Schedule/Standings/Coach Tools, the original ask),
 // landing back on Play rebuilds and shows it again every time, not just
 // once per session.
-function setSection(section){
+// Real back-button support (js/nav-history.js) -- a REAL, LIVE bug found
+// testing the just-deployed feature directly on the production site, not
+// just in isolated tests: setMode's own push/undo only ever toggles
+// #modeTabs/.modePanel state, but a top-level SECTION change ALSO moves
+// #topSections' own active-button highlight and modeTabsEl's visibility
+// -- state setMode has no idea exists. Undoing a section switch by
+// calling bare setMode(fromMode) left the content panel correct but the
+// top nav still highlighting the section you'd supposedly backed OUT of.
+// Fix: setSection tracks its OWN currentSection and pushes its OWN
+// history entry for a REAL section change, separately from setMode's own
+// (unchanged) push for a Play sub-tab change -- every call setSection
+// makes to setMode now passes fromHistory:true so setMode's own push
+// logic never ALSO fires for the same user action (one real navigation,
+// one real history entry, not two).
+let currentSection = 'play';
+function setSection(section, navOpts){
+  navOpts = navOpts || {};
+  const fromSection = currentSection;
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
   if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
     modeTabsEl.style.display = 'none';
     hideGlobalCallout();
-    setMode(section);
+    setMode(section, { fromHistory: true });
   } else {
     modeTabsEl.style.display = '';
-    setMode(lastPlaySubMode);
+    setMode(lastPlaySubMode, { fromHistory: true });
     if (typeof renderEngagementCallout === 'function') renderEngagementCallout();
+  }
+  currentSection = section;
+  if (!navOpts.fromHistory && fromSection !== section && window.NavHistory) {
+    window.NavHistory.push('section:' + section, () => setSection(fromSection, { fromHistory: true }));
   }
 }
 if (topSectionsEl) {
