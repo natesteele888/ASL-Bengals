@@ -332,12 +332,48 @@
       });
   }
 
+  // Nathan: "these don't make sense like they used to... some of those
+  // plays can be run out of different formations. Some are in specific
+  // formations." numberedRows() is still the real source (one row per
+  // play x direction, labeled "<Formation>: <Name>" for anything from
+  // customFormationRows, bare "<Name>" for a Wing-family row) -- this just
+  // groups that flat list by the play's own base name (the label with any
+  // "<Formation>: " prefix stripped), so "Blast" collapses Wing's own
+  // blast key and I's own blast_i key into ONE group a coach picks a
+  // formation+direction from, while a formation-specific play (no other
+  // formation shares its base name, e.g. "5 Guys: 1") stays its own,
+  // clearly-labeled group of just its own direction pair. Data-driven, not
+  // guessed -- a play only ever groups with another because they share the
+  // literal same post-prefix label text today (confirmed real for every
+  // family name Wing/I/I Wing's own plays already use).
+  function pickerGroups() {
+    const byBase = new Map();
+    numberedRows().forEach((row) => {
+      const m = row.label.match(/^([^:]+): (.+)$/);
+      const formation = m ? m[1] : 'Wing';
+      const base = m ? m[2] : row.label;
+      if (!byBase.has(base)) byBase.set(base, []);
+      byBase.get(base).push(Object.assign({ formation }, row));
+    });
+    return [...byBase.entries()].map(([base, entries]) => {
+      const formationCount = new Set(entries.map((e) => e.formation)).size;
+      return {
+        base, entries, color: entries[0].color,
+        // A single-formation group keeps its original, already-unambiguous
+        // label ("5 Guys: 1", "QB Sneak") as its header -- the stripped
+        // base name alone ("1") would read as meaningless out of context.
+        header: formationCount > 1 ? base : entries[0].label,
+        multi: formationCount > 1,
+      };
+    });
+  }
+
   // Exposed standalone (not just used inside v2Label) so js/gameplan-pdf.js
   // can build its own, more compact per-card label (formation-grouped under
   // a section header, so repeating the formation name on every card would
   // be redundant) without a second copy of this same toggle-walking logic.
   window.GamePlan = {
-    describe, resolveForRender, legacyWingSideFor, alignmentSummary, addEntry, numberedRows, MAX_PLAYS,
+    describe, resolveForRender, legacyWingSideFor, alignmentSummary, addEntry, numberedRows, pickerGroups, MAX_PLAYS,
     loadCurrentGamePlan, saveDraftAsGamePlan,
   };
 })();

@@ -2327,6 +2327,19 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .gameplanCardSpotlight { font-size: 10px; font-weight: 800; text-align: center; color: #fff; background: #2e7d32; padding: 3px 4px; }
 .gameplanCardSvg { display: block; width: 100%; height: auto; background: #fff; }
 .gameplanPickerGrid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+/* Nathan: "these don't make sense like they used to... some of those plays
+   can be run out of different formations. Some are in specific
+   formations." The picker used to be one flat row of ~68 "#N Label •
+   Direction" pills (every play x direction, no grouping at all) -- now
+   grouped by the play's own base name (e.g. "Blast" collapses Wing's and
+   I's own separate keys into one card), so a play that's available from
+   several formations shows all of them together, and a formation-specific
+   play (e.g. "5 Guys: 1") still reads clearly on its own. See
+   js/thisweek.js's own pickerGroups(). */
+.gameplanGroupList { display: flex; flex-direction: column; gap: 10px; max-width: 640px; margin: 0 auto; }
+.gameplanGroup { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); }
+.gameplanGroupHeader { font-size: 13px; font-weight: 800; color: var(--chip-color, var(--ink)); margin-bottom: 6px; }
+.gameplanGroupChips { display: flex; flex-wrap: wrap; gap: 6px; }
 /* Nathan: "keep the pills a consistent size" -- these sit in a flex row
    with no shared width, so a short label ("Games") and a long one ("Full
    Schedule"/"Drive Scripts") hugged their own text and made the row look
