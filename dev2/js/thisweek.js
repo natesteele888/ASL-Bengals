@@ -461,7 +461,20 @@
       <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
       <div id="thisweekOpponentScoutingWrap"></div>
-      <div id="thisweekOpponentFormWrap"></div>
+      <!-- Nathan: "link formatting and placement isn't good - needs
+           breathing room for other things and needs to be centered."
+           Real, found cause: .lbSectionHeader's own margin-top:0 for
+           whichever header is first-of-type in its own column (both
+           "Games this week" and "Practice & film" qualify, each the only
+           section header in its own .weekAheadCol) means nothing above
+           this wrap was ever pushing space between them -- this toggle
+           link had zero margin of its own either, so the two sat flush
+           against each other with no gap. text-align:center also fixes
+           the link itself -- .lbLinkBtn is a plain inline-block button,
+           so without it the link just sits flush left instead of centered
+           under the stat cards above it, same as every other centered
+           toggle on this screen. -->
+      <div id="thisweekOpponentFormWrap" style="text-align:center;margin:10px 0 16px;"></div>
     `;
 
     return `
