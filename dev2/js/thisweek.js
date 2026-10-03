@@ -38,6 +38,14 @@
   const BUNDLED_LOGOS = {
     clinton: 'assets/images/opponents/clinton.png',
     grafton: 'assets/images/opponents/grafton.png',
+    // normalizeOpponentKey("Leicester/Spencer") -- no space before the
+    // slash, so the whole thing counts as one "word" (same reasoning
+    // js/schedule.js's own copy documents). Was missing from this
+    // file's own copy of the map even though js/schedule.js already had
+    // it -- found by a live audit against the real league roster, not
+    // new art.
+    leicesterspencer: 'assets/images/opponents/leicesterspencer.png',
+    leominster: 'assets/images/opponents/leominster.png',
     oxfordwebster: 'assets/images/opponents/oxfordwebster.png',
     merrimack: 'assets/images/opponents/merrimack.png',
     milford: 'assets/images/opponents/milford.png',
@@ -53,6 +61,17 @@
     // slash, so the whole thing counts as one "word", then the slash
     // gets stripped (same reasoning js/schedule.js's own copy documents).
     maynardnashoba: 'assets/images/opponents/maynardnashoba.png',
+    charltondudley: 'assets/images/opponents/charltondudley.png',
+    nipmuc: 'assets/images/opponents/nipmuc.png',
+    // "North Middlesex" does NOT use the plain first-word key ("north")
+    // -- "North County" is a separate, real team that would collide on
+    // that exact key. Keyed on normalizeOpponentFullKey (the whole
+    // name) instead -- see opponentBadgeHtml below, same reasoning
+    // js/schedule.js's own copy documents.
+    northmiddlesex: 'assets/images/opponents/north-middlesex.png',
+    northbridgeuxbridge: 'assets/images/opponents/northbridgeuxbridge.png',
+    tantasqua: 'assets/images/opponents/tantasqua.png',
+    tyngsboro: 'assets/images/opponents/tyngsboro.png',
   };
   let opponentLogos = {};
   // Delegates to js/gameplan.js's own MAX_PLAYS (same "one real source,
@@ -132,6 +151,13 @@
     const firstWord = cleaned.split(/\s+/).filter(Boolean)[0] || '';
     return firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
+  // Same idea, but keeps the WHOLE name instead of just the first word
+  // -- see js/schedule.js's own copy for why this exists (the
+  // "North Middlesex"/"North County" first-word collision).
+  function normalizeOpponentFullKey(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    return cleaned.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
   function hashColor(str) {
     let hash = 0;
     for (let i = 0; i < (str || '').length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
@@ -150,8 +176,9 @@
     return `<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
   }
   function opponentBadgeHtml(name) {
+    const fullKey = normalizeOpponentFullKey(name);
     const key = normalizeOpponentKey(name);
-    const logo = opponentLogos[key] || BUNDLED_LOGOS[key] || null;
+    const logo = opponentLogos[fullKey] || opponentLogos[key] || BUNDLED_LOGOS[fullKey] || BUNDLED_LOGOS[key] || null;
     if (logo) return `<span class="scheduleTeamBadge hasLogo"><img src="${logo}" alt="${escapeHtml(name || '')}"></span>`;
     return `<span class="scheduleTeamBadge" style="background:${hashColor(name)};">${escapeHtml(initials(name))}</span>`;
   }
