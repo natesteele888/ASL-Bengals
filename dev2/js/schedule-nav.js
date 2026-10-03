@@ -28,6 +28,26 @@
       btn.addEventListener('click', () => setActiveTab(t.key));
       nav.appendChild(btn);
     });
+    // Nathan: "I still don't see the Play Count tab at the end of the 3
+    // others here so I can track plays for that game" -- a 4th pill,
+    // same row, same style, at the end as asked. Deliberately NOT a real
+    // tab in TABS above (no panel to show/hide, never shows .active) --
+    // tapping it jumps straight into the real, full-screen Play Count
+    // overlay's own game picker (js/playcount-tracker.js), the same
+    // entry point Coach Tools' own "Play Count" already uses, rather
+    // than replacing this row's current list view. Coach-only, same gate
+    // every other coach-only action in this app already uses -- tracking
+    // plays isn't something a player/parent session should reach.
+    if (window.isApprovedCoachProfile && window.isApprovedCoachProfile()) {
+      const pcBtn = document.createElement('button');
+      pcBtn.type = 'button';
+      pcBtn.className = 'gameplanChip';
+      pcBtn.textContent = '🎯 Play Counts';
+      pcBtn.addEventListener('click', () => {
+        if (window.openPlayCountTracker) window.openPlayCountTracker();
+      });
+      nav.appendChild(pcBtn);
+    }
   }
 
   function setActiveTab(key) {
