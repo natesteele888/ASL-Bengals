@@ -59,6 +59,11 @@
     // depth list only; it doesn't touch the master roster above.
     { key: 'depthchart', label: '📋 Depth Chart', category: 'team', panel: 'coachDepthChartPanel', init: () => window.initDepthChart && window.initDepthChart() },
     { key: 'drivescripts', label: '🧢 Drive Scripts', category: 'gameday', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
+    // Nathan: "live in game tracking of plays for certain kids... a
+    // minimum number of plays so certain kids need to be tracked... a bar
+    // of how many they need with a red yellow or green status." See
+    // js/playcount-tracker.js.
+    { key: 'playcount', label: '🎯 Play Count', category: 'gameday', panel: 'coachPlayCountPanel', init: () => window.initPlayCountTracker && window.initPlayCountTracker() },
     // Nathan: "make it so any drone videos added are in a Film Vault tab in
     // Coaches Tools - they should be categorized by alphabetical order since
     // they are written by play" + "have that be searchable to narrow the

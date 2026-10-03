@@ -2648,8 +2648,25 @@ window.splitPersonnel = splitPersonnel;
 
 function getSplitBlockingPaths(playType, splitSide, insideOutside, readPosition) {
   const variant = getVariant(playType, splitSide, insideOutside, readPosition);
-  const { wideNum, flexNum: flexBackNum } = splitPersonnel(splitSide);
-  const excluded = new Set([wideNum, flexBackNum, 4]);
+  // Nathan: "before the snap it shows the 6 on the correct left side of
+  // the play then at snap, he jumps over to the same spot as the 4" --
+  // real bug, found reading the raw data directly. In Split, today's real
+  // wide/flex numbers (5/3 on a Left call, 6/2 on a Right call -- see
+  // splitPersonnel) are ALWAYS receiver-only: their real positions/routes
+  // come entirely from getSplitRoutePaths, never from here. This used to
+  // exclude only the pair ACTIVE for the current side (just {5,3} for
+  // Left) -- so the OTHER side's own wide/flex number (6, on a Left call)
+  // still matched classic Wing's own raw blocking-path data for that
+  // number, unfiltered. Wing's own geometry for #6 sits at its own
+  // anchor (often the opposite side of the field from Split's own #6
+  // spot), so the player's circle -- drawn at Split's own, completely
+  // different position -- animated toward that stray Wing coordinate
+  // instead. For #6 specifically that coordinate happened to land right
+  // on top of Split's own #4. Excluding BOTH sides' real wide/flex
+  // numbers, always, closes this off regardless of which side is active.
+  const left = splitPersonnel('Left');
+  const right = splitPersonnel('Right');
+  const excluded = new Set([left.wideNum, left.flexNum, right.wideNum, right.flexNum, 4]);
   return (variant.paths || []).filter(p => {
     if (p.optionLine || p.dualSideBlock) return false; // Option-style relative blocking isn't wired for Split yet
     return p.player === null || !excluded.has(p.player);

@@ -3364,3 +3364,42 @@ html.gameHudPreview #editPlaysMode .toggle-group .toggle-btn[aria-pressed="true"
   color: var(--toggle-color, #17181a);
 }
 
+/* ---- Coach Tools > Play Count (js/playcount-tracker.js) -- Nathan: "live
+   in game tracking of plays for certain kids... add players with numbers...
+   say there are in on a snap and log it with a confirmation step... a bar
+   of how many they need with a red yellow or green status." Bigger tap
+   targets than the rest of Coach Tools on purpose -- this gets used
+   quickly, mid-game, on the sideline, not read carefully at a desk. ---- */
+.pctSetupCard { text-align: center; }
+.pctTargetRow { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.pctStepBtn { width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--bengal-orange); background: var(--card); color: var(--bengal-orange); font-size: 22px; font-weight: 900; cursor: pointer; }
+.pctStepBtn:active { background: rgba(255, 106, 19, .14); }
+.pctTargetValue { font-size: 40px; font-weight: 900; color: var(--ink); min-width: 64px; }
+.pctAddRow { display: flex; gap: 8px; margin-bottom: 12px; }
+.pctAddInput { flex: 1; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 9px; font-size: 15px; font-family: inherit; background: var(--card); color: var(--ink); }
+.pctPlayerList { display: flex; flex-direction: column; }
+.pctPlayerRow { display: flex; align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.pctPlayerRow:last-child { border-bottom: none; }
+.pctPlayerNum { font-weight: 900; color: var(--bengal-orange); min-width: 34px; flex: none; }
+.pctPlayerName { flex: 1; font-weight: 700; color: var(--ink); }
+.pctIconBtn { background: var(--card); border: 1px solid var(--line); border-radius: 7px; min-width: 32px; min-height: 32px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--ink); padding: 0 8px; }
+.pctIconBtn:disabled { opacity: .35; cursor: default; }
+.pctRemoveBtn { color: #c62828; border-color: #c62828; min-width: 32px; width: 32px; padding: 0; }
+.pctTrackHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.pctTrackList { display: flex; flex-direction: column; gap: 8px; }
+.pctTrackRow { display: block; width: 100%; text-align: left; background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; font-family: inherit; min-height: 56px; }
+.pctTrackRow:active { filter: brightness(1.06); }
+.pctTrackRow.armed { border-color: var(--bengal-orange); background: rgba(255, 106, 19, .1); }
+.pctTrackTop { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pctTrackTop .pctPlayerNum { font-size: 15px; }
+.pctTrackTop .pctPlayerName { font-size: 14px; }
+.pctArmedHint { display: block; font-size: 12.5px; font-weight: 800; color: var(--bengal-orange); }
+.pctCancelX { float: right; font-weight: 700; color: var(--muted); }
+.pctBarTrack { position: relative; height: 18px; border-radius: 9px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+.pctBarFill { height: 100%; border-radius: 9px; transition: width .25s ease; }
+/* Dark text with a light halo (not a plain color) so the label stays
+   readable regardless of how much of the track is filled -- it sits on
+   top of BOTH the colored fill and the plain track background, and
+   plain white text would vanish against the light track in light mode. */
+.pctBarLabel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 900; color: #1a1a1a; text-shadow: 0 0 3px rgba(255,255,255,.9), 0 0 3px rgba(255,255,255,.9), 0 0 3px rgba(255,255,255,.9); }
+
