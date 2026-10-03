@@ -647,6 +647,14 @@
     <div class="gameplanList" id="thisweekGamePlanList"></div>
     <button class="navBtn" id="thisweekSaveBtn" style="display:block;width:100%;text-align:center;margin-top:14px;">Save This Week</button>
     <button class="navBtn secondary" id="thisweekPrintCallSheetBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📋 Print Call Sheet</button>
+    <!-- Nathan: "I need a simplified version for the print out. I don't
+         need to see the formation and the play diagram itself. I just
+         need a list of Play Calls with available Formations to run it
+         out of... need to be simple organized lists." A second, additive
+         print option -- js/gameplan-pdf.js's generateQuickReferencePDF --
+         not a replacement for the detailed Call Sheet above, since
+         nothing asked for that one to go away. -->
+    <button class="navBtn secondary" id="thisweekPrintQuickRefBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📝 Print Quick Reference</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
@@ -2404,7 +2412,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261002r';
+  const BUILD_V = '20261002s';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

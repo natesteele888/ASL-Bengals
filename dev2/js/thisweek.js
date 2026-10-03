@@ -1230,6 +1230,32 @@
         }
       });
     }
+    // Nathan: "I need a simplified version for the print out... just a
+    // list of Play Calls with available Formations to run it out of...
+    // and Formations with pills of each play you run out of it." Same
+    // disabled/originalLabel/try-catch-finally pattern as the detailed
+    // Call Sheet button just above -- a second, additive print option,
+    // not a replacement.
+    const quickRefBtn = document.getElementById('thisweekPrintQuickRefBtn');
+    if (quickRefBtn) {
+      const originalQuickRefLabel = quickRefBtn.textContent;
+      quickRefBtn.addEventListener('click', async () => {
+        if (quickRefBtn.disabled || !window.generateQuickReferencePDF) return;
+        if (!pendingSelection.length) { alert('Add at least one play to the Game Plan first.'); return; }
+        quickRefBtn.disabled = true;
+        quickRefBtn.textContent = '📝 Generating…';
+        try {
+          const doc = await window.generateQuickReferencePDF(pendingSelection);
+          doc.save('ASL_Bengals_Game_Plan_Quick_Reference.pdf');
+          quickRefBtn.textContent = '✅ Saved!';
+        } catch (err) {
+          console.error('Game Plan Quick Reference PDF generation failed:', err);
+          quickRefBtn.textContent = '⚠️ Failed — tap to retry';
+        } finally {
+          setTimeout(() => { quickRefBtn.textContent = originalQuickRefLabel; quickRefBtn.disabled = false; }, 2200);
+        }
+      });
+    }
     // Nathan: "Lets have it so it opens full screen like the 2-min drill
     // and you choose your opponent on the schedule to game plan
     // against." js/gameplan-builder.js owns the overlay itself; this is
