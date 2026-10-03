@@ -3174,6 +3174,25 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playoffSeedChip.playoffSeedUs .playoffSeedNum { color: var(--bengal-orange); }
 .playoffTbdChip { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9aa4ae; font-style: italic; }
 
+/* Standings' own "Playoff Picture / Playoff Probabilities / All Bengals
+   Teams" row of small nav pills -- Nathan: "Make these links small side
+   by side pill buttons." Was 2 (now 3) stacked .lbLinkBtn underlined text
+   links; kept .lbLinkBtn itself untouched (still used elsewhere as a
+   plain inline link, e.g. the "‹ All Standings" back buttons right below
+   these panels) and built a separate, dedicated pill style instead of
+   overloading that class with a second visual meaning. */
+.standingsNavPillRow { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.standingsNavPill { display: inline-flex; align-items: center; gap: 5px; background: var(--card); border: 1.5px solid var(--bengal-orange); color: var(--bengal-orange); font-size: 11.5px; font-weight: 800; border-radius: 999px; padding: 7px 14px; cursor: pointer; white-space: nowrap; }
+.standingsNavPill:active { background: rgba(255, 106, 19, .14); }
+
+/* "All Bengals Teams" (js/standings.js's allTeamsRowHtml) -- Nathan: "I
+   want to have the ability to see the standings with all the other age
+   groups... record, place in standings, and playoff probabilities" for
+   every Ayer/Shirley/Lunenburg team (9U-13U), not a full table per
+   division. Small fixed-width age-group tag, same pill-tag language as
+   .practiceTag elsewhere in the app. */
+.allTeamsDivBadge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 34px; background: var(--bengal-orange); color: #fff; font-size: 10.5px; font-weight: 900; border-radius: 8px; padding: 5px 6px; }
+
 /* ============================================================
    Game HUD preview theme -- see js/preview-theme.js for how the
    .gameHudPreview class gets onto <html> (a per-device localStorage flag,

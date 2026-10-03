@@ -50,6 +50,19 @@
   // index.html's own "11U Bengals" header -- so the division is pinned
   // here too, not derived.
   const CMYFCC_OUR_DIVISION_KEY = 'Tackle 11U';
+  // Nathan: "I want to have the ability to see the standings with all the
+  // other age groups... 9U, 10U, 11U, 12U, 13U" -- Ayer/Shirley/Lunenburg
+  // fields a Bengals team in every one of these (confirmed live, see the
+  // comment above CMYFCC_OUR_DIVISION_KEY), each its own separate
+  // division/standings/playoff bracket in the same CMYFCC payload this
+  // file already fetches for our own 11U team.
+  const BENGALS_DIVISIONS = [
+    { key: 'Tackle 9U', label: '9U' },
+    { key: 'Tackle 10U', label: '10U' },
+    { key: 'Tackle 11U', label: '11U' },
+    { key: 'Tackle 12U', label: '12U' },
+    { key: 'Tackle 13U', label: '13U' },
+  ];
 
   async function fetchCmyfccStandings() {
     const res = await fetch(CMYFCC_API_URL, {
@@ -1067,7 +1080,10 @@
   // actually played. Simulated outcomes are binary (win/loss only, no
   // simulated ties) -- real ties are rare enough in this data that
   // modeling them adds real complexity for very little accuracy gained.
-  async function fetchCmyfccDivisionData() {
+  // Raw fetch+parse, unfiltered -- factored out of fetchCmyfccDivisionData
+  // so "All Bengals Teams" (below) can pull every division's data from
+  // ONE network call instead of 5 separate fetches of the same payload.
+  async function fetchCmyfccRawPayload() {
     const res = await fetch(CMYFCC_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1080,10 +1096,46 @@
       throw new Error('CMYFCC response missing games data');
     }
     const standingsArr = Array.isArray(payload.standings) ? payload.standings : Object.values(payload.standings || {});
+    return { games: payload.games, standings: standingsArr };
+  }
+  async function fetchCmyfccDivisionData(divisionKey) {
+    const key = divisionKey || CMYFCC_OUR_DIVISION_KEY;
+    const { games, standings } = await fetchCmyfccRawPayload();
     return {
-      games: payload.games.filter((g) => g.divisionKey === CMYFCC_OUR_DIVISION_KEY),
-      standings: standingsArr.filter((s) => s.divisionKey === CMYFCC_OUR_DIVISION_KEY),
+      games: games.filter((g) => g.divisionKey === key),
+      standings: standings.filter((s) => s.divisionKey === key),
     };
+  }
+  // "All Bengals Teams" -- Nathan: "it doesn't need to be full standings
+  // but have their record, their place in standings (3 of 12), and their
+  // playoff probabilities." One compact row per age group, reusing the
+  // SAME simulatePlayoffOdds this file already runs for our own 11U team
+  // (below), just run once per division against that division's own
+  // games/standings slice. CMYFCC's own "rank" field on each standings row
+  // is used directly for "place in standings" (confirmed live: the same
+  // overall rank its playoffProjection's seeding is built from, not
+  // re-derived from wins/losses here) -- division size (the "of 12") is
+  // just that division's own standings row count.
+  async function fetchAllBengalsTeamsData() {
+    const { games, standings } = await fetchCmyfccRawPayload();
+    return BENGALS_DIVISIONS.map((div) => {
+      const divGames = games.filter((g) => g.divisionKey === div.key);
+      const divStandings = standings.filter((s) => s.divisionKey === div.key);
+      const ourRow = divStandings.find((s) =>
+        (s.associationName || '').toLowerCase() === CMYFCC_OUR_ASSOCIATION_NAME.toLowerCase());
+      if (!ourRow) return { division: div.label, divisionKey: div.key, missing: true };
+      const odds = divStandings.length ? simulatePlayoffOdds(divGames, divStandings) : [];
+      const ourOdds = odds.find((o) => o.name === ourRow.associationName);
+      return {
+        division: div.label,
+        divisionKey: div.key,
+        isCurrent: div.key === CMYFCC_OUR_DIVISION_KEY,
+        record: ourRow.record,
+        rank: ourRow.rank,
+        total: divStandings.length,
+        probability: ourOdds ? ourOdds.probability : null,
+      };
+    });
   }
   function simulatePlayoffOdds(games, standings, iterations) {
     iterations = iterations || 4000;
@@ -1155,39 +1207,70 @@
     }
   }
 
-  function showStandingsList() {
-    const listPanel = document.getElementById('standingsListPanel');
-    const detailPanel = document.getElementById('standingsOpponentDetail');
-    const playoffPanel = document.getElementById('standingsPlayoffDetail');
-    const probPanel = document.getElementById('standingsProbabilitiesDetail');
-    if (listPanel) listPanel.style.display = '';
-    if (detailPanel) detailPanel.style.display = 'none';
-    if (playoffPanel) playoffPanel.style.display = 'none';
-    if (probPanel) probPanel.style.display = 'none';
+  function allTeamsRowHtml(row) {
+    if (row.missing) {
+      return `<div class="playoffSeedChip standingsProbabilityRow" style="display:flex;align-items:center;gap:10px;padding:10px;">
+          <span class="allTeamsDivBadge">${escapeHtml(row.division)}</span>
+          <span class="scheduleTeamName" style="flex:1;">No ${escapeHtml(row.division)} data posted by CMYFCC yet</span>
+        </div>`;
+    }
+    const pct = row.probability != null ? Math.round(row.probability * 100) : null;
+    const badge = window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '';
+    return `<div class="playoffSeedChip standingsProbabilityRow${row.isCurrent ? ' playoffSeedUs' : ''}" style="display:flex;align-items:center;gap:10px;padding:10px;">
+        <span class="allTeamsDivBadge">${escapeHtml(row.division)}</span>
+        ${badge}
+        <span style="flex:1;min-width:0;">
+          <span class="scheduleTeamName" style="display:block;max-width:none;white-space:normal;">Ayer/Shirley/Lunenburg</span>
+          <span class="scheduleTeamRecord">${escapeHtml(row.record || '')} · ${row.rank} of ${row.total}</span>
+        </span>
+        <span style="font-weight:900;font-size:15px;min-width:48px;text-align:right;color:${pct != null && pct >= 50 ? 'var(--bengal-orange)' : 'var(--muted)'};">${pct != null ? pct + '%' : '--'}</span>
+      </div>`;
+  }
+  async function loadAllBengalsTeams() {
+    const wrap = document.getElementById('standingsAllTeamsBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="hint" style="text-align:center;">Loading every Bengals team…</div>';
+    try {
+      const rows = await fetchAllBengalsTeamsData();
+      wrap.innerHTML =
+        '<div class="lbSub" style="text-align:center;margin-bottom:14px;">Record, standing, and simulated playoff odds for every Ayer/Shirley/Lunenburg Bengals team, 9U through 13U. This app is the 11U team\'s own -- the others are shown read-only for reference.</div>' +
+        rows.map(allTeamsRowHtml).join('');
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbEmpty">Couldn't load Bengals teams: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
+  // One shared toggler for the Standings tab's panels -- was 3 separate,
+  // nearly-identical functions each hand-listing every panel id; adding a
+  // 4th panel (All Bengals Teams) on top of that copy-paste risked
+  // forgetting to hide it in one of them. showOpponentPage (above) stays
+  // on its own separate, simpler list/detail-only toggle -- it's only
+  // ever reached from a context where the other 3 detail panels are
+  // already hidden (see its own comment), so folding it in here isn't
+  // needed and would be unrelated scope.
+  const STANDINGS_PANEL_IDS = ['standingsListPanel', 'standingsOpponentDetail', 'standingsPlayoffDetail', 'standingsProbabilitiesDetail', 'standingsAllTeamsDetail'];
+  function showStandingsPanel(activeId) {
+    STANDINGS_PANEL_IDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (id === activeId) ? '' : 'none';
+    });
+  }
+
+  function showStandingsList() { showStandingsPanel('standingsListPanel'); }
+
   function showPlayoffPicture() {
-    const listPanel = document.getElementById('standingsListPanel');
-    const detailPanel = document.getElementById('standingsOpponentDetail');
-    const playoffPanel = document.getElementById('standingsPlayoffDetail');
-    const probPanel = document.getElementById('standingsProbabilitiesDetail');
-    if (listPanel) listPanel.style.display = 'none';
-    if (detailPanel) detailPanel.style.display = 'none';
-    if (playoffPanel) playoffPanel.style.display = '';
-    if (probPanel) probPanel.style.display = 'none';
+    showStandingsPanel('standingsPlayoffDetail');
     loadPlayoffPicture();
   }
 
   function showPlayoffProbabilities() {
-    const listPanel = document.getElementById('standingsListPanel');
-    const detailPanel = document.getElementById('standingsOpponentDetail');
-    const playoffPanel = document.getElementById('standingsPlayoffDetail');
-    const probPanel = document.getElementById('standingsProbabilitiesDetail');
-    if (listPanel) listPanel.style.display = 'none';
-    if (detailPanel) detailPanel.style.display = 'none';
-    if (playoffPanel) playoffPanel.style.display = 'none';
-    if (probPanel) probPanel.style.display = '';
+    showStandingsPanel('standingsProbabilitiesDetail');
     loadPlayoffProbabilities();
+  }
+
+  function showAllBengalsTeams() {
+    showStandingsPanel('standingsAllTeamsDetail');
+    loadAllBengalsTeams();
   }
 
   let backBtnWired = false;
@@ -1207,6 +1290,10 @@
       if (probBackBtn) { probBackBtn.addEventListener('click', showStandingsList); }
       const probOpenBtn = document.getElementById('standingsProbabilitiesOpenBtn');
       if (probOpenBtn) { probOpenBtn.addEventListener('click', showPlayoffProbabilities); }
+      const allTeamsBackBtn = document.getElementById('standingsAllTeamsBackBtn');
+      if (allTeamsBackBtn) { allTeamsBackBtn.addEventListener('click', showStandingsList); }
+      const allTeamsOpenBtn = document.getElementById('standingsAllTeamsOpenBtn');
+      if (allTeamsOpenBtn) { allTeamsOpenBtn.addEventListener('click', showAllBengalsTeams); }
     }
     showStandingsList();
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';
