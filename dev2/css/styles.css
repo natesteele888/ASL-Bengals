@@ -3237,6 +3237,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    division. Small fixed-width age-group tag, same pill-tag language as
    .practiceTag elsewhere in the app. */
 .allTeamsDivBadge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 34px; background: var(--bengal-orange); color: #fff; font-size: 10.5px; font-weight: 900; border-radius: 8px; padding: 5px 6px; }
+/* Nathan: "see the game cards from those other bengals teams and not
+   just their record." Tapping a division row (.standingsAllTeamsToggle)
+   expands a real games list underneath it (js/standings.js's
+   allTeamsRowHtml/allTeamsGamesHtml, reusing the same .scheduleRow cards
+   every other game list in the app already uses) -- collapsed by
+   default, same "nothing extra shown on load" principle as This Week's
+   own Recent Results toggle. */
+.standingsAllTeamsRowWrap { border-radius: 10px; overflow: hidden; }
+.standingsAllTeamsToggle:active { filter: brightness(0.97); }
+.standingsAllTeamsChevron { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+.standingsAllTeamsGames { display: flex; flex-direction: column; gap: 6px; padding: 8px 2px 2px; }
 
 /* ============================================================
    Game HUD preview theme -- see js/preview-theme.js for how the

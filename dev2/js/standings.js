@@ -188,6 +188,28 @@
   // yet -- compactGameRowHtml (js/schedule.js) already renders that
   // correctly as an "Upcoming" pill with no score, the exact same
   // convention it already uses for our own not-yet-played Schedule games.
+  // Reshapes a raw CMYFCC games array into the {id, date, opponent,
+  // ourScore, oppScore, isFinal} shape window.compactGameRowHtml (js/
+  // schedule.js) already knows how to render -- factored out so
+  // fetchAllBengalsTeamsData (below) can reuse the exact same home/away/
+  // score resolution for the OTHER divisions' own Bengals team, instead
+  // of a second, drift-prone copy of this logic.
+  function shapeTeamGames(games, isMatch) {
+    return games
+      .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
+      .map(g => {
+        const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
+        const isFinal = !!(g.result && g.result.status === 'final');
+        return {
+          id: g.id,
+          date: g.logistics ? g.logistics.date : null,
+          opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
+          ourScore: isFinal ? (isHome ? g.result.homeScore : g.result.awayScore) : undefined,
+          oppScore: isFinal ? (isHome ? g.result.awayScore : g.result.homeScore) : undefined,
+          isFinal,
+        };
+      });
+  }
   async function fetchCmyfccGamesFor(teamName) {
     const res = await fetch(CMYFCC_API_URL, {
       method: 'POST',
@@ -206,21 +228,7 @@
       const gTokens = teamTokens(assocName);
       return gTokens.length && tTokens.some(t => gTokens.includes(t));
     };
-    return payload.games
-      .filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY)
-      .filter(g => isMatch(g.homeTeam && g.homeTeam.associationName) || isMatch(g.awayTeam && g.awayTeam.associationName))
-      .map(g => {
-        const isHome = isMatch(g.homeTeam && g.homeTeam.associationName);
-        const isFinal = !!(g.result && g.result.status === 'final');
-        return {
-          id: g.id,
-          date: g.logistics ? g.logistics.date : null,
-          opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
-          ourScore: isFinal ? (isHome ? g.result.homeScore : g.result.awayScore) : undefined,
-          oppScore: isFinal ? (isHome ? g.result.awayScore : g.result.homeScore) : undefined,
-          isFinal,
-        };
-      });
+    return shapeTeamGames(payload.games.filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY), isMatch);
   }
   async function fetchCmyfccRecentGamesFor(teamName, limit) {
     limit = limit || 5;
@@ -1144,6 +1152,15 @@
       if (!ourRow) return { division: div.label, divisionKey: div.key, missing: true };
       const odds = divStandings.length ? simulatePlayoffOdds(divGames, divStandings) : [];
       const ourOdds = odds.find((o) => o.name === ourRow.associationName);
+      // Nathan: "It would be nice to be able to see the game cards from
+      // those other bengals teams and not just their record." divGames
+      // was already fetched (and already filtered to this division) for
+      // simulatePlayoffOdds just above -- this just also reshapes the
+      // SAME division's own Bengals games via shapeTeamGames, matched by
+      // ourRow's own real associationName (already resolved, no fuzzy
+      // token matching needed the way fetchCmyfccGamesFor needs for an
+      // arbitrary typed-in opponent name). No second network call.
+      const ourGames = shapeTeamGames(divGames, (assocName) => assocName === ourRow.associationName);
       return {
         division: div.label,
         divisionKey: div.key,
@@ -1152,6 +1169,7 @@
         rank: ourRow.rank,
         total: divStandings.length,
         probability: ourOdds ? ourOdds.probability : null,
+        games: ourGames,
       };
     });
   }
@@ -1225,6 +1243,27 @@
     }
   }
 
+  // Nathan: "It would be nice to be able to see the game cards from those
+  // other bengals teams and not just their record." Real game rows (date,
+  // opponent, score/Upcoming pill), not a second, simpler card -- reuses
+  // window.compactGameRowHtml (js/schedule.js), the SAME renderer
+  // loadOpponentRecentForm (below) already proves out for CMYFCC-sourced
+  // games, so this reads identically to every other "recent/upcoming
+  // games" list in the app. Deliberately does NOT wire a click handler on
+  // each row's own opponent logo the way loadOpponentRecentForm does --
+  // that calls showOpponentPage against OUR 11U division's own
+  // teams/games list, which wouldn't find an opponent from a different
+  // division at all. Soonest-upcoming-first, then most-recent-final,
+  // matching "what's next, then what just happened" over a flat date sort.
+  function allTeamsGamesHtml(games) {
+    if (!games || !games.length) return '<div class="lbEmpty" style="margin:6px 0 2px;">No games posted for this division yet.</div>';
+    const upcoming = games.filter(g => !g.isFinal).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const recent = games.filter(g => g.isFinal).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const badge = window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '';
+    return [...upcoming, ...recent]
+      .map(g => window.compactGameRowHtml ? window.compactGameRowHtml(g, { teamName: 'Ayer/Shirley/Lunenburg', teamBadgeHtml: badge }) : '')
+      .join('');
+  }
   function allTeamsRowHtml(row) {
     if (row.missing) {
       return `<div class="playoffSeedChip standingsProbabilityRow" style="display:flex;align-items:center;gap:10px;padding:10px;">
@@ -1234,7 +1273,9 @@
     }
     const pct = row.probability != null ? Math.round(row.probability * 100) : null;
     const badge = window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '';
-    return `<div class="playoffSeedChip standingsProbabilityRow${row.isCurrent ? ' playoffSeedUs' : ''}" style="display:flex;align-items:center;gap:10px;padding:10px;">
+    const safeKey = (row.divisionKey || row.division).replace(/[^a-zA-Z0-9]/g, '_');
+    return `<div class="standingsAllTeamsRowWrap">
+      <div class="playoffSeedChip standingsProbabilityRow standingsAllTeamsToggle${row.isCurrent ? ' playoffSeedUs' : ''}" data-games-target="allTeamsGames-${safeKey}" style="display:flex;align-items:center;gap:10px;padding:10px;cursor:pointer;">
         <span class="allTeamsDivBadge">${escapeHtml(row.division)}</span>
         ${badge}
         <span style="flex:1;min-width:0;">
@@ -1242,7 +1283,10 @@
           <span class="scheduleTeamRecord">${escapeHtml(row.record || '')} · ${row.rank} of ${row.total}</span>
         </span>
         <span style="font-weight:900;font-size:15px;min-width:48px;text-align:right;color:${pct != null && pct >= 50 ? 'var(--bengal-orange)' : 'var(--muted)'};">${pct != null ? pct + '%' : '--'}</span>
-      </div>`;
+        <span class="standingsAllTeamsChevron">▾</span>
+      </div>
+      <div class="standingsAllTeamsGames" id="allTeamsGames-${safeKey}" style="display:none;">${allTeamsGamesHtml(row.games)}</div>
+    </div>`;
   }
   async function loadAllBengalsTeams() {
     const wrap = document.getElementById('standingsAllTeamsBody');
@@ -1251,8 +1295,22 @@
     try {
       const rows = await fetchAllBengalsTeamsData();
       wrap.innerHTML =
-        '<div class="lbSub" style="text-align:center;margin-bottom:14px;">Record, standing, and simulated playoff odds for every Ayer/Shirley/Lunenburg Bengals team, 9U through 13U. This app is the 11U team\'s own -- the others are shown read-only for reference.</div>' +
+        '<div class="lbSub" style="text-align:center;margin-bottom:14px;">Record, standing, and simulated playoff odds for every Ayer/Shirley/Lunenburg Bengals team, 9U through 13U -- tap a team to see its games. This app is the 11U team\'s own -- the others are shown read-only for reference.</div>' +
         rows.map(allTeamsRowHtml).join('');
+      // Collapsed by default (same "don't show everything on load"
+      // principle This Week's own Recent Results toggle already uses) --
+      // the games were already fetched above (one request covers every
+      // division), so opening one is instant, no extra network round trip.
+      wrap.querySelectorAll('.standingsAllTeamsToggle').forEach((row) => {
+        row.addEventListener('click', () => {
+          const target = document.getElementById(row.dataset.gamesTarget);
+          if (!target) return;
+          const show = target.style.display === 'none';
+          target.style.display = show ? '' : 'none';
+          const chevron = row.querySelector('.standingsAllTeamsChevron');
+          if (chevron) chevron.textContent = show ? '▴' : '▾';
+        });
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="lbEmpty">Couldn't load Bengals teams: ${escapeHtml(e.message)}</div>`;
     }
