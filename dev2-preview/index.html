@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261002g">
+<link rel="stylesheet" href="css/styles.css?v=20261002o">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1042,19 +1042,17 @@
       <div class="lbHeroTrophy">🏆</div>
       <h3>League Standings</h3>
     </div>
-    <!-- Nathan: "CYMFCC site also has a playoff ladder that I want to
-         incorporate." Same real, public CMYFCC API the standings table
-         above already reads -- js/standings.js's showPlayoffPicture. -->
-    <div style="text-align:center;margin-bottom:14px;">
-      <button type="button" class="lbLinkBtn" id="standingsPlayoffOpenBtn">🏈 See Playoff Picture ›</button>
-    </div>
-    <!-- Nathan: "add in playoff probabilities for teams based on the
-         current results available... shown in standings under a second
-         tab." Same real/link-button-to-a-swapped-panel pattern the
-         Playoff Picture button right above already established -- this
-         app's own one real way to add a secondary Standings view. -->
-    <div style="text-align:center;margin-bottom:14px;">
-      <button type="button" class="lbLinkBtn" id="standingsProbabilitiesOpenBtn">📊 See Playoff Probabilities ›</button>
+    <!-- Nathan: "Make these links small side by side pill buttons." +
+         "I want to have the ability to see the standings with all the
+         other age groups... record, place in standings (3 of 12), and
+         playoff probabilities" for every 9U-13U Bengals team. Same real
+         CMYFCC API the standings table above already reads --
+         js/standings.js's showPlayoffPicture/showPlayoffProbabilities/
+         showAllBengalsTeams. -->
+    <div class="standingsNavPillRow">
+      <button type="button" class="standingsNavPill" id="standingsPlayoffOpenBtn">🏈 Playoff Picture</button>
+      <button type="button" class="standingsNavPill" id="standingsProbabilitiesOpenBtn">📊 Playoff Probabilities</button>
+      <button type="button" class="standingsNavPill" id="standingsAllTeamsOpenBtn">🐯 All Bengals Teams</button>
     </div>
     <div id="standingsTableWrap" style="max-width:640px;margin:0 auto;"></div>
   </div>
@@ -1079,6 +1077,17 @@
       <h3>Playoff Probabilities</h3>
     </div>
     <div id="standingsProbabilitiesBody"></div>
+  </div>
+
+  <div id="standingsAllTeamsDetail" style="display:none;max-width:640px;margin:0 auto;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="lbLinkBtn" id="standingsAllTeamsBackBtn">‹ All Standings</button>
+    </div>
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">🐯</div>
+      <h3>All Bengals Teams</h3>
+    </div>
+    <div id="standingsAllTeamsBody"></div>
   </div>
 
   <!-- Nathan: "I want to develop a opponent page where you click on their
@@ -1394,9 +1403,7 @@
   <div style="text-align:center;margin-bottom:8px;">
     <button id="pcInfoBtn" class="pcInfoBtn">i</button>
   </div>
-  <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
   <div class="play-grid" id="playCallsGrid"></div>
-  <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Wing or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
 </div>
 
 
@@ -2090,8 +2097,12 @@
       <li>🎓 <b>Study Signals</b> — tap a category to expand it and see every signal in it.</li>
       <li>🏈 <b>Quiz</b> — pick the right meaning, several rounds of 6, and build your streak!</li>
       <li>⏱️ <b>Timed Quiz</b> — race the clock through every signal in the book; a wrong answer just sends that one to the back of the line, so keep going until you've cleared them all!</li>
-      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip the Wing/Motion/Direction/Boot toggles (or, for Split formation plays, Split L/R and Pass) to see exactly how the call and the diagram change. Tap any player's number to give him an orange glow so it's easy to track just his job — set your position from the name menu and this happens automatically every time you open a play.</li>
-      <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching Wing/Motion/Play/In-Out/Direction/Boot answer. Starts easy and gets tougher round by round.</li>
+      <li>📋 <b>Play Calls</b> — look up any play's diagram and full signal sequence. Flip a play's own toggles (Wing, Direction, and whatever else that play has — Motion, Boot, Overload, and more) to see exactly how the call and the diagram change. Tap any player's number to give him an orange glow so it's easy to track just his job — set your position from the name menu and this happens automatically every time you open a play. Use 🔍 at the top to search plays by name or by who carries the ball.</li>
+      <li>🧠 <b>Play Quiz</b> — watch a play's signals, then set the matching answer. Starts easy and gets tougher round by round.</li>
+      <li>🎯 <b>This Week</b> — this week's featured plays to focus on, the Coaches' Keys, and the week's games/practices, all in one place.</li>
+      <li>📅 <b>Schedule</b> — every game and practice on the calendar, with a one-tap way to save it all to your phone's calendar.</li>
+      <li>🏆 <b>Standings</b> — the league standings table, the Playoff Picture, Playoff Probabilities, and how every Bengals team is doing, 9U through 13U.</li>
+      <li>🏈⏱️ Press and hold the Bengals logo for 3 seconds for the <b>2 Minute Drill</b> — race the clock in a live, simulated drive.</li>
       <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
       <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Quiz, Timed, and Play Quiz boards.</li>
       <li>🌙 Tap the moon/sun to switch between dark and light mode.</li>
@@ -2393,7 +2404,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261002k';
+  const BUILD_V = '20261002p';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

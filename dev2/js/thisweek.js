@@ -606,13 +606,15 @@
   // clickable, to their Standings team page (window.openStandingsTeamPage,
   // same destination compactGameRowHtml's own click target would use
   // elsewhere in the app).
-  function cmyfccEventPassedLocal(dateStr) {
-    if (!dateStr) return false;
-    const parts = dateStr.split('-').map(Number);
-    if (parts.length !== 3 || parts.some(isNaN)) return false;
-    const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
-    return d.getTime() < Date.now();
-  }
+  // Nathan: "I don't need the opponents full schedule in this week ahead.
+  // we can have a drop down that says see opponents recent results and it
+  // shows recent games, but all this shouldn't show up on load." Collapsed
+  // by default, same toggle-link pattern js/play-calls.js's own
+  // renderBallCarrierFilterBar already established -- no CMYFCC fetch at
+  // all until a coach/kid actually asks for it. Only recent (final) games
+  // now -- the opponent's own upcoming schedule isn't relevant to
+  // studying THIS week's matchup, and was unrequested clutter on every
+  // load either way.
   function renderOpponentForm(linkedGame) {
     const wrap = document.getElementById('thisweekOpponentFormWrap');
     if (!wrap) return;
@@ -621,26 +623,50 @@
       wrap.innerHTML = '';
       return;
     }
-    wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="hint" style="text-align:center;">Loading…</div>`;
+    wrap.innerHTML = '';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'lbLinkBtn';
+    const closedLabel = `📊 See ${opponent}'s Recent Results ›`;
+    const openLabel = `📊 Hide ${opponent}'s Recent Results`;
+    toggleBtn.textContent = closedLabel;
+    const body = document.createElement('div');
+    body.style.display = 'none';
+    body.style.marginTop = '8px';
+    let fetched = false;
+    toggleBtn.addEventListener('click', () => {
+      const show = body.style.display === 'none';
+      body.style.display = show ? '' : 'none';
+      toggleBtn.textContent = show ? openLabel : closedLabel;
+      if (show && !fetched) {
+        fetched = true;
+        loadOpponentRecentResults(opponent, body);
+      }
+    });
+    wrap.appendChild(toggleBtn);
+    wrap.appendChild(body);
+  }
+  function loadOpponentRecentResults(opponent, body) {
+    body.innerHTML = '<div class="hint" style="text-align:center;">Loading…</div>';
     window.fetchCmyfccGamesFor(opponent).then((all) => {
       // Stale-response guard, same reasoning as js/standings.js's own
       // loadOpponentRecentForm -- a slow response landing after the coach
-      // has already navigated away from This Week, or This Week itself
-      // re-rendered for a different linked game in the meantime, shouldn't
-      // clobber whatever's on screen now.
-      if (document.getElementById('thisweekOpponentFormWrap') !== wrap || !wrap.isConnected) return;
+      // has already collapsed this, or navigated away from This Week
+      // entirely, shouldn't clobber whatever's on screen now. Checking
+      // the body node's own connectedness directly (rather than
+      // re-fetching thisweekOpponentFormWrap by id and comparing) works
+      // the same way but doesn't depend on this still being the CURRENT
+      // wrap's own body -- it just asks "is this still live."
+      if (!body.isConnected) return;
       const recent = all.filter((g) => g.isFinal).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
-      const upcoming = all.filter((g) => !g.isFinal && !cmyfccEventPassedLocal(g.date)).sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(0, 5);
-      if (!recent.length && !upcoming.length) {
-        wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="lbEmpty">No games found for ${escapeHtml(opponent)} on CMYFCC yet.</div>`;
+      if (!recent.length) {
+        body.innerHTML = `<div class="lbEmpty">No recent games found for ${escapeHtml(opponent)} on CMYFCC yet.</div>`;
         return;
       }
       const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponent) : window.opponentBadgeHtml(opponent);
-      const rowsHtmlFor = (rows) => rows.map((g) => window.compactGameRowHtml(g, { teamName: opponent, teamBadgeHtml: badgeHtml })).join('');
-      const recentHtml = recent.length ? `<div class="last5List">${rowsHtmlFor(recent)}</div>` : '';
-      const upcomingHtml = upcoming.length ? `<div class="lbSectionHeader" style="font-size:13px;margin-top:10px;">📅 ${escapeHtml(opponent)}'s Upcoming</div><div class="last5List">${rowsHtmlFor(upcoming)}</div>` : '';
-      wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div>${recentHtml}${upcomingHtml}<div style="margin-bottom:10px;"></div>`;
-      wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
+      const rowsHtml = recent.map((g) => window.compactGameRowHtml(g, { teamName: opponent, teamBadgeHtml: badgeHtml })).join('');
+      body.innerHTML = `<div class="last5List">${rowsHtml}</div>`;
+      body.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
         const name = el.dataset.opponentName;
         if (!name || !window.openStandingsTeamPage) return;
         el.addEventListener('click', (e) => {
@@ -649,8 +675,8 @@
         });
       });
     }).catch((e) => {
-      if (document.getElementById('thisweekOpponentFormWrap') !== wrap || !wrap.isConnected) return;
-      wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+      if (!body.isConnected) return;
+      body.innerHTML = `<div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
     });
   }
 

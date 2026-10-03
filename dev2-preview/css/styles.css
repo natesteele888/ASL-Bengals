@@ -1383,6 +1383,17 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   }
   .play-tile-pill.run { background: var(--bengal-orange); }
   .play-tile-pill.pass { background: #2a78d6; }
+  /* "Plays that can give #N the ball" results (js/play-calls.js's
+     renderBallCarrierResults) -- names the specific call (Wing/Dir/
+     toggles) that actually makes this position carry, since it isn't
+     always the play's own default look. */
+  .pc-carrier-condition { padding: 0 9px 8px; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+  /* Play-name search box (js/play-calls.js's renderPlaySearchBar), above
+     the formation picker. */
+  .pc-play-search { max-width: 420px; margin: 0 auto 14px; }
+  .pc-play-search-input { width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); font-size: 13.5px; }
+  .pc-play-search-input:focus { outline: none; border-color: var(--bengal-orange); }
+  .pc-play-search-input::placeholder { color: var(--muted); }
 
   /* the flip card */
   .card-outer {
@@ -2745,6 +2756,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    date/time, and location. ---- */
 .practiceRow { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #1a2029 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .practiceRow:active { filter: brightness(1.12); }
+/* Same two treatments js/schedule.js's own Games list already uses
+   (.scheduleRowFinal/.scheduleRowCurrentWeek) -- "grays out past games
+   and makes the current event in the center of the view," matched here
+   for Practices/Film Nights. */
+.practiceRow.practiceRowPast { background: linear-gradient(135deg, #3a4048 0%, #454d56 55%, #4a3d2e 100%); border-color: #5a6472; }
+.practiceRow.practiceRowCurrent { border: 3px solid var(--bengal-orange); box-shadow: 0 0 0 4px rgba(255,106,19,.25), 0 0 22px rgba(255,106,19,.55), 0 2px 6px rgba(0,0,0,.25); }
 .practiceTypeBadge { display: inline-block; font-size: 10.5px; font-weight: 900; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
 .practiceTypeBadge.practice { background: var(--bengal-orange); color: #fff; }
 .practiceTypeBadge.film { background: #4a5fc9; color: #fff; }
@@ -3160,11 +3177,38 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playoffSeedChip { display: flex; align-items: center; gap: 8px; }
 .playoffSeedChip .scheduleTeamBadge { width: 30px; height: 30px; min-width: 30px; min-height: 30px; max-width: 30px; max-height: 30px; font-size: 10px; }
 .playoffSeedChip .scheduleTeamName { max-width: none; white-space: normal; }
+/* Playoff Probabilities rows (js/standings.js's probabilityRowHtml) reuse
+   .playoffSeedChip/.scheduleTeamName for layout but DON'T sit on the
+   always-dark .playoffBracketCard this family was built for -- they render
+   straight onto the plain page background, so the class's own hardcoded
+   white text is invisible in light mode. Theme-aware override; higher
+   specificity than this (.playoffSeedChip.playoffSeedUs .scheduleTeamName,
+   below) still wins for our own row's orange highlight. */
+.standingsProbabilityRow .scheduleTeamName { color: var(--ink); }
 .playoffSeedNum { flex: 0 0 auto; font-size: 10px; font-weight: 900; color: #9aa4ae; min-width: 18px; }
 .playoffSeedChip.playoffSeedUs { position: relative; }
 .playoffSeedChip.playoffSeedUs .scheduleTeamName { color: var(--bengal-orange); }
 .playoffSeedChip.playoffSeedUs .playoffSeedNum { color: var(--bengal-orange); }
 .playoffTbdChip { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9aa4ae; font-style: italic; }
+
+/* Standings' own "Playoff Picture / Playoff Probabilities / All Bengals
+   Teams" row of small nav pills -- Nathan: "Make these links small side
+   by side pill buttons." Was 2 (now 3) stacked .lbLinkBtn underlined text
+   links; kept .lbLinkBtn itself untouched (still used elsewhere as a
+   plain inline link, e.g. the "‹ All Standings" back buttons right below
+   these panels) and built a separate, dedicated pill style instead of
+   overloading that class with a second visual meaning. */
+.standingsNavPillRow { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.standingsNavPill { display: inline-flex; align-items: center; gap: 5px; background: var(--card); border: 1.5px solid var(--bengal-orange); color: var(--bengal-orange); font-size: 11.5px; font-weight: 800; border-radius: 999px; padding: 7px 14px; cursor: pointer; white-space: nowrap; }
+.standingsNavPill:active { background: rgba(255, 106, 19, .14); }
+
+/* "All Bengals Teams" (js/standings.js's allTeamsRowHtml) -- Nathan: "I
+   want to have the ability to see the standings with all the other age
+   groups... record, place in standings, and playoff probabilities" for
+   every Ayer/Shirley/Lunenburg team (9U-13U), not a full table per
+   division. Small fixed-width age-group tag, same pill-tag language as
+   .practiceTag elsewhere in the app. */
+.allTeamsDivBadge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 34px; background: var(--bengal-orange); color: #fff; font-size: 10.5px; font-weight: 900; border-radius: 8px; padding: 5px 6px; }
 
 /* ============================================================
    Game HUD preview theme -- see js/preview-theme.js for how the
