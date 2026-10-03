@@ -83,13 +83,32 @@ function isWingPosition(formation, positionId) {
  * has no routes to preserve the shape of, just standing spots). Right
  * (direction !== 'left') returns positions completely unchanged, not even
  * a clone -- so a caller that never asks for 'left' pays nothing extra.
- * @param {{id:string,label:string,x:number,y:number}[]} positions
+ *
+ * A position's own `responsibility` (DefenderResponsibility, schema.js)
+ * rides along and gets the same x-reflection applied to whichever points
+ * it carries: 'zone's `area` and 'blitz's `path` are both authored in the
+ * SAME absolute field coordinates the position's own x/y already are, so
+ * they need the identical per-point reflection, not a separate transform.
+ * 'man's `target` is an OFFENSIVE position id (resolved against whatever
+ * Formation the play is actually using, at render time) -- not a
+ * coordinate at all, so it passes through completely unchanged.
+ * @param {{id:string,label:string,x:number,y:number,responsibility?:import('./schema.js').DefenderResponsibility}[]} positions
  * @param {'left'|'right'} direction
  * @param {number} centerX
  */
 function reflectDefensePositions(positions, direction, centerX) {
   if (direction !== 'left') return positions;
-  return positions.map((p) => Object.assign({}, p, { x: reflect(p.x, centerX) }));
+  return positions.map((p) => {
+    const next = Object.assign({}, p, { x: reflect(p.x, centerX) });
+    if (p.responsibility) {
+      const r = p.responsibility;
+      const nextR = Object.assign({}, r);
+      if (r.area) nextR.area = r.area.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, centerX) }));
+      if (r.path) nextR.path = r.path.map((pt) => Object.assign({}, pt, { x: reflect(pt.x, centerX) }));
+      next.responsibility = nextR;
+    }
+    return next;
+  });
 }
 
 /**

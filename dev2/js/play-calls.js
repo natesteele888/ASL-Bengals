@@ -1794,7 +1794,7 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // different source.
   const activeDefense = (window.PlayBuilderActiveDefenseLook && window.PlayBuilderMirror)
     ? window.PlayBuilderMirror.reflectDefensePositions(window.PlayBuilderActiveDefenseLook.positions, direction.toLowerCase(), wingAlign.C[0])
-        .map((d) => ({ pos: [d.x, d.y], label: d.label, id: d.id }))
+        .map((d) => ({ pos: [d.x, d.y], label: d.label, id: d.id, responsibility: d.responsibility }))
     : ((defenseMode === '4x4' && variant.defense4x4) ? variant.defense4x4 : variant.defense);
   // QB Sneak is a real Split Left/Right personnel grouping (Nathan: "It
   // shows Split on the QB Sneak play but it still shows the Shotgun

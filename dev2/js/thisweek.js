@@ -461,6 +461,7 @@
       <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
       <div id="thisweekOpponentScoutingWrap"></div>
+      <div id="thisweekOpponentFormWrap"></div>
     `;
 
     return `
@@ -583,6 +584,74 @@
         }).catch(() => {});
       }
     }
+    renderOpponentForm(linkedGame);
+  }
+
+  // Nathan, follow-up to "what else can we pull in from CMYFCC": "the
+  // upcoming opponent's own real season results, not just ours" -- a
+  // coach/kid can already see this by drilling into that specific
+  // Schedule game's own "Last 5 Games" > "<Opponent>'s Last 5" tab (js/
+  // schedule.js's renderLast5Panel), but that's a real click-through away;
+  // This Week is the actual weekly dashboard, right next to the Scouting
+  // Film section above, so it shows up without a coach having to go
+  // looking for it. Reuses the exact same real functions that panel
+  // already proved out (js/standings.js's fetchCmyfccGamesFor/
+  // window.compactGameRowHtml/window.opponentBadgeHtml) -- no second,
+  // drifting copy of the CMYFCC fetch/match/row-rendering logic.
+  //
+  // Same "not final" caution js/schedule.js's own renderLast5Panel already
+  // has: these rows carry CMYFCC's own game ids, not one of OUR local
+  // Schedule game ids, so they're never wired to open a game detail page
+  // (would silently open a blank draft) -- only the opponent's own logo is
+  // clickable, to their Standings team page (window.openStandingsTeamPage,
+  // same destination compactGameRowHtml's own click target would use
+  // elsewhere in the app).
+  function cmyfccEventPassedLocal(dateStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
+  }
+  function renderOpponentForm(linkedGame) {
+    const wrap = document.getElementById('thisweekOpponentFormWrap');
+    if (!wrap) return;
+    const opponent = linkedGame && linkedGame.gameType !== 'Bye' ? linkedGame.opponent : null;
+    if (!opponent || !window.fetchCmyfccGamesFor || !window.compactGameRowHtml || !window.opponentBadgeHtml) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="hint" style="text-align:center;">Loading…</div>`;
+    window.fetchCmyfccGamesFor(opponent).then((all) => {
+      // Stale-response guard, same reasoning as js/standings.js's own
+      // loadOpponentRecentForm -- a slow response landing after the coach
+      // has already navigated away from This Week, or This Week itself
+      // re-rendered for a different linked game in the meantime, shouldn't
+      // clobber whatever's on screen now.
+      if (document.getElementById('thisweekOpponentFormWrap') !== wrap || !wrap.isConnected) return;
+      const recent = all.filter((g) => g.isFinal).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+      const upcoming = all.filter((g) => !g.isFinal && !cmyfccEventPassedLocal(g.date)).sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(0, 5);
+      if (!recent.length && !upcoming.length) {
+        wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="lbEmpty">No games found for ${escapeHtml(opponent)} on CMYFCC yet.</div>`;
+        return;
+      }
+      const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponent) : window.opponentBadgeHtml(opponent);
+      const rowsHtmlFor = (rows) => rows.map((g) => window.compactGameRowHtml(g, { teamName: opponent, teamBadgeHtml: badgeHtml })).join('');
+      const recentHtml = recent.length ? `<div class="last5List">${rowsHtmlFor(recent)}</div>` : '';
+      const upcomingHtml = upcoming.length ? `<div class="lbSectionHeader" style="font-size:13px;margin-top:10px;">📅 ${escapeHtml(opponent)}'s Upcoming</div><div class="last5List">${rowsHtmlFor(upcoming)}</div>` : '';
+      wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div>${recentHtml}${upcomingHtml}<div style="margin-bottom:10px;"></div>`;
+      wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
+        const name = el.dataset.opponentName;
+        if (!name || !window.openStandingsTeamPage) return;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.openStandingsTeamPage(name, null);
+        });
+      });
+    }).catch((e) => {
+      if (document.getElementById('thisweekOpponentFormWrap') !== wrap || !wrap.isConnected) return;
+      wrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">📊 ${escapeHtml(opponent)}'s Season (via CMYFCC)</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+    });
   }
 
   // js/gameplan.js (loads earlier in index.html's scripts array) now owns

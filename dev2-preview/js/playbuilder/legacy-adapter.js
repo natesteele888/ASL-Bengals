@@ -171,7 +171,15 @@ function fbLegacyBuildLeaf(play, variant, formation, defenseLook, dirKeyCapitali
     paths.push(path);
   });
 
-  const defensePositions = (defenseLook.positions || []).map((d) => ({ pos: [d.x, d.y], label: d.label, id: d.id }));
+  // responsibility (DefenderResponsibility, schema.js) only added when
+  // actually set, matching every other optional field this adapter
+  // carries through -- a DefenseLook authored before per-defender
+  // assignment existed (or a defender nobody's assigned yet) has none.
+  const defensePositions = (defenseLook.positions || []).map((d) => {
+    const leaf = { pos: [d.x, d.y], label: d.label, id: d.id };
+    if (d.responsibility) leaf.responsibility = d.responsibility;
+    return leaf;
+  });
   const readKeyId = play.readKeyId ? play.readKeyId[dirKeyCapitalized] : undefined;
   return {
     defense: defensePositions,
