@@ -122,6 +122,24 @@
     const mins = (eh * 60 + em) - (sh * 60 + sm);
     return mins > 0 ? mins : null;
   }
+  // Nathan: "just like the game schedule that grays out past games and
+  // makes the current event in the center of the view, we need to match
+  // that here" -- same date-driven (not a manually-entered flag) "has
+  // this passed" check js/schedule.js's own hasEventPassed already uses,
+  // local copy per this codebase's established per-file convention.
+  // Prefers the practice's own end time (still "not past" while it's
+  // actually happening), falling back to its start time, then to "end of
+  // that calendar day" when no time was ever entered at all.
+  function hasEventPassed(dateStr, timeStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const tm = (timeStr || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    const d = tm
+      ? new Date(parts[0], parts[1] - 1, parts[2], Number(tm[1]), Number(tm[2]))
+      : new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
+    return d.getTime() < Date.now();
+  }
   // Same fix as js/schedule.js -- see the comment there. Practice Time used
   // to be free text too, which is why it could silently fail to parse and
   // land as an all-day .ics event.
@@ -157,7 +175,7 @@
       .then(data => {
         items = Array.isArray(data) ? data.filter(p => p && p.id) : [];
         if (statusEl) statusEl.textContent = '';
-        renderList();
+        renderList(true);
       })
       .catch(err => {
         console.error('Could not load practices:', err);
@@ -197,13 +215,16 @@
       chip.type = 'button';
       chip.className = 'gameplanChip' + (weekViewFilter === key ? ' active' : '');
       chip.textContent = label;
-      chip.addEventListener('click', () => { weekViewFilter = key; renderList(); });
+      // Switching TO "All" needs the same grey-past/scroll-to-current
+      // treatment a fresh tab-open already gets (below) -- "This Week" is
+      // short enough on its own that it never needs it.
+      chip.addEventListener('click', () => { weekViewFilter = key; renderList(key === 'all'); });
       grid.appendChild(chip);
     });
   }
 
   // ---- List view ----
-  function renderList() {
+  function renderList(scrollToCurrent) {
     const listEl = document.getElementById('practicesList');
     const addWrap = document.getElementById('practicesAddWrap');
     const toggleGrid = document.getElementById('practicesWeekToggleGrid');
@@ -235,7 +256,13 @@
       const info = typeInfo(p.type);
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = 'practiceRow';
+      // Same two conditions js/schedule.js's own Games list already
+      // applies to .scheduleRow/.scheduleRowFinal/.scheduleRowCurrentWeek
+      // -- greyed-out once it's happened, orange-glow highlighted while
+      // it's genuinely this week and still ahead.
+      const isPast = hasEventPassed(p.date, p.endTime || p.time);
+      const isCurrentWeek = !isPast && window.isDateInCurrentWeek && window.isDateInCurrentWeek(p.date);
+      row.className = 'practiceRow' + (isPast ? ' practiceRowPast' : '') + (isCurrentWeek ? ' practiceRowCurrent' : '');
       const weatherId = `practiceRowWeather-${p.id}`;
       // Nathan: "if drone footage is available - it should show a drone
       // icon on the practice bar to indicate it's available. If you
@@ -276,6 +303,19 @@
         window.loadCompactWeatherInto(document.getElementById(weatherId), p.location, p.date, p.time);
       }
     });
+    if (scrollToCurrent) {
+      // rAF, not synchronous -- listEl was just rebuilt from innerHTML=''
+      // above, and scrollIntoView needs the new rows' real layout
+      // already committed. Same fallback order as js/schedule.js's own
+      // Games list: the current week's own item first, else the first
+      // one that hasn't happened yet (no practices scheduled this week,
+      // but something real is still coming up).
+      requestAnimationFrame(() => {
+        const target = listEl.querySelector('.practiceRowCurrent')
+          || [...listEl.querySelectorAll('.practiceRow')].find((row) => !row.classList.contains('practiceRowPast'));
+        if (target) target.scrollIntoView({ block: 'center' });
+      });
+    }
   }
 
   // ---- Detail view ----
@@ -668,7 +708,7 @@
     } else {
       document.getElementById('practicesDetail').style.display = 'none';
       document.getElementById('practicesListWrap').style.display = '';
-      renderList();
+      renderList(true);
     }
   };
 

@@ -2756,6 +2756,12 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    date/time, and location. ---- */
 .practiceRow { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; text-align: left; background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #1a2029 100%); border: 1px solid #2c333b; border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .practiceRow:active { filter: brightness(1.12); }
+/* Same two treatments js/schedule.js's own Games list already uses
+   (.scheduleRowFinal/.scheduleRowCurrentWeek) -- "grays out past games
+   and makes the current event in the center of the view," matched here
+   for Practices/Film Nights. */
+.practiceRow.practiceRowPast { background: linear-gradient(135deg, #3a4048 0%, #454d56 55%, #4a3d2e 100%); border-color: #5a6472; }
+.practiceRow.practiceRowCurrent { border: 3px solid var(--bengal-orange); box-shadow: 0 0 0 4px rgba(255,106,19,.25), 0 0 22px rgba(255,106,19,.55), 0 2px 6px rgba(0,0,0,.25); }
 .practiceTypeBadge { display: inline-block; font-size: 10.5px; font-weight: 900; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
 .practiceTypeBadge.practice { background: var(--bengal-orange); color: #fff; }
 .practiceTypeBadge.film { background: #4a5fc9; color: #fff; }
