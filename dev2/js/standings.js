@@ -244,6 +244,12 @@
   // establish in the other direction.
   window.fetchCmyfccRecentGamesFor = fetchCmyfccRecentGamesFor;
   window.fetchCmyfccUpcomingGamesFor = fetchCmyfccUpcomingGamesFor;
+  // The lower-level, un-split fetch -- exposed too (js/thisweek.js's own
+  // Opponent Scouting section) so a caller wanting BOTH recent and
+  // upcoming can do it in the one real network round-trip
+  // loadOpponentRecentForm below already does, instead of the two
+  // separate CMYFCC calls going through both wrappers above would cost.
+  window.fetchCmyfccGamesFor = fetchCmyfccGamesFor;
 
   function escapeHtml(s) {
     const d = document.createElement('div');
