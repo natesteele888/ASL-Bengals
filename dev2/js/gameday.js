@@ -62,6 +62,7 @@
     northbridgeuxbridge: 'assets/images/opponents/northbridgeuxbridge.png',
     tantasqua: 'assets/images/opponents/tantasqua.png',
     tyngsboro: 'assets/images/opponents/tyngsboro.png',
+    westborough: 'assets/images/opponents/westborough.png',
   };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit

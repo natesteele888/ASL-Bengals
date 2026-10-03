@@ -72,6 +72,7 @@
     northbridgeuxbridge: 'assets/images/opponents/northbridgeuxbridge.png',
     tantasqua: 'assets/images/opponents/tantasqua.png',
     tyngsboro: 'assets/images/opponents/tyngsboro.png',
+    westborough: 'assets/images/opponents/westborough.png',
   };
   let opponentLogos = {};
   // Delegates to js/gameplan.js's own MAX_PLAYS (same "one real source,

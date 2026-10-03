@@ -171,6 +171,7 @@
     northbridgeuxbridge: 'assets/images/opponents/northbridgeuxbridge.png',
     tantasqua: 'assets/images/opponents/tantasqua.png',
     tyngsboro: 'assets/images/opponents/tyngsboro.png',
+    westborough: 'assets/images/opponents/westborough.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
