@@ -582,8 +582,16 @@
       // form), not just the ones on our own Schedule. A team we've
       // actually played ALSO gets film/scouting/a "View on Schedule" link,
       // via its matched Schedule game -- showOpponentPage/opponentPageHtml
-      // already render correctly either way. Our own row stays plain text
-      // -- there's no "opponent" page for ourselves.
+      // already render correctly either way. Our own row used to stay
+      // plain text ("there's no opponent page for ourselves") -- found
+      // live that Playoff Probabilities' own logo-click already reaches
+      // that same page for us (and, once its real bug was fixed just
+      // above -- BENGALS_HERO_HUE -- renders a real, correct, useful
+      // page: our own record plus CMYFCC's real recent/upcoming games).
+      // Nathan: "our own team, I can't click on in the standings" --
+      // since the page already works correctly when reached the other
+      // way, the real fix is making it reachable here too, not leaving
+      // this the one dead end into an otherwise-working feature.
       const matchedGame = games ? matchScheduleOpponent(t.team, games) : null;
       const isUs = isBengalsRow(t);
       // Coach Tools' own paste-preview (initCoachToolsStandings) calls
@@ -595,7 +603,7 @@
       // empty array -- the real read-only tab always passes one, even
       // empty) is exactly that call site; keep it plain text there.
       const hasGamesContext = games !== undefined && games !== null;
-      const nameCell = (isUs || !hasGamesContext)
+      const nameCell = !hasGamesContext
         ? escapeHtml(t.team)
         : `<button type="button" class="standingsTeamLink" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${escapeHtml(t.team)} ›</button>`;
       html += `<tr class="${isUs ? 'standingsRowUs' : ''}">` +
@@ -632,6 +640,12 @@
   function heroGradient(hue) {
     return `linear-gradient(160deg, hsl(${hue}, 60%, 42%) 0%, hsl(${hue}, 66%, 24%) 100%)`;
   }
+  // The real Bengals orange (--bengal-orange, #ff6a13) expressed as a hue
+  // for heroGradient -- fixed, not computed, so our own team's page always
+  // gets this exact color through the SAME gradient formula every other
+  // team's hero already uses, just with a known-correct hue instead of a
+  // hash or a sampled logo color.
+  const BENGALS_HERO_HUE = 22;
   function rgbToHue(r, g, b) {
     const rf = r / 255, gf = g / 255, bf = b / 255;
     const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
@@ -733,7 +747,24 @@
     // scouting/a schedule-link from -- see showOpponentPage, which builds
     // a plain {opponent: teamName} stand-in for that second case.
     const hasGame = !!game.id;
-    const hue = hashHue(game.opponent);
+    // Found live: viewing OUR OWN team's page (reachable via Playoff
+    // Probabilities' own logo-click, the first real entry point into this
+    // function for "us" -- the main list's row has always stayed plain
+    // text specifically because "there's no opponent page for ourselves"
+    // predates that) showed an arbitrary blue/purple hero instead of our
+    // real Bengals orange. Two compounding reasons, both real: hashHue is
+    // a generic per-OPPONENT color so each one reads as visually distinct
+    // -- meaningless applied to our own name, which hashes to whatever
+    // color it happens to. And applyOpponentHeroColor's own real-logo-hue
+    // upgrade (below) never fires for us at all, because
+    // getOpponentLogoSrc has no entry for our own team (bengalsBadgeHtml
+    // is a separate, dedicated lookup) -- so the arbitrary color was
+    // permanent, not just a brief flash before the real one loaded. We
+    // already know our own exact brand color -- nothing to hash or
+    // sample -- so BENGALS_HERO_HUE (the real #ff6a13 orange, converted)
+    // is used directly instead of either mechanism.
+    const isUsPage = window.isBengalsTeamName && window.isBengalsTeamName(game.opponent);
+    const hue = isUsPage ? BENGALS_HERO_HUE : hashHue(game.opponent);
     const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(game.opponent) : (window.opponentBadgeHtml ? window.opponentBadgeHtml(game.opponent) : '');
     let html = `<div class="lbHeroHeader" id="standingsOpponentHero" data-opponent="${escapeHtml(game.opponent || '')}" style="background:${heroGradient(hue)};">
         <div class="lbHeroTeamBadgeWrap">${badgeHtml}</div>
@@ -822,7 +853,16 @@
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent, teams, games);
     loadOpponentFilmSection(game);
-    applyOpponentHeroColor(game.opponent);
+    // Skipped for our own team -- opponentPageHtml already set the real,
+    // fixed Bengals color synchronously (BENGALS_HERO_HUE); this upgrade
+    // exists to find an UNKNOWN opponent's real logo hue, which doesn't
+    // apply to us and would be a guaranteed no-op anyway (no entry for
+    // our own team in getOpponentLogoSrc) -- skipped outright rather than
+    // relying on that no-op, so a future change there can't silently
+    // override our own fixed color.
+    if (!(window.isBengalsTeamName && window.isBengalsTeamName(game.opponent))) {
+      applyOpponentHeroColor(game.opponent);
+    }
   }
 
   async function loadOpponentRecentForm(opponentName, teams, games) {
