@@ -268,7 +268,16 @@
       .catch(err => { console.error('Could not load opponent logos:', err); opponentLogos = {}; });
   }
   function saveOpponentLogo(name, dataUrl, afterOk, afterFail) {
-    const key = normalizeOpponentKey(name);
+    // Keyed by the WHOLE name (normalizeOpponentFullKey), not just the
+    // first word -- found a real, live bug (not hypothetical) this same
+    // session: a coach's own upload for "North Middlesex" had saved
+    // under the plain first-word key ("north"), which also collides
+    // with "North County," a separate, real team. For every single-
+    // word or slash-joined (no-space) name this produces the exact
+    // same key as before (opponentLogoSrc checks the full key first,
+    // then falls back to the old first-word key, so nothing already
+    // saved under the old scheme stops working).
+    const key = normalizeOpponentFullKey(name);
     if (!key) { if (afterFail) afterFail('Enter an opponent name first.'); return; }
     opponentLogos[key] = dataUrl;
     window.firebaseAuthed(OPPONENT_LOGOS_URL).then(url => fetch(url, {
