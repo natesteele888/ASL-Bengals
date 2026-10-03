@@ -1048,6 +1048,14 @@
     <div style="text-align:center;margin-bottom:14px;">
       <button type="button" class="lbLinkBtn" id="standingsPlayoffOpenBtn">🏈 See Playoff Picture ›</button>
     </div>
+    <!-- Nathan: "add in playoff probabilities for teams based on the
+         current results available... shown in standings under a second
+         tab." Same real/link-button-to-a-swapped-panel pattern the
+         Playoff Picture button right above already established -- this
+         app's own one real way to add a secondary Standings view. -->
+    <div style="text-align:center;margin-bottom:14px;">
+      <button type="button" class="lbLinkBtn" id="standingsProbabilitiesOpenBtn">📊 See Playoff Probabilities ›</button>
+    </div>
     <div id="standingsTableWrap" style="max-width:640px;margin:0 auto;"></div>
   </div>
 
@@ -1060,6 +1068,17 @@
       <h3>Playoff Picture</h3>
     </div>
     <div id="standingsPlayoffBody"></div>
+  </div>
+
+  <div id="standingsProbabilitiesDetail" style="display:none;max-width:640px;margin:0 auto;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="lbLinkBtn" id="standingsProbabilitiesBackBtn">‹ All Standings</button>
+    </div>
+    <div class="lbHeroHeader">
+      <div class="lbHeroTrophy">📊</div>
+      <h3>Playoff Probabilities</h3>
+    </div>
+    <div id="standingsProbabilitiesBody"></div>
   </div>
 
   <!-- Nathan: "I want to develop a opponent page where you click on their
@@ -2374,7 +2393,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261002h';
+  const BUILD_V = '20261002j';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

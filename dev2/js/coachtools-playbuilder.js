@@ -485,12 +485,20 @@
       '<button class="navBtn" id="dbSaveBtn" style="' + BTN + '">Save Defense</button>' +
       '<button class="navBtn danger" id="dbRemoveLookBtn" style="' + BTN + '">Remove Defense</button>' +
       '<div class="build-panel" style="margin-top:14px">' +
+      '  <div class="build-panel-label">Editing mode</div>' +
+      '  <div style="display:flex;gap:6px">' +
+      '    <button class="navBtn" id="dbModeAlignBtn" style="flex:1 1 0;margin:0;padding:9px 4px;font-size:13px">🧲 Alignment</button>' +
+      '    <button class="navBtn secondary" id="dbModeAssignBtn" style="flex:1 1 0;margin:0;padding:9px 4px;font-size:13px">🎯 Assignments</button>' +
+      '  </div>' +
+      '</div>' +
+      '<div id="dbAssignPanel" class="build-panel" style="margin-top:14px;display:none"></div>' +
+      '<div class="build-panel" style="margin-top:14px">' +
       '  <div class="build-panel-label">This week</div>' +
       '  <div class="hint" id="dbActiveStatus" style="margin-bottom:8px"></div>' +
       '  <button class="navBtn" id="dbSetActiveBtn" style="' + BTN + '">Set as this week\'s defense</button>' +
       '  <button class="navBtn secondary" id="dbClearActiveBtn" style="' + BTN + '">Use each play\'s own default</button>' +
       '</div>' +
-      '<div class="hint" style="margin-top:10px">Drag any defender to set where they line up. The dashed circles are your own O-line, shown for reference only. This sets ALIGNMENT only for now -- man/zone/blitz assignment is a later phase.</div>';
+      '<div class="hint" style="margin-top:10px" id="dbModeHint">Drag any defender to set where they line up. The dashed circles are your own O-line, shown for reference only.</div>';
     view.appendChild(side);
 
     return view;

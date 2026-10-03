@@ -998,23 +998,156 @@
     }
   }
 
+  // ---- Playoff Probabilities (Nathan: "add in playoff probabilities for
+  // teams based on the current results available... shown in standings
+  // under a second tab.") CMYFCC's own playoffProjection (above) is a
+  // single deterministic "if the season ended today" bracket -- real,
+  // but not a probability. Confirmed live (not guessed) exactly how that
+  // bracket gets populated before building this: cross-checked both
+  // divisions' own seed lists against the flat, rank-ordered standings
+  // list for Tackle 11U (21 teams total) -- Division 1's 6 seeds are
+  // EXACTLY overall ranks 1-6, Division 2's are EXACTLY ranks 7-12, in
+  // order, both times. So "making the playoffs" here means "finishing in
+  // the top 12 of Tackle 11U by season end" -- genuinely uncertain for
+  // teams on the bubble (9 teams currently sit outside that line), which
+  // is what this Monte Carlo simulation actually estimates.
+  //
+  // Real, disclosed simplifications (shown in the UI itself, not just
+  // here) rather than a false precision this app can't actually back up:
+  // CMYFCC's real standingsPoints formula includes an opponentWinPoints
+  // bonus (schema confirmed via standingsPolicy, exact semantics not
+  // documented anywhere reachable) -- this simulation ranks each
+  // simulated season by the base win/tie/loss points alone (10/5/0),
+  // which is the dominant factor in a real standings table regardless.
+  // Each remaining game's own winner is drawn using a simple log5-style
+  // estimate from each team's CURRENT winning percentage (clamped to
+  // 15%-85% so a single early loss/win can't make a team's remaining
+  // games deterministic) -- "based on the current results available," in
+  // Nathan's own words, not a coin flip that ignores how teams have
+  // actually played. Simulated outcomes are binary (win/loss only, no
+  // simulated ties) -- real ties are rare enough in this data that
+  // modeling them adds real complexity for very little accuracy gained.
+  async function fetchCmyfccDivisionData() {
+    const res = await fetch(CMYFCC_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    });
+    if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
+    const body = await res.json();
+    const payload = body.result || body.data || body;
+    if (!payload || payload.available === false || !Array.isArray(payload.games)) {
+      throw new Error('CMYFCC response missing games data');
+    }
+    const standingsArr = Array.isArray(payload.standings) ? payload.standings : Object.values(payload.standings || {});
+    return {
+      games: payload.games.filter((g) => g.divisionKey === CMYFCC_OUR_DIVISION_KEY),
+      standings: standingsArr.filter((s) => s.divisionKey === CMYFCC_OUR_DIVISION_KEY),
+    };
+  }
+  function simulatePlayoffOdds(games, standings, iterations) {
+    iterations = iterations || 4000;
+    const names = standings.map((s) => s.associationName);
+    const baseWins = {}, baseLosses = {}, baseTies = {};
+    standings.forEach((s) => { baseWins[s.associationName] = s.wins || 0; baseLosses[s.associationName] = s.losses || 0; baseTies[s.associationName] = s.ties || 0; });
+    function strength(name) {
+      const w = baseWins[name] || 0, l = baseLosses[name] || 0, t = baseTies[name] || 0;
+      const gp = w + l + t;
+      if (!gp) return 0.5;
+      const pct = (w + 0.5 * t) / gp;
+      return Math.min(0.85, Math.max(0.15, pct));
+    }
+    const remaining = games.filter((g) => !(g.result && g.result.status === 'final') && g.homeTeam && g.awayTeam);
+    const playoffCount = {};
+    names.forEach((n) => { playoffCount[n] = 0; });
+    const strengthByName = {};
+    names.forEach((n) => { strengthByName[n] = strength(n); });
+    for (let i = 0; i < iterations; i++) {
+      const wins = Object.assign({}, baseWins);
+      remaining.forEach((g) => {
+        const home = g.homeTeam.associationName, away = g.awayTeam.associationName;
+        const sh = strengthByName[home] != null ? strengthByName[home] : 0.5;
+        const sa = strengthByName[away] != null ? strengthByName[away] : 0.5;
+        const pHome = sh / (sh + sa);
+        if (Math.random() < pHome) wins[home] = (wins[home] || 0) + 1;
+        else wins[away] = (wins[away] || 0) + 1;
+      });
+      const ranked = names.map((name) => ({ name, points: (wins[name] || 0) * 10 + (baseTies[name] || 0) * 5, tiebreak: Math.random() }));
+      ranked.sort((a, b) => (b.points - a.points) || (a.tiebreak - b.tiebreak));
+      ranked.slice(0, 12).forEach((t) => { playoffCount[t.name]++; });
+    }
+    return standings.map((s) => ({
+      name: s.associationName,
+      teamLabel: s.teamLabel,
+      record: s.record,
+      probability: playoffCount[s.associationName] / iterations,
+    })).sort((a, b) => b.probability - a.probability);
+  }
+  function probabilityRowHtml(row) {
+    const isUs = isBengalsRow({ team: row.teamLabel });
+    const badge = window.isBengalsTeamName && window.isBengalsTeamName(row.teamLabel)
+      ? (window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '')
+      : (window.opponentBadgeHtml ? window.opponentBadgeHtml(row.name) : '');
+    const pct = Math.round(row.probability * 100);
+    return `<div class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;">
+        ${badge}
+        <span class="scheduleTeamName" style="flex:1;">${escapeHtml(row.name)}</span>
+        <span class="scheduleTeamRecord">${escapeHtml(row.record || '')}</span>
+        <span style="font-weight:900;font-size:15px;min-width:48px;text-align:right;color:${pct >= 50 ? 'var(--bengal-orange)' : 'var(--muted)'};">${pct}%</span>
+      </div>`;
+  }
+  async function loadPlayoffProbabilities() {
+    const wrap = document.getElementById('standingsProbabilitiesBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="hint" style="text-align:center;">Simulating the rest of the season…</div>';
+    try {
+      const { games, standings } = await fetchCmyfccDivisionData();
+      if (!standings.length) {
+        wrap.innerHTML = '<div class="lbEmpty">No standings data available from CMYFCC yet.</div>';
+        return;
+      }
+      const rows = simulatePlayoffOdds(games, standings);
+      wrap.innerHTML =
+        '<div class="lbSub" style="text-align:center;margin-bottom:14px;">Odds of finishing in the top 12 of Tackle 11U (both playoff brackets combined) -- simulating the rest of the season 4,000 times from each team’s current record. Not an official CMYFCC number, just this app’s own estimate.</div>' +
+        rows.map(probabilityRowHtml).join('');
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbEmpty">Couldn't simulate playoff odds: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
   function showStandingsList() {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
     const playoffPanel = document.getElementById('standingsPlayoffDetail');
+    const probPanel = document.getElementById('standingsProbabilitiesDetail');
     if (listPanel) listPanel.style.display = '';
     if (detailPanel) detailPanel.style.display = 'none';
     if (playoffPanel) playoffPanel.style.display = 'none';
+    if (probPanel) probPanel.style.display = 'none';
   }
 
   function showPlayoffPicture() {
     const listPanel = document.getElementById('standingsListPanel');
     const detailPanel = document.getElementById('standingsOpponentDetail');
     const playoffPanel = document.getElementById('standingsPlayoffDetail');
+    const probPanel = document.getElementById('standingsProbabilitiesDetail');
     if (listPanel) listPanel.style.display = 'none';
     if (detailPanel) detailPanel.style.display = 'none';
     if (playoffPanel) playoffPanel.style.display = '';
+    if (probPanel) probPanel.style.display = 'none';
     loadPlayoffPicture();
+  }
+
+  function showPlayoffProbabilities() {
+    const listPanel = document.getElementById('standingsListPanel');
+    const detailPanel = document.getElementById('standingsOpponentDetail');
+    const playoffPanel = document.getElementById('standingsPlayoffDetail');
+    const probPanel = document.getElementById('standingsProbabilitiesDetail');
+    if (listPanel) listPanel.style.display = 'none';
+    if (detailPanel) detailPanel.style.display = 'none';
+    if (playoffPanel) playoffPanel.style.display = 'none';
+    if (probPanel) probPanel.style.display = '';
+    loadPlayoffProbabilities();
   }
 
   let backBtnWired = false;
@@ -1030,6 +1163,10 @@
       if (playoffBackBtn) { playoffBackBtn.addEventListener('click', showStandingsList); }
       const playoffOpenBtn = document.getElementById('standingsPlayoffOpenBtn');
       if (playoffOpenBtn) { playoffOpenBtn.addEventListener('click', showPlayoffPicture); }
+      const probBackBtn = document.getElementById('standingsProbabilitiesBackBtn');
+      if (probBackBtn) { probBackBtn.addEventListener('click', showStandingsList); }
+      const probOpenBtn = document.getElementById('standingsProbabilitiesOpenBtn');
+      if (probOpenBtn) { probOpenBtn.addEventListener('click', showPlayoffProbabilities); }
     }
     showStandingsList();
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';
