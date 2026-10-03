@@ -2493,6 +2493,89 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // removing this call, not assumed -- so the ball still visibly runs
   // the real path when a coach actually hits ▶ Play; it's just invisible
   // on the still diagram, matching "data in the background."
+
+  drawDefenseResponsibility(activeDefense, playerCircles, circlesLayer);
+}
+
+// Nathan: "choose a defender and give them man to man or zone
+// assignments and choose the offensive player, tell them to blitz and
+// draw the path they should take." Renders whatever a coach actually
+// authored in Play Builder's own Defense > Assignments screen (js/
+// playbuilder/defense-editor.js) -- a no-op for every play today, since
+// nothing sets DefenderResponsibility yet; only ever draws something once
+// a coach has actually assigned a defender on the active weekly defense.
+// Called LAST, after every circle (offense AND defense) is already drawn
+// and in playerCircles/defenseCircles -- Man coverage needs the TARGET's
+// own real circle position, which doesn't exist yet at the point
+// activeDefense's own circles are drawn (defenders draw first, long
+// before the numbered/O-line offensive circles later in this same
+// function) -- simpler to do this as one deferred pass than to thread a
+// second, earlier resolution through every one of those different
+// position-circle code paths.
+function defenseRespPathD(points) {
+  if (!points || points.length < 2) return '';
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  let i = 1;
+  for (; i + 1 < points.length; i += 2) {
+    d += ` Q ${points[i].x} ${points[i].y} ${points[i + 1].x} ${points[i + 1].y}`;
+  }
+  if (i < points.length) d += ` L ${points[i].x} ${points[i].y}`;
+  return d;
+}
+function drawDefenseResponsibility(activeDefense, playerCircles, circlesLayer) {
+  activeDefense.forEach((d) => {
+    const resp = d.responsibility;
+    if (!resp || !resp.type) return;
+    if (resp.type === 'man') {
+      // No target, or a target this specific formation doesn't have (a
+      // DefenseLook is shared across every formation it's ever the active
+      // weekly defense for -- see schema.js's own DefenderResponsibility
+      // doc) -- "uncovered," same as the schema already documents, not an
+      // error.
+      const targetCircle = resp.target != null ? playerCircles[String(resp.target)] : null;
+      if (!targetCircle || !targetCircle.circleEl) return;
+      const tx = targetCircle.circleEl.cx.baseVal.value;
+      const ty = targetCircle.circleEl.cy.baseVal.value;
+      // #555 matches this file's own existing "de-emphasized, informational
+      // dashed line" convention (see optionLine just above in this same
+      // file) rather than a new, arbitrary color -- but that convention's
+      // own lines are drawn at the full ROUTE_STROKE_WIDTH (16), muted only
+      // by color; verified live that this line's first-draft 2.5px width
+      // read as nearly invisible against the dark theme (correct DOM
+      // coordinates, just too thin to actually see). Bolder here, though
+      // still clearly thinner than a real route, since it's a pairing
+      // indicator, not a path a player runs.
+      circlesLayer.appendChild(svgEl('line', {
+        x1: d.pos[0], y1: d.pos[1], x2: tx, y2: ty,
+        stroke: '#555', 'stroke-width': 6, 'stroke-dasharray': '4 6', 'pointer-events': 'none',
+      }));
+      return;
+    }
+    if (resp.type === 'zone' && resp.area && resp.area.length >= 3) {
+      const d2 = defenseRespPathD(resp.area) + ' Z';
+      circlesLayer.appendChild(svgEl('path', {
+        d: d2, fill: DEFENSE_COLOR, 'fill-opacity': 0.16, stroke: DEFENSE_COLOR,
+        'stroke-width': 2.5, 'stroke-dasharray': '5 4', 'pointer-events': 'none',
+      }));
+      return;
+    }
+    if (resp.type === 'blitz' && resp.path && resp.path.length >= 2) {
+      const pathD = defenseRespPathD(resp.path);
+      const blitzColor = '#e0201a';
+      const pathEl = svgEl('path', { d: pathD, fill: 'none', stroke: blitzColor, 'stroke-width': 4.5, 'stroke-dasharray': '9 6', 'pointer-events': 'none' });
+      circlesLayer.appendChild(pathEl);
+      // Same real arrowhead (buildEndCapEl) + real-geometry placement
+      // (placeArrowAtFraction, getTotalLength/getPointAtLength against the
+      // path actually in the DOM) every offensive route's own end already
+      // uses -- not a second, approximate arrow shape, and correctly
+      // angled to the path's real final tangent rather than a straight
+      // line between the last two authored points.
+      const arrow = buildEndCapEl('run', blitzColor, 11);
+      circlesLayer.appendChild(arrow);
+      placeArrowAtFraction(arrow, pathEl, 1);
+    }
+  });
 }
 
 // ---- Render the Split formation's lineup, plus whichever of the play's
