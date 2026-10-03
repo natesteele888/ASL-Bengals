@@ -64,6 +64,11 @@
     tyngsboro: 'assets/images/opponents/tyngsboro.png',
     westborough: 'assets/images/opponents/westborough.png',
     oakmont: 'assets/images/opponents/oakmont.png',
+    southbridge: 'assets/images/opponents/southbridge.png',
+    // normalizeOpponentKey("Millbury/Sutton") -- no space before the
+    // slash, so the whole thing counts as one "word" (same reasoning
+    // leicesterspencer/oxfordwebster above document).
+    millburysutton: 'assets/images/opponents/millburysutton.png',
   };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit
