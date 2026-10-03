@@ -95,6 +95,31 @@
       '</div>';
     view.appendChild(formationBar);
 
+    // Nathan, live: "it appears I can't make any edits to Split plays."
+    // Real, confirmed gap, not a bug in today's work -- Wing/Split were
+    // always meant to be migrated INTO Play Builder V2 (see editor.js's
+    // own populatePlaySelect() comment), but that cutover was scoped as
+    // its own later phase and never actually happened, so this screen
+    // honestly has nothing to show/edit for either of them. Retiring the
+    // Play tab's own Edit entry point (this file's own header comment)
+    // was only ever meant to be safe once Play Builder V2 covered
+    // everything -- for Wing/Split specifically it wasn't yet, so this
+    // notice is the "instant rollback" that header comment promised,
+    // scoped to exactly the one case that still needs it: a direct link
+    // to the classic Edit Plays tool (js/edit-plays.js, still fully
+    // loaded and working, just unlinked from the main nav), which already
+    // has a real, working Split route editor (renderSplitEditor()).
+    // Shown/hidden by editor.js's own render() -- see its own comment.
+    var legacyNotice = document.createElement('div');
+    legacyNotice.id = 'pbLegacyFormationNotice';
+    legacyNotice.className = 'coachToolsSubPanel';
+    legacyNotice.style.cssText = 'flex:1 1 100%;display:none;border-color:var(--bengal-orange);background:rgba(224,32,26,.06)';
+    legacyNotice.innerHTML =
+      '<div style="font-weight:800;font-size:13px;margin-bottom:4px" id="pbLegacyFormationNoticeTitle"></div>' +
+      '<div class="hint" style="margin-bottom:8px">Its real plays still live in the classic editor -- Play Builder has nothing to show for it yet, and "+ New Play" here would only create a brand-new, disconnected play, not edit the real one.</div>' +
+      '<button type="button" class="navBtn secondary" id="pbOpenEditPlaysBtn" style="width:auto;padding:8px 16px">✏️ Open Edit Plays →</button>';
+    view.appendChild(legacyNotice);
+
     var fieldCard = document.createElement('div');
     fieldCard.className = 'diagramCard';
     fieldCard.style.cssText = 'flex:7 1 0;min-width:380px';

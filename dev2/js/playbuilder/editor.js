@@ -890,6 +890,22 @@ function render() {
   if (els.pbFormationSelect && state.currentPlay) {
     els.pbFormationSelect.value = state.currentPlay.formationId;
   }
+  // Nathan, live: "it appears I can't make any edits to Split plays."
+  // Wing/Split's real plays were never migrated into Play Builder V2
+  // (see populatePlaySelect()'s own comment) -- this screen has nothing
+  // to show/edit for either, so point straight at the classic Edit Plays
+  // tool instead of leaving a coach staring at an empty "+ New Play"
+  // draft that can't touch the real data. Every render, same "can't
+  // drift" reasoning as pbFieldTitle above.
+  if (els.pbLegacyFormationNotice) {
+    const formationId = state.currentPlay ? state.currentPlay.formationId : null;
+    const isLegacy = formationId === 'wing' || formationId === 'split';
+    els.pbLegacyFormationNotice.style.display = isLegacy ? '' : 'none';
+    if (isLegacy && els.pbLegacyFormationNoticeTitle) {
+      const label = formationId === 'wing' ? 'Wing' : 'Split';
+      els.pbLegacyFormationNoticeTitle.textContent = `${label} isn't editable here yet`;
+    }
+  }
   els.svg.innerHTML = '';
   if (!state.currentPlay) return;
   renderAlignmentPreviewToggles();
@@ -2360,6 +2376,16 @@ function bindSidebar() {
     els.pbPlayBtn.addEventListener('click', () => { playPreview(); });
   }
 
+  // "✏️ Open Edit Plays →" -- only present (and only ever shown) for
+  // Wing/Split, see render()'s own pbLegacyFormationNotice block above.
+  // Not present on the standalone playbuilder.html page at all (no
+  // window.setMode there -- it has no classic editor to send a coach to).
+  if (els.pbOpenEditPlaysBtn) {
+    els.pbOpenEditPlaysBtn.addEventListener('click', () => {
+      if (window.setMode) window.setMode('editplays');
+    });
+  }
+
   els.pbNewPlayBtn.addEventListener('click', () => {
     // Nathan, live, trying to start "5 Guys"' very first play: "when I
     // try to add a new play, I can't choose 5 guys as the formation, it
@@ -2618,6 +2644,13 @@ async function init() {
   els.pbNewPlayBtn = q('pbNewPlayBtn');
   els.pbPlaySelect = q('pbPlaySelect');
   els.pbFormationSelect = q('pbFormationSelect');
+  // Not present on the standalone playbuilder.html dev page (Wing/Split
+  // there have no equivalent "classic editor" to link out to) -- every
+  // use below is null-guarded, same convention as every other optional
+  // els.* reference in this file.
+  els.pbLegacyFormationNotice = q('pbLegacyFormationNotice');
+  els.pbLegacyFormationNoticeTitle = q('pbLegacyFormationNoticeTitle');
+  els.pbOpenEditPlaysBtn = q('pbOpenEditPlaysBtn');
   // A real, functional switcher -- see its own 'change' listener below for
   // why it's safe (navigates, never reassigns the current play's data).
   els.pbVariantSelect = q('pbVariantSelect');
