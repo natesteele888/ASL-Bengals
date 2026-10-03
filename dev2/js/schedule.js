@@ -152,6 +152,11 @@
     // normalizeOpponentKey("Northboro/Southboro") -- same no-space-
     // before-the-slash reasoning as leicesterspencer/oxfordwebster above.
     northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
+    fitchburg: 'assets/images/opponents/fitchburg.png',
+    auburn: 'assets/images/opponents/auburn.png',
+    // normalizeOpponentKey("Maynard/Nashoba") -- same no-space-before-
+    // the-slash reasoning as leicesterspencer/oxfordwebster above.
+    maynardnashoba: 'assets/images/opponents/maynardnashoba.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 

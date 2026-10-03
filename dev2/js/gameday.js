@@ -37,6 +37,12 @@
     hudson: 'assets/images/opponents/hudson.png',
     worcester: 'assets/images/opponents/worcester.png',
     northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
+    fitchburg: 'assets/images/opponents/fitchburg.png',
+    auburn: 'assets/images/opponents/auburn.png',
+    // normalizeOpponentKey("Maynard/Nashoba") -- no space before the
+    // slash, so the whole thing counts as one "word", then the slash
+    // gets stripped (same reasoning js/schedule.js's own copy documents).
+    maynardnashoba: 'assets/images/opponents/maynardnashoba.png',
   };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit
