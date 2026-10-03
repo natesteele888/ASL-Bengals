@@ -157,6 +157,20 @@
     // normalizeOpponentKey("Maynard/Nashoba") -- same no-space-before-
     // the-slash reasoning as leicesterspencer/oxfordwebster above.
     maynardnashoba: 'assets/images/opponents/maynardnashoba.png',
+    charltondudley: 'assets/images/opponents/charltondudley.png',
+    nipmuc: 'assets/images/opponents/nipmuc.png',
+    // "North Middlesex" does NOT use normalizeOpponentKey's plain
+    // first-word key ("north") -- confirmed live against CMYFCC's own
+    // real roster that "North County" is a separate, real team that
+    // would collide on that exact same key. Keyed on
+    // normalizeOpponentFullKey (the whole name, not just the first
+    // word) instead, which is unique across the whole league -- see
+    // opponentLogoSrc below, which checks the full-name key before
+    // falling back to the first-word key.
+    northmiddlesex: 'assets/images/opponents/north-middlesex.png',
+    northbridgeuxbridge: 'assets/images/opponents/northbridgeuxbridge.png',
+    tantasqua: 'assets/images/opponents/tantasqua.png',
+    tyngsboro: 'assets/images/opponents/tyngsboro.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
@@ -164,6 +178,17 @@
     const cleaned = (name || '').replace(/\(.*?\)/g, '').trim(); // drop "(Scrimmage)" etc -- not part of the team name
     const firstWord = cleaned.split(/\s+/).filter(Boolean)[0] || '';
     return firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  // Same idea as normalizeOpponentKey, but keeps the WHOLE name instead
+  // of just the first word -- needed for a team like "North Middlesex"
+  // whose first word alone ("north") collides with a different, real
+  // team ("North County"). Checked first in opponentLogoSrc below, so a
+  // team that needs this disambiguation can get its own unique
+  // BUNDLED_LOGOS/opponentLogos entry without disturbing every other
+  // team's existing first-word key.
+  function normalizeOpponentFullKey(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    return cleaned.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
   function hashColor(str) {
     let hash = 0;
@@ -188,8 +213,9 @@
     return `<span class="scheduleTeamBadge hasLogo"><img src="assets/images/header-logo.png" alt="ASL Bengals"></span>`;
   }
   function opponentLogoSrc(name) {
+    const fullKey = normalizeOpponentFullKey(name);
     const key = normalizeOpponentKey(name);
-    return opponentLogos[key] || BUNDLED_LOGOS[key] || null;
+    return opponentLogos[fullKey] || opponentLogos[key] || BUNDLED_LOGOS[fullKey] || BUNDLED_LOGOS[key] || null;
   }
   function opponentBadgeHtml(name) {
     const logo = opponentLogoSrc(name);
