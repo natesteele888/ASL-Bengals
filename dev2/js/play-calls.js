@@ -3995,6 +3995,32 @@ function buildCard(combo, opts) {
   // actually applies -- this only ever gets populated by the dynamic
   // toggle built further down, for a play whose formation declares one.
   const alignmentValues = {};
+  // Nathan: "1 play could go to the 3 on a call to the right and the 2 on
+  // a call to the left... not sure we can accommodate all the play
+  // options correctly" -- the "who carries it" filter (below,
+  // computeBallCarrierPositions) already brute-forces every reachable
+  // toggle combo through the real renderer, so the MATCHING is accurate,
+  // but the card used to always open on its own hardcoded defaults
+  // regardless of which combo actually produced the match -- filtering
+  // for #3 could open a card defaulted to a state where #2 has it
+  // instead, reading as wrong even though #3 genuinely can carry it
+  // somewhere in the toggle space. opts.initialToggles (set only by
+  // renderBallCarrierResults' own "open" handler; every other caller
+  // passes none, so every existing card is unaffected) seeds the SAME
+  // combo the filter actually found, so what opens is what was promised.
+  if (opts.initialToggles) {
+    const it = opts.initialToggles;
+    if (it.wingSide) wingSide = it.wingSide;
+    if (it.direction) direction = it.direction;
+    if (it.splitSide) splitSide = it.splitSide;
+    if (it.passOn != null) passOn = it.passOn;
+    if (it.bootOn != null) bootOn = it.bootOn;
+    if (it.reverseOn != null) reverseOn = it.reverseOn;
+    if (it.qbSneakOn != null) qbSneakOn = it.qbSneakOn;
+    if (it.counterOn != null) counterOn = it.counterOn;
+    if (it.popVariantOn != null) popVariantOn = it.popVariantOn;
+    if (it.alignmentValues) Object.assign(alignmentValues, it.alignmentValues);
+  }
   const isPlayingRef = { value: false };
 
   // FRONT
@@ -4891,14 +4917,67 @@ window.buildGamePlanEditCard = function (entry, opts) {
 function buildGrid() {
   const grid = document.getElementById('playCallsGrid');
   grid.innerHTML = '';
-  renderBallCarrierFilterBar(grid);
   // renderFormationPicker does its own container.innerHTML = '' -- a
-  // second, nested host keeps that from wiping the filter bar just
+  // second, nested host keeps that from wiping the search box/filter bar
   // added above it (both would otherwise be fighting over the same
   // top-level container).
   const formationHost = document.createElement('div');
+  renderPlaySearchBar(grid, formationHost);
+  renderBallCarrierFilterBar(grid);
   grid.appendChild(formationHost);
   renderFormationPicker(formationHost);
+}
+
+// Nathan: "Coaches and kids will likely want to search for the play name
+// too. can it be a text entry field where they write the name of the
+// play?" Cross-formation, same reasoning as the ball-carrier filter below
+// -- a coach doesn't necessarily remember which formation a play lives
+// under, just its name. Reuses the same buildPlayList()/
+// reachableFormationIdsFor() pair the carrier filter already uses, so a
+// play reachable from both Wing and Split shows once per formation --
+// consistent with how that filter already presents results, not a new
+// convention.
+function renderPlaySearchBar(container, formationHost) {
+  const wrap = document.createElement('div');
+  wrap.className = 'pc-play-search';
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.className = 'pc-play-search-input';
+  input.placeholder = '🔍 Search plays by name…';
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { renderFormationPicker(formationHost); return; }
+    renderPlaySearchResults(formationHost, q);
+  });
+  wrap.appendChild(input);
+  container.appendChild(wrap);
+}
+function renderPlaySearchResults(container, query) {
+  container.innerHTML = '';
+  const matches = [];
+  buildPlayList().forEach((combo) => {
+    if (!combo.label || !combo.label.toLowerCase().includes(query)) return;
+    reachableFormationIdsFor(combo).forEach((formationId) => matches.push({ combo, formationId }));
+  });
+  if (!matches.length) {
+    const note = document.createElement('p');
+    note.className = 'empty-note';
+    note.style.textAlign = 'center';
+    note.textContent = `No plays match "${query}".`;
+    container.appendChild(note);
+    return;
+  }
+  const gridEl = document.createElement('div');
+  gridEl.className = 'formation-play-grid';
+  matches.forEach(({ combo, formationId }) => {
+    const formationMeta = window.Formations.get(formationId);
+    const formationLabel = (formationMeta && formationMeta.name) || 'Wing';
+    const tile = buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationLabel));
+    const nm = tile.querySelector('.play-tile-nm');
+    if (nm) nm.textContent = `${formationLabel} — ${combo.label}`;
+    gridEl.appendChild(tile);
+  });
+  container.appendChild(gridEl);
 }
 
 // ---- "Who carries it?" filter (Nathan: "a way to filter all plays that
@@ -4957,12 +5036,27 @@ function reachableFormationIdsFor(combo) {
   if (combo.authoredFormationId) return [combo.authoredFormationId];
   return combo.noSplit ? ['wing'] : ['wing', 'split'];
 }
+// Returns { carriers, carrierToggles } -- carriers is the same sorted
+// position-number list as before; carrierToggles maps each carrying
+// position to the FIRST toggle combo (in enumeration order) that actually
+// produced it, in the exact shape buildCard's own opts.initialToggles
+// expects. Nathan: "1 play could go to the 3 on a call to the right and
+// the 2 on a call to the left" -- the matching itself was already
+// accurate (it runs the real renderer), but the result tile used to open
+// the card on ITS OWN hardcoded default state, which isn't necessarily
+// the state that makes the filtered position actually carry. Recording
+// which combo did it lets the "open" handler (renderBallCarrierResults,
+// below) seed the card so it opens already showing what was promised.
 function computeBallCarrierPositions(combo, formationId) {
   const svgNS = 'http://www.w3.org/2000/svg';
   const carriers = new Set();
-  const record = (stage) => {
+  const carrierToggles = {};
+  const record = (stage, toggleState) => {
     (stage._lastRenderedPaths || []).forEach((p) => {
-      if (p.isBall && p.player != null) carriers.add(p.player);
+      if (p.isBall && p.player != null) {
+        carriers.add(p.player);
+        if (!(p.player in carrierToggles)) carrierToggles[p.player] = toggleState;
+      }
     });
   };
   if (formationId === 'split') {
@@ -4980,12 +5074,12 @@ function computeBallCarrierPositions(combo, formationId) {
         try {
           window.renderSplitDiagram(stage, combo.playKey, splitSide,
             combo.hasInsideOutside ? 'Outside' : null, 'A', 'seattle', 'seattle', passOn, null, 'pocket');
-          record(stage);
+          record(stage, { splitSide, passOn });
         } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
         document.body.removeChild(stage);
       });
     });
-    return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+    return { carriers: [...carriers].sort((a, b) => (a > b ? 1 : -1)), carrierToggles };
   }
   const alignmentCombos = cartesianAlignmentCombos(combo.alignmentToggles);
   const boolDims = [];
@@ -5005,14 +5099,18 @@ function computeBallCarrierPositions(combo, formationId) {
             window.renderCardDiagram(stage, combo.playKey, direction, wingSide, null, false, null,
               false, !!bools.boot, null, !!bools.counter, !!bools.popVariant, formationId, false,
               alignmentValues, !!bools.qbSneak, !!bools.reverse);
-            record(stage);
+            record(stage, {
+              direction, wingSide, alignmentValues,
+              bootOn: !!bools.boot, reverseOn: !!bools.reverse,
+              qbSneakOn: !!bools.qbSneak, counterOn: !!bools.counter, popVariantOn: !!bools.popVariant,
+            });
           } catch (e) { /* a combo this play genuinely can't reach -- skip it */ }
           document.body.removeChild(stage);
         });
       });
     });
   });
-  return [...carriers].sort((a, b) => (a > b ? 1 : -1));
+  return { carriers: [...carriers].sort((a, b) => (a > b ? 1 : -1)), carrierToggles };
 }
 
 function renderBallCarrierFilterBar(container) {
@@ -5066,8 +5164,9 @@ function renderBallCarrierResults(container, positionNum) {
   const matches = [];
   buildPlayList().forEach((combo) => {
     reachableFormationIdsFor(combo).forEach((formationId) => {
-      if (computeBallCarrierPositions(combo, formationId).includes(positionNum)) {
-        matches.push({ combo, formationId });
+      const result = computeBallCarrierPositions(combo, formationId);
+      if (result.carriers.includes(positionNum)) {
+        matches.push({ combo, formationId, initialToggles: result.carrierToggles[positionNum] });
       }
     });
   });
@@ -5078,14 +5177,47 @@ function renderBallCarrierResults(container, positionNum) {
     gridEl.replaceWith(note);
     return;
   }
-  matches.forEach(({ combo, formationId }) => {
+  matches.forEach(({ combo, formationId, initialToggles }) => {
     const formationMeta = window.Formations.get(formationId);
     const formationLabel = (formationMeta && formationMeta.name) || 'Wing';
-    const tile = buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationLabel));
+    const tile = buildPlayTile(combo, formationId, () => renderPlayDetail(container, combo, formationId, formationLabel, initialToggles));
     const nm = tile.querySelector('.play-tile-nm');
     if (nm) nm.textContent = `${formationLabel} — ${combo.label}`;
+    // The matching itself is accurate (computeBallCarrierPositions runs
+    // the real renderer), but WHICH call actually gives this position the
+    // ball varies play to play -- spelling it out here, plus seeding the
+    // opened card with this exact combo (initialToggles, above), is what
+    // actually fixes "1 play could go to the 3 on a call to the right and
+    // the 2 on a call to the left" reading as inaccurate.
+    const condition = describeInitialToggles(initialToggles, combo);
+    if (condition) {
+      const cap = document.createElement('div');
+      cap.className = 'pc-carrier-condition';
+      cap.textContent = `on ${condition}`;
+      tile.appendChild(cap);
+    }
     gridEl.appendChild(tile);
   });
+}
+
+function describeInitialToggles(it, combo) {
+  if (!it) return '';
+  if (it.splitSide) return `Split ${it.splitSide}` + (it.passOn ? ', Pass' : '');
+  const parts = [`Wing ${it.wingSide}`, `Dir ${it.direction}`];
+  if (it.alignmentValues && combo.alignmentToggles) {
+    combo.alignmentToggles.forEach((toggle) => {
+      const valId = it.alignmentValues[toggle.id];
+      if (valId == null) return;
+      const val = (toggle.values || []).find((v) => v.id === valId);
+      parts.push(`${toggle.label} ${val ? val.label : valId}`);
+    });
+  }
+  if (it.bootOn) parts.push('Boot');
+  if (it.reverseOn) parts.push('Reverse');
+  if (it.qbSneakOn) parts.push('QB Sneak');
+  if (it.counterOn) parts.push('Counter');
+  if (it.popVariantOn) parts.push('Pop 2');
+  return parts.join(', ');
 }
 
 function pcBackButton(label, onClick) {
@@ -5610,7 +5742,7 @@ function buildPlayTile(combo, formationId, onOpen) {
   return tile;
 }
 
-function renderPlayDetail(container, combo, formationId, formationName) {
+function renderPlayDetail(container, combo, formationId, formationName, initialToggles) {
   container.innerHTML = '';
   container.appendChild(pcBackButton('← ' + formationName + ' plays', () => renderFormationPlays(container, formationId, formationName)));
 
@@ -5635,7 +5767,7 @@ function renderPlayDetail(container, combo, formationId, formationName) {
   // collapsed to Shotgun/Wing geometry, which buildCard previously had no
   // way to represent at all (see its own formationLabel/
   // registryFormationId() comments).
-  body.appendChild(buildCard(combo, { lockFormation: formationId === 'split' ? 'split' : (formationId === 'wing' ? 'shotgun' : formationId) }));
+  body.appendChild(buildCard(combo, { lockFormation: formationId === 'split' ? 'split' : (formationId === 'wing' ? 'shotgun' : formationId), initialToggles }));
   item.appendChild(body);
   container.appendChild(item);
 }

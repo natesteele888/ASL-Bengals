@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261002m">
+<link rel="stylesheet" href="css/styles.css?v=20261002n">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -1403,7 +1403,6 @@
   <div style="text-align:center;margin-bottom:8px;">
     <button id="pcInfoBtn" class="pcInfoBtn">i</button>
   </div>
-  <div id="playCallsCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-bottom:8px;"></div>
   <div class="play-grid" id="playCallsGrid"></div>
   <div class="hint" style="max-width:700px;margin:10px auto 0;text-align:center;font-size:11px;color:#999;">Tap a play to open it. Each card has its own Wing L/R and Direction L/R toggle (or, in Split formation, Split L/R and a Pass switch). Tap ▶ to watch the play, tap a player (in Wing or Split) to give him an orange glow so he's easy to track, tap the flip icon to see the signal call.</div>
 </div>
@@ -2402,7 +2401,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261002m';
+  const BUILD_V = '20261002n';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
