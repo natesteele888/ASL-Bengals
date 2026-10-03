@@ -546,12 +546,30 @@
     return true;
   }
 
+  // Real back-button support (js/nav-history.js). If closeBuilder() comes
+  // back false (coach backed out of the "discard changes?" confirm), the
+  // browser has already stepped back by the time that resolves --
+  // re-pushing keeps the overlay's open state and real history depth in
+  // sync instead of leaving it open with nothing left to back out of it
+  // with (same pattern js/two-minute-drill.js's own in-progress-drive
+  // confirm now uses).
+  function gameplanBuilderBackUndo() {
+    if (!closeBuilder() && window.NavHistory) {
+      window.NavHistory.push('gameplan', gameplanBuilderBackUndo);
+    }
+  }
+
   let wired = false;
   function wire() {
     if (wired) return;
     wired = true;
     const closeBtn = document.getElementById('gpbCloseBtn');
-    if (closeBtn) closeBtn.addEventListener('click', closeBuilder);
+    // Routed through NavHistory.goBack(), not closeBuilder() directly --
+    // see js/schedule.js's identical pattern/comment.
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+      if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+      else closeBuilder();
+    });
     const saveBtn = document.getElementById('gpbSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', saveBuilderDraft);
     // Nathan: "For defense, you can set your defensive alignments." Points
@@ -564,6 +582,13 @@
     const openDefenseBtn = document.getElementById('gpbOpenDefenseBtn');
     if (openDefenseBtn) openDefenseBtn.addEventListener('click', () => {
       if (!closeBuilder()) return;
+      // Closed directly above (not via goBack()) since this needs the
+      // synchronous true/false result first -- NavHistory.consumeTop()
+      // (js/nav-history.js) brings the pushed 'gameplan' entry and real
+      // history depth back in sync with what just closed, without
+      // re-running its undo (this already WAS the undo, just triggered a
+      // different way).
+      if (window.NavHistory) window.NavHistory.consumeTop();
       if (window.openCoachToolsTab) window.openCoachToolsTab('playbuilder');
       requestAnimationFrame(() => {
         const defBtn = document.querySelector('#pbTopModeToggle [data-mode="defense"]');
@@ -578,6 +603,7 @@
     const openDepthChartBtn = document.getElementById('gpbOpenDepthChartBtn');
     if (openDepthChartBtn) openDepthChartBtn.addEventListener('click', () => {
       if (!closeBuilder()) return;
+      if (window.NavHistory) window.NavHistory.consumeTop();
       if (window.openCoachToolsTab) window.openCoachToolsTab('depthchart');
     });
   }
@@ -601,6 +627,9 @@
     // dark-mode coach gets a bright cream overlay every time.
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     overlay.style.background = isDark ? '#161616' : '#f4f2ee';
+    // Real back-button support (js/nav-history.js) -- see
+    // gameplanBuilderBackUndo, above.
+    if (window.NavHistory) window.NavHistory.push('gameplan', gameplanBuilderBackUndo);
     state.status = 'Loading…';
     renderStatus();
     Promise.all([

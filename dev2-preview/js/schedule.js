@@ -2412,13 +2412,26 @@
     // down as the list was, showing whatever section happens to fall at
     // that same pixel offset instead of the hero at the top.
     window.scrollTo(0, 0);
+    // Real back-button support (js/nav-history.js) -- doCloseDetailUI is
+    // the actual closer, reused both here (as the undo a hardware back or
+    // #scheduleBackBtn eventually triggers) and by closeDetail() itself
+    // (for Save/Delete's own direct close, below).
+    if (window.NavHistory) window.NavHistory.push('schedule-detail', doCloseDetailUI);
   }
 
-  function closeDetail() {
+  function doCloseDetailUI() {
     current = null;
     document.getElementById('scheduleDetail').style.display = 'none';
     document.getElementById('scheduleListWrap').style.display = '';
     renderList();
+  }
+  // Public close -- called directly by Save/Delete success (not via the
+  // back button), so the pushed history entry from openDetail is still
+  // open; consumeTop() closes it out in sync rather than leaving a
+  // phantom entry a later back press would wrongly consume.
+  function closeDetail() {
+    doCloseDetailUI();
+    if (window.NavHistory) window.NavHistory.consumeTop();
   }
 
   // Nathan (follow-up): "Teams on your schedule should also have their
@@ -3020,7 +3033,14 @@
     if (controlsWired) return;
     controlsWired = true;
     document.getElementById('scheduleNewBtn').addEventListener('click', () => { current = null; openDetail(null); });
-    document.getElementById('scheduleBackBtn').addEventListener('click', closeDetail);
+    // Routed through NavHistory.goBack() (js/nav-history.js), not
+    // closeDetail() directly -- a real history.back() fires popstate,
+    // which runs doCloseDetailUI() as the undo, keeping an on-screen tap
+    // and a hardware back press on the exact same code path.
+    document.getElementById('scheduleBackBtn').addEventListener('click', () => {
+      if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+      else closeDetail();
+    });
     document.getElementById('scheduleSaveBtn').addEventListener('click', saveCurrent);
     document.getElementById('scheduleDeleteBtn').addEventListener('click', deleteCurrent);
   }

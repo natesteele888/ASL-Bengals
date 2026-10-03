@@ -4944,9 +4944,27 @@ function renderPlaySearchBar(container, formationHost) {
   input.type = 'search';
   input.className = 'pc-play-search-input';
   input.placeholder = '🔍 Search plays by name…';
+  // Real back-button support (js/nav-history.js) -- pushes ONE entry on
+  // the first non-empty keystroke (entering "search mode"), not one per
+  // keystroke; later keystrokes just update results. Clearing the box
+  // (by hand OR via the undo a back press runs) leaves search mode and
+  // consumes that same entry either way, so the two stay in sync.
+  let searching = false;
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { renderFormationPicker(formationHost); return; }
+    if (!q) {
+      if (searching) { searching = false; if (window.NavHistory) window.NavHistory.consumeTop(); }
+      renderFormationPicker(formationHost);
+      return;
+    }
+    if (!searching) {
+      searching = true;
+      if (window.NavHistory) window.NavHistory.push('play-search', () => {
+        searching = false;
+        input.value = '';
+        renderFormationPicker(formationHost);
+      });
+    }
     renderPlaySearchResults(formationHost, q);
   });
   wrap.appendChild(input);
@@ -5143,7 +5161,7 @@ function renderBallCarrierFilterBar(container) {
 
 function renderBallCarrierResults(container, positionNum) {
   container.innerHTML = '';
-  container.appendChild(pcBackButton('← Formations', () => buildGrid()));
+  container.appendChild(pcPushLevel('← Formations', 'carrier-results', () => buildGrid()));
   const title = document.createElement('h3');
   title.className = 'formation-play-title';
   title.textContent = `Plays that can give #${positionNum} the ball`;
@@ -5220,12 +5238,32 @@ function describeInitialToggles(it, combo) {
   return parts.join(', ');
 }
 
+// Real back-button support (js/nav-history.js) -- the button itself always
+// routes through NavHistory.goBack(), so an on-screen tap and a hardware
+// back press run the exact same undo. Every real caller ALSO pushes
+// `onClick` as that undo at the same moment it builds this button (see
+// pcPushLevel, below) -- onClick is still taken as a param here (not
+// derived from the stack) so a NavHistory-less fallback never breaks.
 function pcBackButton(label, onClick) {
   const btn = document.createElement('button');
   btn.className = 'pc-back-btn';
   btn.textContent = label;
-  btn.addEventListener('click', onClick);
+  btn.addEventListener('click', () => {
+    if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+    else onClick();
+  });
   return btn;
+}
+// Pushes a NavHistory entry for a new drill-down level AND returns its
+// own pcBackButton, built from the SAME onBack closure -- one call
+// covers both halves of "how this level can be left" instead of letting
+// them drift into two different functions. buttonLabel is the real,
+// user-facing "← ..." text; navLabel is only ever used internally
+// (NavHistory's own console-error label if an undo throws), so it
+// doesn't need to match exactly.
+function pcPushLevel(buttonLabel, navLabel, onBack) {
+  if (window.NavHistory) window.NavHistory.push(navLabel, onBack);
+  return pcBackButton(buttonLabel, onBack);
 }
 
 // One box shared by every formation card, not a per-formation crop --
@@ -5320,7 +5358,7 @@ function renderFormationPicker(container) {
     cap.className = 'formation-card-cap';
     cap.textContent = f.name;
     card.appendChild(cap);
-    card.addEventListener('click', () => renderFormationPlays(container, f.id, f.name));
+    card.addEventListener('click', () => renderFormationPlays(container, f.id, f.name, false, { pushLevel: true }));
     wrap.appendChild(card);
   });
   container.appendChild(wrap);
@@ -5340,9 +5378,29 @@ function renderFormationPicker(container) {
 // fully land before it reads.
 let modifyRemovalChain = Promise.resolve();
 
-function renderFormationPlays(container, formationId, formationName, modifyMode) {
+// navOpts.pushLevel -- real back-button support (js/nav-history.js).
+// This function is called 3 different ways: a genuine fresh drill-in from
+// renderFormationPicker's own card click (the ONLY case that should push
+// a new history entry); as the Modify-mode toggle button's own re-render
+// of this SAME level with a different modifyMode (lines below -- not a
+// navigation at all, pushing here would wrongly treat toggling Modify as
+// "went somewhere new"); and as renderPlayDetail's own back-button undo,
+// redrawing this SAME level on the way out of the card -- pushing THERE
+// would double-push on every single step back out of a play (confirmed
+// live by a dedicated test: depth stayed flat across back presses instead
+// of shrinking, because each undo re-pushed the very entry it was
+// supposed to be consuming). Defaulting to "don't push" and making the
+// one real entry point opt in via {pushLevel:true} keeps all 3 cases
+// correct without three different functions.
+function renderFormationPlays(container, formationId, formationName, modifyMode, navOpts) {
+  navOpts = navOpts || {};
   container.innerHTML = '';
-  container.appendChild(pcBackButton('← Formations', () => renderFormationPicker(container)));
+  const onBackToFormations = () => renderFormationPicker(container);
+  if (navOpts.pushLevel) {
+    container.appendChild(pcPushLevel('← Formations', 'formation:' + formationId, onBackToFormations));
+  } else {
+    container.appendChild(pcBackButton('← Formations', onBackToFormations));
+  }
 
   const titleRow = document.createElement('div');
   titleRow.className = 'formation-play-title-row';
@@ -5744,7 +5802,7 @@ function buildPlayTile(combo, formationId, onOpen) {
 
 function renderPlayDetail(container, combo, formationId, formationName, initialToggles) {
   container.innerHTML = '';
-  container.appendChild(pcBackButton('← ' + formationName + ' plays', () => renderFormationPlays(container, formationId, formationName)));
+  container.appendChild(pcPushLevel('← ' + formationName + ' plays', 'play:' + combo.playKey, () => renderFormationPlays(container, formationId, formationName)));
 
   // Same accordion-item/accordion-body wrapper the old flat list used,
   // pre-opened -- buildCard's own flip-card CSS (.accordion-body .card-outer)

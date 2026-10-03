@@ -331,13 +331,26 @@
     document.getElementById('practicesListWrap').style.display = 'none';
     document.getElementById('practicesDetail').style.display = '';
     renderDetail();
+    // Real back-button support (js/nav-history.js) -- doCloseDetailUI is
+    // the actual closer, reused both as the undo a hardware back or
+    // #practicesBackBtn eventually triggers, and by closeDetail() itself
+    // (Save/Delete's own direct close, below).
+    if (window.NavHistory) window.NavHistory.push('practices-detail', doCloseDetailUI);
   }
 
-  function closeDetail() {
+  function doCloseDetailUI() {
     current = null;
     document.getElementById('practicesDetail').style.display = 'none';
     document.getElementById('practicesListWrap').style.display = '';
     renderList();
+  }
+  // Public close -- called directly by Save/Delete success (not via the
+  // back button), so the pushed history entry from openDetail is still
+  // open; consumeTop() closes it out in sync rather than leaving a
+  // phantom entry a later back press would wrongly consume.
+  function closeDetail() {
+    doCloseDetailUI();
+    if (window.NavHistory) window.NavHistory.consumeTop();
   }
 
   function renderDetail() {
@@ -695,7 +708,12 @@
     if (controlsWired) return;
     controlsWired = true;
     document.getElementById('practicesNewBtn').addEventListener('click', () => { current = null; openDetail(null); });
-    document.getElementById('practicesBackBtn').addEventListener('click', closeDetail);
+    // Routed through NavHistory.goBack() (js/nav-history.js), not
+    // closeDetail() directly -- see js/schedule.js's identical pattern.
+    document.getElementById('practicesBackBtn').addEventListener('click', () => {
+      if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+      else closeDetail();
+    });
     document.getElementById('practicesSaveBtn').addEventListener('click', saveCurrent);
     document.getElementById('practicesDeleteBtn').addEventListener('click', deleteCurrent);
   }

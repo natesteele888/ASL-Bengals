@@ -325,7 +325,15 @@
     }
   }
 
-  function setActiveTab(key) {
+  // Real back-button support (js/nav-history.js). initCoachToolsNav() (below)
+  // calls this on every Coach Tools entry with whatever activeTab already
+  // was -- a no-op transition most of the time, so the fromKey!==key guard
+  // naturally skips pushing then, and only a REAL tap onto a different tab
+  // pushes an undo step, nested correctly under the section-level push
+  // setMode('coachtools') already makes.
+  function setActiveTab(key, navOpts) {
+    navOpts = navOpts || {};
+    const fromKey = activeTab;
     activeTab = key;
     const tab = TABS.find(t => t.key === key);
     if (tab) activeCategory = tab.category;
@@ -335,6 +343,9 @@
     });
     renderNav();
     if (tab) tab.init();
+    if (!navOpts.fromHistory && fromKey && fromKey !== key && window.NavHistory) {
+      window.NavHistory.push('coachtab:' + key, () => setActiveTab(fromKey, { fromHistory: true }));
+    }
   }
 
   window.initCoachToolsNav = function () {

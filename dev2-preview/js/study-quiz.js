@@ -23,7 +23,21 @@ const thisweekModeEl = document.getElementById('thisweekMode');
 const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 const scheduleModeEl = document.getElementById('scheduleMode');
 const standingsModeEl = document.getElementById('standingsMode');
-function setMode(mode){
+// Real back-button support (js/nav-history.js) -- setMode is the single
+// choke point every top-level section switch AND every Play sub-tab
+// switch already goes through (setSection, below, just delegates to it),
+// so instrumenting it here covers both in one place. currentMode starts
+// from whichever modePanel the static markup already marked .show --
+// confirmed nothing calls setMode() at boot, only in response to a real
+// click or an explicit navigation call, so there's no "initial" call to
+// exclude from pushing; every real call here is a genuine mode change.
+let currentMode = (function () {
+  const shown = document.querySelector('.modePanel.show');
+  return shown ? shown.id.replace(/Mode$/, '').toLowerCase() : 'playcalls';
+})();
+function setMode(mode, navOpts){
+  navOpts = navOpts || {};
+  const fromMode = currentMode;
   modeTabsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   studyModeEl.classList.toggle('show', mode==='study');
   quizModeEl.classList.toggle('show', mode==='quiz');
@@ -52,6 +66,13 @@ function setMode(mode){
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
   if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
 
+  currentMode = mode;
+  // navOpts.fromHistory is set only when THIS call is itself running as
+  // an undo (see below) -- never push again in that case, or back/forward
+  // would fight itself. A no-op mode (already there) never pushes either.
+  if (!navOpts.fromHistory && fromMode !== mode && window.NavHistory) {
+    window.NavHistory.push('mode:' + mode, () => setMode(fromMode, { fromHistory: true }));
+  }
 }
 // Nathan: "I don't want them hidden under more, but need a way to show
 // them" -- reverses the earlier "More" dropdown; all six Play tabs are
