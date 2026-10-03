@@ -2720,25 +2720,49 @@
       if (GAME_HUD_PREVIEW) el.twoMinDrillOverlay.style.background = '#0c0d0f';
       else if (isDark) el.twoMinDrillOverlay.style.background = '#161616';
       else el.twoMinDrillOverlay.style.background = '#f4f2ee';
+      // Real back-button support (js/nav-history.js) -- undo is
+      // attemptCloseTwoMinDrillOverlay (below), the SAME confirm-then-close
+      // logic the X button already ran directly. If the coach says no to
+      // quitting an in-progress drive, the browser has already stepped
+      // back by the time that confirm resolves -- re-pushing keeps the
+      // overlay's open state and real history depth in sync instead of
+      // silently leaving it open with nothing left to back out of it with.
+      if (window.NavHistory) window.NavHistory.push('twominute', twoMinDrillBackUndo);
     }
   };
+  function closeTwoMinDrillOverlayUI() {
+    if (el.twoMinDrillOverlay) {
+      el.twoMinDrillOverlay.classList.remove('show');
+      el.twoMinDrillOverlay.style.display = 'none';
+    }
+  }
+  // Nathan: "if you hit the X to close it, it should ask you to confirm if
+  // you want to quit the game. If you proceed it will stop the game and
+  // close. If you say no, it will keep the game going." Only a drive
+  // actually in progress has anything to lose -- closing from the start/
+  // end/leaderboard screens (state.running is false there) just closes
+  // immediately. Returns whether it actually closed, same shape as
+  // gameplan-builder.js's own closeBuilder().
+  function attemptCloseTwoMinDrillOverlay() {
+    if (state.running) {
+      const proceed = window.confirm('Quit this 2 Minute Drill? Your current drive will end.');
+      if (!proceed) return false;
+      endGame(); // stops the clock/crowd audio and saves the result, same cleanup as the clock hitting 0
+    }
+    closeTwoMinDrillOverlayUI();
+    return true;
+  }
+  function twoMinDrillBackUndo() {
+    if (!attemptCloseTwoMinDrillOverlay() && window.NavHistory) {
+      window.NavHistory.push('twominute', twoMinDrillBackUndo);
+    }
+  }
   if (el.twoMinDrillCloseBtn) {
+    // Routed through NavHistory.goBack(), not attemptCloseTwoMinDrillOverlay
+    // directly -- see js/schedule.js's identical pattern/comment.
     el.twoMinDrillCloseBtn.addEventListener('click', () => {
-      // Nathan: "if you hit the X to close it, it should ask you to
-      // confirm if you want to quit the game. If you proceed it will stop
-      // the game and close. If you say no, it will keep the game going."
-      // Only a drive actually in progress has anything to lose -- closing
-      // from the start/end/leaderboard screens (state.running is false
-      // there) just closes immediately, same as before.
-      if (state.running) {
-        const proceed = window.confirm('Quit this 2 Minute Drill? Your current drive will end.');
-        if (!proceed) return;
-        endGame(); // stops the clock/crowd audio and saves the result, same cleanup as the clock hitting 0
-      }
-      if (el.twoMinDrillOverlay) {
-        el.twoMinDrillOverlay.classList.remove('show');
-        el.twoMinDrillOverlay.style.display = 'none';
-      }
+      if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+      else attemptCloseTwoMinDrillOverlay();
     });
   }
 

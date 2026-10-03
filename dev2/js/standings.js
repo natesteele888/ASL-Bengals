@@ -862,6 +862,11 @@
     body.innerHTML = opponentPageHtml(game, teamRow);
     listPanel.style.display = 'none';
     detailPanel.style.display = '';
+    // Real back-button support (js/nav-history.js) -- always reachable
+    // from the list (see this function's own comment, above), so going
+    // back always means showStandingsList(), the same place its own
+    // "‹ All Standings" button already goes.
+    if (window.NavHistory) window.NavHistory.push('standings:opponent', () => showStandingsList({ fromHistory: true }));
     const scheduleLink = document.getElementById('standingsOpponentScheduleLink');
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent, teams, games);
@@ -1249,14 +1254,28 @@
   // already hidden (see its own comment), so folding it in here isn't
   // needed and would be unrelated scope.
   const STANDINGS_PANEL_IDS = ['standingsListPanel', 'standingsOpponentDetail', 'standingsPlayoffDetail', 'standingsProbabilitiesDetail', 'standingsAllTeamsDetail'];
-  function showStandingsPanel(activeId) {
+  // Real back-button support (js/nav-history.js). currentStandingsPanel
+  // tracks which of the 5 is up WITHIN an already-open Standings section
+  // -- kept separate from setMode's own currentMode (study-quiz.js),
+  // which only knows "the Standings section is open," not which panel
+  // inside it. navOpts.silent is for initStandingsNav's own unconditional
+  // reset-to-list on every section entry (below) -- not a real user
+  // navigation, so it resyncs the tracked variable without pushing.
+  let currentStandingsPanel = 'standingsListPanel';
+  function showStandingsPanel(activeId, navOpts) {
+    navOpts = navOpts || {};
+    const fromPanel = currentStandingsPanel;
     STANDINGS_PANEL_IDS.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.style.display = (id === activeId) ? '' : 'none';
     });
+    currentStandingsPanel = activeId;
+    if (!navOpts.fromHistory && !navOpts.silent && fromPanel !== activeId && window.NavHistory) {
+      window.NavHistory.push('standings:' + activeId, () => showStandingsPanel(fromPanel, { fromHistory: true }));
+    }
   }
 
-  function showStandingsList() { showStandingsPanel('standingsListPanel'); }
+  function showStandingsList(navOpts) { showStandingsPanel('standingsListPanel', navOpts); }
 
   function showPlayoffPicture() {
     showStandingsPanel('standingsPlayoffDetail');
@@ -1279,23 +1298,37 @@
   window.initStandingsNav = async function () {
     const container = document.getElementById('standingsTableWrap');
     if (!container) return;
+    // Every back button here routes through NavHistory.goBack() (js/
+    // nav-history.js), not showStandingsList() directly -- a real
+    // history.back() fires popstate, which runs the matching undo (always
+    // showStandingsList() for these 4, see showStandingsPanel/
+    // showOpponentPage above), keeping an on-screen tap and a hardware
+    // back press on the exact same code path.
+    const goBackToList = () => {
+      if (window.NavHistory && window.NavHistory.depth() > 0) window.NavHistory.goBack();
+      else showStandingsList();
+    };
     if (!backBtnWired) {
       const backBtn = document.getElementById('standingsOpponentBackBtn');
-      if (backBtn) { backBtn.addEventListener('click', showStandingsList); backBtnWired = true; }
+      if (backBtn) { backBtn.addEventListener('click', goBackToList); backBtnWired = true; }
       const playoffBackBtn = document.getElementById('standingsPlayoffBackBtn');
-      if (playoffBackBtn) { playoffBackBtn.addEventListener('click', showStandingsList); }
+      if (playoffBackBtn) { playoffBackBtn.addEventListener('click', goBackToList); }
       const playoffOpenBtn = document.getElementById('standingsPlayoffOpenBtn');
       if (playoffOpenBtn) { playoffOpenBtn.addEventListener('click', showPlayoffPicture); }
       const probBackBtn = document.getElementById('standingsProbabilitiesBackBtn');
-      if (probBackBtn) { probBackBtn.addEventListener('click', showStandingsList); }
+      if (probBackBtn) { probBackBtn.addEventListener('click', goBackToList); }
       const probOpenBtn = document.getElementById('standingsProbabilitiesOpenBtn');
       if (probOpenBtn) { probOpenBtn.addEventListener('click', showPlayoffProbabilities); }
       const allTeamsBackBtn = document.getElementById('standingsAllTeamsBackBtn');
-      if (allTeamsBackBtn) { allTeamsBackBtn.addEventListener('click', showStandingsList); }
+      if (allTeamsBackBtn) { allTeamsBackBtn.addEventListener('click', goBackToList); }
       const allTeamsOpenBtn = document.getElementById('standingsAllTeamsOpenBtn');
       if (allTeamsOpenBtn) { allTeamsOpenBtn.addEventListener('click', showAllBengalsTeams); }
     }
-    showStandingsList();
+    // Silent -- this unconditionally resets to the list every time the
+    // Standings SECTION is entered (not a real user navigation within an
+    // already-open section), so it just resyncs currentStandingsPanel
+    // without pushing a history entry for it.
+    showStandingsList({ silent: true });
     container.innerHTML = '<div class="hint" style="text-align:center;">Loading standings…</div>';
     const [data, games] = await Promise.all([
       loadStandings(),
