@@ -296,5 +296,156 @@
     return doc;
   }
 
+  // ---------------------------------------------------------------------
+  // Quick Reference PDF -- Nathan: "I need a simplified version for the
+  // print out. I don't need to see the formation and the play diagram
+  // itself. I just need a list of Play Calls with available Formations to
+  // run it out of. Along with lists of plays per formations... For
+  // example 'Sweep' then have pills for each formation you can run it in.
+  // Then you can have Formations with pills of each play you run out of
+  // it... We are trying to get too granular with the play call sheets for
+  // each week -- need to be simple organized lists." A second, additive
+  // print option alongside generateGamePlanPDF above (nothing asked for
+  // that detailed one to go away) -- no diagrams, no rasterization, just
+  // two cross-referenced text lists built from the SAME Game Plan data
+  // and the SAME formationKey/formationName/formationColor/FORMATION_ORDER
+  // helpers above, so formation naming/coloring/order can't drift between
+  // the two PDFs.
+  // ---------------------------------------------------------------------
+
+  // A play's own bare name (e.g. "Sweep"), the one thing this reference
+  // groups by -- not window.GamePlan.describe()'s own compound label
+  // (formation + toggles + name), which would make "Sweep • Wing" and
+  // "Sweep • I Wing" look like two different calls instead of the same
+  // call available from two formations, exactly backwards from what was
+  // asked for here.
+  function playNameFor(entry) {
+    return entry.label || entry.playKey || entry.key || '?';
+  }
+
+  function measurePillWidth(doc, text) {
+    return doc.getTextWidth(text) + 10;
+  }
+  const PILL_H = 13;
+  function drawPill(doc, x, y, text, color, textColor) {
+    const w = measurePillWidth(doc, text);
+    doc.setFillColor(color);
+    doc.roundedRect(x, y, w, PILL_H, PILL_H / 2, PILL_H / 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(textColor || '#ffffff');
+    doc.text(text, x + w / 2, y + PILL_H / 2 + 2.6, { align: 'center' });
+    return w;
+  }
+  // Flows pills left-to-right inside [x, x+maxW], wrapping to a new line
+  // (indented back to x, not hanging under the label) whenever the next
+  // pill wouldn't fit -- returns the y position just below the last line
+  // drawn, ready for the next row.
+  function flowPills(doc, x, y, maxW, pills) {
+    const GAP = 5, LINE_H = PILL_H + 4;
+    let curX = x, curY = y;
+    pills.forEach((p) => {
+      const w = measurePillWidth(doc, p.text);
+      if (curX > x && curX + w > x + maxW) { curX = x; curY += LINE_H; }
+      drawPill(doc, curX, curY, p.text, p.color, p.textColor);
+      curX += w + GAP;
+    });
+    return curY + LINE_H;
+  }
+
+  async function generateQuickReferencePDF(plays) {
+    if (!window.GamePlan) throw new Error('Game Plan data not loaded yet.');
+    if (!window.jspdf) throw new Error('PDF library not loaded yet.');
+    if (window.loadLiveEditsIntoData) await window.loadLiveEditsIntoData();
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const PAGE_W = 792, PAGE_H = 612, MARGIN = 20;
+
+    // Two cross-referencing maps off the SAME entries -- playName ->
+    // which formationKeys it's available in, and formationKey -> which
+    // playNames are available from it. Deliberately dedupes by name alone
+    // (not name+direction+toggles) -- a Left call and a Right call of the
+    // same play are the same CALL for "what can I run from this
+    // formation" purposes, not two different ones.
+    const byPlay = new Map();
+    const byFormation = new Map();
+    for (const raw of (plays || [])) {
+      const entry = window.GamePlan.resolveForRender(raw);
+      if (!entry) continue;
+      const fKey = formationKey(entry);
+      const name = playNameFor(entry);
+      if (!byPlay.has(name)) byPlay.set(name, new Set());
+      byPlay.get(name).add(fKey);
+      if (!byFormation.has(fKey)) byFormation.set(fKey, new Set());
+      byFormation.get(fKey).add(name);
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor('#111111');
+    doc.text('ASL Bengals — Game Plan Quick Reference', MARGIN, MARGIN + 10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor('#666666');
+    doc.text(new Date().toLocaleDateString(), PAGE_W - MARGIN, MARGIN + 10, { align: 'right' });
+
+    const COL_GAP = 24;
+    const COL_W = (PAGE_W - 2 * MARGIN - COL_GAP) / 2;
+    const leftX = MARGIN, rightX = MARGIN + COL_W + COL_GAP;
+    const topY = MARGIN + 30;
+
+    function sectionHeader(x, text) {
+      doc.setFillColor('#1a1a1a');
+      doc.rect(x, topY, COL_W, 16, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor('#ffffff');
+      doc.text(text, x + 6, topY + 11.5);
+      return topY + 16 + 10;
+    }
+
+    // LEFT -- By Play, alphabetical (a coach scanning for a specific call
+    // by name), each with a pill per formation it's available in.
+    let y1 = sectionHeader(leftX, `BY PLAY  (${byPlay.size})`);
+    [...byPlay.keys()].sort((a, b) => a.localeCompare(b)).forEach((name) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor('#111111');
+      doc.text(name, leftX, y1);
+      y1 += 11;
+      const pills = [...byPlay.get(name)]
+        .sort((a, b) => FORMATION_ORDER.indexOf(a) - FORMATION_ORDER.indexOf(b))
+        .map((fKey) => ({ text: formationName(fKey), color: formationColor(fKey) }));
+      y1 = flowPills(doc, leftX, y1, COL_W, pills) + 5;
+    });
+
+    // RIGHT -- By Formation, in the same real tile order every other
+    // Game Plan surface uses, each with a (neutral-colored, since the
+    // formation itself already owns the color here) pill per play.
+    let y2 = sectionHeader(rightX, `BY FORMATION  (${byFormation.size})`);
+    const orderedFormationKeys = FORMATION_ORDER.filter((k) => byFormation.has(k))
+      .concat([...byFormation.keys()].filter((k) => !FORMATION_ORDER.includes(k)));
+    orderedFormationKeys.forEach((fKey) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(formationColor(fKey));
+      doc.text(formationName(fKey), rightX, y2);
+      y2 += 11;
+      const pills = [...byFormation.get(fKey)].sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ text: name, color: '#e2e2e2', textColor: '#222222' }));
+      y2 = flowPills(doc, rightX, y2, COL_W, pills) + 5;
+    });
+
+    const buildLabel = window.BUILD_V ? `Build ${window.BUILD_V}` : 'ASL Bengals';
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor('#999999');
+    doc.text(buildLabel, PAGE_W - MARGIN, PAGE_H - 6, { align: 'right' });
+
+    return doc;
+  }
+
   window.generateGamePlanPDF = generateGamePlanPDF;
+  window.generateQuickReferencePDF = generateQuickReferencePDF;
 })();
