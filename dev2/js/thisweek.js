@@ -1124,27 +1124,46 @@
     const pickerGrid = document.getElementById('thisweekPickerGrid');
     const countEl = document.getElementById('thisweekPickerCount');
     if (!pickerGrid) return;
+    pickerGrid.className = 'gameplanGroupList';
     pickerGrid.innerHTML = '';
-    numberedRows().forEach(row => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'gameplanChip' + (isSelected(row) ? ' active' : '');
-      chip.style.setProperty('--chip-color', row.color);
-      chip.textContent = `#${row.number} ${row.label} • ${row.direction}`;
-      chip.addEventListener('click', () => {
-        const idx = pendingSelection.findIndex(p => p.key === row.key && p.direction === row.direction);
-        if (idx >= 0) {
-          pendingSelection.splice(idx, 1);
-        } else {
-          if (pendingSelection.length >= MAX_PLAYS) {
-            alert(`Game Plan is capped at ${MAX_PLAYS} -- remove one first.`);
-            return;
+    const groups = window.GamePlan ? window.GamePlan.pickerGroups() : [];
+    groups.forEach(group => {
+      const card = document.createElement('div');
+      card.className = 'gameplanGroup';
+      const header = document.createElement('div');
+      header.className = 'gameplanGroupHeader';
+      header.style.setProperty('--chip-color', group.color);
+      header.textContent = group.header;
+      card.appendChild(header);
+      const chipsWrap = document.createElement('div');
+      chipsWrap.className = 'gameplanGroupChips';
+      group.entries.forEach(row => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'gameplanChip coachToolsSubChip' + (isSelected(row) ? ' active' : '');
+        chip.style.setProperty('--chip-color', row.color);
+        // Multi-formation group ("Blast"): each chip needs to say which
+        // formation it's from ("Wing L", "I R"), since the header no
+        // longer does. Single-formation group: the header already carries
+        // that (e.g. "5 Guys: 1"), so a chip is just its direction.
+        chip.textContent = group.multi ? `${row.formation} ${row.direction === 'Left' ? 'L' : 'R'}` : row.direction;
+        chip.addEventListener('click', () => {
+          const idx = pendingSelection.findIndex(p => p.key === row.key && p.direction === row.direction);
+          if (idx >= 0) {
+            pendingSelection.splice(idx, 1);
+          } else {
+            if (pendingSelection.length >= MAX_PLAYS) {
+              alert(`Game Plan is capped at ${MAX_PLAYS} -- remove one first.`);
+              return;
+            }
+            pendingSelection.push({ key: row.key, direction: row.direction });
           }
-          pendingSelection.push({ key: row.key, direction: row.direction });
-        }
-        renderEditor();
+          renderEditor();
+        });
+        chipsWrap.appendChild(chip);
       });
-      pickerGrid.appendChild(chip);
+      card.appendChild(chipsWrap);
+      pickerGrid.appendChild(card);
     });
     renderGamePlanList();
     if (countEl) {
