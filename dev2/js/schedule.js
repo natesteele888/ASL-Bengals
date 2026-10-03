@@ -172,6 +172,7 @@
     tantasqua: 'assets/images/opponents/tantasqua.png',
     tyngsboro: 'assets/images/opponents/tyngsboro.png',
     westborough: 'assets/images/opponents/westborough.png',
+    oakmont: 'assets/images/opponents/oakmont.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
