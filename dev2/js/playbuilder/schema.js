@@ -630,6 +630,30 @@
  *   as-is, same shape/precedent as qbSneakRoute -- not keyed by
  *   direction or wingSide (a straight run up the middle has no
  *   handedness, same reasoning qbSneakRoute already applies).
+ * @property {boolean} [hasQbKeep] - true to show a "QB Keep" switch IN
+ *   ADDITION TO Boot for this play (deliberately NOT mutually exclusive
+ *   with Boot the way hasQbSneak is -- Nathan, on I's Sweep: "needs an
+ *   option for QB Keep on top of the Boot option it already has"). The
+ *   real card still locks the two off from each other LIVE once either
+ *   is actually ON (updateBootAvailability()/updateQbKeepAvailability()
+ *   in js/play-calls.js) -- the QB can't both hand it off and keep it on
+ *   the same snap -- but both toggles are always visible together,
+ *   unlike hasQbSneak's own always-replaces-Boot slot. Turning it on
+ *   swaps ONLY #1's own drawn path (qbKeepRoute below) for his normal
+ *   one and makes him the real ball carrier for this render/animation,
+ *   same "swap one thing" shape every sibling toggle here already uses.
+ *   Default false/omitted = no QB Keep switch shows at all.
+ * @property {RoutePoint[]} [qbKeepRoute] - #1's own real "keeps it and
+ *   follows the sweep" path when hasQbKeep is on and the coach has
+ *   actually flipped the switch -- omit if hasQbKeep is false, required
+ *   if it's true. Nathan: "The QB Keep toggle has the QB turning left
+ *   towards the 4, and following all the backs to the right." UNLIKE
+ *   qbSneakRoute/bootRoute (both used as-is, no handedness), this one is
+ *   genuinely NOT symmetric -- "towards the 4" only means left when #4
+ *   actually is on the left -- so author it for Wing:Left (the real case
+ *   described/shown) and js/play-calls.js's own renderCardDiagram
+ *   reflects it live around the formation's real center for Wing:Right,
+ *   the same reflection wingMirrorPlayers already does a few lines away.
  * @property {boolean} [noDirection] - true to hide the Dir L/R toggle for
  *   this play entirely (same shape/precedent as the real, existing
  *   `isQbSneak` case in js/play-calls.js's buildCard, generalized to be

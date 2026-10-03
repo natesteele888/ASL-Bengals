@@ -203,7 +203,7 @@
           // "+ Add to Game Plan," which is additive and direction-specific.
           state.draftPlays = state.draftPlays.filter((p) => p.key !== row.key);
         } else {
-          const cap = window.GamePlan ? window.GamePlan.MAX_PLAYS : 15;
+          const cap = window.GamePlan ? window.GamePlan.MAX_PLAYS : 100;
           if (state.draftPlays.length >= cap) {
             alert(`Game Plan is capped at ${cap} -- remove one first.`);
             return;
