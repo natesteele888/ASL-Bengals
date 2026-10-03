@@ -202,13 +202,23 @@ window.isPlayBuilderAdmin = function(){
 // that would miss anything not specifically taught about preview mode.
 // The real role is never overwritten in localStorage, so exiting preview
 // is just clearing the flag and reloading back to the actual session.
+// 'bengalsPreviewAsPlayer' is spelled out here rather than referencing
+// PREVIEW_KEY -- that var is declared inside the IIFE below, out of
+// scope for these two functions (which sit at top level, between the
+// IIFE above and the one below). Referencing it silently threw a
+// ReferenceError, swallowed by the try/catch, so the flag never
+// actually got set/cleared and Preview was a no-op reload -- found
+// live while checking that kids can't see Game Wizard/Play Builder/
+// Game Plan Builder (they can't, via the real isCoachSession/
+// isApprovedCoachProfile gates -- this bug only broke the coach's own
+// preview-as-player self-check, not any real access control).
 window.enterPlayerPreview = function(){
   if (!window.isApprovedCoachProfile || !window.isApprovedCoachProfile()) return;
-  try { sessionStorage.setItem(PREVIEW_KEY, '1'); } catch(e) {}
+  try { sessionStorage.setItem('bengalsPreviewAsPlayer', '1'); } catch(e) {}
   location.reload();
 };
 window.exitPlayerPreview = function(){
-  try { sessionStorage.removeItem(PREVIEW_KEY); } catch(e) {}
+  try { sessionStorage.removeItem('bengalsPreviewAsPlayer'); } catch(e) {}
   location.reload();
 };
 

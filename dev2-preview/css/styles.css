@@ -163,9 +163,15 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    (transparent, no backdrop) lets the tiger's own black/white outline
    show directly, and reclaims the padding as extra width for the pills. */
 .headerRow img{width:34px;height:34px;object-fit:contain;background:transparent}
-.headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em}
-.headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-.headerRow .hudWordmark{display:none}
+/* Nathan: "It should appear like the 2nd header with BENGALS wordmark
+   next to the bengal head" -- for everyone, not just devices with the
+   ?preview=1 Game HUD theme on (see js/preview-theme.js). The plain
+   text title is the one that's preview-only now, kept only so a device
+   WITHOUT the wordmark asset loaded (it never 404s in practice, but
+   costs nothing as a fallback) still shows a real header. */
+.headerRow h1{color:#fff;font-size:17px;margin:0;letter-spacing:.01em;display:none}
+.headerRow p{color:var(--bengal-orange);font-size:10px;margin:1px 0 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase;display:none}
+.headerRow .hudWordmark{display:block;height:32px;width:auto;object-fit:contain}
 /* Nathan: "on Mobile the name pills are too big and collide with the
    title and resizes the menu... make the title text on the left bigger
    so it all fits in the same size header." At full pill width (170px max
@@ -3191,18 +3197,10 @@ html.gameHudPreview header {
   border-bottom: none;
 }
 html.gameHudPreview .headerRow { position: relative; z-index: 1; }
-/* Jersey wordmark, round 3 -- rounds 1/2 tried to RECREATE the decal look
-   with fonts/CSS (a stroke+shadow fake on Big Shoulders Text). Nathan wants
-   the actual supplied art instead: "the exact PNG of BENGALS... not written
-   text." So the real h1/p text is hidden here (still what the default 99%
-   of users see -- untouched above) and assets/images/bengals-wordmark.png
-   (his own decal photo, cropped to its real bounding box, alpha-transparent
-   background) renders in their place at a height matching the logo. */
-html.gameHudPreview .headerRow h1,
-html.gameHudPreview .headerRow p { display: none; }
-html.gameHudPreview .headerRow .hudWordmark {
-  display: block; height: 32px; width: auto; object-fit: contain;
-}
+/* The h1/p-hidden, wordmark-shown swap used to live here, gated behind
+   this preview theme -- it's since graduated to the real, unconditional
+   default for everyone (see the plain .headerRow h1/p/.hudWordmark rules
+   above), so nothing header-specific is needed in this block anymore. */
 
 html.gameHudPreview .topSections {
   background: #0c0d0f;
