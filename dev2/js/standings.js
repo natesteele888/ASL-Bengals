@@ -616,9 +616,22 @@
       // empty array -- the real read-only tab always passes one, even
       // empty) is exactly that call site; keep it plain text there.
       const hasGamesContext = games !== undefined && games !== null;
+      // Nathan: "we need to incorporate the team logos into the
+      // standings." This was the one team-rendering function in the file
+      // with no logo at all -- Playoff Picture/Probabilities/the team
+      // page/"All Bengals Teams" already call window.teamBadgeHtmlFor
+      // (js/schedule.js), which already does the right thing either way
+      // (our own real logo for a Bengals row via isBengalsTeamName, an
+      // uploaded/bundled opponent logo or a deterministic colored-initials
+      // fallback otherwise) -- reused here rather than a second copy.
+      // Folded INTO the existing clickable button (not a separate badge
+      // next to it) so tapping the logo opens the team page too, same as
+      // tapping the name already does -- no dead tap target next to a
+      // live one.
+      const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(t.team) : '';
       const nameCell = !hasGamesContext
-        ? escapeHtml(t.team)
-        : `<button type="button" class="standingsTeamLink" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${escapeHtml(t.team)} ›</button>`;
+        ? `<span class="standingsTeamCell">${badgeHtml}<span>${escapeHtml(t.team)}</span></span>`
+        : `<button type="button" class="standingsTeamLink standingsTeamCell" data-open-team="${escapeHtml(t.team)}" data-open-opponent="${matchedGame ? escapeHtml(matchedGame.id) : ''}">${badgeHtml}<span>${escapeHtml(t.team)} ›</span></button>`;
       html += `<tr class="${isUs ? 'standingsRowUs' : ''}">` +
         `<td class="standingsPowerCell">${powerRankCellHtml(t, i + 1)}</td>` +
         `<td>${nameCell}${t.division ? `<span class="standingsDivTag">${escapeHtml(t.division)}</span>` : ''}</td>` +

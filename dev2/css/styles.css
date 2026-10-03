@@ -3170,6 +3170,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .standingsDivTag { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; white-space: normal; }
 .standingsTeamLink { background: none; border: none; padding: 0; font: inherit; font-weight: 700;
   color: var(--bengal-orange); cursor: pointer; text-decoration: underline; }
+/* Team logo next to the name in the main standings table -- same
+   .scheduleTeamBadge component every other logo in the app uses (js/
+   schedule.js), just sized down for this dense a row. See js/
+   standings.js's renderTable. */
+.standingsTeamCell { display: flex; align-items: center; gap: 6px; text-align: left; }
+.standingsTeamCell .scheduleTeamBadge { width: 22px; height: 22px; min-width: 22px; min-height: 22px;
+  max-width: 22px; max-height: 22px; font-size: 8px; }
 /* Power rank + week-over-week trend arrow (Nathan: "trending like they do
    in the NFL showing an arrow up or down for where they moved since the
    last week") -- see js/standings.js's computePowerRanks/powerRankCellHtml. */
