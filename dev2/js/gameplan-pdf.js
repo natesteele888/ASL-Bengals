@@ -242,7 +242,7 @@
           if (entry.formation === 'split' && window.renderSplitDiagram) {
             window.renderSplitDiagram(stage, entry.key, entry.splitSide, entry.insideOutside, entry.readPosition, entry.leftCall, entry.rightCall, entry.passOn, null, entry.protection);
           } else {
-            window.renderCardDiagram(stage, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn, entry.reverseOn);
+            window.renderCardDiagram(stage, entry.key, entry.direction, entry.wingSide, null, '4x4', entry.insideOutside, entry.motionOn, entry.bootOn, entry.readPosition, entry.counterOn, entry.popVariantOn, formationId, entry.overloadOn, entry.alignmentValues, entry.qbSneakOn, entry.reverseOn, entry.qbKeepOn);
           }
           const png = await svgToPng(stage, CELL_W, DIAGRAM_H, RASTER_SCALE);
 

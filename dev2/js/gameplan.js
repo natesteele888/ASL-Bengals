@@ -23,7 +23,17 @@
 // ---------------------------------------------------------------------------
 (function () {
 
-  const MAX_PLAYS = 15;
+  // Nathan: "We need to expand the play calls sheet past 15 plays. Let us
+  // add as many as we want." Was a real, original 5-15 target ("choose
+  // 5-15 plays that will appear in the playbook for the week") -- raised
+  // generously rather than removed outright, since gameplan-pdf.js's own
+  // ensureRoom()/newPage() already page-breaks cleanly past one sheet, so
+  // there's no real layout reason to cap this tightly. Not literally
+  // infinite -- still a sane backstop against a runaway bug writing
+  // unbounded data, just far past anything a real week's game plan would
+  // ever reach (the entire live playbook today is under 90 play x
+  // direction rows combined, across every formation).
+  const MAX_PLAYS = 100;
 
   // Same 8-family list window.playbookLiveFamilies() (js/playbook-pdf.js)
   // already encodes, matched against whatever's actually in
@@ -191,7 +201,7 @@
       splitSide: 'Left', insideOutside: def.io, readPosition: def.rp,
       motionOn: false, bootOn: false, qbSneakOn: false, counterOn: false, popVariantOn: false,
       passOn: false, protection: null, overloadOn: false, leftCall: null, rightCall: null, alignmentValues: null,
-      reverseOn: false,
+      reverseOn: false, qbKeepOn: false,
     };
   }
 

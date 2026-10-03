@@ -49,7 +49,11 @@
     northborosouthboro: 'assets/images/opponents/northborosouthboro.png',
   };
   let opponentLogos = {};
-  const MAX_PLAYS = 15;
+  // Delegates to js/gameplan.js's own MAX_PLAYS (same "one real source,
+  // not a second copy that can drift" discipline as numberedRows()/
+  // pickerGroups() just below) -- gameplan.js loads before this file, so
+  // window.GamePlan already exists by the time this line runs.
+  const MAX_PLAYS = window.GamePlan ? window.GamePlan.MAX_PLAYS : 100;
   const MIN_RECOMMENDED = 5;
   const NUM_KEYS = 3;
   // Nathan: "add in Coaches Names with 3 areas to show their 3 KEYS.
@@ -890,7 +894,7 @@
         if (e.formation === 'split' && window.renderSplitDiagram) {
           window.renderSplitDiagram(svg, e.key, e.splitSide, e.insideOutside, e.readPosition, e.leftCall, e.rightCall, e.passOn, null, e.protection);
         } else {
-          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn, e.reverseOn);
+          window.renderCardDiagram(svg, e.key, e.direction, e.wingSide, null, '4x4', e.insideOutside, e.motionOn, e.bootOn, e.readPosition, e.counterOn, e.popVariantOn, formationId, e.overloadOn, e.alignmentValues, e.qbSneakOn, e.reverseOn, e.qbKeepOn);
         }
       } else if (info.row) {
         const row = info.row;
@@ -1181,7 +1185,11 @@
     renderGamePlanList();
     if (countEl) {
       const n = pendingSelection.length;
-      countEl.textContent = `Game Plan — ${n} selected (aim for ${MIN_RECOMMENDED}-${MAX_PLAYS})`;
+      // "Aim for 5-15" read as a hard ceiling once MAX_PLAYS was raised
+      // well past 15 -- MIN_RECOMMENDED is still a real, useful floor to
+      // suggest, there's just no longer a target UPPER number worth
+      // stating (MAX_PLAYS is a generous backstop now, not a goal).
+      countEl.textContent = `Game Plan — ${n} selected (aim for at least ${MIN_RECOMMENDED})`;
       countEl.style.color = (n > MAX_PLAYS) ? '#e0201a' : '';
     }
   }

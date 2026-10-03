@@ -316,6 +316,15 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // that distinction.
   if (play.isPass) result.isPass = true;
   if (play.hasQbSneak) { result.hasQbSneak = true; result.qbSneakRoute = play.qbSneakRoute; }
+  // I's Sweep: Nathan -- "needs an option for QB Keep on top of the Boot
+  // option it already has. The QB Keep toggle has the QB turning left
+  // towards the 4, and following all the backs to the right." Same
+  // shape as hasQbSneak/qbSneakRoute just above -- a single, play-level
+  // alternate route for #1 only (reflected per wingSide live by
+  // js/play-calls.js's own renderCardDiagram, since unlike QB Sneak's
+  // route this one genuinely isn't symmetric -- "towards the 4" depends
+  // on which side #4 is actually on).
+  if (play.hasQbKeep) { result.hasQbKeep = true; result.qbKeepRoute = play.qbKeepRoute; }
   // Jet Sweep's own Boot: Nathan -- "a boot option... for the 1 (QB) to
   // take the ball on a carry likely up the middle after faking the
   // handoff with the rest of the play looking exactly the same." Same
