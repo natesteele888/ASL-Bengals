@@ -3160,6 +3160,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playoffSeedChip { display: flex; align-items: center; gap: 8px; }
 .playoffSeedChip .scheduleTeamBadge { width: 30px; height: 30px; min-width: 30px; min-height: 30px; max-width: 30px; max-height: 30px; font-size: 10px; }
 .playoffSeedChip .scheduleTeamName { max-width: none; white-space: normal; }
+/* Playoff Probabilities rows (js/standings.js's probabilityRowHtml) reuse
+   .playoffSeedChip/.scheduleTeamName for layout but DON'T sit on the
+   always-dark .playoffBracketCard this family was built for -- they render
+   straight onto the plain page background, so the class's own hardcoded
+   white text is invisible in light mode. Theme-aware override; higher
+   specificity than this (.playoffSeedChip.playoffSeedUs .scheduleTeamName,
+   below) still wins for our own row's orange highlight. */
+.standingsProbabilityRow .scheduleTeamName { color: var(--ink); }
 .playoffSeedNum { flex: 0 0 auto; font-size: 10px; font-weight: 900; color: #9aa4ae; min-width: 18px; }
 .playoffSeedChip.playoffSeedUs { position: relative; }
 .playoffSeedChip.playoffSeedUs .scheduleTeamName { color: var(--bengal-orange); }

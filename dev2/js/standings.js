@@ -1129,7 +1129,7 @@
       ? (window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '')
       : (window.opponentBadgeHtml ? window.opponentBadgeHtml(row.name) : '');
     const pct = Math.round(row.probability * 100);
-    return `<div class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;">
+    return `<div class="playoffSeedChip standingsProbabilityRow${isUs ? ' playoffSeedUs' : ''}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;">
         ${badge}
         <span class="scheduleTeamName" style="flex:1;">${escapeHtml(row.name)}</span>
         <span class="scheduleTeamRecord">${escapeHtml(row.record || '')}</span>
