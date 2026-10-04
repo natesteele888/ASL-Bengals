@@ -551,6 +551,7 @@
       <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
       <div id="thisweekOpponentScoutingWrap"></div>
+      <div id="thisweekGameFootageWrap"></div>
       <!-- Nathan: "link formatting and placement isn't good - needs
            breathing room for other things and needs to be centered."
            Real, found cause: .lbSectionHeader's own margin-top:0 for
@@ -685,6 +686,27 @@
             btnStyle: 'display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:4px;',
           })).join('') + '<div style="margin-bottom:10px;"></div>';
         }).catch(() => {});
+      }
+    }
+    // Nathan: "it's our game film against them [91 individual plays]...
+    // surface it on This Week too." Distinct from the opponentFilmUrl/
+    // OpponentFilm sections above (both scouting material ABOUT the
+    // opponent, gathered before the game) -- this is OUR OWN recorded
+    // footage of the linked game itself (schedule.js's game.gameFootage,
+    // the same field a game's own detail page already shows as a Q1/Q2/
+    // Q3/Q4-style button grid). Reuses that exact rendering
+    // (window.gameFootageTopCtaHtml) rather than a second copy of the
+    // abbreviation/grid/shared-embed-slot logic -- a coach adding a
+    // single "Full Game" entry (e.g. a Google Drive folder link covering
+    // all of a game's individual play clips) or several per-quarter
+    // entries both just work, unchanged from how that game's own
+    // Schedule page already renders them.
+    const gameFootageWrap = document.getElementById('thisweekGameFootageWrap');
+    if (gameFootageWrap) {
+      if (linkedGame && window.gameFootageTopCtaHtml && Array.isArray(linkedGame.gameFootage) && linkedGame.gameFootage.some((c) => c && c.url)) {
+        gameFootageWrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">🎥 Our Game Film</div>${window.gameFootageTopCtaHtml(linkedGame)}`;
+      } else {
+        gameFootageWrap.innerHTML = '';
       }
     }
     renderOpponentForm(linkedGame);

@@ -1967,6 +1967,13 @@
   // [data-embed-target] button on the page regardless of which file
   // rendered it, so exposing this one function is enough.
   window.filmButtonHtml = filmButtonHtml;
+  // Nathan: "surface it on This Week too" -- our OWN footage of the
+  // linked game (gameFootage), not the opponent-scouting opponentFilmUrl
+  // This Week already shows. Exposes the exact same Q1/Q2/Q3/Q4-grid
+  // rendering a game's own detail page uses (js/thisweek.js's own
+  // renderWeekAhead), rather than a second copy of the abbreviation/
+  // responsive-grid/shared-embed-slot logic.
+  window.gameFootageTopCtaHtml = gameFootageTopCtaHtml;
   window.compactGameRowHtml = compactGameRowHtml;
   window.opponentBadgeHtml = opponentBadgeHtml;
   // Raw logo URL (not the wrapped badge <span>) -- js/standings.js's team
