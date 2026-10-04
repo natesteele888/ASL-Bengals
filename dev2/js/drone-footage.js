@@ -155,6 +155,17 @@
     practice.droneClips = clips;
     if (window.saveDroneClips) window.saveDroneClips(practice.id, clips, afterOk, afterFail);
   }
+  // Real, previously-silent bug: every saveClips/saveGameFootage call in
+  // this file's own click handlers (rename, reorder, delete, comment)
+  // passed only an onOk callback, never onFail -- a failed PUT (bad
+  // connection, etc.) left the UI showing whatever the coach/parent just
+  // typed as if it had saved, with no indication the edit never actually
+  // persisted. uploadBatch (above) already handles failure correctly;
+  // this gives every OTHER save in the file the same minimum -- a clear,
+  // visible error instead of silence.
+  function alertSaveFailed(action, msg) {
+    alert(`Couldn't save (${action})${msg ? ': ' + msg : ''}. Check your connection and try again.`);
+  }
 
   // ---- Upload (coach only) ----
   function uploadBatch(practice, files, statusEl) {
@@ -246,20 +257,20 @@
         clips[idx].title = titleInput.value.trim() || 'Drone Clip';
         const parsed = parseDuration(durInput.value);
         if (parsed !== null) clips[idx].durationSec = parsed;
-        saveClips(practice, clips, () => renderDroneFootageSection(practice));
+        saveClips(practice, clips, () => renderDroneFootageSection(practice), msg => alertSaveFailed('clip title', msg));
       } else if (action === 'move-up' || action === 'move-down') {
         const swapWith = action === 'move-up' ? idx - 1 : idx + 1;
         if (swapWith < 0 || swapWith >= clips.length) return;
         const a = clips[idx].order || 0, b = clips[swapWith].order || 0;
         clips[idx].order = b; clips[swapWith].order = a;
-        saveClips(practice, clips, () => renderDroneFootageSection(practice));
+        saveClips(practice, clips, () => renderDroneFootageSection(practice), msg => alertSaveFailed('clip order', msg));
       } else if (action === 'delete-clip') {
         if (!confirm(`Delete "${clips[idx].title || 'this clip'}"? This can't be undone.`)) return;
         deleteVideoBlob(clips[idx].id);
         clips.splice(idx, 1);
         if (openClipId === clipId) openClipId = null;
         loadedVideos.delete(clipId);
-        saveClips(practice, clips, () => renderDroneFootageSection(practice));
+        saveClips(practice, clips, () => renderDroneFootageSection(practice), msg => alertSaveFailed('deleting clip', msg));
       } else if (action === 'post-comment') {
         const body = actionBtn.closest('.accordion-body');
         const input = body.querySelector('.droneCommentInput');
@@ -270,7 +281,7 @@
         if (!Array.isArray(target.comments)) target.comments = [];
         target.comments.push({ id: genClipId(), author: currentUserName(), text, at: new Date().toISOString() });
         input.value = '';
-        saveClips(practice, clips, () => renderDroneFootageSection(practice));
+        saveClips(practice, clips, () => renderDroneFootageSection(practice), msg => alertSaveFailed('comment', msg));
       }
     });
   }
@@ -866,13 +877,13 @@
         if (set.has(categoryId)) set.delete(categoryId); else set.add(categoryId);
         pair.clip.categoryIds = Array.from(set);
         if (pair.kind === 'game') {
-          if (window.saveGameFootage) window.saveGameFootage(pair.game.id, pair.game.gameFootage, () => renderFilmVaultList());
+          if (window.saveGameFootage) window.saveGameFootage(pair.game.id, pair.game.gameFootage, () => renderFilmVaultList(), msg => alertSaveFailed('category', msg));
         } else {
           const clips = sortedClips(pair.practice);
           const ci = clips.findIndex(c => c.id === clipId);
           if (ci === -1) return;
           clips[ci].categoryIds = pair.clip.categoryIds;
-          saveClips(pair.practice, clips, () => renderFilmVaultList());
+          saveClips(pair.practice, clips, () => renderFilmVaultList(), msg => alertSaveFailed('category', msg));
         }
         return;
       }
@@ -892,14 +903,14 @@
         clips[idx].title = titleInput.value.trim() || 'Drone Clip';
         const parsed = parseDuration(durInput.value);
         if (parsed !== null) clips[idx].durationSec = parsed;
-        saveClips(practice, clips, () => renderFilmVaultList());
+        saveClips(practice, clips, () => renderFilmVaultList(), msg => alertSaveFailed('clip title', msg));
       } else if (action === 'delete-clip') {
         if (!confirm(`Delete "${clips[idx].title || 'this clip'}"? This can't be undone.`)) return;
         deleteVideoBlob(clips[idx].id);
         clips.splice(idx, 1);
         if (vaultOpenClipId === clipId) vaultOpenClipId = null;
         loadedVideos.delete(clipId);
-        saveClips(practice, clips, () => renderFilmVaultList());
+        saveClips(practice, clips, () => renderFilmVaultList(), msg => alertSaveFailed('deleting clip', msg));
       } else if (action === 'post-comment') {
         const body = actionBtn.closest('.accordion-body');
         const input = body.querySelector('.droneCommentInput');
@@ -910,7 +921,7 @@
         if (!Array.isArray(target.comments)) target.comments = [];
         target.comments.push({ id: genClipId(), author: currentUserName(), text, at: new Date().toISOString() });
         input.value = '';
-        saveClips(practice, clips, () => renderFilmVaultList());
+        saveClips(practice, clips, () => renderFilmVaultList(), msg => alertSaveFailed('comment', msg));
       }
     });
   }

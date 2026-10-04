@@ -232,10 +232,11 @@
     }
     const tTokens = teamTokens(teamName);
     if (!tTokens.length) return [];
-    const isMatch = (assocName) => {
-      const gTokens = teamTokens(assocName);
-      return gTokens.length && tTokens.some(t => gTokens.includes(t));
-    };
+    // teamTokensMatch (defined below -- function declarations hoist, so
+    // this forward reference is fine), not a raw .some() -- a bare shared
+    // token like "north" would otherwise pull North County's games into
+    // North Middlesex's own Team Page list, or vice versa.
+    const isMatch = (assocName) => teamTokensMatch(tTokens, teamTokens(assocName));
     return shapeTeamGames(payload.games.filter(g => g.divisionKey === CMYFCC_OUR_DIVISION_KEY), isMatch);
   }
   async function fetchCmyfccRecentGamesFor(teamName, limit) {
@@ -421,7 +422,7 @@
       let trend = null;
       if (prevOrdered) {
         const tTokens = teamTokens(t.team);
-        const prevIdx = prevOrdered.findIndex(p => teamTokens(p.team).some(tok => tTokens.includes(tok)));
+        const prevIdx = prevOrdered.findIndex(p => teamTokensMatch(teamTokens(p.team), tTokens));
         if (prevIdx !== -1) trend = (prevIdx + 1) - powerRank; // positive = moved up
       }
       return Object.assign({}, t, { powerRank, trend });
@@ -462,7 +463,7 @@
     const tTokens = teamTokens(name);
     if (!tTokens.length) return false;
     const ourTokens = teamTokens(CMYFCC_OUR_ASSOCIATION_NAME);
-    return ourTokens.some(tok => tTokens.includes(tok));
+    return teamTokensMatch(ourTokens, tTokens);
   }
 
   // ---- Opponent Page (Nathan: "I want to develop a opponent page where
@@ -487,13 +488,27 @@
       .split(/[^a-z0-9]+/)
       .filter(t => t.length > 2 && !IGNORED_TEAM_WORDS.has(t));
   }
+  // A single shared token isn't enough to call two names the same team --
+  // "North Middlesex" and "North County" are two separate, real CMYFCC
+  // opponents that share only "north" and nothing else (the exact
+  // collision already found and fixed for opponent logos this same
+  // session, via normalizeOpponentFullKey in schedule.js). Requires every
+  // token of the SHORTER name to appear in the longer one instead -- still
+  // matches the legitimate cases this file's own comments describe (our
+  // own "Ayer/Shirley/Lunenburg" vs. a coach's shorthand "Ayer Shirley,"
+  // or a CMYFCC row suffixed "(Bengals)"), since every token of the
+  // shorter name is still fully contained in the longer one there, but no
+  // longer matches two genuinely different teams off one shared word.
+  function teamTokensMatch(aTokens, bTokens) {
+    if (!aTokens.length || !bTokens.length) return false;
+    const shorter = aTokens.length <= bTokens.length ? aTokens : bTokens;
+    const longer = aTokens.length <= bTokens.length ? bTokens : aTokens;
+    return shorter.every(tok => longer.includes(tok));
+  }
   function matchScheduleOpponent(teamName, games) {
     const tTokens = teamTokens(teamName);
     if (!tTokens.length) return null;
-    return (games || []).find(g => {
-      const gTokens = teamTokens(g.opponent);
-      return gTokens.length && tTokens.some(t => gTokens.includes(t));
-    }) || null;
+    return (games || []).find(g => teamTokensMatch(tTokens, teamTokens(g.opponent))) || null;
   }
 
   // Nathan (follow-up): "Teams on your schedule should also have their
@@ -515,10 +530,7 @@
     if (!data || !Array.isArray(data.teams) || !data.teams.length) return null;
     const oTokens = teamTokens(opponentName);
     if (!oTokens.length) return null;
-    const row = data.teams.find(t => {
-      const tTokens = teamTokens(t.team);
-      return tTokens.length && oTokens.some(tok => tTokens.includes(tok));
-    });
+    const row = data.teams.find(t => teamTokensMatch(oTokens, teamTokens(t.team)));
     return row ? recordStr(row) : null;
   };
 
@@ -546,16 +558,27 @@
   }
 
   async function saveStandings(teams, rawText, statusEl) {
-    // Power rank + trend computed against whatever was the PREVIOUS save
-    // (not re-fetched -- standingsData/loaded already holds it from
-    // whatever loaded this Coach Tools screen) before it gets overwritten
-    // below, so the read-only tab can just read t.powerRank/t.trend
-    // straight off each saved team.
-    const previousTeams = loaded && standingsData && Array.isArray(standingsData.teams) ? standingsData.teams : null;
-    const rankedTeams = computePowerRanks(teams, previousTeams);
-    const payload = { updatedAt: new Date().toISOString(), rawText: rawText || '', teams: rankedTeams };
     if (statusEl) statusEl.textContent = 'Saving…';
     try {
+      // Power rank + trend computed against the PREVIOUS save -- re-fetched
+      // fresh here immediately before computing it, not trusted from
+      // standingsData/loaded (whatever this tab happened to load at page
+      // open). Real, live risk on a shared, multi-coach, same-code app:
+      // two coaches saving standings close together (one "Sync from
+      // CMYFCC," the other a manual paste moments later, in either order)
+      // used to compute that week's up/down trend arrows against
+      // whichever snapshot THIS tab's own memory was still holding, not
+      // the true most-recent prior save. The final save still correctly
+      // replaces the week's whole standings snapshot either way (there's
+      // no sensible partial merge for "this week's full standings
+      // dataset," unlike a list of independent games) -- this only fixes
+      // what the TREND gets computed against.
+      const freshUrl = await window.firebaseAuthed(STANDINGS_URL);
+      const freshRes = await fetch(freshUrl, { cache: 'no-store' });
+      const freshData = freshRes.ok ? await freshRes.json() : null;
+      const previousTeams = freshData && Array.isArray(freshData.teams) ? freshData.teams : null;
+      const rankedTeams = computePowerRanks(teams, previousTeams);
+      const payload = { updatedAt: new Date().toISOString(), rawText: rawText || '', teams: rankedTeams };
       const url = await window.firebaseAuthed(STANDINGS_URL);
       const res = await fetch(url, {
         method: 'PUT',

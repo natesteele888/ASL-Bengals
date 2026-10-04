@@ -42,6 +42,16 @@
     const firstWord = cleaned.split(/\s+/).filter(Boolean)[0] || '';
     return firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
+  // Same idea, but keeps the WHOLE name instead of just the first word --
+  // "North Middlesex" and "North County" are two separate, real CMYFCC
+  // opponents that both reduce to the same normalizeOpponentKey ("north"),
+  // a confirmed, live collision (see schedule.js's own BUNDLED_LOGOS
+  // comments, fixed there this same session). Used below to prefer an
+  // exact match before ever falling back to the looser first-word one.
+  function normalizeOpponentFullKey(name) {
+    const cleaned = (name || '').replace(/\(.*?\)/g, '').trim();
+    return cleaned.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
 
   function to24h(h, m, ampm) {
     h = Number(h); m = Number(m);
@@ -194,9 +204,23 @@
   function mergeGames(existingGames, parsedGames) {
     let updated = 0, added = 0;
     parsedGames.forEach(pg => {
+      const pgFullKey = normalizeOpponentFullKey(pg.opponent);
       const pgKey = normalizeOpponentKey(pg.opponent);
       let match = (pg.week !== null) ? existingGames.find(g => g.week === pg.week) : null;
-      if (!match) match = existingGames.find(g => normalizeOpponentKey(g.opponent) === pgKey);
+      // Prefer an exact full-name match first -- most reliable, no risk
+      // of conflating two different teams that happen to share a first
+      // word.
+      if (!match) match = existingGames.find(g => normalizeOpponentFullKey(g.opponent) === pgFullKey);
+      // Fall back to the looser first-word match ONLY when it's
+      // unambiguous (exactly one existing game shares that first word).
+      // If two or more do -- the real "North Middlesex"/"North County"
+      // case -- picking whichever .find() happens to hit first would
+      // silently merge this import into the WRONG team's game, so this
+      // falls through to "add as new" instead of guessing.
+      if (!match) {
+        const candidates = existingGames.filter(g => normalizeOpponentKey(g.opponent) === pgKey);
+        if (candidates.length === 1) match = candidates[0];
+      }
       if (match) {
         Object.assign(match, pg);
         updated++;

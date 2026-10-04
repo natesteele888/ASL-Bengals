@@ -848,7 +848,7 @@
       if (!opponent || !opponent.trim()) return;
       const newGame = { id: genId(), opponent: opponent.trim(), date: '', arriveTime: '', warmupTime: '', gameTime: '', homeAway: 'Home', location: '', ourScore: '', oppScore: '', writeup: '', scouting: '', statSheet: window.blankGameStatSheet(), updatedAt: null };
       games.push(newGame);
-      persistGames(() => { selectedGameId = newGame.id; renderEnterStats(); }, msg => setStatus(`Could not create game: ${msg}`));
+      persistGames(newGame, () => { selectedGameId = newGame.id; renderEnterStats(); }, msg => setStatus(`Could not create game: ${msg}`));
     });
     pickWrap.appendChild(newBtn);
     wrap.appendChild(pickWrap);
@@ -942,7 +942,7 @@
       saveBtn.disabled = true;
       const label = saveBtn.textContent;
       saveBtn.textContent = 'Saving…';
-      persistGames(() => { saveBtn.textContent = '✅ Saved'; setTimeout(() => { saveBtn.textContent = label; saveBtn.disabled = false; }, 1600); },
+      persistGames(game, () => { saveBtn.textContent = '✅ Saved'; setTimeout(() => { saveBtn.textContent = label; saveBtn.disabled = false; }, 1600); },
         msg => { saveBtn.textContent = '⚠️ Failed'; setStatus(`Save failed: ${msg}`); setTimeout(() => { saveBtn.textContent = label; saveBtn.disabled = false; }, 2200); });
     });
     saveRow.appendChild(saveBtn);
@@ -959,18 +959,48 @@
     if (el) el.textContent = text || '';
   }
 
-  function persistGames(afterOk, afterFail) {
-    window.firebaseAuthed(SCHEDULE_URL).then(url => fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(games),
-    })).then(r => {
-      if (r.ok) { if (afterOk) afterOk(); }
-      else if (afterFail) afterFail(`HTTP ${r.status}`);
-    }).catch(err => {
-      console.error('Stats save failed:', err);
-      if (afterFail) afterFail(err.message);
-    });
+  // Real, live risk on a shared, multi-coach, same-code app: this used to
+  // PUT the WHOLE locally-held `games` array -- whatever schedule.json
+  // looked like whenever THIS tab last loaded it. A coach entering stats
+  // for one game while a different coach (separate device, same shared
+  // code) edits ANY other game on the real Schedule tab and saves first
+  // would have that edit silently reverted the instant this tab's own
+  // Save Stats / + New Game next saves, no warning to either coach.
+  // Re-fetches the live schedule fresh immediately before writing and
+  // merges this ONE game's own local edit into it by id (add if new,
+  // overwrite if existing) instead of blindly replacing every other
+  // game with this tab's own stale snapshot. Same fetch-then-merge
+  // discipline js/gameplan.js's own addEntry/saveDraftAsGamePlan already
+  // established for this exact class of race, including refusing
+  // (rather than silently falling back to an empty schedule) if the
+  // fresh GET itself fails. Also refreshes the local `games` array to
+  // the merged result, so this tab's own NEXT save starts from the
+  // correct, current baseline too.
+  function persistGames(gameToSave, afterOk, afterFail) {
+    window.firebaseAuthed(SCHEDULE_URL)
+      .then(url => fetch(url, { cache: 'no-store' }))
+      .then(r => {
+        if (!r.ok) throw new Error(`Could not load the current schedule (HTTP ${r.status}) -- nothing was saved. Try again.`);
+        return r.json();
+      })
+      .then(data => {
+        const fresh = Array.isArray(data) ? data.filter(g => g && g.id) : [];
+        const idx = fresh.findIndex(g => g.id === gameToSave.id);
+        if (idx === -1) fresh.push(gameToSave); else fresh[idx] = gameToSave;
+        return window.firebaseAuthed(SCHEDULE_URL).then(url2 => fetch(url2, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fresh),
+        })).then(r2 => {
+          if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+          games = fresh;
+        });
+      })
+      .then(() => { if (afterOk) afterOk(); })
+      .catch(err => {
+        console.error('Stats save failed:', err);
+        if (afterFail) afterFail(err.message);
+      });
   }
 
   // ---- Team Stats (by game and overall) -- Nathan: "I need all the high
