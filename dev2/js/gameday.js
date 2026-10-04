@@ -69,6 +69,10 @@
     // slash, so the whole thing counts as one "word" (same reasoning
     // leicesterspencer/oxfordwebster above document).
     millburysutton: 'assets/images/opponents/millburysutton.png',
+    // "North County" has the SAME first-word collision as "North
+    // Middlesex" above (both reduce to "north") -- keyed on
+    // normalizeOpponentFullKey for the same reason.
+    northcounty: 'assets/images/opponents/northcounty.png',
   };
   // Stores the last calendar date (YYYY-MM-DD) this was actually shown and
   // dismissed -- "first open of the app that day" per device, same spirit

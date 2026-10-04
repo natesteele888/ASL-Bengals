@@ -178,6 +178,10 @@
     // slash, so the whole thing counts as one "word" (same reasoning
     // leicesterspencer/oxfordwebster above document).
     millburysutton: 'assets/images/opponents/millburysutton.png',
+    // "North County" has the SAME first-word collision as "North
+    // Middlesex" above (both reduce to "north") -- keyed on
+    // normalizeOpponentFullKey for the same reason.
+    northcounty: 'assets/images/opponents/northcounty.png',
   };
   let opponentLogos = {}; // normalized opponent key -> data URL, loaded from Firebase
 
