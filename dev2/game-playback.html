@@ -408,12 +408,20 @@
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
     if (m) return { kind:'youtube', videoId: m[1] };
+    // Nathan: "Full Game Clips should open in the window on the page with
+    // no login as they are public" -- a Drive FOLDER link (a coach's own
+    // "all 91 individual plays" playlist) used to fall through to nothing
+    // embeddable here, since a folder URL (/drive/folders/<id>) matches
+    // neither the single-file /d/<id>/ nor ?id= patterns below. Same
+    // regex/kind js/schedule.js's own copy of this function uses.
+    m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind:'drive-folder', previewUrl: 'https://drive.google.com/embeddedfolderview?id=' + m[1] + '#list' };
     m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (m && /drive\.google\.com/.test(url)) return { kind:'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
     return null;
   }
   let ytPlayer = null;
-  let filmKind = null; // 'youtube' | 'drive' | null
+  let filmKind = null; // 'youtube' | 'drive' | 'drive-folder' | null
   function renderPlaybackFilmPanel(game){
     const host = document.getElementById('filmPanelHost');
     host.innerHTML = '';
@@ -435,13 +443,18 @@
         if (!document.getElementById('filmPlayer')) return; // a different game may have been selected while this was loading
         ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
       });
-    } else if (embed.kind === 'drive'){
+    } else if (embed.kind === 'drive' || embed.kind === 'drive-folder'){
+      // A folder embed is a file LIST, not a single video -- give it real
+      // room (91 individual plays) instead of a cramped video-player box.
+      const h = embed.kind === 'drive-folder' ? 'min(55vh,480px)' : 'min(38vh,320px)';
       const iframe = document.createElement('iframe');
       iframe.src = embed.previewUrl; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
+      iframe.style.cssText = 'width:100%;height:' + h + ';border:0;border-radius:10px;background:' + (embed.kind === 'drive-folder' ? 'transparent' : '#000') + ';display:block;';
       wrap.appendChild(iframe);
       const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
-      hint.textContent = "Auto-seek isn't available for this film -- use the video's own controls above to find each play.";
+      hint.textContent = embed.kind === 'drive-folder'
+        ? 'Pick a clip from the list above to play it.'
+        : "Auto-seek isn't available for this film -- use the video's own controls above to find each play.";
       wrap.appendChild(hint);
     }
     host.appendChild(wrap);
@@ -481,11 +494,12 @@
     const clip = playClipsList[index];
     wrap.innerHTML = '<div style="font-weight:800;font-size:13px;margin-bottom:6px;">🎬 Clip ' + (index + 1) + ' of ' + playClipsList.length + '</div>';
     const embed = embeddableFilmSrc(clip.url);
-    if (embed && (embed.kind === 'youtube' || embed.kind === 'drive')){
+    if (embed && (embed.kind === 'youtube' || embed.kind === 'drive' || embed.kind === 'drive-folder')){
+      const h = embed.kind === 'drive-folder' ? 'min(55vh,480px)' : 'min(38vh,320px)';
       const iframe = document.createElement('iframe');
       iframe.src = embed.kind === 'youtube' ? ('https://www.youtube.com/embed/' + embed.videoId) : embed.previewUrl;
       iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-      iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;display:block;';
+      iframe.style.cssText = 'width:100%;height:' + h + ';border:0;border-radius:10px;background:' + (embed.kind === 'drive-folder' ? 'transparent' : '#000') + ';display:block;';
       wrap.appendChild(iframe);
     } else {
       const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
