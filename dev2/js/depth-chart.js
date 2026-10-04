@@ -88,24 +88,41 @@
     return 'pos' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
+  function mapGroups(rawGroups) {
+    return rawGroups.map((g, i) => {
+      const sectionGroupsSoFar = rawGroups.slice(0, i).filter(o => o.section === g.section).length;
+      return {
+        id: g.id || genId(),
+        section: SECTION_ORDER.includes(g.section) ? g.section : 'offense',
+        label: g.label || '?',
+        players: Array.isArray(g.players) ? g.players.filter(n => n !== null && n !== undefined).map(String) : [],
+        // Nathan: "player cards in the spots on the field" -- a group
+        // saved before x/y existed (or before this from a row/col
+        // version) just gets spread left-to-right on one line as a
+        // starting point, not stacked on top of each other at (0,0).
+        x: Number.isFinite(g.x) ? g.x : Math.min(92, 8 + sectionGroupsSoFar * 12),
+        y: Number.isFinite(g.y) ? g.y : 50,
+      };
+    });
+  }
   function normalizeChart(data) {
-    if (data && Array.isArray(data.groups) && data.groups.length) {
-      return data.groups.map((g, i) => {
-        const sectionGroupsSoFar = data.groups.slice(0, i).filter(o => o.section === g.section).length;
-        return {
-          id: g.id || genId(),
-          section: SECTION_ORDER.includes(g.section) ? g.section : 'offense',
-          label: g.label || '?',
-          players: Array.isArray(g.players) ? g.players.filter(n => n !== null && n !== undefined).map(String) : [],
-          // Nathan: "player cards in the spots on the field" -- a group
-          // saved before x/y existed (or before this from a row/col
-          // version) just gets spread left-to-right on one line as a
-          // starting point, not stacked on top of each other at (0,0).
-          x: Number.isFinite(g.x) ? g.x : Math.min(92, 8 + sectionGroupsSoFar * 12),
-          y: Number.isFinite(g.y) ? g.y : 50,
-        };
-      });
-    }
+    // Real bug: Firebase Realtime Database prunes empty arrays/objects on
+    // write -- {groups: []} round-trips as just `null` (confirmed live),
+    // so `data.groups.length` alone can't tell "a coach intentionally
+    // cleared every group to rebuild from scratch" apart from "nothing
+    // ever saved here" -- the first case was silently re-seeding
+    // Nathan's own placeholder defaults and writing them back over a
+    // deliberately-emptied chart. `seeded` is a plain boolean
+    // persistChart (below) now always writes alongside `groups`, which
+    // survives the round-trip even when `groups` itself empties out --
+    // checked first, so a real (possibly now-empty) saved chart is
+    // correctly recognized either way. Falls back to the old
+    // groups.length check only when `seeded` is missing, so an already-
+    // real, already-customized chart saved before this fix existed
+    // doesn't get wrongly reseeded the first time it loads under the
+    // new logic.
+    if (data && data.seeded) return Array.isArray(data.groups) ? mapGroups(data.groups) : [];
+    if (data && Array.isArray(data.groups) && data.groups.length) return mapGroups(data.groups);
     return null; // nothing real saved yet
   }
 
@@ -134,7 +151,7 @@
     window.firebaseAuthed(DEPTH_URL).then(url => fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groups }),
+      body: JSON.stringify({ groups, seeded: true }),
     })).then(r => {
       if (r.ok) { if (afterOk) afterOk(); }
       else if (afterFail) afterFail(`HTTP ${r.status}`);
@@ -150,9 +167,20 @@
     return d.innerHTML;
   }
 
+  // Real inconsistency, found in an audit: an allowed duplicate jersey
+  // number (roster.js's own "Save anyway" override exists for a real
+  // reissue mid-season) used to resolve to a DIFFERENT kid here than on
+  // Player Profile -- this forEach always overwrote, so the LAST player
+  // in roster order won; player-profile.js's roster.find(...) (and
+  // roster.js's own lookups) always take the FIRST. Same tie-break here
+  // now -- skip the overwrite once a number's already claimed, so every
+  // screen agrees on the same kid for the same number.
   function rosterByNum() {
     const map = {};
-    (window.getTeamRosterCached ? window.getTeamRosterCached() : []).forEach(p => { map[String(p.num)] = p; });
+    (window.getTeamRosterCached ? window.getTeamRosterCached() : []).forEach(p => {
+      const key = String(p.num);
+      if (!(key in map)) map[key] = p;
+    });
     return map;
   }
 
@@ -248,24 +276,43 @@
   }
 
   // ---- Detail panel for whichever one marker is currently selected. ----
-  function detailHtml(g, byNum) {
+  // approved gates every EDIT affordance (reorder/remove/add-to-group/
+  // nudge/remove-group) -- real, previously-missing gap found in an
+  // audit: roster.js and coaching-staff.js both check
+  // window.isApprovedCoachProfile() before rendering any edit control,
+  // but this file never did, so any coach holding the one shared code
+  // (not just the 5 named coaches) could delete every position group or
+  // reorder every starter. The read-only VIEW (diagram markers, which
+  // starter/backups are listed) stays visible to everyone either way --
+  // only the controls that write something are gated.
+  function detailHtml(g, byNum, approved) {
     if (!g) return '<div class="lbEmpty">Tap a position above to see who\'s listed there.</div>';
     const rowsHtml = g.players.map((num, i) => {
       const p = byNum[num];
       if (!p) return ''; // stale reference (player removed from roster elsewhere) -- just skip it, don't touch storage
       const label = i === 0 ? 'Starter' : `Backup ${i}`;
-      return `
-        <div class="depthChartRow" data-group="${escapeHtml(g.id)}" data-num="${escapeHtml(num)}">
-          <span class="depthChartSlotLabel">${label}</span>
-          <span class="depthChartPlayer">#${escapeHtml(num)} ${escapeHtml(p.name || '')}</span>
+      const btnsHtml = approved ? `
           <span class="depthChartRowBtns">
             <button type="button" class="depthChartIconBtn" data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
             <button type="button" class="depthChartIconBtn" data-act="down" title="Move down" ${i === g.players.length - 1 ? 'disabled' : ''}>▼</button>
             <button type="button" class="depthChartIconBtn depthChartRemoveBtn" data-act="remove" title="Remove from ${escapeHtml(g.label)}">✕</button>
-          </span>
+          </span>` : '';
+      return `
+        <div class="depthChartRow" data-group="${escapeHtml(g.id)}" data-num="${escapeHtml(num)}">
+          <span class="depthChartSlotLabel">${label}</span>
+          <span class="depthChartPlayer">#${escapeHtml(num)} ${escapeHtml(p.name || '')}</span>
+          ${btnsHtml}
         </div>`;
     }).join('');
     const emptyHtml = g.players.length ? '' : '<div class="lbEmpty" style="padding:6px 0;">No one listed yet.</div>';
+
+    if (!approved) {
+      return `
+        <div class="depthChartCard" data-group="${escapeHtml(g.id)}">
+          <div class="depthChartCardTitle"><span>${escapeHtml(g.label)}</span></div>
+          ${rowsHtml}${emptyHtml}
+        </div>`;
+    }
 
     const listedNums = new Set(g.players);
     // Nathan: "list in numerical order not alphabetical order. Easier to
@@ -309,7 +356,8 @@
       </div>`;
   }
 
-  function sectionAddGroupHtml(section) {
+  function sectionAddGroupHtml(section, approved) {
+    if (!approved) return '';
     return `
       <div class="depthChartAddGroupRow" data-section="${escapeHtml(section)}">
         <input type="text" class="depthChartNewGroupInput" placeholder="+ Add a position (e.g. Safety, RT)…">
@@ -322,6 +370,7 @@
     if (!wrap) return;
     if (!loaded) { wrap.innerHTML = '<div class="lbEmpty">Loading…</div>'; return; }
     const byNum = rosterByNum();
+    const approved = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
 
     wrap.innerHTML = SECTION_ORDER.map(section => {
       const sectionGroups = groups.filter(g => g.section === section);
@@ -335,16 +384,16 @@
         return `
           <div class="lbSectionHeader" style="margin-top:14px;">${escapeHtml(SECTION_LABELS[section])}</div>
           ${sectionGroups.length ? diagramHtml(section, sectionGroups) : '<div class="lbEmpty">No positions added yet.</div>'}
-          ${detailHtml(selected, byNum)}
-          ${sectionAddGroupHtml(section)}
+          ${detailHtml(selected, byNum, approved)}
+          ${sectionAddGroupHtml(section, approved)}
         `;
       }
       // Special Teams -- plain list, unchanged from before (no field spot
       // for a single specialist role the way there is for an 11-man unit).
       return `
         <div class="lbSectionHeader" style="margin-top:14px;">${escapeHtml(SECTION_LABELS[section])}</div>
-        ${!sectionGroups.length ? '<div class="lbEmpty">No positions added yet.</div>' : `<div class="depthChartGrid">${sectionGroups.map(g => detailHtml(g, byNum)).join('')}</div>`}
-        ${sectionAddGroupHtml(section)}
+        ${!sectionGroups.length ? '<div class="lbEmpty">No positions added yet.</div>' : `<div class="depthChartGrid">${sectionGroups.map(g => detailHtml(g, byNum, approved)).join('')}</div>`}
+        ${sectionAddGroupHtml(section, approved)}
       `;
     }).join('') + '<div id="depthChartStatus" class="lbSub" style="margin-top:10px;"></div>';
 

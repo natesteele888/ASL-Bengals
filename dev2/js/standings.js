@@ -73,14 +73,24 @@
     if (!res.ok) throw new Error(`CMYFCC returned HTTP ${res.status}`);
     const body = await res.json();
     const payload = body.result || body.data || body;
-    if (!payload || payload.available === false || !Array.isArray(payload.standings)) {
+    if (!payload || payload.available === false || !payload.standings) {
       throw new Error('CMYFCC response missing standings data');
     }
-    const ourRow = payload.standings.find(s =>
+    // Real inconsistency, found in an audit: required payload.standings
+    // to already be a true array and threw otherwise, unlike
+    // fetchCmyfccRawPayload (used by Playoff Probabilities/All Bengals
+    // Teams, the exact same underlying CMYFCC call), which already
+    // tolerates it arriving as an object-with-numeric-keys shape instead
+    // -- a real possibility that defensive fallback exists to guard
+    // against. "Sync from CMYFCC" would have broken with a confusing
+    // error in exactly the case the other two features already handle
+    // fine from the same payload. Same fallback here now.
+    const standingsArr = Array.isArray(payload.standings) ? payload.standings : Object.values(payload.standings);
+    const ourRow = standingsArr.find(s =>
       (s.associationName || '').toLowerCase() === CMYFCC_OUR_ASSOCIATION_NAME.toLowerCase() &&
       s.divisionKey === CMYFCC_OUR_DIVISION_KEY);
     if (!ourRow) throw new Error(`Couldn't find "${CMYFCC_OUR_ASSOCIATION_NAME}" · "${CMYFCC_OUR_DIVISION_KEY}" in CMYFCC's standings -- their site may have renamed us or the division.`);
-    const divisionRows = payload.standings.filter(s => s.divisionKey === ourRow.divisionKey);
+    const divisionRows = standingsArr.filter(s => s.divisionKey === ourRow.divisionKey);
     // CMYFCC's standings rows don't carry PF/PA -- summed straight from
     // every COMPLETED game (result present) in the same division, home and
     // away, rather than leaving pf/pa blank. This is actually MORE than
@@ -1153,15 +1163,35 @@
       throw new Error('CMYFCC response missing games data');
     }
     const standingsArr = Array.isArray(payload.standings) ? payload.standings : Object.values(payload.standings || {});
-    return { games: payload.games, standings: standingsArr };
+    return { games: payload.games, standings: standingsArr, playoffProjection: Array.isArray(payload.playoffProjection) ? payload.playoffProjection : [] };
   }
   async function fetchCmyfccDivisionData(divisionKey) {
     const key = divisionKey || CMYFCC_OUR_DIVISION_KEY;
-    const { games, standings } = await fetchCmyfccRawPayload();
+    const { games, standings, playoffProjection } = await fetchCmyfccRawPayload();
     return {
       games: games.filter((g) => g.divisionKey === key),
       standings: standings.filter((s) => s.divisionKey === key),
+      playoffSlotCount: playoffSlotCountFor(key, playoffProjection),
     };
+  }
+  // simulatePlayoffOdds' own "top 12" cutoff was confirmed correct for
+  // Tackle 11U specifically (see its own comment above), then reused
+  // unmodified for every other division too -- real, confirmed live:
+  // every division we actually show (9U/10U/11U/12U/13U) genuinely does
+  // use 12 playoff slots today (two 6-team brackets each), but that's a
+  // fact about THIS season's real bracket sizes, not a guarantee (a
+  // smaller division like Tackle 8U -- not one of ours, but proves the
+  // format varies -- uses 10). Derives the real count from CMYFCC's own
+  // playoffProjection for the requested division instead of a hardcoded
+  // number, so this can't silently go stale if the league ever
+  // restructures a division's bracket -- falls back to 12 (today's
+  // real, verified value for every division this app uses) if that
+  // division's projection isn't posted yet or doesn't parse.
+  function playoffSlotCountFor(divisionKey, playoffProjection) {
+    const entry = (playoffProjection || []).find((p) => p.divisionKey === divisionKey);
+    if (!entry || !Array.isArray(entry.brackets)) return 12;
+    const total = entry.brackets.reduce((sum, b) => sum + (Array.isArray(b.seeds) ? b.seeds.length : 0), 0);
+    return total > 0 ? total : 12;
   }
   // "All Bengals Teams" -- Nathan: "it doesn't need to be full standings
   // but have their record, their place in standings (3 of 12), and their
@@ -1174,14 +1204,14 @@
   // re-derived from wins/losses here) -- division size (the "of 12") is
   // just that division's own standings row count.
   async function fetchAllBengalsTeamsData() {
-    const { games, standings } = await fetchCmyfccRawPayload();
+    const { games, standings, playoffProjection } = await fetchCmyfccRawPayload();
     return BENGALS_DIVISIONS.map((div) => {
       const divGames = games.filter((g) => g.divisionKey === div.key);
       const divStandings = standings.filter((s) => s.divisionKey === div.key);
       const ourRow = divStandings.find((s) =>
         (s.associationName || '').toLowerCase() === CMYFCC_OUR_ASSOCIATION_NAME.toLowerCase());
       if (!ourRow) return { division: div.label, divisionKey: div.key, missing: true };
-      const odds = divStandings.length ? simulatePlayoffOdds(divGames, divStandings) : [];
+      const odds = divStandings.length ? simulatePlayoffOdds(divGames, divStandings, null, playoffSlotCountFor(div.key, playoffProjection)) : [];
       const ourOdds = odds.find((o) => o.name === ourRow.associationName);
       // Nathan: "It would be nice to be able to see the game cards from
       // those other bengals teams and not just their record." divGames
@@ -1204,8 +1234,9 @@
       };
     });
   }
-  function simulatePlayoffOdds(games, standings, iterations) {
+  function simulatePlayoffOdds(games, standings, iterations, playoffSlotCount) {
     iterations = iterations || 4000;
+    playoffSlotCount = playoffSlotCount || 12;
     const names = standings.map((s) => s.associationName);
     const baseWins = {}, baseLosses = {}, baseTies = {};
     standings.forEach((s) => { baseWins[s.associationName] = s.wins || 0; baseLosses[s.associationName] = s.losses || 0; baseTies[s.associationName] = s.ties || 0; });
@@ -1233,7 +1264,7 @@
       });
       const ranked = names.map((name) => ({ name, points: (wins[name] || 0) * 10 + (baseTies[name] || 0) * 5, tiebreak: Math.random() }));
       ranked.sort((a, b) => (b.points - a.points) || (a.tiebreak - b.tiebreak));
-      ranked.slice(0, 12).forEach((t) => { playoffCount[t.name]++; });
+      ranked.slice(0, playoffSlotCount).forEach((t) => { playoffCount[t.name]++; });
     }
     return standings.map((s) => ({
       name: s.associationName,
@@ -1260,14 +1291,14 @@
     if (!wrap) return;
     wrap.innerHTML = '<div class="hint" style="text-align:center;">Simulating the rest of the season…</div>';
     try {
-      const { games, standings } = await fetchCmyfccDivisionData();
+      const { games, standings, playoffSlotCount } = await fetchCmyfccDivisionData();
       if (!standings.length) {
         wrap.innerHTML = '<div class="lbEmpty">No standings data available from CMYFCC yet.</div>';
         return;
       }
-      const rows = simulatePlayoffOdds(games, standings);
+      const rows = simulatePlayoffOdds(games, standings, null, playoffSlotCount);
       wrap.innerHTML =
-        '<div class="lbSub" style="text-align:center;margin-bottom:14px;">Odds of finishing in the top 12 of Tackle 11U (both playoff brackets combined) -- simulating the rest of the season 4,000 times from each team’s current record. Not an official CMYFCC number, just this app’s own estimate.</div>' +
+        `<div class="lbSub" style="text-align:center;margin-bottom:14px;">Odds of finishing in the top ${playoffSlotCount} of Tackle 11U (both playoff brackets combined) -- simulating the rest of the season 4,000 times from each team’s current record. Not an official CMYFCC number, just this app’s own estimate.</div>` +
         rows.map(probabilityRowHtml).join('');
     } catch (e) {
       wrap.innerHTML = `<div class="lbEmpty">Couldn't simulate playoff odds: ${escapeHtml(e.message)}</div>`;

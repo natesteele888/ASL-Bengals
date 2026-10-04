@@ -195,7 +195,20 @@
             saveClips(practice, clips, () => {
               renderDroneFootageSection(practice);
               next(i + 1);
-            }, msg => { statusEl.textContent = `Clip ${i + 1} save failed: ${msg}`; next(i + 1); });
+            }, msg => {
+              // Real storage leak: the video blob (droneVideos/{clipId},
+              // the multi-MB part) already saved successfully above, but
+              // the metadata write that would ever reference it just
+              // failed -- nothing else can find or clean it up afterward
+              // (deleteVideoBlob is only ever called from delete-clip),
+              // so it would otherwise sit there permanently against the
+              // free-tier storage cap this file's own header already
+              // flags as a real constraint. Clean up the now-orphaned
+              // blob before moving on.
+              deleteVideoBlob(clipId);
+              statusEl.textContent = `Clip ${i + 1} save failed: ${msg}`;
+              next(i + 1);
+            });
           }, msg => { statusEl.textContent = `Clip ${i + 1} upload failed: ${msg}`; next(i + 1); });
         }).catch(() => { statusEl.textContent = `Clip ${i + 1}: could not read that file.`; next(i + 1); });
       });

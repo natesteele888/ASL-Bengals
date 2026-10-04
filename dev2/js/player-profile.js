@@ -192,7 +192,23 @@
       const rec = perGame[num];
       if (!rec) return;
       const hasAny = ALL_CATS.some(c => (rec[c.key] || 0) > 0);
-      if (!hasAny) return;
+      // Real bug: a pure offensive lineman (roster.js's own 'OL' position)
+      // has no stat category at all -- ALL_CATS only covers skill-
+      // position/defensive counting stats -- so hasAny was always false
+      // for them even in a game they genuinely played, and GP stayed 0
+      // forever regardless of real attendance. Scoped to 'OL'
+      // specifically (not every position) so this doesn't also start
+      // crediting a skill/defensive player who was absent and simply
+      // never got removed from the game's own roster list -- hasAny
+      // already (if imperfectly) protects against that case for them.
+      // computeGamePlayerStats creates a real, zeroed record for every
+      // player in THIS game's own tracked roster (ss.roster, seeded from
+      // the team roster and coach-editable per game -- see
+      // game-stats-editor.js's seedRosterFromTeam), so an OL player
+      // being listed there is the real signal they were part of the game.
+      const isOL = position === 'OL';
+      const inGameRoster = isOL && Array.isArray(g.statSheet.roster) && g.statSheet.roster.some(r => String(r.num) === String(num));
+      if (!hasAny && !inGameRoster) return;
       totals.games += 1;
       // ypc is a ratio (rushYds/rushAtt) -- summing each game's ypc here
       // would average-of-averages, which is wrong. It's recomputed below
