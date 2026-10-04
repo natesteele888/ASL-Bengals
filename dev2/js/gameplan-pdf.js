@@ -37,13 +37,26 @@
 (function () {
 
   // Matches the Formations screen's own real tile order (Wing, Split,
-  // 5 Guys, I, I Wing) so sections read in the order a coach already
-  // expects, not alphabetically or by add-order. Any future formation not
-  // in this list still prints -- just after the known ones, in whatever
-  // order it was first encountered, rather than being dropped.
-  const FORMATION_ORDER = ['wing', 'split', '5-guys', 'i', 'i-wing'];
-  const FORMATION_COLORS = { wing: '#1f6f43', split: '#2a5d8f', '5-guys': '#8a3b12', i: '#6b3fa0', 'i-wing': '#8a2e5c' };
+  // 5 Guys, I, I Wing, Jumbo) so sections read in the order a coach
+  // already expects, not alphabetically or by add-order. Any future
+  // formation not in this list still prints -- just after the known
+  // ones, in whatever order it was first encountered, rather than being
+  // dropped.
+  const FORMATION_ORDER = ['wing', 'split', '5-guys', 'i', 'i-wing', 'jumbo'];
+  const FORMATION_COLORS = { wing: '#1f6f43', split: '#2a5d8f', '5-guys': '#8a3b12', i: '#6b3fa0', 'i-wing': '#8a2e5c', jumbo: '#8a7b12' };
   const FALLBACK_COLOR = '#455a64';
+
+  // Mixes a hex color toward white -- used for the full-playbook
+  // reference's "add-on option" pills, a lighter tint of the same
+  // formation color the play-name header above them uses, so the whole
+  // column still reads as one color family without a second fill color
+  // to maintain per formation.
+  function tint(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const mix = (c) => Math.round(c + (255 - c) * amt);
+    return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  }
 
   function formationKey(entry) {
     if (entry.formation === 'split') return 'split';
@@ -446,6 +459,291 @@
     return doc;
   }
 
+  // ---------------------------------------------------------------------
+  // Full Playbook Reference PDF -- Nathan, with a screenshot of the Game
+  // Plan Builder's own play-picker (pills per play) as the visual/
+  // interaction reference: "I need to be able to print out the PDF
+  // visual of all the plays. It needs to be Super easy similar to this
+  // section here. CTA style cells - All formations along the top
+  // creating 6 columns, then each play under it that we can run, below
+  // each of those small CTAs for the add on options for each. Color
+  // Coded easy to read - no diagrams just names."
+  //
+  // Unlike generateGamePlanPDF/generateQuickReferencePDF above (both
+  // scoped to whatever's curated into THIS WEEK's own Game Plan), this
+  // covers the FULL, evergreen playbook across all 6 real formations --
+  // sourced from window.playsForFormation() (js/play-calls.js), the
+  // exact same curation/fallback rules the real Play tab's own browse
+  // grid uses (factored out of renderFormationPlays() specifically for
+  // this reuse), so this can never show a play under the wrong formation
+  // or miss/duplicate a curated one. No diagrams/rasterization at all --
+  // "no diagrams just names" sidesteps the one real risk every other PDF
+  // in this file has to smoke-test (offscreen SVG rendering of a custom
+  // formation's alignmentToggles-driven geometry) -- this is pure vector
+  // text/pills, reusing the SAME drawPill/measurePillWidth helpers
+  // generateQuickReferencePDF already built rather than a second copy.
+  //
+  // "Add-on options" are shown as the TOGGLE'S OWN NAME (e.g. "Overload",
+  // "Motion", "Read A/B"), not every value combination (e.g. not
+  // "Overload: Off"/"Overload: L"/"Overload: R" as 3 separate pills) --
+  // keeps each play's own block genuinely small/scannable the way "CTA
+  // style... small CTAs" asks for, and the printed reference's job is
+  // "what can I additionally call for this play," not a second copy of
+  // the live card's own interactive toggles.
+  //
+  // The exact show/hide rule for every toggle was read directly out of
+  // js/play-calls.js's buildCard() (not guessed) -- see the comment on
+  // addOnPillsFor() below for the reasoning behind each one, and
+  // call-sheet-pdf.js's own established principle for why this matters:
+  // "make sure if a coach prints the play calls, it's reflective to the
+  // options we have in the play calls."
+  // ---------------------------------------------------------------------
+
+  // Every toggle a coach can additionally call for this play, in this
+  // formation -- one short pill per toggle NAME, matching buildCard's own
+  // exact show/hide conditions (js/play-calls.js, read in full). Nathan,
+  // with a screenshot circling "Wing Side"/"Direction" on a real printed
+  // page: "wing side and direction don't make sense to call out - Boot,
+  // Overload, QB Sneak, Motion, Reverse, those are the things we need to
+  // call out." Deliberately excludes Wing Side/Direction/Split Side --
+  // every single play needs a side and a direction, so flagging them as
+  // if they're a special, optional "add-on" is noise; a real add-on is
+  // something a coach might or might not layer onto the base call. Same
+  // reasoning extends to Split Side (the Split-formation equivalent of
+  // Wing Side) even though Nathan's own example only showed Wing plays --
+  // Pass stays (a genuine, optional Split call, not a baseline axis) --
+  // Protection/Left Call/Right Call were cut too, per Nathan's own
+  // follow-up ("Protection, Left Call, Right Call all don't need to be
+  // visible").
+  // - The legacy, 3-value Overload toggle (Off/L/R) only exists for the
+  //   built-in Wing formation (Formations.supportsOverload() is only
+  //   ever true there) -- I/I-Wing's own Overload comes through
+  //   `alignmentToggles` instead (below), a parallel, unrelated code path
+  //   that happens to share the same visual convention.
+  // - QB Sneak/Boot/Reverse share one slot and CAN combine (confirmed
+  //   against the real code, not assumed): QB Sneak takes priority over
+  //   Boot specifically (a play with hasQbSneak never also shows Boot,
+  //   even if noBoot is false), Reverse is independent of Boot, QB Keep
+  //   is independent of all three.
+  // - Read A/B, Counter, and Pop Variant are mutually exclusive (one slot,
+  //   first match wins, matching buildCard's own if/else-if chain) --
+  //   alignmentToggles (Overload for I/I-Wing, or any future per-
+  //   formation toggle) only shows when NONE of those three apply, one
+  //   pill per toggle, using the toggle's own author-set label so a new
+  //   toggle needs no new code here.
+  function addOnPillsFor(combo, formationId) {
+    const pills = [];
+    if (formationId === 'split') {
+      pills.push('Pass');
+      return pills;
+    }
+    const isQbSneakPlay = combo.playKey === 'qb_sneak';
+    if (formationId === 'wing' && !combo.hasPopVariant && !combo.noOverload) pills.push('Overload');
+    if (!isQbSneakPlay && !combo.noMotion) pills.push('Motion');
+    if (!combo.hasQbSneak && !combo.noBoot) pills.push('Boot');
+    if (combo.hasReverse && !combo.hasQbSneak) pills.push('Reverse');
+    if (combo.hasQbSneak) pills.push('QB Sneak');
+    if (combo.hasQbKeep) pills.push('QB Keep');
+    if (combo.hasInsideOutside) pills.push('In/Out');
+    else if (combo.altCallCardId != null) pills.push(combo.altCallLabel || 'Alt Call');
+    // Nathan: "we dont need Read A/B - or Pop Variant" -- dropped, same
+    // reasoning as the Wing Side/Direction cut above (buildCard's own
+    // hasCounter/alignmentToggles branches still apply when present).
+    if (combo.hasCounter) pills.push('Counter');
+    else if (combo.alignmentToggles && combo.alignmentToggles.length) {
+      combo.alignmentToggles.forEach((t) => pills.push(t.label));
+    }
+    return pills;
+  }
+
+  // Lays out one formation's whole column -- play-name header pill, then
+  // its add-on pills flowed/wrapped beneath, repeated for every play --
+  // and returns the final y. `draw` false does the exact same text-
+  // measuring/wrapping work (so height and ink can never disagree) but
+  // skips every actual fillRect/text call, used for the up-front sizing
+  // pass that decides how tall the one real page needs to be.
+  const PLAY_PILL_H = 15, ADDON_PILL_H = 11;
+  function renderColumn(doc, x, y, w, formationId, color, lightTint, plays, draw) {
+    const startY = y;
+    plays.forEach((combo) => {
+      if (draw) {
+        doc.setFillColor(color);
+        doc.roundedRect(x, y, w, PLAY_PILL_H, 3, 3, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor('#ffffff');
+        const label = doc.splitTextToSize(combo.label, w - 8)[0];
+        doc.text(label, x + w / 2, y + PLAY_PILL_H / 2 + 3, { align: 'center' });
+      }
+      y += PLAY_PILL_H + 3;
+
+      const pills = addOnPillsFor(combo, formationId).map((text) => ({ text }));
+      // Deliberately not reusing the louder drawPill/flowPills above --
+      // those are sized for a handful of big, bold, white-on-color pills
+      // across a half-page-wide column; a ~120pt-wide formation column
+      // with up to a dozen plays needs its own smaller, tighter pill/line
+      // sizing to stay legible and "small."
+      const GAP = 3, LINE_H = ADDON_PILL_H + 3;
+      let curX = x, curY = y;
+      pills.forEach((p) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.3);
+        const pw = doc.getTextWidth(p.text) + 7;
+        if (curX > x && curX + pw > x + w) { curX = x; curY += LINE_H; }
+        if (draw) {
+          doc.setFillColor(lightTint);
+          doc.roundedRect(curX, curY, pw, ADDON_PILL_H, ADDON_PILL_H / 2, ADDON_PILL_H / 2, 'F');
+          doc.setTextColor(color);
+          doc.text(p.text, curX + pw / 2, curY + ADDON_PILL_H / 2 + 2.1, { align: 'center' });
+        }
+        curX += pw + GAP;
+      });
+      y = curY + LINE_H + 6;
+    });
+    return y - startY;
+  }
+
+  // Renders one column that stacks TWO formations' sections (own header +
+  // own renderColumn each) back to back -- used for 5 Guys + Jumbo, which
+  // Nathan asked to condense into one column (Jumbo's only ever had the
+  // one "Beast" play so far, not enough on its own to earn a full column
+  // the way Wing/Split/I/I Wing do). Same measure/draw split as
+  // renderColumn itself, for the same reason.
+  function renderStackedColumn(doc, x, y, w, groups, draw) {
+    const startY = y;
+    groups.forEach(({ id, color, items }) => {
+      if (draw) {
+        doc.setFillColor(color);
+        doc.roundedRect(x, y, w, HEADER_H_STACKED, 3, 3, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor('#ffffff');
+        doc.text(`${formationName(id).toUpperCase()}  (${items.length})`, x + w / 2, y + HEADER_H_STACKED / 2 + 3, { align: 'center' });
+      }
+      y += HEADER_H_STACKED + 4;
+      if (items.length) {
+        y += renderColumn(doc, x, y, w, id, color, tint(color, 0.85), items, draw);
+      } else if (draw) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7.5);
+        doc.setTextColor('#999999');
+        doc.text('No plays yet', x + w / 2, y + 9, { align: 'center' });
+        y += 16;
+      } else {
+        y += 16;
+      }
+      y += 8;
+    });
+    return y - startY;
+  }
+  const HEADER_H_STACKED = 15;
+
+  async function generateFullPlaybookReferencePDF() {
+    if (!window.playsForFormation || !window.Formations) throw new Error('Play data not loaded yet.');
+    if (!window.jspdf) throw new Error('PDF library not loaded yet.');
+    if (window.loadLiveEditsIntoData) await window.loadLiveEditsIntoData();
+
+    const allFormations = window.Formations.list().map((f) => f.id);
+    const formationIds = FORMATION_ORDER.filter((id) => allFormations.includes(id))
+      .concat(allFormations.filter((id) => !FORMATION_ORDER.includes(id)));
+
+    const playsByFormation = {};
+    for (const id of formationIds) {
+      playsByFormation[id] = await window.playsForFormation(id);
+    }
+
+    // Nathan: "let's condense the 5 guys column with the jumbo column" --
+    // every solo formation keeps its own column; 5 Guys and Jumbo stack
+    // inside one shared column instead. Any future formation not in
+    // FORMATION_ORDER at all still gets its own solo column (same
+    // fallback the old flat list already had), just never auto-merged --
+    // merging is Nathan's own explicit call about these two specific,
+    // currently-small formations, not a general "small formations merge"
+    // rule this should keep making on its own as the playbook grows.
+    const MERGE_IDS = ['5-guys', 'jumbo'];
+    const soloIds = formationIds.filter((id) => !MERGE_IDS.includes(id));
+    const mergeGroups = MERGE_IDS.filter((id) => formationIds.includes(id))
+      .map((id) => ({ id, color: formationColor(id), items: playsByFormation[id] }));
+
+    // Slots left-to-right: every solo formation, with the merged 5 Guys/
+    // Jumbo column in its original FORMATION_ORDER position -- one fewer
+    // slot than before now that the sideline key column (Nathan: "remove
+    // the sideline key as well") is gone; the remaining columns widen to
+    // fill the page automatically (COL_W below derives from slots.length).
+    const mergeInsertAt = soloIds.findIndex((id) => FORMATION_ORDER.indexOf(id) > FORMATION_ORDER.indexOf(MERGE_IDS[0]));
+    const slots = soloIds.slice(0, mergeInsertAt < 0 ? soloIds.length : mergeInsertAt).map((id) => ({ type: 'solo', id }));
+    if (mergeGroups.length) slots.push({ type: 'merged', groups: mergeGroups });
+    if (mergeInsertAt >= 0) soloIds.slice(mergeInsertAt).forEach((id) => slots.push({ type: 'solo', id }));
+
+    const { jsPDF } = window.jspdf;
+    const PAGE_W = 792, MARGIN = 16, COL_GAP = 8, HEADER_H = 18, TITLE_H = 26;
+    const COLS = slots.length;
+    const USABLE_W = PAGE_W - 2 * MARGIN;
+    const COL_W = (USABLE_W - (COLS - 1) * COL_GAP) / COLS;
+
+    // Measure first (own throwaway doc -- text metrics don't depend on
+    // page size, only the font/size actually set when measuring, which
+    // this reuses identically in the real draw pass below), so the one
+    // real page can be sized to fit every column's content exactly --
+    // "CTA style cells... all columns" reads as one continuous
+    // reference, not a reference that's arbitrarily paginated mid-column.
+    const measureDoc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    let maxColH = 0;
+    slots.forEach((slot) => {
+      let h;
+      if (slot.type === 'solo') h = HEADER_H + 5 + renderColumn(measureDoc, 0, 0, COL_W, slot.id, null, null, playsByFormation[slot.id], false);
+      else h = renderStackedColumn(measureDoc, 0, 0, COL_W, slot.groups, false);
+      if (h > maxColH) maxColH = h;
+    });
+
+    const PAGE_H = Math.max(612, TITLE_H + maxColH + MARGIN * 2 + 10);
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: [PAGE_W, PAGE_H] });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor('#111111');
+    doc.text('ASL Bengals — Full Playbook Reference', MARGIN, MARGIN + 11);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor('#666666');
+    doc.text(new Date().toLocaleDateString(), PAGE_W - MARGIN, MARGIN + 11, { align: 'right' });
+
+    const colTopY = MARGIN + TITLE_H;
+    slots.forEach((slot, i) => {
+      const x = MARGIN + i * (COL_W + COL_GAP);
+      if (slot.type === 'merged') {
+        renderStackedColumn(doc, x, colTopY, COL_W, slot.groups, true);
+        return;
+      }
+      const id = slot.id;
+      const color = formationColor(id);
+      doc.setFillColor(color);
+      doc.roundedRect(x, colTopY, COL_W, HEADER_H, 3, 3, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor('#ffffff');
+      const items = playsByFormation[id];
+      doc.text(`${formationName(id).toUpperCase()}  (${items.length})`, x + COL_W / 2, colTopY + HEADER_H / 2 + 3.3, { align: 'center' });
+
+      renderColumn(doc, x, colTopY + HEADER_H + 5, COL_W, id, color, tint(color, 0.85), items, true);
+      if (!items.length) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7.5);
+        doc.setTextColor('#999999');
+        doc.text('No plays yet', x + COL_W / 2, colTopY + HEADER_H + 18, { align: 'center' });
+      }
+    });
+
+    const buildLabel = window.BUILD_V ? `Build ${window.BUILD_V}` : 'ASL Bengals';
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor('#999999');
+    doc.text(buildLabel, PAGE_W - MARGIN, PAGE_H - 6, { align: 'right' });
+
+    return doc;
+  }
+
   window.generateGamePlanPDF = generateGamePlanPDF;
   window.generateQuickReferencePDF = generateQuickReferencePDF;
+  window.generateFullPlaybookReferencePDF = generateFullPlaybookReferencePDF;
 })();

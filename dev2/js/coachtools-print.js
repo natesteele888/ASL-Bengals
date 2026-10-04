@@ -55,10 +55,20 @@
     const blankStatsBtn = document.getElementById('coachPrintBlankStatsBtn');
     if (blankStatsBtn && !blankStatsBtn.dataset.wired) {
       blankStatsBtn.dataset.wired = '1';
+      const blankStatsOriginalLabel = blankStatsBtn.textContent;
       blankStatsBtn.addEventListener('click', () => {
-        if (!window.generateGameStatSheetPDF) return;
-        const doc = window.generateGameStatSheetPDF(null);
-        doc.save('ASL_Bengals_Stat_Sheet_Blank.pdf');
+        if (blankStatsBtn.disabled || !window.generateGameStatSheetPDF) return;
+        blankStatsBtn.disabled = true;
+        try {
+          const doc = window.generateGameStatSheetPDF(null);
+          doc.save('ASL_Bengals_Stat_Sheet_Blank.pdf');
+          blankStatsBtn.textContent = '✅ Saved!';
+        } catch (err) {
+          console.error('Blank stat sheet PDF generation failed:', err);
+          blankStatsBtn.textContent = '⚠️ Failed — tap to retry';
+        } finally {
+          setTimeout(() => { blankStatsBtn.textContent = blankStatsOriginalLabel; blankStatsBtn.disabled = false; }, 2200);
+        }
       });
     }
   }
