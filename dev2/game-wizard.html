@@ -1115,6 +1115,14 @@
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
     if (m) return { kind:'youtube', videoId: m[1] };
+    // Nathan: "Full Game Clips should open in the window on the page with
+    // no login as they are public" -- a Drive FOLDER link (a coach's own
+    // "all 91 individual plays" playlist) used to fall through to nothing
+    // embeddable here, since a folder URL (/drive/folders/<id>) matches
+    // neither the single-file /d/<id>/ nor ?id= patterns below. Same
+    // regex/kind js/schedule.js's own copy of this function uses.
+    m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind:'drive-folder', previewUrl: 'https://drive.google.com/embeddedfolderview?id=' + m[1] + '#list' };
     m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (m && /drive\.google\.com/.test(url)) return { kind:'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
     return null;
@@ -1122,7 +1130,7 @@
   let filmPanelCollapsed = false;
   let filmClipIndex = 0;
   let filmPanelBuiltForGameId = null; // which game's film is currently sitting in #filmPanelHost
-  let filmKind = null; // 'youtube' | 'drive' | null -- which control path getCurrentFilmTime/play-pause should use
+  let filmKind = null; // 'youtube' | 'drive' | 'drive-folder' | null -- which control path getCurrentFilmTime/play-pause should use
 
   // Nathan: "Video is always visible in the top and should not start over
   // or reload when a play is saved." Builds the panel (and its <iframe>)
@@ -1225,7 +1233,7 @@
             ytPlayer = new YT.Player('filmPlayer', { videoId: embed.videoId, playerVars: { playsinline: 1 } });
           });
           appendPlayPauseControls(wrap, function(){ if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }, function(){ if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo(); });
-        } else if (embed && embed.kind === 'drive'){
+        } else if (embed && (embed.kind === 'drive' || embed.kind === 'drive-folder')){
           // Nathan: "this whole feature isn't working well." The direct-
           // video-file technique (driveDirectVideoUrl -> native <video>)
           // just failed with a real, specific error -- "source not
@@ -1236,13 +1244,18 @@
           // displays the video -- the tradeoff is losing programmatic
           // control (no auto-capturing a timestamp, no auto-seek in
           // Playback for Drive-hosted film specifically), but a working,
-          // simple video beats a broken, fancier one.
+          // simple video beats a broken, fancier one. A folder embed is a
+          // file LIST, not a single video -- give it real room (91
+          // individual plays) instead of a cramped video-player box.
+          const isFolder = embed.kind === 'drive-folder';
           const iframe = document.createElement('iframe');
           iframe.src = embed.previewUrl; iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-          iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+          iframe.style.cssText = 'width:100%;height:' + (isFolder ? 'min(55vh,480px)' : 'min(38vh,320px)') + ';border:0;border-radius:10px;margin-top:8px;background:' + (isFolder ? 'transparent' : '#000') + ';display:block;';
           wrap.appendChild(iframe);
           const hint = document.createElement('div'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
-          hint.textContent = 'Use the play/pause controls built into the video above -- this embed can\'t be driven by a separate button, so timestamps can\'t be auto-captured for this film.';
+          hint.textContent = isFolder
+            ? 'Pick a clip from the list above to play it -- timestamps can\'t be auto-captured for a folder of clips.'
+            : 'Use the play/pause controls built into the video above -- this embed can\'t be driven by a separate button, so timestamps can\'t be auto-captured for this film.';
           wrap.appendChild(hint);
         } else {
           const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';
@@ -1333,11 +1346,12 @@
       wrap.appendChild(navRow);
       const clip = clips[playClipIndex];
       const embed = embeddableFilmSrc(clip.url);
-      if (embed && (embed.kind === 'youtube' || embed.kind === 'drive')){
+      if (embed && (embed.kind === 'youtube' || embed.kind === 'drive' || embed.kind === 'drive-folder')){
+        const isFolder = embed.kind === 'drive-folder';
         const iframe = document.createElement('iframe');
         iframe.src = embed.kind === 'youtube' ? ('https://www.youtube.com/embed/' + embed.videoId) : embed.previewUrl;
         iframe.allow = 'autoplay; encrypted-media; picture-in-picture'; iframe.allowFullscreen = true;
-        iframe.style.cssText = 'width:100%;height:min(38vh,320px);border:0;border-radius:10px;margin-top:8px;background:#000;display:block;';
+        iframe.style.cssText = 'width:100%;height:' + (isFolder ? 'min(55vh,480px)' : 'min(38vh,320px)') + ';border:0;border-radius:10px;margin-top:8px;background:' + (isFolder ? 'transparent' : '#000') + ';display:block;';
         wrap.appendChild(iframe);
       } else {
         const openLink = document.createElement('a'); openLink.href = clip.url; openLink.target = '_blank'; openLink.rel = 'noopener';

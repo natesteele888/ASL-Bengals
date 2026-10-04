@@ -1932,6 +1932,17 @@
     if (!url) return null;
     let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
     if (m) return { kind: 'youtube', videoId: m[1] };
+    // Nathan: "Full Game Clips should open in the window on the page with
+    // no login as they are public" -- a Drive FOLDER link (a coach's own
+    // "all 91 individual plays" playlist, see the gameFootageTopCtaHtml/
+    // gameFootageReadOnlyHtml "Full Game"/quarter buttons above) used to
+    // always fall through to a plain new-tab link, since a folder URL
+    // (/drive/folders/<id>) matches neither the single-file /d/<id>/ nor
+    // ?id= patterns below. Google's own embeddedfolderview endpoint
+    // renders a real inline file list for a publicly-shared folder, same
+    // no-sign-in assumption as every other embed here.
+    m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (m && /drive\.google\.com/.test(url)) return { kind: 'drive-folder', previewUrl: 'https://drive.google.com/embeddedfolderview?id=' + m[1] + '#list' };
     m = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (m && /drive\.google\.com/.test(url)) return { kind: 'drive', previewUrl: 'https://drive.google.com/file/d/' + m[1] + '/preview' };
     return null;
@@ -2003,9 +2014,13 @@
     }
     // Nathan: Drive's /preview embed has no timestamp URL parameter the
     // way YouTube does -- start only ever applies to the YouTube branch.
+    // A folder embed is a file LIST, not a single video -- give it real
+    // room to actually be useful (91 individual plays) instead of a
+    // cramped video-player-sized box.
+    const embedHeight = embed.kind === 'drive-folder' ? 'min(55vh,480px)' : 'min(38vh,320px)';
     slot.innerHTML = embed.kind === 'youtube'
-      ? `<iframe src="https://www.youtube.com/embed/${embed.videoId}?autoplay=1${start ? '&start=' + start : ''}" style="width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`
-      : `<iframe src="${embed.previewUrl}" style="width:100%;height:min(38vh,320px);border:0;border-radius:10px;background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+      ? `<iframe src="https://www.youtube.com/embed/${embed.videoId}?autoplay=1${start ? '&start=' + start : ''}" style="width:100%;height:${embedHeight};border:0;border-radius:10px;background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`
+      : `<iframe src="${embed.previewUrl}" style="width:100%;height:${embedHeight};border:0;border-radius:10px;background:${embed.kind === 'drive-folder' ? 'transparent' : '#000'};" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
     slot.setAttribute('data-showing-url', btn.getAttribute('data-film-url'));
     slot.style.display = '';
   });
