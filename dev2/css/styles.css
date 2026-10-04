@@ -113,10 +113,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    fixed constant anymore. */
 .topToolbar{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto}
 .toolbarRow{display:flex;gap:6px}
-.toolbarBtn{width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
+.toolbarBtn{position:relative;width:20px;height:20px;border-radius:50%;background:rgba(17,17,17,.65);
   border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
 .toolbarBtn:active{background:rgba(17,17,17,.85)}
+/* Mobile audit: visually 18-20px, well under the ~32px touch-target
+   guideline -- deliberately kept visually small (see the @media block
+   below, Nathan: "tightening the pill/icon sizing... reclaims enough
+   width that both stay on one line on a typical phone" -- growing these
+   for real would reopen that header-wrapping problem). A ::after hit-zone
+   extends the actual TAPPABLE area without touching layout/flex sizing
+   at all, so the header's own width math is completely unaffected. */
+.toolbarBtn::after{content:'';position:absolute;inset:-6px}
 /* Nathan: "there should be a 2nd pill next to your own pill for the
    player" -- playerMenuWrap and childPillsWrap's own child-pill wraps now
    sit side by side in this row instead of playerMenuWrap being the whole
