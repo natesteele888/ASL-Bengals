@@ -166,12 +166,22 @@
     }
     if(!inFlight){
       inFlight = (async () => {
+        // Remember which real gate refresh token this attempt was for --
+        // if the refresh itself throws (e.g. a network blip mid-game, not
+        // necessarily a dead/invalid token), the catch below falls back to
+        // an anonymous session for THIS call but keeps this refreshToken
+        // on `cached` with an already-expired expiresAt, so the very next
+        // call retries the real gate session instead of being stuck on
+        // the anonymous one for the rest of the page's life.
+        let fallbackRefreshToken = null, fallbackKind = null;
         try {
           if(cached && cached.refreshToken){
+            fallbackRefreshToken = cached.refreshToken; fallbackKind = cached.kind;
             cached = Object.assign({}, await refreshIdToken(cached.refreshToken), {kind: cached.kind});
           } else {
             const saved = loadGateSession();
             if(saved && saved.refreshToken){
+              fallbackRefreshToken = saved.refreshToken; fallbackKind = saved.kind;
               cached = Object.assign({}, await refreshIdToken(saved.refreshToken), {kind: saved.kind});
               saveGateSession(cached.refreshToken, saved.kind);
             } else {
@@ -183,7 +193,10 @@
             }
           }
         } catch(e){
-          cached = await signInAnonymously();
+          const anon = await signInAnonymously();
+          cached = fallbackRefreshToken
+            ? Object.assign({}, anon, {refreshToken: fallbackRefreshToken, kind: fallbackKind, expiresAt: 0})
+            : anon;
         }
         return cached;
       })().finally(() => { inFlight = null; });

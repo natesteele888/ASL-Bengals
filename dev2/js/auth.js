@@ -534,6 +534,21 @@ window.exitPlayerPreview = function(){
     }
     var hash = await sha256Hex(roleCoachInput.value);
     if(hash === COACH_CODE_HASH){
+      // Match attemptLogin()'s typed-coach-code path: establish the real
+      // 'coach' gate session before granting the role, not just the local
+      // UI permission -- otherwise this route leaves the Firebase session
+      // tied to whichever gate account was used at the first screen
+      // (usually 'player'), different from someone who types the coach
+      // code directly.
+      try {
+        await window.signInWithGate('coach', hash);
+      } catch(gateErr) {
+        console.error('Gate sign-in failed:', gateErr);
+        roleErrorEl.textContent = "Couldn't verify that right now -- check your connection and try again.";
+        roleCoachInput.value = '';
+        roleCoachInput.focus();
+        return;
+      }
       applyRole('coach');
       roleScreenEl.classList.add('hide');
       proceedPastRoleChoice();

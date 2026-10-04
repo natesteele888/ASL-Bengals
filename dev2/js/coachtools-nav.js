@@ -200,6 +200,13 @@
   function renderNav() {
     const nav = document.getElementById('coachToolsSubNav');
     if (!nav) return;
+    // renderNav() rebuilds the whole subtree (including the search input
+    // itself) on every keystroke -- capture focus/caret from the OLD input
+    // before wiping it, so typing a multi-character query doesn't get
+    // kicked out of the field after the first letter.
+    const prevInput = document.getElementById('coachToolsSearchInput');
+    const hadFocus = !!prevInput && document.activeElement === prevInput;
+    const caret = hadFocus ? prevInput.selectionStart : null;
     nav.innerHTML = '';
 
     // ---- Search box -- typing jumps straight to a matching tab by name,
@@ -207,6 +214,7 @@
     const searchWrap = document.createElement('div');
     searchWrap.style.cssText = 'margin-bottom:10px;';
     const searchInput = document.createElement('input');
+    searchInput.id = 'coachToolsSearchInput';
     searchInput.type = 'text';
     searchInput.value = searchQuery;
     searchInput.placeholder = '🔍 Search Coach Tools…';
@@ -214,6 +222,10 @@
     searchInput.addEventListener('input', () => { searchQuery = searchInput.value; renderNav(); });
     searchWrap.appendChild(searchInput);
     nav.appendChild(searchWrap);
+    if (hadFocus) {
+      searchInput.focus();
+      if (caret != null) searchInput.setSelectionRange(caret, caret);
+    }
 
     const q = searchQuery.trim().toLowerCase();
     if (q) {

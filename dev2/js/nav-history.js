@@ -27,7 +27,16 @@
 // tab or drill-down is.
 (function () {
   const stack = [];
-  let suppressNextPopstate = false;
+  // A counter, not a boolean -- consumeTop() is called from several
+  // independent files (practices.js, play-calls.js, schedule.js,
+  // gameplan-builder.js). Each history.back() it triggers fires its OWN
+  // popstate asynchronously, so if a second consumeTop() ever runs before
+  // the first popstate lands, a boolean would get clobbered back to true
+  // by the second call and then cleared by the first popstate to arrive --
+  // leaving the SECOND back-press's popstate with nothing to suppress, so
+  // it would incorrectly pop and undo a real (not consumed) entry. A
+  // counter suppresses exactly as many popstates as were consumed.
+  let suppressNextPopstate = 0;
 
   function push(label, undo) {
     if (typeof undo !== 'function') return;
@@ -76,12 +85,12 @@
   function consumeTop() {
     if (!stack.length) return;
     stack.pop();
-    suppressNextPopstate = true;
+    suppressNextPopstate++;
     history.back();
   }
 
   window.addEventListener('popstate', () => {
-    if (suppressNextPopstate) { suppressNextPopstate = false; return; }
+    if (suppressNextPopstate > 0) { suppressNextPopstate--; return; }
     const entry = stack.pop();
     if (entry) {
       try { entry.undo(); }

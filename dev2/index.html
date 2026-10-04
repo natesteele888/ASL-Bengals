@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261003o">
+<link rel="stylesheet" href="css/styles.css?v=20261004a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -655,6 +655,16 @@
          not a replacement for the detailed Call Sheet above, since
          nothing asked for that one to go away. -->
     <button class="navBtn secondary" id="thisweekPrintQuickRefBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📝 Print Quick Reference</button>
+    <!-- Nathan, with a screenshot of this screen's own Game Plan pills as
+         the visual reference: "I need to be able to print out the PDF
+         visual of all the plays... CTA style cells - All formations
+         along the top creating 6 columns, then each play under it...
+         Color Coded easy to read - no diagrams just names." Unlike the
+         two print buttons above (both scoped to whatever's in THIS
+         WEEK's own list), this covers the full, evergreen playbook
+         across all 6 real formations regardless of what's curated this
+         week -- js/gameplan-pdf.js's generateFullPlaybookReferencePDF. -->
+    <button class="navBtn secondary" id="thisweekPrintFullPlaybookBtn" style="display:block;width:100%;text-align:center;margin-top:8px;">📚 Print Full Playbook Reference</button>
     <div id="thisweekCloudStatus" style="text-align:center;font-size:11px;color:#999;margin-top:8px;"></div>
   </div>
 </div>
@@ -2472,7 +2482,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261003o';
+  const BUILD_V = '20261004a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

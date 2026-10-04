@@ -940,6 +940,61 @@ window.renderedDefenseFor = function (variant, defenseMode) {
 
 // ---- Build every base play x direction combo (wing is a per-card toggle, not a filter) ----
 const BASE_PLAY_ORDER = ['inside_zone', 'outside_zone', 'option', 'option_pass', 'blast', 'double_blast'];
+// Which plays a given formation actually shows -- factored out of
+// renderFormationPlays() so a second real consumer (the full-playbook
+// reference PDF) gets the exact same curation/fallback rules for free
+// instead of a second, drift-prone copy of this logic. Exposed on window
+// (see the bottom of this file) for that same reason.
+async function playsForFormation(formationId) {
+  const allCombos = buildPlayList();
+  const all = await window.AssignmentStore.loadFormationPlays();
+  const curated = all[formationId];
+  const formationMeta = window.Formations.get(formationId);
+  // Wing/Split predate "which plays can this formation call" as a concept
+  // at all -- every play has always been available for them, so an empty
+  // curation falls back to every play, matching what Play Calls has
+  // always shown. A coach-created formation has no such history: Nathan,
+  // after adding one in Formation Builder: "it automatically assigned all
+  // plays to the formation without me verifying which plays I wanted to
+  // assign" -- so for anything that isn't built-in, empty curation means
+  // exactly that (nothing chosen yet), not "everything", until the coach
+  // actually picks some in Create a Play.
+  //
+  // "Every play" used to correctly mean "every Wing/Split play" because
+  // DATA.playTypes never held anything else. Once js/playbuilder/
+  // sync-custom-formations.js started merging Play Builder V2 plays
+  // (I's own Dive/Sweep/4-Sweep, authoredFormationId: 'i') into that
+  // SAME pool, this fallback started showing them under Wing/Split too --
+  // Nathan, live: "there are plays showing up in other formations that
+  // came from i-form. I don't have an easy way of removing those plays
+  // from the formations." Not a stray curation write (confirmed:
+  // formationPlays.wing is genuinely unset, only .i has entries) -- this
+  // filter is the actual fix, not a cleanup. A play with no
+  // authoredFormationId at all is a real, original Wing/Split play
+  // (that field is Play Builder V2-only) and always passes; one with a
+  // DIFFERENT formation's id is excluded; one that matches THIS
+  // formation's own id (not possible for Wing/Split today, but real the
+  // moment either is ever authored through Play Builder V2) still shows.
+  // Nathan: "pop pass needs to be removed from the Split formation, but
+  // it won't allow me to remove plays there." Modify is deliberately
+  // unavailable for Wing/Split (see renderFormationPlays' own gate) --
+  // Pop Pass showing up under Split at all was the actual bug, not a
+  // missing removal affordance. Pop Pass already carries noSplit:true
+  // (buildCard's own formation toggle already hides its "Split" pill for
+  // exactly this reason -- "Pop Pass has no Split formation data at
+  // all"), but this fallback never checked it, so it fell through to
+  // Split's grid anyway as one more "every play with no foreign
+  // authoredFormationId" match. Root-caused here rather than worked
+  // around with a curation write, same reasoning the authoredFormationId
+  // filter right above already established.
+  const list = (curated && curated.length)
+    ? curated.map(key => allCombos.find(c => c.playKey === key)).filter(Boolean)
+    : (formationMeta && formationMeta.builtIn
+        ? allCombos.filter(c => (!c.authoredFormationId || c.authoredFormationId === formationId) && !(formationId === 'split' && c.noSplit))
+        : []);
+  return list.slice().sort((a, b) => (a.isPass ? 1 : 0) - (b.isPass ? 1 : 0));
+}
+
 function buildPlayList() {
   const base = BASE_PLAY_ORDER
     .map(playKey => DATA.playTypes.find(p => p.key === playKey))
@@ -5547,54 +5602,7 @@ function renderFormationPlays(container, formationId, formationName, modifyMode,
   gridEl.className = 'formation-play-grid';
   container.appendChild(gridEl);
 
-  const allCombos = buildPlayList();
-  window.AssignmentStore.loadFormationPlays().then(all => {
-    const curated = all[formationId];
-    const formationMeta = window.Formations.get(formationId);
-    // Wing/Split predate "which plays can this formation call" as a concept
-    // at all -- every play has always been available for them, so an empty
-    // curation falls back to every play, matching what Play Calls has
-    // always shown. A coach-created formation has no such history: Nathan,
-    // after adding one in Formation Builder: "it automatically assigned all
-    // plays to the formation without me verifying which plays I wanted to
-    // assign" -- so for anything that isn't built-in, empty curation means
-    // exactly that (nothing chosen yet), not "everything", until the coach
-    // actually picks some in Create a Play. The empty-note below already
-    // says the right thing for that case.
-    //
-    // "Every play" used to correctly mean "every Wing/Split play" because
-    // DATA.playTypes never held anything else. Once js/playbuilder/
-    // sync-custom-formations.js started merging Play Builder V2 plays
-    // (I's own Dive/Sweep/4-Sweep, authoredFormationId: 'i') into that
-    // SAME pool, this fallback started showing them under Wing/Split too --
-    // Nathan, live: "there are plays showing up in other formations that
-    // came from i-form. I don't have an easy way of removing those plays
-    // from the formations." Not a stray curation write (confirmed:
-    // formationPlays.wing is genuinely unset, only .i has entries) -- this
-    // filter is the actual fix, not a cleanup. A play with no
-    // authoredFormationId at all is a real, original Wing/Split play
-    // (that field is Play Builder V2-only) and always passes; one with a
-    // DIFFERENT formation's id is excluded; one that matches THIS
-    // formation's own id (not possible for Wing/Split today, but real the
-    // moment either is ever authored through Play Builder V2) still shows.
-    // Nathan: "pop pass needs to be removed from the Split formation, but
-    // it won't allow me to remove plays there." Modify is deliberately
-    // unavailable for Wing/Split (see the comment on that gate below) --
-    // Pop Pass showing up under Split at all was the actual bug, not a
-    // missing removal affordance. Pop Pass already carries noSplit:true
-    // (buildCard's own formation toggle already hides its "Split" pill for
-    // exactly this reason -- "Pop Pass has no Split formation data at
-    // all"), but this fallback never checked it, so it fell through to
-    // Split's grid anyway as one more "every play with no foreign
-    // authoredFormationId" match. Root-caused here rather than worked
-    // around with a curation write, same reasoning the authoredFormationId
-    // filter right above already established.
-    const list = (curated && curated.length)
-      ? curated.map(key => allCombos.find(c => c.playKey === key)).filter(Boolean)
-      : (formationMeta && formationMeta.builtIn
-          ? allCombos.filter(c => (!c.authoredFormationId || c.authoredFormationId === formationId) && !(formationId === 'split' && c.noSplit))
-          : []);
-    const sorted = list.slice().sort((a, b) => (a.isPass ? 1 : 0) - (b.isPass ? 1 : 0));
+  playsForFormation(formationId).then(sorted => {
 
     // "Modify" -- Nathan: "I should be able to go into Play > Formations >
     // choose a formation > with all plays visible, click a Modify button...
@@ -6064,6 +6072,12 @@ function renderPlayDetail(container, combo, formationId, formationName, initialT
     });
   }
   window.loadLiveEditsIntoData = loadLiveEditsIntoData;
+  // Exposed for js/gameplan-pdf.js's full-playbook reference print, which
+  // needs the exact same "which plays belong to which formation" rules
+  // renderFormationPlays() already uses -- see playsForFormation's own
+  // comment for why this isn't a second, reimplemented copy.
+  window.buildPlayList = buildPlayList;
+  window.playsForFormation = playsForFormation;
 
   function proceedIntoPlayCalls() {
     const grid = document.getElementById('playCallsGrid');

@@ -1391,6 +1391,32 @@
     if (buildBtn) buildBtn.addEventListener('click', () => {
       if (window.openGamePlanBuilder) window.openGamePlanBuilder();
     });
+
+    // Nathan: "I need to be able to print out the PDF visual of all the
+    // plays... CTA style cells - All formations along the top creating 6
+    // columns... Color Coded easy to read - no diagrams just names."
+    // Covers the full playbook regardless of what's in THIS week's own
+    // list, unlike the two print buttons above -- no pendingSelection
+    // check needed, same disabled/originalLabel/try-catch-finally pattern.
+    const fullPlaybookBtn = document.getElementById('thisweekPrintFullPlaybookBtn');
+    if (fullPlaybookBtn) {
+      const originalFullPlaybookLabel = fullPlaybookBtn.textContent;
+      fullPlaybookBtn.addEventListener('click', async () => {
+        if (fullPlaybookBtn.disabled || !window.generateFullPlaybookReferencePDF) return;
+        fullPlaybookBtn.disabled = true;
+        fullPlaybookBtn.textContent = '📚 Generating…';
+        try {
+          const doc = await window.generateFullPlaybookReferencePDF();
+          doc.save('ASL_Bengals_Full_Playbook_Reference.pdf');
+          fullPlaybookBtn.textContent = '✅ Saved!';
+        } catch (err) {
+          console.error('Full Playbook Reference PDF generation failed:', err);
+          fullPlaybookBtn.textContent = '⚠️ Failed — tap to retry';
+        } finally {
+          setTimeout(() => { fullPlaybookBtn.textContent = originalFullPlaybookLabel; fullPlaybookBtn.disabled = false; }, 2200);
+        }
+      });
+    }
   }
 
   window.initThisWeek = function () {
