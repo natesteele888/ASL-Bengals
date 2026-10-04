@@ -2289,7 +2289,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    needed on top of those existing components, just laying the stat cards
    out in a row instead of the 2-column grid .adminStatGrid uses elsewhere. */
 .weekAheadStats { display: flex; gap: 10px; margin-bottom: 4px; }
-.weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 80px; }
+/* min-width was 80px, which silently defeated flex-shrink below that --
+   fine with 3 cards (fits even on a narrow phone), but a week with 4
+   (e.g. a walk-through alongside practices/game/film) needs ~71px each
+   on a 375px screen and had nowhere to shrink to, overflowing the page
+   by 5px. min-width:0 lets flex-shrink actually do its job -- .lbl has
+   no white-space:nowrap, so a narrower card just wraps its label to a
+   second line instead of pushing the page wider. */
+.weekAheadStats .adminStatCard { flex: 1 1 80px; min-width: 0; }
 /* Nathan: "also keep a short write up in there with a little
    motivation." then: "hype line is weak - move it to the top and have
    it be worth having there." then (2026-09-01): "don't need the pump up
