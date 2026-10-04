@@ -38,9 +38,21 @@
       .split(/[^a-z0-9]+/)
       .filter((t) => t.length > 2 && !IGNORED_TEAM_WORDS.has(t));
   }
+  // A single shared token isn't enough -- "North Middlesex" and "North
+  // County" are two separate, real CMYFCC opponents that share only
+  // "north" and nothing else (the exact collision already found and
+  // fixed for opponent logos this same session, and for this same
+  // token-matching pattern in js/standings.js). Requires every token of
+  // the SHORTER name to appear in the longer one instead -- still
+  // matches the legitimate "Ayer/Shirley/Lunenburg" vs. "Ayer Shirley"
+  // case this function's own comment above describes, but no longer
+  // matches two genuinely different teams off one shared word.
   function teamsMatch(a, b) {
     const ta = teamTokens(a), tb = teamTokens(b);
-    return !!(ta.length && tb.length && ta.some((t) => tb.includes(t)));
+    if (!ta.length || !tb.length) return false;
+    const shorter = ta.length <= tb.length ? ta : tb;
+    const longer = ta.length <= tb.length ? tb : ta;
+    return shorter.every((t) => longer.includes(t));
   }
 
   function load() {

@@ -520,6 +520,15 @@
       current = { ...current, id: genId(), date: '', updatedAt: null };
       delete current._repeatDays;
       delete current._repeatUntil;
+      // Real bug: duplicating a practice that already has drone footage
+      // attached carried those exact clip URLs/titles/comments over to
+      // the new, unsaved draft -- once Saved, they'd permanently persist
+      // under a new id for a completely different date. A duplicate
+      // should start with no footage of its own, same as any other
+      // brand-new practice (every reader already treats a missing
+      // droneClips field as "none," see drone-footage.js's own
+      // Array.isArray guards).
+      delete current.droneClips;
       renderDetail();
       const statusEl = document.getElementById('practicesDetailStatus');
       if (statusEl) statusEl.textContent = 'Duplicated -- pick a new date (and repeat days, if you want) and Save.';

@@ -418,6 +418,20 @@
           function commitAttempt() {
             const raw = input.value.trim();
             if (raw === '') return;
+            // Real, previously-silent bug: a typo that isn't a valid number
+            // (or "-" in passing mode) fell through every branch below
+            // untouched, yet the box still cleared and the view still
+            // re-rendered as if the attempt HAD been recorded -- a coach
+            // fast-entering live stats could lose a play's stat with zero
+            // indication anything went wrong. Same validity condition each
+            // branch below already uses, computed up front so an invalid
+            // entry can bail out before touching anything.
+            const isValid = cfg.passingMode ? (raw === '-' || !isNaN(Number(raw))) : !isNaN(Number(raw));
+            if (!isValid) {
+              input.style.outline = '2px solid #c62828';
+              setTimeout(() => { input.style.outline = ''; }, 1200);
+              return;
+            }
             const dir = dirSelect ? dirSelect.value : undefined;
             if (dir) rowData._lastDir = dir;
             let playCall = null;

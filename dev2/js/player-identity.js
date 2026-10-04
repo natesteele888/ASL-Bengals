@@ -804,7 +804,19 @@
       throw err;
     }
     touchLastSeen(match.id, match.name);
-    return { session: { playerId: match.id, name: match.name }, isFreshSignup: false };
+    // Real risk, not hypothetical: two different kids who happen to type
+    // the identical name AND pick the identical 4-digit PIN resolve to
+    // the SAME existing record here, with no signal either way -- name+
+    // PIN alone can't tell them apart. isKnownOnThisDevice tells the call
+    // site whether this device has actually seen this exact playerId
+    // sign in before (a real prior session, not just a name/PIN guess) --
+    // false means "first time this device has ever resolved to this
+    // specific record," the one case worth a quick "is this really you?"
+    // check before silently continuing as them. True (the common case --
+    // the same kid signing in again on a device they've already used)
+    // needs no extra friction at all.
+    const isKnownOnThisDevice = getKnownProfiles().some(p => p.playerId === match.id);
+    return { session: { playerId: match.id, name: match.name }, isFreshSignup: false, isKnownOnThisDevice };
   }
 
   // Shared tail end of both the mandatory sign-in gate and the Switch
@@ -852,6 +864,10 @@
       // Switch Profile "Add Another" flow below, there's no separate
       // per-profile role choice here, this IS that choice already made.
       const result = await resolveSessionFor(name, pin, window.userRole || (window.isCoachSession ? 'coach' : 'player'));
+      if(!result.isFreshSignup && !result.isKnownOnThisDevice){
+        const ok = confirm(`We found an existing "${result.session.name}" account with that name and code. If that's you signing in on a new device, tap OK to continue as them. If you're not sure, tap Cancel and try a slightly different name (like adding your last initial).`);
+        if(!ok){ btnEl.disabled = false; btnEl.textContent = 'Continue'; return; }
+      }
       completeSignIn(result.session, result.isFreshSignup);
     } catch(e){
       errorEl.textContent = e.isNameTaken ? e.message : 'Could not reach the team server -- check your connection and try again.';
@@ -989,6 +1005,23 @@
     if(mergePromptCurrentNameEl) mergePromptCurrentNameEl.textContent = mergeCurrentSession.name;
     mergePromptOverlay.classList.add('show');
   }
+  // Nathan's own motivating example for this whole feature (Caden86/
+  // Caden#86/Caden) is almost certainly legacy data predating the role
+  // field -- a strict `role === 'player'` check silently excluded any
+  // account missing that field from ever being offered a merge, on
+  // either side, forever. Treats a MISSING role as "player" (the
+  // historical default, before parent/coach roles existed as a concept)
+  // while still excluding anyone who's genuinely a coach or parent --
+  // same isCoach/role/name-allowlist check coachtools-dashboard.js's own
+  // isCoachRecord already established for this exact "legacy record with
+  // no role field" gap, extended here to also rule out role:'parent'.
+  function isPlayerRecord(rec){
+    if(!rec) return false;
+    if(rec.role === 'parent') return false;
+    if(rec.isCoach || rec.role === 'coach') return false;
+    if(window.COACH_PROFILE_NAMES && window.COACH_PROFILE_NAMES.indexOf(String(rec.name || '').trim().toLowerCase()) !== -1) return false;
+    return true;
+  }
   async function maybeShowMergePrompt(session){
     if(!session || mergePromptShownThisLoad || !mergePromptOverlay) return;
     mergePromptShownThisLoad = true;
@@ -997,14 +1030,14 @@
       const myRecord = all[session.playerId];
       // Only ever offered for plain player logins -- see the block comment
       // above for why coach/parent accounts are excluded on both sides.
-      if(!myRecord || myRecord.role !== 'player') return;
+      if(!myRecord || !isPlayerRecord(myRecord)) return;
       const groupIds = await getAliasGroupIds(session.playerId, all);
       const declined = getDeclinedPairs();
       const known = getKnownProfiles();
       const candidates = known.filter(p => {
         if(groupIds.indexOf(p.playerId) !== -1) return false; // already the same person (or is themselves)
         const rec = all[p.playerId];
-        if(!rec || rec.role !== 'player') return false;
+        if(!rec || !isPlayerRecord(rec)) return false;
         if(rec.aliasOf) return false; // already merged into someone else -- that merge is offered from the survivor's side instead
         if(declined.indexOf(pairKey(session.playerId, p.playerId)) !== -1) return false;
         return true;
@@ -1136,6 +1169,14 @@
       // entirely either way -- that account keeps whatever role it
       // already has.
       const result = await resolveSessionFor(name, pin, 'player');
+      // Same real risk as the main sign-in gate above (see
+      // resolveSessionFor's own comment) -- a name+PIN match this device
+      // has never actually seen before could be a coincidental collision
+      // with a different real kid, not a genuine returning profile.
+      if(!result.isFreshSignup && !result.isKnownOnThisDevice){
+        const ok = confirm(`We found an existing "${result.session.name}" account with that name and code. If that's really them, tap OK to add this profile. If you're not sure, tap Cancel and try a slightly different name (like adding a last initial).`);
+        if(!ok) return;
+      }
       closeSwitchProfileOverlay();
       completeSignIn(result.session, result.isFreshSignup);
       // completeSignIn covers the session/badge/local state, but a lot of
