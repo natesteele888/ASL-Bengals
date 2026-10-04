@@ -2824,6 +2824,18 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 
 /* ---- Game stats table ---- */
 .statsTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+/* Mobile audit: the editable variant (roster.js/coaching-staff.js/
+   game-stats-editor.js all share this one class) has enough columns
+   (#/Name/Position/Login + action icons, or every stat category for
+   game entry) that its natural content width -- 432px for the roster
+   table on a 375px phone -- exceeds width:100%'s own constraint, and a
+   <table> is free to grow past that rather than actually shrink to
+   fit, pushing the WHOLE PAGE 67px wider instead of just scrolling the
+   table. display:block turns the table itself into a bounded,
+   independently-scrollable box (verified live: columns/rows still line
+   up correctly, body.scrollWidth back to exactly the viewport width)
+   instead of carrying the overflow out to the page. */
+.statsTableEdit { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .statsTable th { background: var(--bengal-black); color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; padding: 6px 4px; text-align: center; }
 .statsTable td { border: 1px solid var(--line); padding: 4px; text-align: center; }
 .statsTable tbody tr:nth-child(even) { background: rgba(0,0,0,.03); }
