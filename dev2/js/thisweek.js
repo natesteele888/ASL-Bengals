@@ -300,9 +300,24 @@
     const inWindow = (d) => d && d >= start && d <= end;
     const gameEntries = [];
     const practiceEntries = [];
+    // Real bug, found in an audit: neither this nor weekAheadGameCardHtml/
+    // weekAheadWriteupText excluded gameType==='Bye', even though this
+    // exact file already guards it elsewhere (see syncOpponentFilmLink's
+    // own "linkedGame.gameType !== 'Bye'" check below) and js/schedule.js
+    // had to fix the identical gap twice for its own game-preview text
+    // and list row -- a Bye's `opponent` field is literally the string
+    // 'Bye', not empty. A bye week falling in the current window used to
+    // render a real-looking matchup card with a colored-initials "Bye"
+    // badge, and the write-up produced nonsense like "...against Bye."
+    // Tracked separately instead of silently dropped -- Nathan's own
+    // want for the main Schedule list ("let's call that out") applies
+    // here too; a coach/player should still be told it's a bye week, not
+    // see nothing with no explanation.
+    let byeEntry = null;
     (games || []).forEach(g => {
       const d = toDateOnly(g.date);
       if (!inWindow(d)) return;
+      if (g.gameType === 'Bye') { byeEntry = { d, g }; return; }
       gameEntries.push({ d, g });
     });
     (practices || []).forEach(p => {
@@ -322,9 +337,10 @@
     const practiceCount = practiceEntries.length - filmCount - walkthroughCount;
 
     return {
-      hasAny: !!(gameEntries.length || practiceEntries.length),
+      hasAny: !!(gameEntries.length || practiceEntries.length || byeEntry),
       record: bengalsRecord(games),
       gameEntries,
+      byeEntry,
       practiceEntries,
       practiceCount,
       filmCount,
@@ -355,7 +371,13 @@
       : hasEventPassed(g.date, g.gameTime || g.time) ? '' : `<span class="scheduleResultBadge upcoming">Upcoming</span>`;
     const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.ourScore))}</span>` : '';
     const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(g.oppScore))}</span>` : '';
-    const gameTime = to12h(g.gameTime || g.time || '');
+    // Real inconsistency, found in an audit: computed unconditionally,
+    // unlike js/schedule.js's own list row, which explicitly drops
+    // kickoff time once a game is final ("the final score already says
+    // everything a kickoff time would"). A game played earlier in the
+    // same displayed week still showed its kickoff-time chip alongside
+    // the W/L badge and score here.
+    const gameTime = result ? '' : to12h(g.gameTime || g.time || '');
     const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
     const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
     return `
@@ -371,6 +393,17 @@
           </span>
           <span class="scheduleTeamSide away">${opponentBadgeHtml(g.opponent)}<span class="scheduleTeamName">${escapeHtml(g.opponent || 'TBD')}</span>${themScore}</span>
         </span>
+      </button>`;
+  }
+  // Same honest "Bye Week" callout js/schedule.js's own list row already
+  // uses for this exact gameType (Nathan: "let's call that out") instead
+  // of the broken fake-matchup card this file used to render for it --
+  // still clickable into the game's own detail page, same as every other
+  // card here.
+  function weekAheadByeCardHtml(d, g) {
+    return `
+      <button type="button" class="scheduleRow scheduleRowBye" data-open-game="${escapeHtml(g.id)}">
+        <span class="scheduleByeText">Bye Week — ${weekAheadCardDate(d)}</span>
       </button>`;
   }
   // Same markup/classes as js/practices.js's list row (.practiceRow,
@@ -452,6 +485,14 @@
           ? `The Bengals (${data.record}) have a busy week on tap, with`
           : `The Bengals (${data.record}) are back in action this week with`;
       sentences.push(`${intro} ${joinList(gameParts)}.`);
+    } else if (data.byeEntry) {
+      // Real bug: a bye week used to still flow through gameParts/hasGame
+      // as a plain "game" with opponent 'Bye' -- the literal string, not
+      // a real team -- producing nonsense like "...are back in action
+      // this week with a bye Saturday at home against Bye." Called out
+      // honestly instead, matching Nathan's own "let's call that out"
+      // for the main Schedule list's identical case.
+      sentences.push(`The Bengals (${data.record || '0-0'}) have a bye this week -- no game, but the team is still putting in the work.`);
     } else {
       sentences.push('No game on the schedule this week, but the team is still putting in the work.');
     }
@@ -490,7 +531,8 @@
     if (data.filmCount) statCards.push(weekAheadStatCardHtml(data.filmCount, data.filmCount === 1 ? 'Film Night' : 'Film Nights'));
     if (data.walkthroughCount) statCards.push(weekAheadStatCardHtml(data.walkthroughCount, data.walkthroughCount === 1 ? 'Walk Through' : 'Walk Throughs'));
 
-    const gamesHtml = data.gameEntries.map(({ d, g }) => weekAheadGameCardHtml(d, g, data.record)).join('');
+    const gamesHtml = data.gameEntries.map(({ d, g }) => weekAheadGameCardHtml(d, g, data.record)).join('')
+      + (data.byeEntry ? weekAheadByeCardHtml(data.byeEntry.d, data.byeEntry.g) : '');
     const practicesHtml = data.practiceEntries.map(({ d, p }) => weekAheadPracticeCardHtml(d, p)).join('');
 
     // Nathan (2026-09-01, final placement): "move the CTA to just below

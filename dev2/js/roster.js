@@ -157,8 +157,18 @@
     // A parent isn't in a position to judge a team-wide numbering
     // conflict the way a coach confirming a dialog is -- refuse outright
     // rather than ask them to weigh in on someone else's kid's number.
+    // Real inconsistency, found in an audit: this same function is ALSO
+    // the one js/player-profile.js's own Save button uses when an
+    // APPROVED COACH edits a number from a player's card (not just a
+    // parent) -- an approved coach already gets the "Save anyway"
+    // override on the Coach Tools > Roster table for the identical
+    // clash, so hard-refusing it here too just made a coach redo the
+    // same edit in a different screen. Skips the refusal for an
+    // approved coach session specifically; a parent session still can't
+    // override it, unchanged from the original reasoning above.
+    const isApprovedCoach = window.isApprovedCoachProfile ? window.isApprovedCoachProfile() : false;
     const clash = numberTakenBy(newNum, rosterId);
-    if (clash) { if (afterFail) afterFail(`#${(newNum || '').toString().trim()} is already ${clash.name ? `used by ${clash.name}` : 'taken by another player'} -- ask a coach to sort out numbers before saving.`); return; }
+    if (clash && !isApprovedCoach) { if (afterFail) afterFail(`#${(newNum || '').toString().trim()} is already ${clash.name ? `used by ${clash.name}` : 'taken by another player'} -- ask a coach to sort out numbers before saving.`); return; }
     entry.num = newNum;
     persistRoster(afterOk, afterFail);
   };

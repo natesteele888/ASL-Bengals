@@ -187,8 +187,14 @@
     // ---- Standard quiz aggregate ----
     let standardBlock = '<div class="lbEmpty">No completed Standard Quiz runs yet.</div>';
     if (standardResults.length) {
-      const avgScore = standardResults.reduce((s, r) => s + r.score, 0) / standardResults.length;
-      const avgPct = Math.round(avgScore / standardResults[0].total * 100);
+      // Real bug: divided the AVERAGE score by only the FIRST result's
+      // own `total`, not each result's own -- drifted from the correct
+      // per-record pattern yesterdayActivityHtml's own standardByPlayer
+      // already uses below (r.score / r.total, each record's own total).
+      // Wrong whenever the quiz's question count ever changed, or the
+      // first result in the list happens to have a falsy total (NaN%).
+      const pcts = standardResults.filter(r => r.total).map(r => r.score / r.total);
+      const avgPct = pcts.length ? Math.round(pcts.reduce((s, x) => s + x, 0) / pcts.length * 100) : 0;
       standardBlock = `<div class="adminStatGrid">${statCard(standardResults.length, 'Runs Completed')}${statCard(avgPct + '%', 'Average Score')}</div>`;
     }
 
@@ -461,7 +467,20 @@
     }
     const rosterCrossRef = (roster || []).filter(rp => !isCoachName(rp.name)).map(rp => {
       const linked = linkedAccountFor(rp);
-      const hasActivity = linked ? (sessionsSafe.some(s => s.playerId === linked.id) || pcqResultsSafe.some(r => r.playerId === linked.id)) : false;
+      // Real inconsistency, found in an audit: only checked sessions/PCQ,
+      // even though Nathan's own instruction right above ("don't just
+      // look at play quiz scores for that") already made the Excelling/
+      // Needs Attention lists pool Standard Quiz + Timed Quiz + PCQ
+      // together. A player who's only done Standard or Timed Quiz (no
+      // session row, no PCQ attempt) was wrongly shown as "Not Using It"
+      // and excluded from Usage Rate despite being a real, active user.
+      // Same 4 sources that pool, now checked here too.
+      const hasActivity = linked ? (
+        sessionsSafe.some(s => s.playerId === linked.id) ||
+        pcqResultsSafe.some(r => r.playerId === linked.id) ||
+        standardResultsSafe.some(r => r.playerId === linked.id) ||
+        timedResultsSafe.some(r => r.playerId === linked.id)
+      ) : false;
       return Object.assign({}, rp, { linked, hasActivity });
     });
     const noAccount = rosterCrossRef.filter(rp => !rp.linked);

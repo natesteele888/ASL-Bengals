@@ -291,7 +291,18 @@
         // joined mid-season) -- offer to pull in anyone missing rather than
         // making the coach retype them.
         const team = window.getTeamRosterCached ? window.getTeamRosterCached() : [];
-        const missing = team.filter(t => !roster.some(r => String(r.num) === String(t.num)));
+        // Real bug: matched by jersey number alone, so two DIFFERENT
+        // blank-numbered players (a new kid who hasn't been assigned a
+        // number yet -- a real, confirmed collision this codebase has
+        // already hit once, see the Jaiden L/Dean A note elsewhere) both
+        // normalize to the same empty string and silently "match" each
+        // other -- whichever one is already in this game's own roster
+        // hides the OTHER one from ever showing up in the sync button,
+        // even though they're unrelated players. A blank number isn't a
+        // real identifier, so falls back to matching by name instead
+        // specifically when the number is blank.
+        const missing = team.filter(t => !roster.some(r =>
+          t.num ? String(r.num) === String(t.num) : r.name === t.name));
         if (missing.length) {
           const syncBtn = document.createElement('button');
           syncBtn.type = 'button'; syncBtn.className = 'lbLinkBtn'; syncBtn.style.display = 'block'; syncBtn.style.marginTop = '4px';

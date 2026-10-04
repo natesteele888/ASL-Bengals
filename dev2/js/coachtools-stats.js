@@ -361,7 +361,12 @@
         // (kneels/penalties/etc. don't have one).
         if (callKey && (isUsRun || (isUsPassAtt && p.result))) {
           totalCalledPlays++;
-          const c = byCall[callKey] || (byCall[callKey] = { name: callKey, att: 0, yds: 0, td: 0, fd: 0 });
+          // isRun lets downstream insights (generatePlayCallInsights'
+          // "struggling" check specifically) scope a run-only comparison
+          // baseline (teamRunYpc) to actual run calls -- a named call is
+          // always categorically one or the other, so set once at
+          // creation is enough.
+          const c = byCall[callKey] || (byCall[callKey] = { name: callKey, att: 0, yds: 0, td: 0, fd: 0, isRun: isUsRun });
           c.att++;
           // Nathan (follow-up): "players get sacked instead of a rush for
           // a loss. I don't want it to look like it was a designed run."
@@ -661,8 +666,17 @@
 
     // A play getting real volume (5+) but well below the team's own
     // overall run average -- called often despite not producing much.
+    // Real bug: teamRunYpc is a RUN-ONLY baseline (runYds/runAtt), but
+    // this used to compare EVERY call against it, pass calls included --
+    // an incomplete pass counts as 0 yards for that attempt, a
+    // completely different failure mode than a stuffed run, so a normal
+    // short/incompletion-heavy pass call could get flagged as
+    // "struggling" purely from incompletions dragging its average down,
+    // not because the play itself isn't working. Scoped to actual run
+    // calls (c.isRun) to match the baseline it's actually being compared
+    // against.
     const teamRunYpc = runAtt ? runYds / runAtt : 0;
-    const struggling = calledOften.filter(c => c.att >= 5 && c.ypc < Math.min(2, teamRunYpc - 2)).sort((a, b) => a.ypc - b.ypc)[0];
+    const struggling = calledOften.filter(c => c.isRun && c.att >= 5 && c.ypc < Math.min(2, teamRunYpc - 2)).sort((a, b) => a.ypc - b.ypc)[0];
     if (struggling) {
       insights.push(`${escapeHtml(struggling.name)} has been called ${struggling.att} times but is only averaging ${struggling.ypc.toFixed(1)} yards -- worth a look at whether it's being defended well or just isn't working right now.`);
     }
@@ -1180,7 +1194,15 @@
     const leadersGrid = document.createElement('div');
     leadersGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px;';
     CATS.forEach(cat => {
-      const top = players.filter(p => (p[cat.key] || 0) > 0).sort((a, b) => b[cat.key] - a[cat.key]).slice(0, 3);
+      // Real bug: ypc (a RATIO stat, unlike every other CATS entry, which
+      // are all plain counting stats) ranked by raw value with no
+      // minimum-attempt floor -- a player with a single 20-yard carry
+      // outranked the real workhorse back averaging 4.5 ypc on 15
+      // carries. Same >= 3 floor this file's own calledOften convention
+      // already uses elsewhere for the identical small-sample-size
+      // concern on a ratio stat.
+      const eligible = cat.key === 'ypc' ? players.filter(p => (p.rushAtt || 0) >= 3) : players;
+      const top = eligible.filter(p => (p[cat.key] || 0) > 0).sort((a, b) => b[cat.key] - a[cat.key]).slice(0, 3);
       const card = document.createElement('div');
       card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;';
       let rows = top.length
@@ -1217,7 +1239,9 @@
       const grid = document.createElement('div');
       grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;';
       CATS.forEach(cat => {
-        const top = perGame.filter(p => (p[cat.key] || 0) > 0).sort((a, b) => b[cat.key] - a[cat.key])[0];
+        // Same minimum-attempt floor as Team Leaders above, same reason.
+        const eligiblePerGame = cat.key === 'ypc' ? perGame.filter(p => (p.rushAtt || 0) >= 3) : perGame;
+        const top = eligiblePerGame.filter(p => (p[cat.key] || 0) > 0).sort((a, b) => b[cat.key] - a[cat.key])[0];
         const card = document.createElement('div');
         card.style.cssText = 'border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;';
         card.innerHTML = top
