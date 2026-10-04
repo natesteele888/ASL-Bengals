@@ -518,6 +518,13 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .lbHeroHeader{background:linear-gradient(160deg, var(--bengal-orange) 0%, #b8540a 100%);
   padding:22px 18px 20px;text-align:center;margin-bottom:16px;border-radius:16px 16px 0 0}
 .lbHeroTrophy{font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25));margin-bottom:4px}
+/* Nathan: "let's not use the lame emoji. use the real bengals logo" --
+   the "All Bengals Teams" hero swaps its 🐯 for the real mascot PNG.
+   Same white-backing-plate reasoning as .lbHeroTeamBadgeWrap just above
+   (a transparent-background logo needs a solid plate to read against
+   this same orange gradient), sized down to sit inside .lbHeroTrophy's
+   existing ~40px emoji footprint instead of a full 72px hero badge. */
+.lbHeroTrophy img{width:56px;height:56px;display:block;margin:0 auto;background:#fff;padding:6px;box-sizing:border-box;border-radius:14px;box-shadow:0 3px 10px rgba(0,0,0,.35)}
 /* Nathan: "The team logo can be used in place of the football in the team
    page header." Reuses .scheduleTeamBadge's own real-PNG-vs-colored-
    initials-circle split (already established on the Schedule page), just
