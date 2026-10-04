@@ -203,6 +203,14 @@
         return {
           id: g.id,
           date: g.logistics ? g.logistics.date : null,
+          // Nathan: "all upcoming games should have a game time added" --
+          // CMYFCC's own logistics.kickoffTime (confirmed live: present
+          // on all 612 games in the current payload, "HH:MM" 24hr, same
+          // raw shape our own Schedule records store under gameTime).
+          // compactGameRowHtml (js/schedule.js) already knows how to
+          // format/show this via its gameTime||time fallback -- it just
+          // never had a value to read for a CMYFCC-sourced game before.
+          time: g.logistics ? g.logistics.kickoffTime : null,
           opponent: isHome ? (g.awayTeam && g.awayTeam.associationName) : (g.homeTeam && g.homeTeam.associationName),
           ourScore: isFinal ? (isHome ? g.result.homeScore : g.result.awayScore) : undefined,
           oppScore: isFinal ? (isHome ? g.result.awayScore : g.result.homeScore) : undefined,

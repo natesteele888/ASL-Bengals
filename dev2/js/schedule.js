@@ -1524,6 +1524,13 @@
     const usScore = result ? `<span class="scheduleTeamScore home">${escapeHtml(String(g.ourScore))}</span>` : '';
     const themScore = result ? `<span class="scheduleTeamScore away">${escapeHtml(String(g.oppScore))}</span>` : '';
     const centerHtml = result ? `<span class="scheduleRowCenter final">${usScore}${badge}${themScore}</span>` : `<span class="scheduleRowCenter">${badge}</span>`;
+    // Nathan: "all upcoming games should have a game time added" -- same
+    // gameTime||time fallback + to12h formatting + result-drops-it
+    // convention the main Schedule list's own row already uses (dropped
+    // once final, since the score already says everything a kickoff time
+    // would). This compact row has no separate date/time stack -- the
+    // date slot is a single line, so the time just joins it.
+    const gameTimeStr = result ? '' : to12h(g.gameTime || g.time || '');
     // Nathan: "if you click on a logo of one of the opponent's it should go
     // to that teams page." A plain span (not a nested <button>) wrapping
     // just the away-side badge -- row is already a <button>, and this
@@ -1537,7 +1544,7 @@
     // click-the-whole-row-to-open-the-game behavior unchanged).
     return `
       <button type="button" class="scheduleRow last5Row${result ? ' scheduleRowFinal' : ''}" data-game-id="${escapeHtml(g.id)}">
-        <span class="scheduleRowDate">${fmtDate(g.date)}</span>
+        <span class="scheduleRowDate">${fmtDate(g.date)}${gameTimeStr ? ` • ${escapeHtml(gameTimeStr)}` : ''}</span>
         <span class="scheduleRowMatchup">
           <span class="scheduleTeamSide home">${teamBadgeHtml}<span class="scheduleTeamName">${escapeHtml(teamName)}</span></span>
           ${centerHtml}
