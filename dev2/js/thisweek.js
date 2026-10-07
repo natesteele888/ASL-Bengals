@@ -523,7 +523,11 @@
   // treatment (was a bold orange banner before).
   function weekAheadInfographicHtml(data) {
     if (!data.hasAny) {
-      return '<div class="lbEmpty">Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they\'ll show up here.</div>';
+      // Our Game Film isn't tied to this week's schedule (see
+      // getMostRecentPlayedGameWithFootage), so it still gets its slot on a
+      // week with nothing scheduled -- e.g. the week after the last game,
+      // when the team is most likely to want that film.
+      return '<div class="lbEmpty">Nothing on the Schedule this week (Mon-Sun) yet -- once games or practices are added, they\'ll show up here.</div><div id="thisweekGameFootageWrap"></div>';
     }
     const statCards = [];
     if (data.gameEntries.length) statCards.push(weekAheadStatCardHtml(data.gameEntries.length, data.gameEntries.length === 1 ? 'Game' : 'Games'));
@@ -588,9 +592,45 @@
   // Shared by renderReadOnly() (the "This week's game: ..." link) and
   // renderWeekAhead() (the Watch Footage CTA) so both agree on the exact
   // same game without duplicating this lookup.
+  //
+  // A manual link only counts while it's this week's game or a later one.
+  // Nothing ever cleared it, so once Sunday's game was over the link kept
+  // This Week (Scouting Film, opponent results, "This week's game") on LAST
+  // week's opponent until a coach remembered to re-link. A link dated before
+  // this week's Monday is stale and falls back to the auto-detected game in
+  // the current Mon-Sun window (none on a bye week, which correctly hides
+  // those sections). A later-dated link is still honored so a coach can line
+  // up next week's game early. Display-only -- nothing is written back, so a
+  // player's session never edits the shared thisWeek.json.
   function getLinkedWeekGame() {
     const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
-    return (saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null) || autoWeekGame;
+    const manual = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
+    const manualDate = manual ? toDateOnly(manual.date) : null;
+    const manualIsStale = !!manualDate && manualDate < currentWeekWindow().start;
+    return (manual && !manualIsStale ? manual : null) || autoWeekGame;
+  }
+
+  // Nathan: "it's our game film against them... surface it on This Week
+  // too." Our Game Film is footage of a game we've already PLAYED, so it
+  // can't ride on getLinkedWeekGame() -- that's the UPCOMING game (no
+  // footage yet) and rolls over to the next opponent each Monday, which
+  // would make last Sunday's film vanish right when the team sits down to
+  // review it. This picks the most recent game dated today or earlier that
+  // actually has footage linked, so it stays up until newer film replaces
+  // it; renderWeekAhead labels which game it's from.
+  function getMostRecentPlayedGameWithFootage() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let best = null;
+    let bestDate = null;
+    upcomingGames.forEach(g => {
+      if (g.gameType === 'Bye') return;
+      if (!Array.isArray(g.gameFootage) || !g.gameFootage.some((c) => c && c.url)) return;
+      const d = toDateOnly(g.date);
+      if (!d || d > today) return;
+      if (!bestDate || d >= bestDate) { best = g; bestDate = d; }
+    });
+    return best;
   }
 
   function renderWeekAhead() {
@@ -692,19 +732,25 @@
     // surface it on This Week too." Distinct from the opponentFilmUrl/
     // OpponentFilm sections above (both scouting material ABOUT the
     // opponent, gathered before the game) -- this is OUR OWN recorded
-    // footage of the linked game itself (schedule.js's game.gameFootage,
-    // the same field a game's own detail page already shows as a Q1/Q2/
-    // Q3/Q4-style button grid). Reuses that exact rendering
+    // footage (schedule.js's game.gameFootage, the same field a game's own
+    // detail page already shows as a Q1/Q2/Q3/Q4-style button grid) from
+    // the most recent game we've played, not the linked/upcoming one (see
+    // getMostRecentPlayedGameWithFootage). Reuses that exact rendering
     // (window.gameFootageTopCtaHtml) rather than a second copy of the
     // abbreviation/grid/shared-embed-slot logic -- a coach adding a
-    // single "Full Game" entry (e.g. a Google Drive folder link covering
-    // all of a game's individual play clips) or several per-quarter
-    // entries both just work, unchanged from how that game's own
-    // Schedule page already renders them.
+    // single merged "Full Game" entry or several per-quarter entries both
+    // just work, unchanged from how that game's own Schedule page already
+    // renders them. The small line under the header says which game it is,
+    // since it may no longer be the one on this week's schedule.
+    const footageGame = getMostRecentPlayedGameWithFootage();
     const gameFootageWrap = document.getElementById('thisweekGameFootageWrap');
     if (gameFootageWrap) {
-      if (linkedGame && window.gameFootageTopCtaHtml && Array.isArray(linkedGame.gameFootage) && linkedGame.gameFootage.some((c) => c && c.url)) {
-        gameFootageWrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">🎥 Our Game Film</div>${window.gameFootageTopCtaHtml(linkedGame)}`;
+      if (footageGame && window.gameFootageTopCtaHtml) {
+        const footageDate = toDateOnly(footageGame.date);
+        const footageLabel = `${footageGame.homeAway === 'Away' ? '@' : 'vs'} ${footageGame.opponent || 'TBD'}${footageDate ? ' — ' + weekAheadCardDate(footageDate) : ''}`;
+        gameFootageWrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">🎥 Our Game Film</div>`
+          + `<div class="lbSub" style="text-align:center;margin:0 0 6px;">${escapeHtml(footageLabel)}</div>`
+          + window.gameFootageTopCtaHtml(footageGame);
       } else {
         gameFootageWrap.innerHTML = '';
       }
