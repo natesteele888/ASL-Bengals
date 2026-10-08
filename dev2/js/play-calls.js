@@ -5733,6 +5733,43 @@ function renderFormationPlays(container, formationId, formationName, modifyMode,
     }
     addTile.addEventListener('click', openAddPlayChooser);
     gridEl.appendChild(addTile);
+  }).catch(err => {
+    // Nathan: "yes, add the error message" -- after a stray variable here left
+    // every formation showing its title over a BLANK grid for four days, with
+    // nothing on screen saying anything was wrong. Anything that throws while
+    // the list loads or its tiles are built now lands here: logged for whoever
+    // opens the console, and shown as a message with a retry instead of a silent
+    // empty page. Tiles that did get drawn stay put -- a partial grid with a
+    // warning beats hiding plays that rendered fine.
+    console.error('[Plays] could not build the play list for', formationId, err);
+    // The player may already have moved on (back to the formation list, another
+    // formation): container was cleared, gridEl is detached, and a stray message
+    // must not land on an unrelated screen.
+    if (gridEl.parentNode !== container) return;
+    const partial = !!gridEl.querySelector('.play-tile');
+    const box = document.createElement('div');
+    box.className = 'pc-load-error';
+    box.setAttribute('role', 'alert');
+    // Inline on purpose: this has to read correctly even when a stale cached
+    // stylesheet is the very thing that's wrong (a failure this app has hit
+    // before -- see the ?v= notes in index.html).
+    box.style.cssText = 'max-width:560px;margin:14px auto 0;padding:16px;text-align:center;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:13px';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-weight:800;font-size:15px;margin-bottom:4px';
+    head.textContent = partial ? "Some plays didn't load" : "Couldn't load the plays";
+    const body = document.createElement('div');
+    body.style.cssText = 'font-size:13px;line-height:1.4;margin-bottom:12px';
+    body.textContent = 'Try again, or close the app and open it again. If it keeps happening, tell a coach.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'navBtn';
+    retry.style.minHeight = '44px';   // the one control a stuck player needs -- a real phone-sized tap target
+    retry.textContent = 'Try again';
+    retry.addEventListener('click', () => renderFormationPlays(container, formationId, formationName, modifyMode));
+    box.appendChild(head);
+    box.appendChild(body);
+    box.appendChild(retry);
+    container.appendChild(box);
   });
 }
 
