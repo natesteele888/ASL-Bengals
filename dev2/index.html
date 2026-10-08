@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261008a">
+<link rel="stylesheet" href="css/styles.css?v=20261008b">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -617,6 +617,10 @@
        upcoming Schedule game -- shown as a tappable link here, and pulled
        onto that game's own Schedule detail page too (see schedule.js). -->
   <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
+  <!-- Nathan: "add the label for last week's keys." js/thisweek.js's
+       renderReadOnly() fills this in (and shows it) only when the keys/plays
+       below were last posted for a game that's already over. -->
+  <div id="thisweekPlanNote" class="thisweekPlanNote" style="display:none;"></div>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
   </div>
@@ -2482,7 +2486,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261008a';
+  const BUILD_V = '20261008b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2617,6 +2621,31 @@ if (window.ResizeObserver) {
     fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/plays.json`)),
   ]);
   window.ALL_CARDS = await cardsRes.json();
+  // Nathan (2026-10-08): "the current Signal #24, labeled 4-SWEEP, needs to be
+  // changed. We are now using that little hand toss as the TOSS signal. We
+  // can keep it in the same spot and update it to TOSS." The live deck is
+  // Firebase's (dev2PlayData/cards.json): the Signal Cards tool can only ADD
+  // signals, never rename one, and this repo can't write Firebase -- so the
+  // relabel is declared here, at the one spot every reader of the deck shares
+  // (study-quiz.js captures window.ALL_CARDS when it loads, long before
+  // Signals.load runs, so this has to happen first). Same id, same photo,
+  // same place in the deck; only the label changes.
+  // Self-expiring on purpose: it applies only while Firebase still carries
+  // the OLD text, so the day that entry is corrected -- or edited to anything
+  // else -- this steps aside instead of silently overriding a real edit.
+  // Safe to delete once Firebase itself says TOSS.
+  const CARD_RELABELS = [{ id: 24, from: '4-SWEEP', to: 'TOSS' }];
+  const relabelKey = (s) => String(s || '').trim().toUpperCase().replace(/[\s-]+/g, ' ');
+  // On window so anything that swaps in a FRESH copy of the deck later (the
+  // Signal Cards tool does, right after adding a signal) can re-apply the same
+  // relabels instead of bringing the old text back for the rest of that session.
+  window.applyCardRelabels = function (cards) {
+    CARD_RELABELS.forEach(r => (cards || []).forEach(c => {
+      if (c && c.id === r.id && relabelKey(c.meaning) === relabelKey(r.from)) c.meaning = r.to;
+    }));
+    return cards;
+  };
+  window.applyCardRelabels(window.ALL_CARDS);
   window.DATA = await playsRes.json();
 
   const appLoadingBar = document.getElementById('appLoadingBar');

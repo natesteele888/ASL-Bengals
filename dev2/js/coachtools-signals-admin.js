@@ -162,7 +162,12 @@
       if (!res.ok) throw new Error('Save failed (HTTP ' + res.status + ').');
 
       // Live immediately in THIS session too, not just on next reload --
-      // same registry every other real card already goes through.
+      // same registry every other real card already goes through. `updated`
+      // is a fresh copy straight from Firebase, so re-apply the deck relabels
+      // index.html's boot applies (e.g. #24 -> TOSS) or the old text would
+      // come back until the next reload. After the PUT above on purpose:
+      // this only changes what THIS session shows, never what's stored.
+      if (window.applyCardRelabels) window.applyCardRelabels(updated);
       window.ALL_CARDS = updated;
       if (window.Signals) window.Signals.load(updated);
 
