@@ -2277,6 +2277,26 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 }
 #playcallsquizMode select { font-size: 13px; padding: 6px; border-radius: 6px; border: 1px solid #ccc; background: #fafafa; }
 .lbLinkBtn { background: none; border: none; color: var(--bengal-orange); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; }
+/* Back links ("‹ All Games" etc.) are plain 12px text -- ~16px tall, and
+   they're tapped constantly. Each of these seven sits alone in a flex row
+   with margin-bottom:10px above the screen's content, so the empty space
+   around it can become the button's own box: padding grows it to ~34px tall
+   and the negative margins cancel the layout change (8px above, 10px below
+   -- the row's own bottom margin, so it ends exactly where the content
+   starts). Nothing moves, and a real box can't steal a tap from a neighbor
+   the way an overhang over unrelated content could. Left/right reach into the
+   screen gutter / empty end of the row. By id on purpose: .lbLinkBtn is shared
+   by stacked rows elsewhere that must not grow. */
+#driveScriptBackBtn, #scheduleBackBtn, #practicesBackBtn,
+#standingsPlayoffBackBtn, #standingsProbabilitiesBackBtn, #standingsAllTeamsBackBtn, #standingsOpponentBackBtn {
+  padding: 8px 18px 10px 10px;
+  margin: -8px 0 -10px -10px;
+}
+/* The two below sit in tighter spots (a modal form, and a centered line in the
+   Play Count overlay), where there's no safe empty margin to borrow -- plain
+   padding instead, so the surrounding layout just makes room (~18px). */
+#switchProfileBackBtn { display: block; padding: 9px 18px 9px 0; }
+#pctSwitchGameBtn { padding: 9px 18px; }
 /* The quiz answer panel is regular app UI (not a diagram surface), so
    unlike the rest of this file's Play Calls / Edit Plays section, this
    one spot does need dark-mode overrides. */

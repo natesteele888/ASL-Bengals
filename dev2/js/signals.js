@@ -105,6 +105,18 @@
     // Signal Cards admin tool the same day. No-op the moment Firebase
     // already has it, same fallback pattern as every entry above.
     { id: 38, group: 'Play Call', meaning: 'BEAST' },
+    // Nathan (2026-10-07): "I just added a new signal. 39.png in the folder
+    // for a new play call called Screen." Real photo (277x339, like every
+    // other card) dropped at assets/cards/39.png. Unlike the fallbacks above
+    // this one carries its own img: the live deck is Firebase's
+    // dev2PlayData/cards.json, which Nathan writes through the Signal Cards
+    // admin tool, so if 39 isn't in there yet this entry is what keeps
+    // "SCREEN" showing its real photo (and listed in the play-call signal
+    // pickers) instead of a "photo coming" placeholder. Still a no-op the
+    // moment Firebase has 39 -- load() below never lets a pending entry
+    // overwrite a real one. No play uses it yet; wiring it into a Screen
+    // play's signalCardId is a separate step once that play exists.
+    { id: 39, group: 'Play Call', meaning: 'SCREEN', img: 'assets/cards/39.png' },
   ];
 
   var byId = {};
