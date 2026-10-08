@@ -3077,6 +3077,20 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playCountOverlay.show { display: block; }
 .playCountOverlay .lbXClose { background: rgba(0,0,0,.08); color: #1a1a1a; }
 .playCountOverlay .lbXClose:active { background: rgba(0,0,0,.16); }
+/* Dark mode for the three full-screen overlays' close X (2 Minute Drill, Game
+   Plan Builder, Play Count). Each one hard-codes a near-black X above because
+   it opens on a light (#f4f2ee) background -- but in dark mode each opens on
+   #161616 (see their open functions), where #1a1a1a on that disc is ~1:1, so
+   the X was effectively invisible. Back to the shared .lbXClose default (white
+   X on a translucent light disc), the same look every other dark overlay's
+   close button already has (~8:1 against the disc). Attribute + two classes
+   outranks the light-mode rules above whatever the source order. */
+[data-theme="dark"] .twoMinDrillOverlay .lbXClose,
+[data-theme="dark"] .gamePlanBuilderOverlay .lbXClose,
+[data-theme="dark"] .playCountOverlay .lbXClose { background: rgba(255,255,255,.25); color: #fff; }
+[data-theme="dark"] .twoMinDrillOverlay .lbXClose:active,
+[data-theme="dark"] .gamePlanBuilderOverlay .lbXClose:active,
+[data-theme="dark"] .playCountOverlay .lbXClose:active { background: rgba(255,255,255,.4); }
 .twoMinLoadingNote { text-align: center; font-size: 12px; color: var(--muted); min-height: 16px; margin-bottom: 6px; }
 
 /* ---- start / end screens ---- */
