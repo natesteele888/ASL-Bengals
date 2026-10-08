@@ -5582,6 +5582,15 @@ let modifyRemovalChain = Promise.resolve();
 // correct without three different functions.
 function renderFormationPlays(container, formationId, formationName, modifyMode, navOpts) {
   navOpts = navOpts || {};
+  // The Modify gate below needs the formation's own record. This line lived
+  // here until playsForFormation() was factored out of this function (the Full
+  // Playbook Reference PDF reuses it) -- the declaration moved with it, but the
+  // gate stayed behind reading a name that no longer existed in this scope. The
+  // ReferenceError it threw inside the .then() below aborted the whole callback
+  // before a single tile was drawn, so EVERY formation showed its title over an
+  // empty grid (Nathan, 2026-10-08: "no plays what so ever are visible in any
+  // formation").
+  const formationMeta = window.Formations.get(formationId);
   container.innerHTML = '';
   const onBackToFormations = () => renderFormationPicker(container);
   if (navOpts.pushLevel) {
