@@ -1809,10 +1809,17 @@
     const m = String(title || '').match(/^(1st|2nd|3rd|4th)\s+Quarter$/i);
     return m ? 'Q' + { '1st': '1', '2nd': '2', '3rd': '3', '4th': '4' }[m[1].toLowerCase()] : (title || 'Footage');
   }
+  let footageGridSeq = 0;
   function gameFootageTopCtaHtml(game) {
     const clips = Array.isArray(game.gameFootage) ? game.gameFootage.filter(c => c.url) : [];
     if (!clips.length) return '';
-    const slotId = 'footageGridEmbed_' + escapeHtml(game.id || 'x');
+    // Unique per render, not per game: the same game's grid can be on the
+    // page twice at once (This Week's "Our Game Film" and that game's own
+    // Schedule page, whose panel comes later in the DOM). A per-game id
+    // sent every Full Game tap to whichever slot came first -- This Week's,
+    // hidden while you're looking at Schedule -- so the player "opened" out
+    // of sight.
+    const slotId = 'footageGridEmbed_' + escapeHtml(game.id || 'x') + '_' + (++footageGridSeq);
     const buttons = clips.map(c => filmButtonHtml(c.url, `🎥 ${escapeHtml(footageClipLabel(c.title))}`, {
       sharedSlotId: slotId,
       title: c.title || 'Game Footage',
