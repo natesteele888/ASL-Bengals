@@ -617,6 +617,10 @@
        upcoming Schedule game -- shown as a tappable link here, and pulled
        onto that game's own Schedule detail page too (see schedule.js). -->
   <button type="button" id="thisweekGameLink" class="lbLinkBtn" style="display:none;margin:0 auto 12px;text-align:center;width:100%;font-size:13px;"></button>
+  <!-- Nathan: "add the label for last week's keys." js/thisweek.js's
+       renderReadOnly() fills this in (and shows it) only when the keys/plays
+       below were last posted for a game that's already over. -->
+  <div id="thisweekPlanNote" class="thisweekPlanNote" style="display:none;"></div>
   <div id="thisweekEmptyState" class="hint" style="max-width:600px;margin:14px auto;text-align:center;">
     No keys or featured plays set for this week yet.
   </div>

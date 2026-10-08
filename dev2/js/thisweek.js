@@ -605,9 +605,24 @@
   function getLinkedWeekGame() {
     const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
     const manual = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
-    const manualDate = manual ? toDateOnly(manual.date) : null;
-    const manualIsStale = !!manualDate && manualDate < currentWeekWindow().start;
-    return (manual && !manualIsStale ? manual : null) || autoWeekGame;
+    return (manual && !isBeforeThisWeek(manual) ? manual : null) || autoWeekGame;
+  }
+
+  // The one test for "that game is already behind us": dated before this
+  // week's Monday. getLinkedWeekGame() uses it to drop a stale manual link,
+  // and renderReadOnly() uses it to label keys/plays that were posted for a
+  // game that's over -- one definition, so the two can't disagree. An undated
+  // or missing game is never "before" (nothing to compare).
+  function isBeforeThisWeek(game) {
+    const d = game ? toDateOnly(game.date) : null;
+    return !!d && d < currentWeekWindow().start;
+  }
+
+  // "@ North Middlesex — Sun, Oct 4" (vs for home games) -- the one-line way
+  // This Week names a specific game outside the Week Ahead cards.
+  function shortGameLabel(g) {
+    const d = toDateOnly(g.date);
+    return `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${d ? ' — ' + weekAheadCardDate(d) : ''}`;
   }
 
   // Nathan: "it's our game film against them... surface it on This Week
@@ -746,8 +761,7 @@
     const gameFootageWrap = document.getElementById('thisweekGameFootageWrap');
     if (gameFootageWrap) {
       if (footageGame && window.gameFootageTopCtaHtml) {
-        const footageDate = toDateOnly(footageGame.date);
-        const footageLabel = `${footageGame.homeAway === 'Away' ? '@' : 'vs'} ${footageGame.opponent || 'TBD'}${footageDate ? ' — ' + weekAheadCardDate(footageDate) : ''}`;
+        const footageLabel = shortGameLabel(footageGame);
         gameFootageWrap.innerHTML = `<div class="lbSectionHeader" style="font-size:13px;">🎥 Our Game Film</div>`
           + `<div class="lbSub" style="text-align:center;margin:0 0 6px;">${escapeHtml(footageLabel)}</div>`
           + window.gameFootageTopCtaHtml(footageGame);
@@ -1107,6 +1121,31 @@
     const hasContent = coachesWithKeys.length > 0 || (saved.plays && saved.plays.length > 0);
     if (emptyEl) emptyEl.style.display = hasContent ? 'none' : '';
 
+    // Nathan: "add the label for last week's keys." The game link above rolls
+    // over to the new opponent on Monday, but the keys and featured plays
+    // below it are whatever was last posted -- so until coaches repost, the
+    // page could read "This week's game: vs <new opponent>" over LAST week's
+    // keys with nothing saying so. Label them instead of hiding them (last
+    // week's plays beat an empty page). Only when BOTH hold: the plan is
+    // linked to a game that's already over, AND it hasn't been touched since
+    // this week began -- every save stamps updatedAt, so a coach who reposts
+    // keys without re-linking the game doesn't get a false "last posted for"
+    // line. No linked game (or one that's been deleted) = nothing to compare,
+    // so no label rather than a guess.
+    const planNoteEl = document.getElementById('thisweekPlanNote');
+    if (planNoteEl) {
+      const planGame = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
+      const postedAt = saved.updatedAt ? new Date(saved.updatedAt) : null;
+      const postedThisWeek = !!postedAt && !isNaN(postedAt) && postedAt >= currentWeekWindow().start;
+      if (hasContent && isBeforeThisWeek(planGame) && !postedThisWeek) {
+        planNoteEl.innerHTML = `📌 Last posted for <strong>${escapeHtml(shortGameLabel(planGame))}</strong>. This week's keys and plays aren't up yet.`;
+        planNoteEl.style.display = '';
+      } else {
+        planNoteEl.style.display = 'none';
+        planNoteEl.textContent = '';
+      }
+    }
+
     keysBox.style.display = coachesWithKeys.length ? '' : 'none';
     keysList.innerHTML = '';
     coachesWithKeys.forEach(c => {
@@ -1369,7 +1408,10 @@
   // initThisWeek() has actually run once.
   window.ThisWeekGamePlan = {
     onExternalAdd(entry) {
-      saved = Object.assign({}, saved, { plays: (saved.plays || []).concat([entry]) });
+      // updatedAt mirrors the stamp addEntry() just wrote to the real node, so
+      // the "last posted for" label (renderReadOnly) clears right away
+      // instead of waiting for a reload.
+      saved = Object.assign({}, saved, { plays: (saved.plays || []).concat([entry]), updatedAt: new Date().toISOString() });
       pendingSelection.push(entry);
       if (loaded) { renderReadOnly(); renderEditor(); }
     },
@@ -1379,7 +1421,7 @@
     // fires, so this is purely "reflect it on screen if This Week's own
     // editor happens to already be open."
     onReplace(gameId, plays) {
-      saved = Object.assign({}, saved, { plays: (plays || []).slice(), gameId: gameId || '' });
+      saved = Object.assign({}, saved, { plays: (plays || []).slice(), gameId: gameId || '', updatedAt: new Date().toISOString() });
       pendingSelection = (plays || []).slice();
       pendingGameId = gameId || '';
       if (loaded) { renderReadOnly(); renderEditor(); }
