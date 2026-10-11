@@ -58,6 +58,10 @@
     // Lineup screenshot) -- js/depth-chart.js. +/- reorders each position's
     // depth list only; it doesn't touch the master roster above.
     { key: 'depthchart', label: '📋 Depth Chart', category: 'team', panel: 'coachDepthChartPanel', init: () => window.initDepthChart && window.initDepthChart() },
+    // Nathan: "I need a way of exporting a crash course for him with the 4" --
+    // js/coachtools-crashcourse.js (the tab) + js/position-crashcourse-pdf.js (the
+    // PDF). A kid changing positions mid-season, so any position, not just the 4.
+    { key: 'crashcourse', label: '🎓 Crash Course', category: 'team', panel: 'coachCrashCoursePanel', init: () => window.initCoachCrashCourse && window.initCoachCrashCourse() },
     { key: 'drivescripts', label: '🧢 Drive Scripts', category: 'gameday', panel: 'coachDriveScriptsPanel', init: () => window.initDriveBuilder && window.initDriveBuilder() },
     // Nathan: "live in game tracking of plays for certain kids... a
     // minimum number of plays so certain kids need to be tracked... a bar
