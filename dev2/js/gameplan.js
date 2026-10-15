@@ -150,7 +150,14 @@
   // its full, real toggle state.
   function describe(entry) {
     if (!entry) return { label: '', color: '#999', v2: null, row: null };
-    if (entry.v === 2) return { label: v2Label(entry), color: '#2c3e50', v2: entry, row: null };
+    // A v2 call has no play-family color of its own (it can mix Wing, I,
+    // Overload...), so it takes the page's text color. It used to be a fixed
+    // dark slate (#2c3e50) -- fine on a white card, ~1.5:1 against dark mode's
+    // #232323 card, i.e. every dialed-in call's title was nearly invisible
+    // there (Playlist rows, This Week's cards and list, Drive Scripts chips).
+    // Every consumer assigns this straight to style.color / --chip-color, so a
+    // CSS variable resolves per theme where a hex couldn't.
+    if (entry.v === 2) return { label: v2Label(entry), color: 'var(--ink)', v2: entry, row: null };
     const rows = numberedRows();
     const row = rows.find((r) => r.key === entry.key && r.direction === entry.direction);
     if (!row) return { label: `${entry.key || '?'} • ${entry.direction || ''}`, color: '#999', v2: null, row: null };

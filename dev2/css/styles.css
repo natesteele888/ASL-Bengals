@@ -3075,6 +3075,39 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .gpbTagList { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
 [data-theme="dark"] .gpbOpponentBtn { background: var(--card); border-color: var(--line); color: var(--ink); }
 [data-theme="dark"] .gpbPlaylistRow { background: var(--card); border-color: var(--line); }
+/* Nathan: "on This Week - the titles are going off the screen." Create Your
+   Game Plan (the full-screen builder This Week opens) gained an Offense/
+   Defense step, so Offense now has FOUR step tabs -- "1. Opponent / 2.
+   Offense/Defense / 3. Base Plays / 4. Playlist". .coachToolsModuleTab is
+   white-space:nowrap in a row that scrolls sideways: fine for a few short
+   tabs, wrong here. ~400px of labels in a ~347px phone row pushed "4.
+   Playlist" past the right edge, behind a scroll nothing hinted at. On a
+   phone these now use tighter padding/type so all four sit on one line, and
+   a tab that still can't fit (a ~320px screen) shrinks and wraps its label
+   onto a second line instead of leaving the screen (min-width:0 is what lets
+   a flex item shrink below its text; flex-grow stays 0, so wide screens look
+   exactly as before). overflow-y:hidden drops the stray vertical scrollbar
+   the tab's -2px margin was creating inside that row. */
+#gpbStepTabs { overflow-y: hidden; }
+#gpbStepTabs .coachToolsModuleTab { flex: 0 1 auto; min-width: 0; white-space: normal; text-align: center; line-height: 1.2; }
+@media (max-width: 520px) {
+  #gpbStepTabs { gap: 2px; }
+  #gpbStepTabs .coachToolsModuleTab { padding: 6px 3px; font-size: 11.5px; }
+}
+/* Same screen, Playlist step. Each row holds an 84px thumbnail, FIVE 34px
+   buttons (fine-tune, tag, up, down, remove -- ~186px) and, in whatever was
+   left, the play's title. At phone width that was ~35px, so a call like "Wing
+   Right — Sweep Pitch To The Wing Back — Left" stacked one word per line and
+   a word wider than the gap ("Overload") ran under the buttons. On a phone
+   the row becomes a two-line grid instead: thumbnail on the left spanning
+   both lines, the title on top at full width, the buttons underneath on the
+   right. Wider screens keep the single-line row. */
+@media (max-width: 560px) {
+  .gpbPlaylistRow { display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 10px; row-gap: 6px; align-items: center; }
+  .gpbPlaylistRow .gpbPlaylistThumb { grid-row: 1 / span 2; }
+  .gpbPlaylistRow .gpbPlaylistLabel { grid-column: 2; overflow-wrap: anywhere; }
+  .gpbPlaylistRow .driveScriptRowControls { grid-column: 2; justify-self: end; }
+}
 
 /* ===== Play Count -- same full-screen overlay convention as
    .gamePlanBuilderOverlay directly above, reusing its .gpbWrap/.gpbHeader/
