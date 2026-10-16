@@ -2352,11 +2352,28 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    nothing. If only one of the two columns has content (e.g. a
    practice-only week), grid-column:1/-1 lets it take the full row
    instead of leaving an empty second column. */
-.weekAheadColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.weekAheadColumns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .weekAheadCol:only-child { grid-column: 1 / -1; }
 @media (max-width: 480px) {
-  .weekAheadColumns { grid-template-columns: 1fr; }
+  .weekAheadColumns { grid-template-columns: minmax(0, 1fr); }
 }
+/* Nathan: "the titles are going off the screen" (desktop screenshot: the
+   Practice & Film column and its heading sticking out past the right edge of
+   the Week Ahead box). A bare 1fr is minmax(auto, 1fr), so a column can't
+   shrink below its content's min-content width -- and the game card's top
+   line ("AWAY • TANTASQUA REGIONAL HIGH SCHOOL 319 BROOKFIELD RD. FISKDALE MA.
+   01518") is white-space:nowrap, ~530px. That one line stretched the Games
+   column to 526px of a 564px box, squeezed Practice & Film into the ~114px
+   left over (cards wrapping to four lines a word each) and pushed it ~70px
+   outside the box. The same thing happens on a phone in the single column,
+   where the whole card stack is as wide as that address. minmax(0, 1fr)
+   lets both columns actually be their share of the box, and these cards let
+   a location wrap onto more lines instead of cutting it off -- the address is
+   the point of that line, and a pasted map link or coordinates with no spaces
+   in them wrap too. (The Schedule tab's own rows keep their one-line
+   ellipsis; they're full width and it fits.) */
+.weekAheadCol .scheduleRowDate { white-space: normal; overflow-wrap: anywhere; }
+.weekAheadCol .practiceRowLoc { overflow-wrap: anywhere; }
 .thisweekKeysTitle { font-weight: 900; font-size: 14px; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px; }
 .thisweekKeysList { margin: 0; padding-left: 22px; }
 .thisweekKeysList li { font-size: 14.5px; font-weight: 600; color: var(--ink); margin-bottom: 6px; line-height: 1.35; }
