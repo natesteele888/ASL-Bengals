@@ -861,7 +861,7 @@
     // showOpponentPage right below (real network call, shouldn't block
     // this page's own first render), same progressive-render pattern
     // js/schedule.js's own Game Recap narrative already uses.
-    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📊 Recent Games</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
+    html += `<div id="standingsOpponentRecentForm"><div class="lbSectionHeader">📅 Schedule</div><div class="hint" style="text-align:center;">Loading from CMYFCC…</div></div>`;
     if (game.scouting) {
       html += `<div class="lbSectionHeader">🔎 Scouting Report</div>
         <div class="thisweekKeysBox" style="white-space:pre-wrap;font-size:14px;line-height:1.5;">${escapeHtml(game.scouting)}</div>`;
@@ -952,16 +952,19 @@
       wrap.innerHTML = '';
       return;
     }
-    // Nathan: "if you are on a team page from the standings, and you see
-    // the 'recent form' let's change that to 'recent games' as form is
-    // more of a soccer term." Plain rename, same section, same data.
+    // Nathan: "when you go to a team page - it should show you the teams
+    // entire schedule instead of just its last 5. Last 5 is only for the
+    // game preview page." This section used to be two short lists -- "Recent
+    // Games" (their last 5 finals; first "Recent Form", renamed because
+    // "form is more of a soccer term") and "Upcoming Games" (their next 5).
+    // It's now one list of every game on their schedule, in date order:
+    // finals with their score, games still ahead with their date and time.
+    // The Last 5 views live on a Schedule game's own preview page (js/
+    // schedule.js's renderLast5Panel), which is the only place they belong.
+    // (The function and element names are left over from "Recent Form".)
     //
-    // Nathan (follow-up): "don't just show their finished games but use
-    // the master schedule to show their upcoming games as well." One
-    // shared fetchCmyfccGamesFor call (the real master schedule payload)
-    // instead of two separate network round-trips for what's really one
-    // dataset split two ways -- Recent Games stays exactly as it was,
-    // Upcoming Games is new, appended below it.
+    // One fetchCmyfccGamesFor call -- the real master schedule payload --
+    // already carries all of it.
     try {
       const all = await fetchCmyfccGamesFor(opponentName);
       // A stale response landing after the coach has already navigated
@@ -970,29 +973,22 @@
       // showing a loading state for the SAME opponent before writing.
       const stillOnThisOpponent = document.getElementById('standingsOpponentRecentForm') === wrap && wrap.isConnected;
       if (!stillOnThisOpponent) return;
-      const recent = all
-        .filter(g => g.isFinal)
-        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-        .slice(0, 5);
-      const upcoming = all
-        .filter(g => !g.isFinal && !cmyfccEventPassed(g.date))
-        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        .slice(0, 5);
+      // Earliest first, like the Schedule tab. A game with no date sorts
+      // last, not first; two on the same day go by kickoff time. A game
+      // whose date has passed without a posted result (postponed, or a
+      // score CMYFCC hasn't entered yet) stays in the list -- it's still on
+      // their schedule -- and compactGameRowHtml leaves it without an
+      // "Upcoming" pill rather than calling it something it isn't.
+      const season = all.slice().sort((a, b) =>
+        (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
       const badgeHtml = window.teamBadgeHtmlFor ? window.teamBadgeHtmlFor(opponentName) : window.opponentBadgeHtml(opponentName);
-      const rowsHtmlFor = (rows) => rows.map(g => window.compactGameRowHtml(g, {
+      const rowsHtml = season.map(g => window.compactGameRowHtml(g, {
         teamName: opponentName,
         teamBadgeHtml: badgeHtml,
       })).join('');
-      const recentHtml = recent.length
-        ? `<div class="lbSectionHeader">📊 Recent Games</div><div class="last5List">${rowsHtmlFor(recent)}</div>`
-        : `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">No completed games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
-      // Omitted entirely (not an empty-state line) when there genuinely
-      // are none left -- a team with no games remaining this season
-      // doesn't need a section telling you so.
-      const upcomingHtml = upcoming.length
-        ? `<div class="lbSectionHeader" style="margin-top:16px;">📅 Upcoming Games</div><div class="last5List">${rowsHtmlFor(upcoming)}</div>`
-        : '';
-      wrap.innerHTML = recentHtml + upcomingHtml;
+      wrap.innerHTML = season.length
+        ? `<div class="lbSectionHeader">📅 Schedule</div><div class="last5List">${rowsHtml}</div>`
+        : `<div class="lbSectionHeader">📅 Schedule</div><div class="lbEmpty">No games found for ${escapeHtml(opponentName || 'this team')} on CMYFCC yet.</div>`;
       // Nathan: "if you click on a logo of one of the opponent's it should
       // go to that teams page." Each row's own away-side badge (this
       // team's opponent in THAT game) is wrapped by compactGameRowHtml in
@@ -1004,7 +1000,7 @@
       // matching local game record; showOpponentPage already falls back
       // to a real, name-only team page in exactly that case (same as a
       // division-only team we've never played). Wired once over the whole
-      // wrap, so it covers both the Recent and Upcoming sections' rows.
+      // wrap, so it covers every row in the list.
       wrap.querySelectorAll('.last5RowOpponentLogo').forEach((el) => {
         const name = el.dataset.opponentName;
         if (!name) return;
@@ -1014,7 +1010,7 @@
         });
       });
     } catch (e) {
-      wrap.innerHTML = `<div class="lbSectionHeader">📊 Recent Games</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
+      wrap.innerHTML = `<div class="lbSectionHeader">📅 Schedule</div><div class="lbEmpty">Couldn't load from CMYFCC: ${escapeHtml(e.message)}</div>`;
     }
   }
 
