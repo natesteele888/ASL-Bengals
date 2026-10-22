@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261020a">
+<link rel="stylesheet" href="css/styles.css?v=20261021a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -379,7 +379,6 @@
       <div class="toolbarRow">
         <button class="toolbarBtn" id="openLeaderboardBtn" title="Leaderboard">🏆</button>
         <button class="toolbarBtn" id="themeToggleBtn" title="Dark mode">🌙</button>
-        <button class="toolbarBtn" id="muteBtn" title="Mute music">🔊</button>
         <button class="toolbarBtn" id="helpBtn" title="Help">?</button>
       </div>
       <!-- Nathan: "I hate the placement of this... right below the top icons
@@ -2149,7 +2148,6 @@
       <li>👤 Your name in the top-right corner is you — tap it for <b>My Stats</b> (your best scores and where you rank) or to sign out and switch players.</li>
       <li>🏆 Tap the trophy anytime for the leaderboard — Overall, Timed, Quiz, and Play Quiz tabs, all shared across the whole team. Overall tallies points from where you place on the Quiz, Timed, and Play Quiz boards.</li>
       <li>🌙 Tap the moon/sun to switch between dark and light mode.</li>
-      <li>🔊 Tap the speaker to mute or unmute the music.</li>
       <li>? Tap this icon anytime to see these tips again.</li>
     </ul>
     <button class="navBtn" id="tipsGotItBtn" style="width:100%">Got it!</button>
@@ -2296,8 +2294,8 @@
   right after it" (false start) + "have the crowd noise start playing and
   after .6 seconds, play the Touchdown sound. Crowdnoise can be used in the
   background throughout, then switch to the other crowd" (touchdown) --
-  scoped to this drill (separate from study-quiz.js's correct/wrong/
-  bgMusic sounds elsewhere in the app). Sequencing lives in
+  scoped to this drill (separate from study-quiz.js's correct/wrong
+  sounds elsewhere in the app). Sequencing lives in
   js/two-minute-drill.js's playFalseStartSfx()/playTouchdownSfx()/
   startAmbientCrowd().
 -->
@@ -2305,7 +2303,12 @@
 <audio id="drillFalseStartCrowdSound" preload="auto" src="assets/audio/false-start-crowd.mp3"></audio>
 <audio id="drillTouchdownHornSound" preload="auto" src="assets/audio/touchdown-horn.mp3"></audio>
 <audio id="drillCrowdCheerSound" preload="auto" src="assets/audio/crowd-cheer.mp3"></audio>
-<audio id="drillCrowdNoiseSound" preload="auto" src="assets/audio/crowd-noise.mp3"></audio>
+<!-- crowd-noise.mp3 is 3.5MB and only plays inside the drill, so it isn't
+     fetched at launch (preload="auto" pulled it down on every cold load of
+     the app, ahead of everything the login and boot actually need). The drill
+     starts fetching it when its overlay opens -- see openTwoMinDrillOverlay in
+     js/two-minute-drill.js. -->
+<audio id="drillCrowdNoiseSound" preload="none" src="assets/audio/crowd-noise.mp3"></audio>
 </div>
 
 <!-- Game Plan Builder -- full-screen, opponent-scoped authoring flow.
@@ -2428,7 +2431,6 @@
 <audio id="correctSound" preload="auto" src="assets/audio/correct.mp3"></audio>
 <audio id="wrongSound" preload="auto" src="assets/audio/wrong.mp3"></audio>
 <audio id="roarSound" preload="auto" src="assets/audio/roar.mp3"></audio>
-<audio id="bgMusic" preload="auto" loop src="assets/audio/bg-music.mp3"></audio>
 <audio id="badgeSuccessSound" preload="auto" src="assets/audio/badge-success.mp3"></audio>
 
 
@@ -2496,7 +2498,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261020a';
+  const BUILD_V = '20261021a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it

@@ -72,55 +72,17 @@
 })();
 
 /* ============================================================
-   BACKGROUND MUSIC — mellow loop, mute toggle in the corner,
-   preference remembered per device.
+   TOP TOOLBAR — the corner icons (leaderboard, dark mode, help)
+   appear once the player is past the login screen. That used to
+   be a side effect of startBgMusic(), which also started the
+   background music loop; the music is gone and this is what was
+   left of it.
    ============================================================ */
 (function(){
-  var BG_MUTE_KEY = 'bengalsBgMusicMuted';
-  var bgMusic = document.getElementById('bgMusic');
-  var muteBtn = document.getElementById('muteBtn');
   var topToolbar = document.getElementById('topToolbar');
-
-  function isMutedPref(){
-    try { return localStorage.getItem(BG_MUTE_KEY) === '1'; } catch(e) { return false; }
-  }
-  function updateMuteIcon(){
-    muteBtn.textContent = bgMusic.muted ? '🔇' : '🔊';
-  }
-  window.startBgMusic = function(){
-    bgMusic.muted = isMutedPref();
-    bgMusic.volume = 0;
-    bgMusic.play().catch(function(){});
+  window.showTopToolbar = function(){
     topToolbar.style.display = 'flex';
-    updateMuteIcon();
-    // Fade the music up gradually over the same span as the roar clip, so it
-    // swells in as the roar fades out instead of both hitting full volume at once.
-    var target = 0.8;
-    var duration = 3400;
-    var steps = 34;
-    var count = 0;
-    var fadeTimer = setInterval(function(){
-      count++;
-      bgMusic.volume = Math.min(target, (target/steps)*count);
-      if(count >= steps) clearInterval(fadeTimer);
-    }, duration/steps);
   };
-  muteBtn.addEventListener('click', function(){
-    bgMusic.muted = !bgMusic.muted;
-    try { localStorage.setItem(BG_MUTE_KEY, bgMusic.muted ? '1' : '0'); } catch(e) {}
-    updateMuteIcon();
-  });
-
-  // Browsers can block autoplay-with-sound on a fresh page load even for a
-  // returning (already-logged-in) user, since the login click happened on a
-  // previous visit, not this one. Fall back to starting on first interaction.
-  function resumeIfBlocked(){
-    if(bgMusic.paused && topToolbar.style.display !== 'none'){
-      bgMusic.play().catch(function(){});
-    }
-  }
-  document.addEventListener('click', resumeIfBlocked, { once: true });
-  document.addEventListener('touchstart', resumeIfBlocked, { once: true });
 })();
 
 /* ============================================================
@@ -325,7 +287,7 @@ window.exitPlayerPreview = function(){
     // to the visible login screen below and re-enter their code one more
     // time, which establishes the real session going forward.
     if(localStorage.getItem(STORAGE_KEY) === '1' && window.hasGateSession && window.hasGateSession()){
-      screenEl.classList.add('hide'); window.startBgMusic();
+      screenEl.classList.add('hide'); window.showTopToolbar();
       var storedRole = localStorage.getItem(ROLE_KEY);
       if(!storedRole){
         // Migrating a device that logged in before Player/Coach/Parent
@@ -442,7 +404,7 @@ window.exitPlayerPreview = function(){
         roar.play().catch(function(){});
       } catch(e) {}
       screenEl.classList.add('fadeOut');
-      window.startBgMusic();
+      window.showTopToolbar();
       setTimeout(function(){
         screenEl.classList.add('hide');
         if(typedCoachCode){

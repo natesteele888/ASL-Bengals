@@ -1962,8 +1962,8 @@
   // playing and after .6 seconds, play the Touchdown sound. Crowdnoise can
   // be used in the background throughout, then switch to the other crowd"
   // (touchdown). All of this is scoped to this drill only, not the whole
-  // app -- separate <audio> elements from the study-quiz correct/wrong/
-  // bgMusic ones (see two-minute-drill-test.html), same
+  // app -- separate <audio> elements from the study-quiz correct/wrong
+  // ones (see two-minute-drill-test.html), same
   // play-from-the-start-every-time pattern as study-quiz.js's playSound().
   // ================================================================
   function playSfx(elAudio, opts) {
@@ -2728,6 +2728,17 @@
       // overlay's open state and real history depth in sync instead of
       // silently leaving it open with nothing left to back out of it with.
       if (window.NavHistory) window.NavHistory.push('twominute', twoMinDrillBackUndo);
+      // crowd-noise.mp3 (3.5MB) has preload="none" in index.html, so it isn't
+      // downloaded at every app launch. Start fetching it now, while the coach
+      // is still on the start screen, so the ambient bed is buffered by the
+      // time the drive kicks off (startAmbientCrowd just play()s it). Once per
+      // page load -- the element is already preload="auto" after the first open.
+      try {
+        if (el.sndCrowdNoise && el.sndCrowdNoise.preload !== 'auto') {
+          el.sndCrowdNoise.preload = 'auto';
+          el.sndCrowdNoise.load();
+        }
+      } catch (e) { /* sound is a nice-to-have -- never worth breaking the drill over */ }
     }
   };
   function closeTwoMinDrillOverlayUI() {
