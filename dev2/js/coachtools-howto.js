@@ -73,13 +73,6 @@
       `,
     },
     {
-      icon: '🔇',
-      title: 'Mute or unmute the background music',
-      body: `
-        <p>Tap the speaker icon (🔊 / 🔇) in the top toolbar to toggle the background music. Also remembered per device.</p>
-      `,
-    },
-    {
       icon: '🖨️',
       title: 'Print the Sideline Playbook or Play Call Chart',
       body: `
