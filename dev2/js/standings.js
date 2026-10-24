@@ -1159,7 +1159,7 @@
       throw new Error('CMYFCC response missing games data');
     }
     const standingsArr = Array.isArray(payload.standings) ? payload.standings : Object.values(payload.standings || {});
-    return { games: payload.games, standings: standingsArr, playoffProjection: Array.isArray(payload.playoffProjection) ? payload.playoffProjection : [] };
+    return { games: payload.games, standings: standingsArr, playoffProjection: Array.isArray(payload.playoffProjection) ? payload.playoffProjection : [], standingsPolicy: payload.standingsPolicy || null };
   }
   async function fetchCmyfccDivisionData(divisionKey) {
     const key = divisionKey || CMYFCC_OUR_DIVISION_KEY;
@@ -1382,9 +1382,9 @@
   // ever reached from a context where the other 3 detail panels are
   // already hidden (see its own comment), so folding it in here isn't
   // needed and would be unrelated scope.
-  const STANDINGS_PANEL_IDS = ['standingsListPanel', 'standingsOpponentDetail', 'standingsPlayoffDetail', 'standingsProbabilitiesDetail', 'standingsAllTeamsDetail'];
+  const STANDINGS_PANEL_IDS = ['standingsListPanel', 'standingsOpponentDetail', 'standingsPlayoffDetail', 'standingsProbabilitiesDetail', 'standingsScenariosDetail', 'standingsAllTeamsDetail'];
   // Real back-button support (js/nav-history.js). currentStandingsPanel
-  // tracks which of the 5 is up WITHIN an already-open Standings section
+  // tracks which of the 6 is up WITHIN an already-open Standings section
   // -- kept separate from setMode's own currentMode (study-quiz.js),
   // which only knows "the Standings section is open," not which panel
   // inside it. navOpts.silent is for initStandingsNav's own unconditional
@@ -1414,6 +1414,31 @@
   function showPlayoffProbabilities() {
     showStandingsPanel('standingsProbabilitiesDetail');
     loadPlayoffProbabilities();
+  }
+
+  // Nathan: "with this being the last game of the regular season - build out
+  // some scenarios in the standings section showing where the ASL Bengals may
+  // finish in the standings based on some results of the top 6 teams." The
+  // engine and the screen are js/standings-scenarios.js; this just hands it
+  // the same master-schedule payload everything else on this tab reads (a
+  // fresh fetch every time the panel opens, so a game that finishes while
+  // the app is open is counted the next time it's opened).
+  async function loadStandingsScenarios() {
+    const wrap = document.getElementById('standingsScenariosBody');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="hint" style="text-align:center;">Loading from CMYFCC…</div>';
+    try {
+      if (!window.StandingsScenarios) throw new Error('the scenarios screen didn\'t load');
+      const raw = await fetchCmyfccRawPayload();
+      window.StandingsScenarios.render(wrap, raw, { divisionKey: CMYFCC_OUR_DIVISION_KEY, ourName: CMYFCC_OUR_ASSOCIATION_NAME });
+    } catch (e) {
+      wrap.innerHTML = `<div class="lbEmpty">Couldn't build the scenarios: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function showStandingsScenarios() {
+    showStandingsPanel('standingsScenariosDetail');
+    loadStandingsScenarios();
   }
 
   function showAllBengalsTeams() {
@@ -1448,6 +1473,10 @@
       if (probBackBtn) { probBackBtn.addEventListener('click', goBackToList); }
       const probOpenBtn = document.getElementById('standingsProbabilitiesOpenBtn');
       if (probOpenBtn) { probOpenBtn.addEventListener('click', showPlayoffProbabilities); }
+      const scenariosBackBtn = document.getElementById('standingsScenariosBackBtn');
+      if (scenariosBackBtn) { scenariosBackBtn.addEventListener('click', goBackToList); }
+      const scenariosOpenBtn = document.getElementById('standingsScenariosOpenBtn');
+      if (scenariosOpenBtn) { scenariosOpenBtn.addEventListener('click', showStandingsScenarios); }
       const allTeamsBackBtn = document.getElementById('standingsAllTeamsBackBtn');
       if (allTeamsBackBtn) { allTeamsBackBtn.addEventListener('click', goBackToList); }
       const allTeamsOpenBtn = document.getElementById('standingsAllTeamsOpenBtn');

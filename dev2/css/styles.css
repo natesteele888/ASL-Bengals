@@ -3384,6 +3384,93 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    transparent logo, unlike the orange hero gradient. */
 .standingsNavPill img { width: 15px; height: 15px; object-fit: contain; display: block; }
 
+/* ---- Final Week Scenarios (js/standings-scenarios.js) -- Nathan: "with this
+   being the last game of the regular season - build out some scenarios in the
+   standings section showing where the ASL Bengals may finish in the standings
+   based on some results of the top 6 teams." Cards use the page tokens so they
+   follow light/dark; the game picker borrows the always-dark scoreboard look
+   Schedule's own game cards and the Playoff Picture use. Everything is sized
+   for a phone first (grids use minmax(0, ...) so a long team name can't push
+   a column wider than the screen). ---- */
+.scnWrap { max-width: 640px; margin: 0 auto; }
+.scnWrap button { font-family: inherit; }
+.scnIntro { font-size: 12.5px; line-height: 1.45; color: var(--muted); text-align: center; margin: 0 4px 12px; }
+.scnCard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.scnSection { font-size: 12px; font-weight: 800; color: var(--bengal-orange-dark); text-transform: uppercase; letter-spacing: .04em; margin: 20px 2px 8px; }
+.scnEyebrow { font-size: 10.5px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: center; margin-bottom: 6px; }
+.scnHeadCard { text-align: center; }
+.scnBigRow { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 2px 0 8px; }
+.scnBig { font-size: 38px; font-weight: 900; line-height: 1; color: var(--ink); letter-spacing: -.01em; }
+.scnBigNote { flex-basis: 100%; font-size: 12.5px; font-weight: 700; color: var(--muted); text-align: center; }
+.scnBadge .scheduleTeamBadge { width: 28px; height: 28px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; font-size: 10px; }
+.scnBigRow .scnBadge .scheduleTeamBadge { width: 44px; height: 44px; min-width: 44px; min-height: 44px; max-width: 44px; max-height: 44px; }
+.scnHeadLine { display: flex; gap: 8px; align-items: flex-start; text-align: left; font-size: 13px; line-height: 1.4; color: var(--ink); margin-top: 8px; }
+.scnHeadLine.good { color: #2e7d32; font-weight: 700; }
+[data-theme="dark"] .scnHeadLine.good { color: #66bb6a; }
+.scnHeadIcon { flex: 0 0 auto; }
+/* the quick table: our own result picks the block, the games above/below us pick the rows/columns */
+.scnQBlock + .scnQBlock { margin-top: 16px; }
+.scnQTitle { font-size: 13px; font-weight: 900; margin-bottom: 8px; }
+.scnQTitle.win { color: #2e7d32; }
+.scnQTitle.loss { color: #c62828; }
+[data-theme="dark"] .scnQTitle.win { color: #66bb6a; }
+[data-theme="dark"] .scnQTitle.loss { color: #ef5350; }
+.scnQGrid { display: grid; gap: 6px; align-items: stretch; }
+.scnQGrid.cols2 { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr); }
+.scnQGrid.cols1 { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.scnQHead { font-size: 10.5px; font-weight: 800; color: var(--muted); text-align: center; align-self: end; line-height: 1.2; padding-bottom: 2px; overflow-wrap: anywhere; }
+.scnQRow { font-size: 11.5px; font-weight: 700; color: var(--ink); line-height: 1.3; display: flex; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+.scnCell { border: none; border-radius: 10px; padding: 10px 4px; min-height: 42px; font-size: 14px; font-weight: 900; color: #fff; cursor: pointer; }
+.scnCell:active { filter: brightness(1.12); }
+.scnCell sup { font-size: 10px; margin-left: 1px; }
+.scnBye { background: #2e7d32; }
+.scnHome { background: var(--bengal-orange-dark); }
+.scnRoad { background: #3566b0; }
+.scnDiv2 { background: #6b7280; }
+.scnPill { display: inline-block; padding: 4px 10px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 900; }
+.scnLegend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; margin-top: 14px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.scnDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.scnFine { font-size: 10.5px; line-height: 1.4; color: var(--muted); margin-top: 8px; text-align: center; }
+/* who can finish where / the picked-results table */
+.scnWho { padding: 6px 10px; }
+.scnWhoRow { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-top: 1px solid var(--line); }
+.scnWhoRow:first-child { border-top: none; }
+.scnWhoRow.us { background: rgba(255, 106, 19, .12); border-radius: 8px; border-top-color: transparent; }
+.scnWhoName { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; font-size: 13px; font-weight: 800; color: var(--ink); line-height: 1.15; overflow-wrap: anywhere; }
+.scnWhoName small { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.scnWhoRange { flex: 0 0 auto; min-width: 54px; text-align: right; font-size: 14px; font-weight: 900; color: var(--ink); }
+.scnWhoPlace { flex: 0 0 auto; min-width: 46px; font-size: 14px; font-weight: 900; color: var(--ink); }
+.scnWhoRec { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: var(--muted); }
+.scnTag { flex: 0 0 auto; font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 8px; background: var(--paper); color: var(--muted); white-space: nowrap; }
+.scnTag.good { background: rgba(46, 125, 50, .15); color: #2e7d32; }
+[data-theme="dark"] .scnTag.good { color: #66bb6a; }
+.scnTag.warn { background: rgba(255, 106, 19, .15); color: var(--bengal-orange-dark); }
+.scnResultTable { margin-top: 10px; padding: 0; }
+/* the game picker */
+.scnPicks { display: flex; flex-direction: column; gap: 8px; }
+.scnGame { background: linear-gradient(135deg, #14181c 0%, #1d2329 55%, #241a12 100%); border: 1px solid #2c333b; border-radius: 12px; padding: 8px 10px 10px; }
+.scnGame.ours { border-color: var(--bengal-orange); box-shadow: 0 0 0 2px rgba(255, 106, 19, .25); }
+.scnGameWhen { font-size: 10px; font-weight: 800; color: #9aa4ae; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.scnGameWhen b { color: var(--bengal-orange); }
+.scnGameBtns { display: grid; grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr); gap: 6px; }
+.scnGameBtns.noTie { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.scnTeamBtn { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 48px; padding: 6px 8px; background: rgba(255, 255, 255, .06); border: 1.5px solid #3a434d; border-radius: 10px; color: #fff; text-align: left; cursor: pointer; }
+.scnTeamBtn.on { background: var(--bengal-orange); border-color: var(--bengal-orange); }
+.scnTeamTxt { display: flex; flex-direction: column; min-width: 0; font-size: 12px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.scnTeamTxt small { font-size: 10px; font-weight: 700; color: #9aa4ae; }
+.scnTeamBtn.on .scnTeamTxt small { color: rgba(255, 255, 255, .9); }
+.scnTieBtn { background: rgba(255, 255, 255, .06); border: 1.5px solid #3a434d; border-radius: 10px; color: #cfd7de; font-size: 11px; font-weight: 800; cursor: pointer; }
+.scnTieBtn.on { background: #6b7280; border-color: #6b7280; color: #fff; }
+.scnOther { margin-top: 12px; }
+.scnOther summary, .scnHow summary { cursor: pointer; font-size: 12.5px; font-weight: 800; color: var(--bengal-orange-dark); padding: 6px 2px; }
+.scnHow { margin-top: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px 12px; }
+.scnHow ol { margin: 6px 0 8px; padding-left: 20px; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.scnHow p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.scnHow .scnPolicyNote { margin: 6px 0 8px; padding: 6px 8px; border-left: 3px solid var(--bengal-orange); background: var(--paper); border-radius: 6px; }
+.scnResult { margin-top: 12px; }
+.scnStory { font-size: 12.5px; line-height: 1.45; color: var(--ink); background: var(--paper); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.scnStory.warn { border-left: 3px solid var(--bengal-orange); }
+
 /* "All Bengals Teams" (js/standings.js's allTeamsRowHtml) -- Nathan: "I
    want to have the ability to see the standings with all the other age
    groups... record, place in standings, and playoff probabilities" for
