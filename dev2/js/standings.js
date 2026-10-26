@@ -813,9 +813,26 @@
     return `<div class="lbSectionHeader">🎥 Opponent Film</div>${items}<div style="margin-bottom:10px;"></div>`;
   }
 
+  // The scouting-film links a coach attached to this Schedule game, as
+  // {label, url, note} clips -- one per film (opponentFilms), or a single
+  // one for a game that only has the old opponentFilmUrl. A lone untitled
+  // film keeps the label it always had on this page.
+  function gameFilmClips(game) {
+    const clips = window.opponentFilmClips
+      ? window.opponentFilmClips(game)
+      : (game.opponentFilmUrl ? [{ title: '', url: game.opponentFilmUrl, note: game.opponentFilmNote || '' }] : []);
+    const loneText = `Watch Game Film of ${game.opponent || 'this Opponent'}`;
+    return clips.map((c, i) => ({
+      label: '🎥 ' + (window.opponentFilmLabel ? window.opponentFilmLabel(c, i, clips.length, loneText) : (c.title || loneText)),
+      url: c.url,
+      note: c.note,
+    }));
+  }
+
   function opponentPageHtml(game, teamRow) {
     const diffStr = teamRow ? ((teamDiff(teamRow) > 0 ? '+' : '') + teamDiff(teamRow)) : '';
-    const hasFootage = !!game.opponentFilmUrl;
+    const gameClips = gameFilmClips(game);
+    const hasFootage = gameClips.length > 0;
     // A real Schedule record exists for this team (we've actually played
     // or are scheduled to play them) vs. a division-only team pulled
     // straight from Standings with no Schedule game to pull film/
@@ -854,7 +871,7 @@
     // showOpponentPage's own loadOpponentFilmSection() rebuilds this same
     // div with the legacy link PLUS every js/opponent-film.js clip for
     // this team once that fetch resolves.
-    const legacyClips = hasFootage ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+    const legacyClips = gameClips;
     html += `<div id="standingsOpponentFilm">${opponentFilmSectionHtml(legacyClips)}</div>`;
     // Nathan: "utilize the CMYFCC website to also pull in team game
     // history for the other teams" -- filled in asynchronously by
@@ -900,7 +917,7 @@
         label: c.title || `🎥 Watch${game.opponent ? ' ' + game.opponent : ''} Film`,
         url: c.url,
       }));
-      const legacyClips = game.opponentFilmUrl ? [{ label: `🎥 Watch Game Film of ${game.opponent || 'this Opponent'}`, url: game.opponentFilmUrl, note: game.opponentFilmNote }] : [];
+      const legacyClips = gameFilmClips(game);
       wrap.innerHTML = opponentFilmSectionHtml(legacyClips.concat(stored));
     }).catch(() => {});
   }

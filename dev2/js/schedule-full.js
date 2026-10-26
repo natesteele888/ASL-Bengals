@@ -50,12 +50,19 @@
     return mins > 0 ? mins : null;
   }
 
+  // "1st Round - Playoffs" for a Playoff with a round picked, otherwise the
+  // plain game type ('' for Regular Season) -- js/schedule.js owns the rule.
+  function typeLabel(g) {
+    if (window.gameTypeLabel) return window.gameTypeLabel(g);
+    return g && g.gameType && g.gameType !== 'Regular Season' ? g.gameType : '';
+  }
+
   function mergedEntries(games, practices) {
     const gameEntries = games.map(g => ({
       kind: 'game', id: g.id, date: g.date || '',
       time: g.gameTime || g.time || '',
       title: `${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}`,
-      sub: g.gameType && g.gameType !== 'Regular Season' ? g.gameType : 'Game',
+      sub: typeLabel(g) || 'Game',
       location: g.location || '',
       infoUrl: g.infoUrl || '',
     }));
@@ -76,7 +83,7 @@
   function toICSEvents(games, practices) {
     const gameEvents = games.filter(g => g.date).map(g => ({
       uid: g.id, date: g.date, time: g.gameTime || g.time || '', durationMinutes: 120,
-      title: `ASL Bengals ${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${g.gameType && g.gameType !== 'Regular Season' ? ' (' + g.gameType + ')' : ''}`,
+      title: `ASL Bengals ${g.homeAway === 'Away' ? '@' : 'vs'} ${g.opponent || 'TBD'}${typeLabel(g) ? ' (' + typeLabel(g) + ')' : ''}`,
       location: g.location || '',
       description: [g.arriveTime ? `Arrive by ${to12h(g.arriveTime)}` : '', g.warmupTime ? `Warm-up ${to12h(g.warmupTime)}` : ''].filter(Boolean).join(' • '),
     }));

@@ -2602,6 +2602,9 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    reserves space on the right so long location text truncates instead of
    running under the Week badge (see .scheduleWeekBadge below). */
 .scheduleRowTop { display: flex; align-items: center; gap: 8px; padding-right: 76px; }
+/* A long game-type tag ("1st Round - Playoffs") keeps its text on one line and lets the location/date drop to the line below it, instead of the tag wrapping in two and the location getting squeezed to "HOME • HOME F…" on a phone. Short tags (Playoff, Scrimmage) are untouched. */
+.scheduleRowTop.scheduleRowTopTagLong { flex-wrap: wrap; row-gap: 4px; }
+.scheduleRowTop.scheduleRowTopTagLong .scheduleGameTypeTag { flex: 0 0 auto; white-space: nowrap; }
 /* Nathan, with a before/after reference screenshot: "Moved the date of the
    header over next to the location." Real bug, found by measuring the live
    card directly, not just eyeballed: flex:1 1 auto's flex-GROW stretched

@@ -74,8 +74,34 @@
   // "Bye Week" callout instead of drawing a whole empty matchup -- see
   // renderList below.
   const GAME_TYPES = ['Regular Season', 'Scrimmage', 'Jamboree', 'Playoff', 'Bye'];
+  // Nathan: a game marked "Playoff" should be able to say which round it is --
+  // "1st Round - Playoffs". playoffRound is an optional label on the game
+  // itself (picked in the game's edit form); gameType stays 'Playoff', so
+  // everything that already keys off that value (record counting, the
+  // Bye/Jamboree special cases) is untouched.
+  const PLAYOFF_ROUNDS = ['1st Round', 'Semifinal', 'Championship'];
+  function playoffRoundOf(g) {
+    return (g && g.gameType === 'Playoff' && typeof g.playoffRound === 'string') ? g.playoffRound.trim() : '';
+  }
+  // Text for the little type tag and the calendar entries: '' for a plain
+  // Regular Season game, "1st Round - Playoffs" for a Playoff with a round
+  // picked, otherwise just the type ("Playoff", "Scrimmage", ...).
+  function gameTypeLabel(g) {
+    if (!g || !g.gameType || g.gameType === 'Regular Season') return '';
+    const round = playoffRoundOf(g);
+    return round ? `${round} - Playoffs` : g.gameType;
+  }
+  // Lower-case noun for running text ("a 1st round playoff Sunday at ..."),
+  // 'game' for a regular-season one.
+  function gameTypeWord(g) {
+    if (!g || !g.gameType || g.gameType === 'Regular Season') return 'game';
+    const round = playoffRoundOf(g);
+    return round ? `${round.toLowerCase()} playoff` : g.gameType.toLowerCase();
+  }
+  window.gameTypeLabel = gameTypeLabel;
+  window.gameTypeWord = gameTypeWord;
 
-  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl, opponentFilmNote}]
+  let games = [];     // [{id, opponent, date, arriveTime, warmupTime, gameTime, homeAway, location, ourScore, oppScore, writeup, scouting, statSheet, updatedAt, fieldPhoto, infoUrl, opponentFilmUrl, opponentFilmNote, opponentFilms:[{id,title,url,note}], playoffRound}]
   let current = null; // game open in the detail view, or null (list view)
   let loaded = false;
   // Nathan: "when you go to this week ahead, and you click on a game or
@@ -458,7 +484,7 @@
     if (game.warmupTime) timeParts.push(`warm-up ${to12h(game.warmupTime)}`);
     if (game.gameTime) timeParts.push(`kickoff ${to12h(game.gameTime)}`);
     const timeStr = timeParts.length ? ` (${timeParts.join(', ')})` : '';
-    const typeWord = game.gameType === 'Playoff' ? 'Playoff game'
+    const typeWord = game.gameType === 'Playoff' ? (playoffRoundOf(game) ? `${playoffRoundOf(game)} Playoff game` : 'Playoff game')
       : (game.gameType && game.gameType !== 'Regular Season' ? game.gameType : 'matchup');
     const locPart = game.location ? ` at ${game.location}` : '';
 
@@ -1868,6 +1894,62 @@
     wrap.appendChild(addBtn);
   }
 
+  // Nathan: "I also need the ability to add multiple videos for the upcoming
+  // opponent." Coach edit list for current.opponentFilms -- same mutate-in-
+  // place, re-render-just-this-block pattern as renderGameFootageEditor
+  // above. One box per film: its link, an optional title (what its button
+  // says once there are several) and an optional note shown under it. A
+  // blank row is always left open to type into; blank rows are dropped when
+  // the game is saved (saveCurrent).
+  function newOpponentFilm() { return { id: genId(), title: '', url: '', note: '' }; }
+  function renderOpponentFilmEditor() {
+    const wrap = document.getElementById('schedOpponentFilmWrap');
+    if (!wrap || !current) return;
+    const clips = current.opponentFilms;
+    wrap.innerHTML = '';
+    const inputCss = 'width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;';
+    clips.forEach((clip, i) => {
+      const box = document.createElement('div');
+      box.style.cssText = 'border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px;';
+      const top = document.createElement('div');
+      top.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+      const urlInput = document.createElement('input');
+      urlInput.type = 'text'; urlInput.placeholder = 'https://… (Hudl, Google Drive, YouTube)'; urlInput.value = clip.url || '';
+      urlInput.style.cssText = inputCss + 'flex:1 1 auto;min-width:0;';
+      urlInput.addEventListener('input', () => { clip.url = urlInput.value.trim(); });
+      // a film just gained (or lost) its link: refresh the notes' film pickers
+      urlInput.addEventListener('change', renderScoutingNotesEditor);
+      top.appendChild(urlInput);
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'statsRmBtnSmall'; rm.textContent = '✕'; rm.setAttribute('aria-label', 'Remove this film');
+      rm.addEventListener('click', () => {
+        clips.splice(i, 1);
+        if (!clips.length) clips.push(newOpponentFilm());
+        renderOpponentFilmEditor();
+        renderScoutingNotesEditor();
+      });
+      top.appendChild(rm);
+      box.appendChild(top);
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text'; titleInput.placeholder = 'Title (optional), e.g. Nipmuc vs Hudson'; titleInput.value = clip.title || '';
+      titleInput.style.cssText = inputCss + 'margin-bottom:6px;';
+      titleInput.addEventListener('input', () => { clip.title = titleInput.value.trim(); });
+      titleInput.addEventListener('change', renderScoutingNotesEditor);
+      box.appendChild(titleInput);
+      const noteInput = document.createElement('input');
+      noteInput.type = 'text'; noteInput.placeholder = 'Note (optional), e.g. Nipmuc is in white'; noteInput.value = clip.note || '';
+      noteInput.style.cssText = inputCss;
+      noteInput.addEventListener('input', () => { clip.note = noteInput.value.trim(); });
+      box.appendChild(noteInput);
+      wrap.appendChild(box);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'lbLinkBtn'; addBtn.style.marginTop = '2px';
+    addBtn.textContent = '+ Add Another Film';
+    addBtn.addEventListener('click', () => { clips.push(newOpponentFilm()); renderOpponentFilmEditor(); });
+    wrap.appendChild(addBtn);
+  }
+
   // Nathan: "Would be great to clip a few plays or save screenshots from
   // the video to call out coverages or what they are doing. Coach could
   // type in notes... It's going to be on the coaches to create the clips
@@ -1881,8 +1963,11 @@
     const wrap = document.getElementById('schedScoutingNotesWrap');
     if (!wrap || !current) return;
     const notes = current.scoutingNotes;
+    // Only films that actually have a link yet (the editor above keeps a
+    // blank row open for typing into).
+    const filmClips = opponentFilmClips(current);
     wrap.innerHTML = '';
-    if (!current.opponentFilmUrl) {
+    if (!filmClips.length) {
       const hint = document.createElement('div');
       hint.className = 'lbSub';
       hint.textContent = 'Add the opponent film link above first -- these notes link straight into a moment in that film.';
@@ -1911,6 +1996,23 @@
       rm.type = 'button'; rm.className = 'statsRmBtnSmall'; rm.textContent = '✕';
       rm.addEventListener('click', () => { notes.splice(i, 1); renderScoutingNotesEditor(); });
       row.appendChild(rm);
+      // With more than one opponent film, say which one this timestamp is in.
+      // Left alone it points at the first film (what every note did before a
+      // game could have several).
+      if (filmClips.length > 1) {
+        const filmSel = document.createElement('select');
+        filmSel.setAttribute('aria-label', 'Which film is this moment in?');
+        filmSel.style.cssText = 'flex:1 1 100%;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;margin-top:2px;';
+        filmClips.forEach((c, ci) => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `In: ${opponentFilmLabel(c, ci, filmClips.length)}`;
+          filmSel.appendChild(opt);
+        });
+        filmSel.value = filmClips.some(c => c.id === note.filmId) ? note.filmId : filmClips[0].id;
+        filmSel.addEventListener('change', () => { note.filmId = filmSel.value; });
+        row.appendChild(filmSel);
+      }
       const noteInput = document.createElement('textarea');
       noteInput.placeholder = 'What should the kids notice here?'; noteInput.value = note.note || '';
       noteInput.style.cssText = 'width:100%;min-height:44px;padding:8px;border:2px solid #ccc;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;margin-top:4px;';
@@ -1985,6 +2087,54 @@
   // [data-embed-target] button on the page regardless of which file
   // rendered it, so exposing this one function is enough.
   window.filmButtonHtml = filmButtonHtml;
+  // Nathan: "I also need the ability to add multiple videos for the upcoming
+  // opponent. right now you can only add 1." A game's scouting film used to
+  // be one link (opponentFilmUrl) with one caption (opponentFilmNote). It's
+  // now a list -- opponentFilms: [{id, title, url, note}], edited in the
+  // game's Opponent Film section -- and each clip gets its own button.
+  // opponentFilmUrl/opponentFilmNote still hold the FIRST clip (rewritten on
+  // every save), so anything that only asks "does this game have opponent
+  // film?" keeps working, and a game saved before this change simply reads
+  // as a one-clip list.
+  function opponentFilmClips(game) {
+    if (!game) return [];
+    if (Array.isArray(game.opponentFilms)) {
+      return game.opponentFilms
+        .map((c, i) => (c && c.url ? { id: c.id || ('film' + i), title: c.title || '', url: c.url, note: c.note || '' } : null))
+        .filter(Boolean);
+    }
+    return game.opponentFilmUrl ? [{ id: 'legacy', title: '', url: game.opponentFilmUrl, note: game.opponentFilmNote || '' }] : [];
+  }
+  // Button text for one clip (no emoji). A lone untitled clip keeps the
+  // wording the single-link version always had; several clips are told
+  // apart by their title, or "Game Film 2" when a coach hasn't titled them.
+  function opponentFilmLabel(clip, index, total, loneText) {
+    if (clip.title) return clip.title;
+    return total > 1 ? `Game Film ${index + 1}` : (loneText || 'Watch Game Film of our Upcoming Opponent');
+  }
+  // The film buttons for a game, each with its note right underneath --
+  // used by the game's own page and by This Week. With two or more clips a
+  // small "Opponent Film" heading sits above them. opts.headerStyle styles
+  // that heading; opts.noteMargin overrides the margin around a note line.
+  function opponentFilmCtaHtml(game, opts) {
+    opts = opts || {};
+    const clips = opponentFilmClips(game);
+    if (!clips.length) return '';
+    const head = clips.length > 1 ? `<div class="lbSectionHeader" style="${opts.headerStyle || 'margin-top:0;'}">🎥 Opponent Film</div>` : '';
+    return head + clips.map((c, i) => {
+      const last = i === clips.length - 1;
+      const btn = filmButtonHtml(c.url, `🎥 ${escapeHtml(opponentFilmLabel(c, i, clips.length))}`, {
+        filmGameId: game.id,
+        btnClass: 'navBtn',
+        btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:${c.note ? 4 : (last ? 12 : 8)}px;`,
+      });
+      const note = c.note ? `<div class="lbSub" style="text-align:center;margin:${opts.noteMargin || (last ? '0 0 12px' : '0 0 10px')};">${escapeHtml(c.note)}</div>` : '';
+      return btn + note;
+    }).join('');
+  }
+  window.opponentFilmClips = opponentFilmClips;
+  window.opponentFilmLabel = opponentFilmLabel;
+  window.opponentFilmCtaHtml = opponentFilmCtaHtml;
   // Nathan: "surface it on This Week too" -- our OWN footage of the
   // linked game (gameFootage), not the opponent-scouting opponentFilmUrl
   // This Week already shows. Exposes the exact same Q1/Q2/Q3/Q4-grid
@@ -2076,14 +2226,25 @@
   function scoutingNotesReadOnlyHtml(game) {
     const notes = Array.isArray(game.scoutingNotes) ? game.scoutingNotes : [];
     if (!notes.length) return '';
+    const clips = opponentFilmClips(game);
     return `
       <div class="lbSectionHeader" style="margin-top:16px;">🔍 Scouting Notes</div>
-      ${notes.map(n => `
+      ${notes.map(n => {
+        // A note jumps into the film it was tied to (filmId); one written
+        // before a game had several films, or tied to a film that has since
+        // been removed, jumps into the first.
+        const found = clips.findIndex(c => c.id === n.filmId);
+        const ci = found >= 0 ? found : 0;
+        const clip = clips[ci];
+        const canJump = !!(clip && n.timestamp);
+        const where = clips.length > 1 ? opponentFilmLabel(clip, ci, clips.length) : 'the film';
+        return `
         <div class="thisweekKeysBox" style="margin-bottom:8px;">
           ${n.label ? `<div class="thisweekKeysTitle">${escapeHtml(n.label)}</div>` : ''}
-          ${n.note ? `<div style="font-size:14px;font-weight:600;line-height:1.45;margin:${n.label?'4px':'0'} 0 ${game.opponentFilmUrl && n.timestamp ? '8px':'0'};">${escapeHtml(n.note)}</div>` : ''}
-          ${game.opponentFilmUrl && n.timestamp ? filmButtonHtml(game.opponentFilmUrl, `▶ Jump to ${secondsToMmss(n.timestamp)} in the film`, { startSeconds: n.timestamp, btnClass: 'lbLinkBtn', btnStyle: 'display:flex;text-decoration:none;' }) : ''}
-        </div>`).join('')}`;
+          ${n.note ? `<div style="font-size:14px;font-weight:600;line-height:1.45;margin:${n.label?'4px':'0'} 0 ${canJump ? '8px':'0'};">${escapeHtml(n.note)}</div>` : ''}
+          ${canJump ? filmButtonHtml(clip.url, `▶ Jump to ${secondsToMmss(n.timestamp)} in ${escapeHtml(where)}`, { startSeconds: n.timestamp, btnClass: 'lbLinkBtn', btnStyle: 'display:flex;text-decoration:none;' }) : ''}
+        </div>`;
+      }).join('')}`;
   }
 
   // Nathan: "saving the schedule on my phone worked but it assigned all
@@ -2281,7 +2442,7 @@
       // casualty of a long location.
       const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}${g.infoUrl ? ' <span title="More info available on this game">🔗</span>' : ''}`;
       const dateChip = result ? `<span class="scheduleRowDateChip">• ${escapeHtml(fmtDate(g.date))}</span>` : '';
-      const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
+      const gameTypeTag = gameTypeLabel(g) ? `<span class="scheduleGameTypeTag">${escapeHtml(gameTypeLabel(g))}</span>` : '';
       const weatherId = `scheduleRowWeather-${g.id}`;
       // Nathan (follow-up): "Teams on your schedule should also have their
       // record shown under their name like ours. They are on the standings
@@ -2346,7 +2507,7 @@
           </span>`;
       row.innerHTML = `
         ${weekBadge}
-        <div class="scheduleRowTop">
+        <div class="scheduleRowTop${gameTypeLabel(g).length > 12 ? ' scheduleRowTopTagLong' : ''}">
           ${gameTypeTag}
           <span class="scheduleRowDate">${locLine}</span>
           ${dateChip}
@@ -2460,12 +2621,13 @@
     // option to add in Opponent Film on the Upcoming Game." Distinct from
     // gameFootage above -- that's footage OF one of OUR games (recorded
     // after the fact, possibly several clips). This is scouting footage
-    // OF THE OPPONENT (from Hudl, Drive, wherever it already lives), so
-    // it's a single link, entered ahead of the game like Scouting Report,
-    // not a growing list. Surfaced as a "Watch Game Film of our Upcoming
-    // Opponent" button both here on the game's own Schedule preview and on
-    // This Week (js/thisweek.js), which reads it straight off whichever
-    // game is linked as saved.gameId.
+    // OF THE OPPONENT (from Hudl, Drive, wherever it already lives),
+    // entered ahead of the game like Scouting Report. Surfaced as "Watch
+    // Game Film of our Upcoming Opponent" buttons both here on the game's
+    // own Schedule preview and on This Week (js/thisweek.js), which reads
+    // it straight off whichever game is linked as saved.gameId. It started
+    // as a single link (opponentFilmUrl/opponentFilmNote, below); a game can
+    // now carry several -- see opponentFilms right after those two.
     current.opponentFilmUrl = current.opponentFilmUrl || '';
     // Nathan: "include a write-in spot for the footage to say something
     // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
@@ -2473,6 +2635,17 @@
     // Footage button, same linking (saved.gameId -> upcomingGames) as the
     // URL itself.
     current.opponentFilmNote = current.opponentFilmNote || '';
+    // Nathan: "I also need the ability to add multiple videos for the
+    // upcoming opponent." The working list the Opponent Film editor edits in
+    // place -- built fresh (copies, not the saved game's own objects) so a
+    // half-finished edit never leaks into the saved game until it's Saved.
+    // A game saved before this existed becomes a one-film list here, and the
+    // editor always has a blank row open to type a link into.
+    current.opponentFilms = opponentFilmClips(current).map(c => ({ ...c, id: c.id === 'legacy' ? genId() : c.id }));
+    if (!current.opponentFilms.length) current.opponentFilms.push(newOpponentFilm());
+    // Which round of the playoffs this is ("1st Round - Playoffs"); only
+    // used while gameType is Playoff.
+    current.playoffRound = typeof current.playoffRound === 'string' ? current.playoffRound : '';
     // Nathan: "Would be great to clip a few plays or save screenshots from
     // the video to call out coverages... coach could type in notes." Lives
     // on the game record like everything else in this block; unlike
@@ -2570,7 +2743,7 @@
       const usScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.ourScore))}</span>` : '';
       const themScore = result ? `<span class="scheduleTeamScore">${escapeHtml(String(current.oppScore))}</span>` : '';
       const topLine = `${current.homeAway === 'Away' ? 'AWAY' : 'HOME'}${(preGameTimesLine && !gameIsFinal) ? ' • ' + preGameTimesLine : ''}`;
-      const gameTypeTag = current.gameType && current.gameType !== 'Regular Season' ? `<div style="text-align:center;margin-bottom:8px;"><span class="scheduleGameTypeTag">${escapeHtml(current.gameType)}</span></div>` : '';
+      const gameTypeTag = gameTypeLabel(current) ? `<div style="text-align:center;margin-bottom:8px;"><span class="scheduleGameTypeTag">${escapeHtml(gameTypeLabel(current))}</span></div>` : '';
       const heroRecordStr = bengalsRecord(games);
       const heroRecordHtml = heroRecordStr ? `<span class="scheduleTeamRecord">${escapeHtml(heroRecordStr)}</span>` : '';
       return `
@@ -2605,8 +2778,7 @@
              Game) -- opens the real full-screen tracker pre-scoped to this
              exact game, see js/playcount-tracker.js. -->
         ${approved ? `<button type="button" class="navBtn secondary" id="schedPlayCountBtn" style="display:block;width:100%;text-align:center;box-sizing:border-box;margin-bottom:12px;">🎯 Play Counts</button>` : ''}
-        ${current.opponentFilmUrl ? filmButtonHtml(current.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', { filmGameId: current.id, btnClass: 'navBtn', btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${current.opponentFilmNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}` }) : ''}
-        ${current.opponentFilmUrl && current.opponentFilmNote ? `<div class="lbSub" style="text-align:center;margin:0 0 12px;">${escapeHtml(current.opponentFilmNote)}</div>` : ''}
+        ${opponentFilmCtaHtml(current)}
         ${scoutingNotesReadOnlyHtml(current)}
         <div id="schedGamePreviewWrap" class="thisweekKeysBox" style="display:none;">
           <div class="thisweekKeysTitle" id="schedGamePreviewTitle">📰 Game Preview</div>
@@ -2767,6 +2939,9 @@
       </div>
       <div class="lbSub" style="margin:0 0 4px;">Game type:</div>
       <div class="gameplanPickerGrid" id="schedGameTypeGrid" style="margin-bottom:12px;"></div>
+      <!-- Nathan: a Playoff game should be able to say "1st Round - Playoffs".
+           Only filled in (see renderPlayoffRoundRow) while the type is Playoff. -->
+      <div id="schedPlayoffRoundWrap" style="display:none;margin:-4px 0 12px;"></div>
       <div class="gameplanPickerGrid" id="schedHomeAwayGrid" style="margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <span class="lbSub" style="margin:0;">Final score:</span>
@@ -2800,10 +2975,8 @@
       <div class="lbSub" style="margin:2px 0 8px;">Known tendencies, notable players, anything else worth calling out about this opponent -- visible to the whole team ahead of the game.</div>
       <textarea id="schedScouting" placeholder="e.g. &quot;#7 is their best runner, mostly runs right. Weak on outside contain.&quot;" style="width:100%;min-height:80px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:4px;"></textarea>
       <div class="lbSectionHeader" style="margin-top:12px;">🎥 Opponent Film</div>
-      <div class="lbSub" style="margin:2px 0 8px;">Link to game film of this opponent (Hudl share link, Google Drive, YouTube, etc.) -- shows a "Watch Game Film of our Upcoming Opponent" button here and on This Week once a game is linked to it.</div>
-      <input type="text" id="schedOpponentFilmUrl" placeholder="https://…" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
-      <input type="text" id="schedOpponentFilmNote" placeholder="e.g. &quot;Nipmuc is in white. Final score: Nipmuc 7 - Merrimack Valley 6&quot;" style="width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:4px;">
-      <div class="lbSub" style="margin:2px 0 8px;">Optional note shown right under the film button -- jersey colors, final score, anything worth flagging before they hit play.</div>
+      <div class="lbSub" style="margin:2px 0 8px;">Links to game film of this opponent (Hudl share link, Google Drive, YouTube, etc.). Add as many as you like -- each one gets its own "Watch Game Film" button here and on This Week once a game is linked to it. The optional note shows right under its button -- jersey colors, final score, anything worth flagging before they hit play.</div>
+      <div id="schedOpponentFilmWrap" style="margin-bottom:8px;"></div>
       <div class="lbSectionHeader" style="margin-top:12px;">🔍 Scouting Notes</div>
       <div class="lbSub" style="margin:2px 0 8px;">Point kids straight at a moment in the film above -- "1:42, their base coverage," a quick note on what to notice. Visible to the whole team, same as the film link itself.</div>
       <div id="schedScoutingNotesWrap" style="margin-bottom:8px;"></div>
@@ -2837,8 +3010,7 @@
     renderScoutingNotesEditor();
     document.getElementById('schedWriteup').value = current.writeup || '';
     document.getElementById('schedScouting').value = current.scouting || '';
-    document.getElementById('schedOpponentFilmUrl').value = current.opponentFilmUrl || '';
-    document.getElementById('schedOpponentFilmNote').value = current.opponentFilmNote || '';
+    renderOpponentFilmEditor();
     const fillHighlightsBtn = document.getElementById('schedFillHighlightsBtn');
     if (fillHighlightsBtn) {
       fillHighlightsBtn.addEventListener('click', () => {
@@ -2921,7 +3093,10 @@
       chip.type = 'button';
       chip.className = 'gameplanChip' + (current.homeAway === v ? ' active' : '');
       chip.textContent = v;
-      chip.addEventListener('click', () => { current.homeAway = v; renderDetail(); });
+      // syncFormToCurrent first: renderDetail() rebuilds the whole form from
+      // `current`, so anything typed since the last save (the opponent's
+      // name, say) would otherwise vanish the moment a chip is tapped.
+      chip.addEventListener('click', () => { syncFormToCurrent(); current.homeAway = v; renderDetail(); });
       haGrid.appendChild(chip);
     });
 
@@ -2931,9 +3106,54 @@
       chip.type = 'button';
       chip.className = 'gameplanChip' + (current.gameType === v ? ' active' : '');
       chip.textContent = v;
-      chip.addEventListener('click', () => { current.gameType = v; renderDetail(); });
+      chip.addEventListener('click', () => { syncFormToCurrent(); current.gameType = v; renderDetail(); });
       gtGrid.appendChild(chip);
     });
+
+    // Which round of the playoffs? Quick chips for the usual rounds plus a
+    // text box for anything else (and for clearing it) -- the chips just fill
+    // the box, so there's one source of truth. Only the little type tag in
+    // the hero is touched while picking, not the whole form, so nothing the
+    // coach has typed is disturbed.
+    function renderPlayoffRoundRow() {
+      const wrap = document.getElementById('schedPlayoffRoundWrap');
+      if (!wrap) return;
+      if (current.gameType !== 'Playoff') { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+      wrap.style.display = '';
+      wrap.innerHTML = '<div class="lbSub" style="margin:0 0 4px;">Which round? Shows on the game as "1st Round - Playoffs":</div>';
+      const grid = document.createElement('div');
+      grid.className = 'gameplanPickerGrid';
+      grid.style.marginBottom = '6px';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'schedPlayoffRound';
+      input.placeholder = 'or type your own, e.g. 2nd Round';
+      input.value = typeof current.playoffRound === 'string' ? current.playoffRound : '';
+      input.style.cssText = 'width:100%;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;';
+      const chips = PLAYOFF_ROUNDS.map(r => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.textContent = r;
+        chip.addEventListener('click', () => {
+          // tapping the picked round again clears it
+          current.playoffRound = current.playoffRound === r ? '' : r;
+          input.value = current.playoffRound;
+          paint();
+        });
+        grid.appendChild(chip);
+        return { r, chip };
+      });
+      function paint() {
+        chips.forEach(({ r, chip }) => { chip.className = 'gameplanChip' + (current.playoffRound === r ? ' active' : ''); });
+        const tag = document.querySelector('#scheduleDetailBody .scheduleDetailHero .scheduleGameTypeTag');
+        if (tag) tag.textContent = gameTypeLabel(current);
+      }
+      input.addEventListener('input', () => { current.playoffRound = input.value.trim(); paint(); });
+      wrap.appendChild(grid);
+      wrap.appendChild(input);
+      paint();
+    }
+    renderPlayoffRoundRow();
     const previewToggleBtn = document.getElementById('schedPreviewToggleBtn');
     if (previewToggleBtn) {
       previewToggleBtn.addEventListener('click', () => {
@@ -2967,7 +3187,7 @@
       if (!window.buildICS || !window.downloadICS) return;
       const ics = window.buildICS([{
         uid: current.id, date: current.date, time: current.gameTime || current.time || '', durationMinutes: 120,
-        title: `ASL Bengals ${current.homeAway === 'Away' ? '@' : 'vs'} ${current.opponent || 'TBD'}${current.gameType && current.gameType !== 'Regular Season' ? ' (' + current.gameType + ')' : ''}`,
+        title: `ASL Bengals ${current.homeAway === 'Away' ? '@' : 'vs'} ${current.opponent || 'TBD'}${gameTypeLabel(current) ? ' (' + gameTypeLabel(current) + ')' : ''}`,
         location: current.location || '',
         description: [current.arriveTime ? `Arrive by ${to12h(current.arriveTime)}` : '', current.warmupTime ? `Warm-up ${to12h(current.warmupTime)}` : ''].filter(Boolean).join(' • '),
       }]);
@@ -3102,8 +3322,12 @@
     current.writeup = document.getElementById('schedWriteup').value.trim();
     current.scouting = document.getElementById('schedScouting').value.trim();
     current.infoUrl = document.getElementById('schedInfoUrl').value.trim();
-    current.opponentFilmUrl = document.getElementById('schedOpponentFilmUrl').value.trim();
-    current.opponentFilmNote = document.getElementById('schedOpponentFilmNote').value.trim();
+    // opponentFilms is edited in place (renderOpponentFilmEditor); what's
+    // left to do here is keep the legacy single-film fields pointing at the
+    // first film that has a link, for anything that still reads them.
+    const firstFilm = (current.opponentFilms || []).find(c => c && c.url);
+    current.opponentFilmUrl = firstFilm ? firstFilm.url : '';
+    current.opponentFilmNote = firstFilm ? (firstFilm.note || '') : '';
     current.fieldPhoto = pendingFieldPhoto;
     return true;
   }
@@ -3115,6 +3339,8 @@
       if (statusEl) statusEl.textContent = 'Give the game an opponent first.';
       return;
     }
+    // Drop the blank row the Opponent Film editor keeps open for typing.
+    current.opponentFilms = (current.opponentFilms || []).filter(c => c && c.url);
     current.updatedAt = new Date().toISOString();
     const idx = games.findIndex(g => g.id === current.id);
     if (idx >= 0) games[idx] = current; else games.push(current);
