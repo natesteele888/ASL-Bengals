@@ -379,7 +379,8 @@
     // the W/L badge and score here.
     const gameTime = result ? '' : to12h(g.gameTime || g.time || '');
     const locLine = `${g.homeAway === 'Away' ? 'AWAY' : 'HOME'}${g.location ? ' • ' + escapeHtml(g.location) : ''}`;
-    const gameTypeTag = g.gameType && g.gameType !== 'Regular Season' ? `<span class="scheduleGameTypeTag">${escapeHtml(g.gameType)}</span>` : '';
+    const typeLabel = window.gameTypeLabel ? window.gameTypeLabel(g) : (g.gameType && g.gameType !== 'Regular Season' ? g.gameType : '');
+    const gameTypeTag = typeLabel ? `<span class="scheduleGameTypeTag">${escapeHtml(typeLabel)}</span>` : '';
     return `
       <button type="button" class="scheduleRow" data-open-game="${escapeHtml(g.id)}">
         ${gameTypeTag}
@@ -466,7 +467,7 @@
     if (data.walkthroughCount) practiceParts.push(`${data.walkthroughCount} walk-through${data.walkthroughCount === 1 ? '' : 's'}`);
 
     const gameParts = data.gameEntries.map(({ d, g }) => {
-      const label = (g.gameType && g.gameType !== 'Regular Season') ? g.gameType.toLowerCase() : 'game';
+      const label = window.gameTypeWord ? window.gameTypeWord(g) : ((g.gameType && g.gameType !== 'Regular Season') ? g.gameType.toLowerCase() : 'game');
       const dayName = d.toLocaleDateString(undefined, { weekday: 'long' });
       const timeStr = to12h(g.gameTime || g.time || '');
       const timeBit = timeStr ? ` at ${timeStr}` : '';
@@ -553,7 +554,6 @@
     // in the app, so this one opens inline instead of jumping to a new tab.
     const footageHtml = `
       <div id="thisweekWatchFootageWrap"></div>
-      <div id="thisweekWatchFootageNote" class="lbSub" style="display:none;text-align:center;margin:0 0 8px;"></div>
       <div id="thisweekOpponentScoutingWrap"></div>
       <div id="thisweekGameFootageWrap"></div>
       <!-- Nathan: "link formatting and placement isn't good - needs
@@ -685,49 +685,30 @@
     // currently linked to.
     const linkedGame = getLinkedWeekGame();
     const watchFootageWrap = document.getElementById('thisweekWatchFootageWrap');
-    const watchFootageNoteEl = document.getElementById('thisweekWatchFootageNote');
-    const hasFootageNote = !!(linkedGame && linkedGame.opponentFilmUrl && linkedGame.opponentFilmNote);
     if (watchFootageWrap) {
-      if (linkedGame && linkedGame.opponentFilmUrl && window.filmButtonHtml) {
-        // Nathan: "I still hate that the google videos open in another
-        // screen - walk it to open in a local player." This used to be a
-        // bare <a target="_blank"> -- the one Watch Film button left in
-        // the app that still jumped to a new tab instead of using that
-        // fix. window.filmButtonHtml (js/schedule.js) is the exact same
-        // function every other Watch Game Film button already goes
-        // through, so this one now opens inline the same way. filmGameId
-        // still carries the same data-film-game-id attribute
-        // js/film-views.js's "let me know who is watching film" listener
-        // reads, unchanged.
-        watchFootageWrap.innerHTML = window.filmButtonHtml(linkedGame.opponentFilmUrl, '🎥 Watch Game Film of our Upcoming Opponent', {
-          filmGameId: linkedGame.id,
-          btnClass: 'navBtn',
-          btnStyle: `display:block;width:100%;text-align:center;box-sizing:border-box;${hasFootageNote ? 'margin-bottom:4px;' : 'margin-bottom:12px;'}`,
-        });
-      } else {
-        watchFootageWrap.innerHTML = '';
-      }
-    }
-    // Nathan: "include a write-in spot for the footage to say something
-    // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
-    // - Merrimack Valley 6'" -- same opponentFilmNote a coach sets on the
-    // game itself (schedule.js), only shown alongside the button above.
-    if (watchFootageNoteEl) {
-      if (hasFootageNote) {
-        watchFootageNoteEl.style.display = '';
-        watchFootageNoteEl.textContent = linkedGame.opponentFilmNote;
-      } else {
-        watchFootageNoteEl.style.display = 'none';
-        watchFootageNoteEl.textContent = '';
-      }
+      // Nathan: "I still hate that the google videos open in another
+      // screen - walk it to open in a local player." These go through
+      // window.filmButtonHtml (js/schedule.js), the same function every
+      // other Watch Game Film button uses, so they open inline the same
+      // way and carry the same data-film-game-id attribute js/film-views.js's
+      // "let me know who is watching film" listener reads.
+      // Nathan: "include a write-in spot for the footage to say something
+      // underneath it. example is 'Nipmuc is in white. Final score: Nipmuc 7
+      // - Merrimack Valley 6'" -- each film's note renders right under its
+      // own button. Nathan: "I also need the ability to add multiple videos
+      // for the upcoming opponent" -- the game can carry several films now
+      // (opponentFilms), one button each; see opponentFilmCtaHtml.
+      watchFootageWrap.innerHTML = (linkedGame && window.opponentFilmCtaHtml)
+        ? window.opponentFilmCtaHtml(linkedGame, { headerStyle: 'font-size:13px;', noteMargin: '0 0 8px' })
+        : '';
     }
     // Nathan: "The team we are playing that week should also have the
     // film visible in the WEEK AHEAD section so kids can see film on the
-    // opponent ahead." Separate from the single opponentFilmUrl button
-    // right above (which stays exactly as it was) -- these are the
-    // richer, multi-clip js/opponent-film.js entries for this week's
-    // opponent, fetched fresh each render (cheap, small document) rather
-    // than cached, since a coach could add one mid-week.
+    // opponent ahead." Separate from the film buttons right above (the
+    // ones a coach attaches to this specific game, opponentFilms) -- these
+    // are the js/opponent-film.js entries for this week's opponent, kept
+    // per TEAM in Coach Tools, fetched fresh each render (cheap, small
+    // document) rather than cached, since a coach could add one mid-week.
     const scoutingWrap = document.getElementById('thisweekOpponentScoutingWrap');
     if (scoutingWrap) {
       scoutingWrap.innerHTML = '';
@@ -744,7 +725,7 @@
       }
     }
     // Nathan: "it's our game film against them [91 individual plays]...
-    // surface it on This Week too." Distinct from the opponentFilmUrl/
+    // surface it on This Week too." Distinct from the opponentFilms/
     // OpponentFilm sections above (both scouting material ABOUT the
     // opponent, gathered before the game) -- this is OUR OWN recorded
     // footage (schedule.js's game.gameFootage, the same field a game's own
