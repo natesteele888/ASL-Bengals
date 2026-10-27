@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261025a">
+<link rel="stylesheet" href="css/styles.css?v=20261027a">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -117,6 +117,125 @@
   } catch(e) {
     document.documentElement.setAttribute('data-theme', 'dark');
   }
+</script>
+<!--
+  Game-day intro screen -- Nathan (Tue Oct 27, 2026, the 1st-round playoff
+  game vs Merrimack Valley): "I want to have this be the intro screen when
+  you open the app for just today." A full-screen flyer that covers
+  everything, the loading screen and the login screen included (its
+  z-index is above #appLoadingOverlay's 99998), so it's the first thing
+  anyone sees when they open the app that day, and it keeps them company
+  while the rest of the app finishes loading underneath. It only exists on
+  its own date: each entry in GAME_DAY_SPLASHES carries the one date it
+  shows on, the flyer isn't even downloaded on any other day, and after
+  that date nothing happens (the entry can stay or be deleted). Tapping
+  anywhere or the orange button closes it; it shows once per app launch
+  (sessionStorage), not on every reload. If the flyer can't load (offline
+  on the sideline), it quietly gets out of the way instead of trapping
+  anyone behind a broken screen.
+  Nathan: "I hate the grey top and bottom." The flyer is scaled to FILL the
+  screen (object-fit: cover), so there are no bars at all when its shape is
+  close to the phone's. The art is drawn 1290 x 2796 (9:19.5, the shape of
+  a current iPhone/Android) with everything that matters inside the middle
+  of it: a short screen (iPhone SE, a browser with its toolbars showing)
+  crops up to ~11% off the top and bottom. The bottom ~22% is kept clear for
+  the app's own orange button (drawn by the app, not part of the picture).
+  If a picture is a different shape from the screen (a tablet, a desktop
+  window, an older flyer) and filling the screen would cut off more than a
+  quarter of it, it's shown whole instead and a blurred, darkened copy of
+  the same art fills the rest, so there are never flat bars either way.
+  To add the next one: drop the flyer into assets/intro/ and add an entry to
+  GAME_DAY_SPLASHES. To preview one on any day, open the app with
+  ?splashday=YYYY-MM-DD (that date stands in for "today"). Everything
+  layout-critical is inline here, not in css/styles.css, so a stale cached
+  stylesheet can't break it.
+-->
+<style>
+  #gameDaySplash { display: none; position: fixed; inset: 0; z-index: 100000; background: #0a0a0a; overflow: hidden;
+    opacity: 1; transition: opacity .28s ease; overscroll-behavior: contain; touch-action: manipulation; cursor: pointer; }
+  #gameDaySplash.gdsOut { opacity: 0; }
+  #gameDaySplash .gdsBackdrop { display: none; position: absolute; inset: -8%; background-size: cover; background-position: center; filter: blur(26px) brightness(.5); }
+  #gameDaySplash.gdsFit .gdsBackdrop { display: block; }
+  #gameDaySplash img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity .2s ease; }
+  /* shown whole: the picture takes its own natural box (so its edges can be feathered into the blurred copy behind it instead of ending in a hard line) */
+  #gameDaySplash.gdsFit img { inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--gds-fy, 0%), #000 calc(100% - var(--gds-fy, 0%)), transparent 100%), linear-gradient(to right, transparent 0, #000 var(--gds-fx, 0%), #000 calc(100% - var(--gds-fx, 0%)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--gds-fy, 0%), #000 calc(100% - var(--gds-fy, 0%)), transparent 100%), linear-gradient(to right, transparent 0, #000 var(--gds-fx, 0%), #000 calc(100% - var(--gds-fx, 0%)), transparent 100%);
+    -webkit-mask-composite: source-in; mask-composite: intersect; }
+  #gameDaySplash.gdsReady img { opacity: 1; }
+  #gameDaySplash .gdsShade { position: absolute; left: 0; right: 0; bottom: 0; height: 26%; background: linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0)); pointer-events: none; }
+  #gameDaySplash button { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+    width: min(88%, 420px); height: 56px; border: 0; border-radius: 999px; background: #ff6a13; color: #111; font: inherit; font-size: 18px; font-weight: 900;
+    letter-spacing: .02em; cursor: pointer; box-shadow: 0 6px 22px rgba(0,0,0,.45); -webkit-tap-highlight-color: transparent; }
+  #gameDaySplash:focus { outline: none; }
+  #gameDaySplash button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { #gameDaySplash, #gameDaySplash img { transition: none; } }
+</style>
+<div id="gameDaySplash" role="dialog" aria-modal="true" aria-label="Game day" tabindex="-1">
+  <div class="gdsBackdrop"></div>
+  <img id="gameDaySplashImg" alt="" decoding="async" fetchpriority="high">
+  <div class="gdsShade"></div>
+  <button type="button" id="gameDaySplashGo">Let's go, Bengals! &rsaquo;</button>
+</div>
+<script>
+  (function () {
+    var GAME_DAY_SPLASHES = [
+      { date: '2026-10-27', src: 'assets/intro/quarterfinals-2026-10-27.webp',
+        alt: 'Quarterfinals: Merrimack Valley Spartans versus Ayer-Shirley-Lunenburg Bengals, Tuesday, October 27th, 6:30 PM, Lunenburg Middle School' }
+    ];
+    var el = document.getElementById('gameDaySplash');
+    if (!el) return;
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    var now = new Date();
+    var today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    var override = /[?&]splashday=(\d{4}-\d{2}-\d{2})/.exec(location.search);
+    if (override) today = override[1];
+    var entry = null;
+    for (var i = 0; i < GAME_DAY_SPLASHES.length; i++) { if (GAME_DAY_SPLASHES[i].date === today) entry = GAME_DAY_SPLASHES[i]; }
+    if (!entry) return;                                   // not a game day: nothing shows, nothing downloads
+    var seenKey = 'gameDaySplashSeen:' + entry.date;
+    try { if (sessionStorage.getItem(seenKey)) return; } catch (e) {}
+    var img = document.getElementById('gameDaySplashImg');
+    var back = el.querySelector('.gdsBackdrop');
+    var closed = false;
+    // Fill the screen when the flyer's shape is close to the screen's; otherwise show it whole over a blurred copy of itself.
+    function fit() {
+      var vw = el.clientWidth, vh = el.clientHeight;
+      if (!vw || !vh || !img.naturalWidth) return;
+      var vr = vw / vh, ir = img.naturalWidth / img.naturalHeight;
+      var kept = vr < ir ? vr / ir : ir / vr;             // share of the flyer that filling the screen would keep in view
+      var whole = kept < 0.75;
+      el.classList.toggle('gdsFit', whole);
+      // which edges of the whole picture show a seam against the blurred backdrop: top and bottom on a narrow screen, left and right on a wide one
+      el.style.setProperty('--gds-fy', whole && vr < ir ? '7%' : '0%');
+      el.style.setProperty('--gds-fx', whole && vr >= ir ? '5%' : '0%');
+      if (whole && !back.style.backgroundImage) back.style.backgroundImage = 'url("' + entry.src + '")';
+    }
+    // While the flyer is up, nothing underneath may grab focus (a first-time
+    // name prompt would otherwise pop the keyboard up over it on Android).
+    function guardFocus(e) {
+      if (!el.contains(e.target) && e.target && e.target.blur) { e.target.blur(); try { el.focus({ preventScroll: true }); } catch (x) {} }
+    }
+    function finish() { document.removeEventListener('focusin', guardFocus); window.removeEventListener('resize', fit); }
+    function close() {
+      if (closed) return;
+      closed = true;
+      try { sessionStorage.setItem(seenKey, '1'); } catch (e) {}
+      finish();
+      el.classList.add('gdsOut');
+      setTimeout(function () { el.style.display = 'none'; }, 300);
+    }
+    img.onload = function () { fit(); el.classList.add('gdsReady'); };
+    img.onerror = function () { closed = true; finish(); el.style.display = 'none'; };   // flyer unavailable: get out of the way
+    img.alt = entry.alt;
+    img.src = entry.src;
+    el.style.display = 'block';
+    el.addEventListener('click', close);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    document.addEventListener('focusin', guardFocus);
+    window.addEventListener('resize', fit);
+    try { el.focus({ preventScroll: true }); } catch (e) {}
+  })();
 </script>
 <!-- BUILD_VERSION: 2026-08-13c (fix cloud data overwriting missing plays -- Sweep now survives real cloud data) -->
 
@@ -2515,7 +2634,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261025a';
+  const BUILD_V = '20261027a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
