@@ -203,15 +203,22 @@
   // Same date-driven fix as js/schedule.js's hasEventPassed -- duplicated
   // locally rather than reaching into that file's closure, same spirit as
   // the other small helpers on this page. See that file's comment for why.
-  function hasEventPassed(dateStr, timeStr) {
-    if (!dateStr) return false;
+  // eventTimeMs is just the timestamp half (kickoff, or the end of that
+  // calendar day when there's no time), so "has it passed" and "was this
+  // posted after it" further down measure against the same moment.
+  function eventTimeMs(dateStr, timeStr) {
+    if (!dateStr) return null;
     const parts = dateStr.split('-').map(Number);
-    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
     const tm = (timeStr || '').trim().match(/^(\d{1,2}):(\d{2})$/);
     const d = tm
       ? new Date(parts[0], parts[1] - 1, parts[2], Number(tm[1]), Number(tm[2]))
       : new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
-    return d.getTime() < Date.now();
+    return d.getTime();
+  }
+  function hasEventPassed(dateStr, timeStr) {
+    const t = eventTimeMs(dateStr, timeStr);
+    return t !== null && t < Date.now();
   }
   // Same record math as js/schedule.js's bengalsRecord() -- duplicated
   // locally rather than reaching into that file's closure.
@@ -602,20 +609,56 @@
   // those sections). A later-dated link is still honored so a coach can line
   // up next week's game early. Display-only -- nothing is written back, so a
   // player's session never edits the shared thisWeek.json.
+  //
+  // "Before Monday" isn't the whole story in a playoff week: a Tuesday game
+  // and a Saturday one share the same Mon-Sun window, so once Tuesday's was
+  // played the page (and a link to it) stayed on Tuesday's opponent all week.
+  // The auto-detected game is therefore the first one in the window that
+  // isn't over yet, and a link to a game that IS over gives way to it. With
+  // nothing left to play in the window (Sunday night, or a one-game week once
+  // that game is done) the most recent game stays, as a one-game week always
+  // did.
   function getLinkedWeekGame() {
-    const autoWeekGame = (buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries[0] || {}).g || null;
+    const weekGames = buildWeekAheadData(upcomingGames, upcomingPractices).gameEntries.map(e => e.g);
+    const nextInWeek = weekGames.find(g => !isGameOver(g)) || null;
+    const autoWeekGame = nextInWeek || weekGames[weekGames.length - 1] || null;
     const manual = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
-    return (manual && !isBeforeThisWeek(manual) ? manual : null) || autoWeekGame;
+    const manualBehindUs = !!manual && (isBeforeThisWeek(manual) || (!!nextInWeek && isGameOver(manual)));
+    return (manual && !manualBehindUs ? manual : null) || autoWeekGame;
   }
 
-  // The one test for "that game is already behind us": dated before this
-  // week's Monday. getLinkedWeekGame() uses it to drop a stale manual link,
-  // and renderReadOnly() uses it to label keys/plays that were posted for a
-  // game that's over -- one definition, so the two can't disagree. An undated
-  // or missing game is never "before" (nothing to compare).
+  // "That game is over": a final score is on it, or its kickoff has passed
+  // (the end of its day when no time is set) -- the same bar the Schedule
+  // list's "Upcoming" badge uses, so This Week and the Schedule agree on
+  // which game is still ahead.
+  function isGameOver(game) {
+    return !!game && (resultFor(game) !== null || hasEventPassed(game.date, game.gameTime || game.time));
+  }
+
+  // The one test for "that game is behind us by the calendar": dated before
+  // this week's Monday. getLinkedWeekGame() uses it to drop a stale manual
+  // link, and isPlanBehindUs() uses it to label keys/plays that were posted
+  // for a game that's over -- one definition, so the two can't disagree. An
+  // undated or missing game is never "before" (nothing to compare).
   function isBeforeThisWeek(game) {
     const d = game ? toDateOnly(game.date) : null;
     return !!d && d < currentWeekWindow().start;
+  }
+
+  // Are the keys and plays on the page for a game that's over, with This Week
+  // already on a different one? Two ways: the plan's game is dated before
+  // this week and nothing has been posted since Monday, or it was played
+  // earlier THIS week (a Tuesday playoff game) with another game now in front
+  // and nothing posted since its kickoff. Every save stamps updatedAt, so a
+  // coach who reposts keys without re-linking the game never gets a false
+  // label. No game on the plan (or a deleted one) = no label, not a guess.
+  function isPlanBehindUs(planGame, linkedGame, postedAt) {
+    if (!planGame) return false;
+    const postedMs = postedAt && !isNaN(postedAt) ? postedAt.getTime() : null;
+    if (isBeforeThisWeek(planGame)) return !(postedMs !== null && postedMs >= currentWeekWindow().start.getTime());
+    if (!linkedGame || linkedGame.id === planGame.id || !isGameOver(planGame)) return false;
+    const gameMs = eventTimeMs(planGame.date, planGame.gameTime || planGame.time);
+    return gameMs !== null && !(postedMs !== null && postedMs > gameMs);
   }
 
   // "@ North Middlesex — Sun, Oct 4" (vs for home games) -- the one-line way
@@ -1107,18 +1150,15 @@
     // below it are whatever was last posted -- so until coaches repost, the
     // page could read "This week's game: vs <new opponent>" over LAST week's
     // keys with nothing saying so. Label them instead of hiding them (last
-    // week's plays beat an empty page). Only when BOTH hold: the plan is
-    // linked to a game that's already over, AND it hasn't been touched since
-    // this week began -- every save stamps updatedAt, so a coach who reposts
-    // keys without re-linking the game doesn't get a false "last posted for"
-    // line. No linked game (or one that's been deleted) = nothing to compare,
-    // so no label rather than a guess.
+    // week's plays beat an empty page). Only when the plan is linked to a game
+    // that's already over, This Week has moved on to another, and nothing has
+    // been posted since -- see isPlanBehindUs for the exact tests (it covers a
+    // game played earlier this same week, like a Tuesday playoff game, too).
     const planNoteEl = document.getElementById('thisweekPlanNote');
     if (planNoteEl) {
       const planGame = saved.gameId ? upcomingGames.find(g => g.id === saved.gameId) : null;
       const postedAt = saved.updatedAt ? new Date(saved.updatedAt) : null;
-      const postedThisWeek = !!postedAt && !isNaN(postedAt) && postedAt >= currentWeekWindow().start;
-      if (hasContent && isBeforeThisWeek(planGame) && !postedThisWeek) {
+      if (hasContent && isPlanBehindUs(planGame, linkedGame, postedAt)) {
         planNoteEl.innerHTML = `📌 Last posted for <strong>${escapeHtml(shortGameLabel(planGame))}</strong>. This week's keys and plays aren't up yet.`;
         planNoteEl.style.display = '';
       } else {
