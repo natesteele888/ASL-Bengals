@@ -1045,7 +1045,10 @@
   function playoffTeamShortName(teamLabel) {
     return (teamLabel || '').split(' · ')[0].trim();
   }
-  function playoffSeedChipHtml(seed) {
+  // opts.lost dims a team that already lost its game this round (see the
+  // playoff-results block below); with no opts the chip is exactly what it
+  // always was.
+  function playoffSeedChipHtml(seed, opts) {
     if (!seed) return '';
     const name = playoffTeamShortName(seed.teamLabel);
     const isUs = isBengalsRow({ team: seed.teamLabel });
@@ -1065,7 +1068,7 @@
     const badge = window.isBengalsTeamName && window.isBengalsTeamName(seed.teamLabel)
       ? (window.bengalsBadgeHtml ? window.bengalsBadgeHtml() : '')
       : (window.opponentBadgeHtml ? window.opponentBadgeHtml(name) : '');
-    return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}">
+    return `<span class="playoffSeedChip${isUs ? ' playoffSeedUs' : ''}${opts && opts.lost ? ' playoffSeedLost' : ''}">
         <span class="playoffSeedNum">#${escapeHtml(String(seed.seed))}</span>
         ${badge}
         <span class="scheduleTeamName">${escapeHtml(name)}</span>
@@ -1075,11 +1078,14 @@
   function playoffTbdChipHtml(text) {
     return `<span class="playoffTbdChip">${escapeHtml(text)}</span>`;
   }
-  function playoffMatchupRowHtml(leftHtml, rightHtml) {
-    return `<div class="playoffMatchupRow">
+  // resultHtml (optional) is the "Final" line for a game that's been played;
+  // it wraps onto its own line under the two teams, so the teams keep the
+  // whole row's width on a phone.
+  function playoffMatchupRowHtml(leftHtml, rightHtml, resultHtml) {
+    return `<div class="playoffMatchupRow${resultHtml ? ' playoffMatchupDone' : ''}">
         <div class="playoffMatchupSide">${leftHtml}</div>
         <div class="playoffMatchupVs">vs</div>
-        <div class="playoffMatchupSide">${rightHtml}</div>
+        <div class="playoffMatchupSide">${rightHtml}</div>${resultHtml || ''}
       </div>`;
   }
   function playoffWinnerOfHtml(bracket, seedNums) {
@@ -1089,19 +1095,158 @@
     }).join(' / ');
     return playoffTbdChipHtml(`Winner: ${label}`);
   }
-  function playoffBracketHtml(bracket) {
+  // ---- Playoff results (Nathan, the day after the Quarterfinal: "the
+  // cmycff site is not updating standings ... we ... beat Merrimack Valley
+  // and I want that to show on the app playoff picture.") Confirmed live (not
+  // guessed): CMYFCC's public feed is still the "2026 REGULAR SEASON" plan --
+  // weeks 1-9, every game final, no playoff game anywhere in it -- so its
+  // playoffProjection can only ever say "Winner: #3 / #6" and there is no
+  // playoff score in it to read. Our OWN playoff games are already on our own
+  // Schedule (Type: Playoff, score typed in after the game), so the picture
+  // reads our results from there -- no second place for a coach to enter the
+  // same score -- and lays them onto CMYFCC's bracket by SEED rather than by
+  // the game's round label (a coach's "1st Round", "Quarterfinal" or no label
+  // at all all land in the same place): who we played says which round it was.
+  // Only OUR games can be shown -- nothing in the app knows how any other
+  // playoff game came out -- and the page says so.
+  //
+  // A Schedule game's score as a number pair, or null while it has no final
+  // score. A tie counts as "no result": a playoff game has a winner, so a
+  // tied score is a typo or an unfinished game and must not advance anyone.
+  function playoffScoreOf(g) {
+    if (!g || g.ourScore === null || g.ourScore === undefined || g.ourScore === '' ||
+        g.oppScore === null || g.oppScore === undefined || g.oppScore === '') return null;
+    const us = Number(g.ourScore), them = Number(g.oppScore);
+    if (isNaN(us) || isNaN(them) || us === them) return null;
+    return { us, them };
+  }
+  // Our played playoff games, in bracket terms: a = our seed number, b = the
+  // opponent's, plus both scores and the winning seed. The opponent is
+  // matched to a seed in THIS bracket by the same token matching the rest of
+  // this file uses for Schedule names (a coach's "Merrimack Valley Spartans"
+  // finds CMYFCC's "Merrimack Valley"); a game vs a team that isn't in the
+  // bracket, or one that matches two seeds, is left out rather than guessed.
+  function ourPlayoffResultsFor(bracket, games) {
+    const seeds = Array.isArray(bracket.seeds) ? bracket.seeds : [];
+    const us = seeds.find(s => isBengalsRow({ team: s.teamLabel }));
+    if (!us) return [];
+    const byPair = {};
+    (games || [])
+      .filter(g => g && g.gameType === 'Playoff')
+      .sort((x, y) => (x.date || '').localeCompare(y.date || ''))
+      .forEach(g => {
+        const score = playoffScoreOf(g);
+        const oTokens = teamTokens(g.opponent);
+        if (!score || !oTokens.length) return;
+        const opps = seeds.filter(s => s !== us && teamTokensMatch(oTokens, teamTokens(playoffTeamShortName(s.teamLabel))));
+        if (opps.length !== 1) return;
+        // the same two teams entered twice: the later game wins
+        byPair[Math.min(us.seed, opps[0].seed) + '-' + Math.max(us.seed, opps[0].seed)] = {
+          a: us.seed, b: opps[0].seed, aScore: score.us, bScore: score.them,
+          winner: score.us > score.them ? us.seed : opps[0].seed, date: g.date || '',
+        };
+      });
+    return Object.keys(byPair).map(k => byPair[k]);
+  }
+  // Where those results sit in a six-team bracket (byes, an opening round,
+  // two fixed semifinals, a championship -- the only shape either 11U bracket
+  // has), and who that moves forward:
+  //   opening[i]   our result in opening-round game i, or null
+  //   semi[i]      our result in semifinal i, or null
+  //   entrant[i]   the team now sitting in semifinal i's open slot (the winner
+  //                of its feeder game, or the opponent we met there), or null
+  //   final        our result in the championship, or null
+  //   finalists    [winner of semifinal 1, winner of semifinal 2], or null each
+  // A result belongs to the round its two seeds say: the same opening pair ->
+  // opening round; one fixed seed plus one of its feeders -> that semifinal;
+  // seeds from two different semifinals -> the championship. Anything that
+  // contradicts an earlier round (a Schedule typo) is dropped, not drawn.
+  // Returns null for any other bracket shape or when there's nothing to lay.
+  function layPlayoffResults(bracket, results) {
+    const opening = Array.isArray(bracket.openingRound) ? bracket.openingRound : [];
+    const semis = Array.isArray(bracket.semifinals) ? bracket.semifinals : [];
+    const sixTeamShape = opening.length > 0 && semis.length === 2 && semis.every(sf =>
+      sf && typeof sf.fixedSeed === 'number' && Array.isArray(sf.winnerOf) && sf.winnerOf.length === 2);
+    if (!sixTeamShape || !results.length) return null;
+    const samePair = (r, x, y) => (r.a === x && r.b === y) || (r.a === y && r.b === x);
+    const semiOf = (seed) => semis.findIndex(sf => sf.fixedSeed === seed || sf.winnerOf.indexOf(seed) !== -1);
+    const lay = { opening: opening.map(() => null), semi: [null, null], entrant: [null, null], finalists: [null, null], final: null };
+    results.forEach(r => {
+      const oi = opening.findIndex(m => samePair(r, m.homeSeed, m.awaySeed));
+      if (oi !== -1) { lay.opening[oi] = r; return; }
+      const sa = semiOf(r.a), sb = semiOf(r.b);
+      if (sa !== -1 && sa === sb && (r.a === semis[sa].fixedSeed || r.b === semis[sa].fixedSeed)) lay.semi[sa] = r;
+      else if (sa !== -1 && sb !== -1 && sa !== sb) lay.final = r;
+    });
+    semis.forEach((sf, i) => {
+      const feeder = opening.findIndex(m => samePair({ a: sf.winnerOf[0], b: sf.winnerOf[1] }, m.homeSeed, m.awaySeed));
+      const fed = feeder !== -1 && lay.opening[feeder] ? lay.opening[feeder].winner : null;
+      const r = lay.semi[i];
+      const played = r ? (r.a === sf.fixedSeed ? r.b : r.a) : null;
+      if (r && fed !== null && fed !== played) lay.semi[i] = null;
+      lay.entrant[i] = lay.semi[i] ? played : fed;
+      lay.finalists[i] = lay.semi[i] ? lay.semi[i].winner : null;
+    });
+    if (lay.final) {
+      const fa = semiOf(lay.final.a), fb = semiOf(lay.final.b);
+      const agrees = (i, seed) => lay.finalists[i] === null || lay.finalists[i] === seed;
+      if (agrees(fa, lay.final.a) && agrees(fb, lay.final.b)) { lay.finalists[fa] = lay.final.a; lay.finalists[fb] = lay.final.b; }
+      else lay.final = null;
+    }
+    return lay;
+  }
+  function playoffLayHasResults(lay) {
+    return !!lay && (lay.opening.some(Boolean) || lay.semi.some(Boolean) || !!lay.final);
+  }
+  // 'YYYY-MM-DD' -> "Tue, Oct 27" (built from the parts, so no timezone shift)
+  function playoffDateLabel(dateStr) {
+    const parts = String(dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return '';
+    return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  // The "Final" line under a played matchup, always from the Bengals' side
+  // (every result here is one of ours) so the two scores can't be read
+  // against the wrong team: the green W / red L badge is the Schedule's own.
+  function playoffResultHtml(bracket, r) {
+    const opp = bracket.seeds.find(s => s.seed === r.b);
+    const oppName = opp ? playoffTeamShortName(opp.teamLabel) : 'Opponent';
+    const won = r.winner === r.a;
+    const dateLabel = playoffDateLabel(r.date);
+    return `
+        <div class="playoffMatchupResult">
+          <span class="scheduleResultBadge ${won ? 'win' : 'loss'}">${won ? 'W' : 'L'}</span>
+          <span>Final · Bengals ${escapeHtml(String(r.aScore))}, ${escapeHtml(oppName)} ${escapeHtml(String(r.bScore))}</span>${dateLabel ? `
+          <span class="playoffResultDate">${escapeHtml(dateLabel)}</span>` : ''}
+        </div>`;
+  }
+  // lay (see layPlayoffResults) is null for a bracket with none of our
+  // results to show -- that renders exactly what it did before results existed.
+  function playoffBracketHtml(bracket, lay) {
     const seedByNum = (n) => bracket.seeds.find(s => s.seed === n);
+    const chip = (n, r) => playoffSeedChipHtml(seedByNum(n), r && r.winner !== n ? { lost: true } : null);
+    const resultOf = (r) => (r ? playoffResultHtml(bracket, r) : '');
     const byeRows = (bracket.byes || [])
       .map(n => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(n)), playoffTbdChipHtml('BYE')))
       .join('');
     const openingRows = (bracket.openingRound || [])
-      .map(m => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(m.homeSeed)), playoffSeedChipHtml(seedByNum(m.awaySeed))))
+      .map((m, i) => {
+        const r = lay ? lay.opening[i] : null;
+        return playoffMatchupRowHtml(chip(m.homeSeed, r), chip(m.awaySeed, r), resultOf(r));
+      })
       .join('');
     const semiRows = (bracket.semifinals || [])
-      .map(sf => playoffMatchupRowHtml(playoffSeedChipHtml(seedByNum(sf.fixedSeed)), playoffWinnerOfHtml(bracket, sf.winnerOf)))
+      .map((sf, i) => {
+        const r = lay ? lay.semi[i] : null;
+        const entrant = lay ? lay.entrant[i] : null;
+        return playoffMatchupRowHtml(chip(sf.fixedSeed, r), entrant ? chip(entrant, r) : playoffWinnerOfHtml(bracket, sf.winnerOf), resultOf(r));
+      })
       .join('');
+    const finalists = lay ? lay.finalists : [null, null];
     const champHtml = bracket.championship
-      ? playoffMatchupRowHtml(playoffTbdChipHtml('Winner: Semifinal 1'), playoffTbdChipHtml('Winner: Semifinal 2'))
+      ? playoffMatchupRowHtml(
+          finalists[0] ? chip(finalists[0], lay.final) : playoffTbdChipHtml('Winner: Semifinal 1'),
+          finalists[1] ? chip(finalists[1], lay.final) : playoffTbdChipHtml('Winner: Semifinal 2'),
+          resultOf(lay ? lay.final : null))
       : '';
     return `
       <div class="playoffBracketCard">
@@ -1117,15 +1262,23 @@
     if (!wrap) return;
     wrap.innerHTML = '<div class="hint" style="text-align:center;">Loading from CMYFCC…</div>';
     try {
-      const projection = await fetchCmyfccPlayoffProjection();
+      // Our Schedule rides along with the CMYFCC fetch for the results
+      // (see "Playoff results" above). A Schedule problem must never take
+      // the CMYFCC bracket down with it, so it falls back to "no games".
+      const [projection, games] = await Promise.all([
+        fetchCmyfccPlayoffProjection(),
+        Promise.resolve().then(() => (window.ensureGamesLoaded ? window.ensureGamesLoaded() : [])).catch(() => []),
+      ]);
       const brackets = Array.isArray(projection.brackets) ? projection.brackets : [];
       if (!brackets.length) {
         wrap.innerHTML = '<div class="lbEmpty">No playoff projection posted yet.</div>';
         return;
       }
+      const laid = brackets.map(b => layPlayoffResults(b, ourPlayoffResultsFor(b, games)));
       wrap.innerHTML =
         (projection.note ? `<div class="lbSub" style="text-align:center;margin-bottom:14px;">${escapeHtml(projection.note)}</div>` : '') +
-        brackets.map(playoffBracketHtml).join('');
+        (laid.some(playoffLayHasResults) ? `<div class="lbSub" style="text-align:center;margin:-6px 0 14px;">Bengals playoff results are taken from our Schedule. CMYFCC's public feed only has the regular season, so other playoff games aren't shown here.</div>` : '') +
+        brackets.map((b, i) => playoffBracketHtml(b, laid[i])).join('');
     } catch (e) {
       wrap.innerHTML = `<div class="lbEmpty">Couldn't load the playoff picture from CMYFCC: ${escapeHtml(e.message)}</div>`;
     }
