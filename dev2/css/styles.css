@@ -3369,6 +3369,16 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .playoffSeedChip.playoffSeedUs .scheduleTeamName { color: var(--bengal-orange); }
 .playoffSeedChip.playoffSeedUs .playoffSeedNum { color: var(--bengal-orange); }
 .playoffTbdChip { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9aa4ae; font-style: italic; }
+/* A matchup whose game has been played (our own, from the Schedule -- see
+   js/standings.js's "Playoff results"): the "Final" line wraps onto its own
+   row under the two teams so they keep the whole row's width on a phone, and
+   the team that lost is dimmed. The W/L badge is the Schedule's own
+   .scheduleResultBadge. */
+.playoffMatchupRow.playoffMatchupDone { flex-wrap: wrap; }
+.playoffSeedChip.playoffSeedLost { opacity: .5; }
+.playoffMatchupResult { flex: 0 0 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; font-size: 11px; font-weight: 700; color: #cfd7de; text-align: center; }
+.playoffMatchupResult .scheduleResultBadge { font-size: 10px; padding: 2px 9px; }
+.playoffMatchupResult .playoffResultDate { color: #9aa4ae; font-weight: 600; }
 
 /* Standings' own "Playoff Picture / Playoff Probabilities / All Bengals
    Teams" row of small nav pills -- Nathan: "Make these links small side
