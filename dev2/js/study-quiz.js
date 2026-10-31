@@ -1435,6 +1435,26 @@ function gcTickerItemHtml(icon, text){
 function gcTickerItemClickableHtml(icon, text, gameId){
   return `<span class="gcTickerItem gcTickerItemClickable" data-open-game="${gcEscapeHtml(gameId)}"><span class="gcTickerIcon">${icon}</span>${text}</span><span class="gcTickerSep">•</span>`;
 }
+// Nathan (2026-10-31): "I want to have happy Halloween show in the banner
+// across the top at the beginning and end." Same shape as the game-day
+// flyer's GAME_DAY_SPLASHES gate in index.html -- a date-keyed list read
+// against the LOCAL date (not UTC, which would flip the greeting on at
+// 8pm the night before here), plus a ?holiday= override so the next one
+// can be checked without waiting for the day or changing the clock.
+// Dated entries rather than a month/day check so a greeting can never
+// outlive its day, and so adding Thanksgiving or Christmas later is one
+// more line here and nothing else.
+const GC_HOLIDAYS = [
+  { date: '2026-10-31', icon: '\u{1F383}', text: 'Happy Halloween, Bengals!' }
+];
+function gcHolidayToday(){
+  const pad = n => (n < 10 ? '0' + n : '' + n);
+  const now = new Date();
+  let today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  const override = /[?&]holiday=(\d{4}-\d{2}-\d{2})/.exec(location.search);
+  if(override) today = override[1];
+  return GC_HOLIDAYS.find(h => h.date === today) || null;
+}
 // Same "not yet happened" logic as schedule.js's own hasEventPassed (that
 // one's private to schedule.js's IIFE, so it's not reusable directly) --
 // picks the single soonest game whose date/time (or just date, if no
@@ -1642,6 +1662,23 @@ async function renderEngagementCallout(){
     // Nice-to-have ticker -- never worth breaking the app over a failed
     // leaderboard/schedule fetch (offline sideline wifi, etc.).
   }
+  // The Halloween/holiday greeting, added out here rather than inside the
+  // try above so a failed schedule or leaderboard fetch can't swallow it,
+  // and unshifted so it leads the strip.
+  //
+  // One entry, not two. The ask was "at the beginning and end", and a
+  // single item at the head of the cycle is exactly that on screen: the
+  // track below renders this list twice back-to-back and scrolls in a
+  // seamless loop, so the greeting reads both as the first thing before
+  // the game line and as the last thing after the final item, every pass.
+  // Literally pushing a second copy onto the tail would instead park two
+  // identical greetings side by side at the wrap seam, which reads as a
+  // bug rather than as bookends.
+  //
+  // Placed before the emptiness check on purpose: on a holiday with no
+  // game and no stats yet, the greeting alone is still worth showing.
+  const holiday = gcHolidayToday();
+  if(holiday) items.unshift(gcTickerItemHtml(holiday.icon, gcEscapeHtml(holiday.text)));
   if(!items.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
   // Nathan: "should always appear at the top of the page when you are on
   // the homepage" -- the periodic refresh timer (gcSetupTicker, below)
