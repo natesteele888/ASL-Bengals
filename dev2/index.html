@@ -26,7 +26,7 @@
      (Nathan, 2026-08-24: saw the drill's entry screen appearing inline at
      the bottom of the Schedule page). Bump this by hand every time
      css/styles.css changes, same discipline as BUILD_V/CACHE_NAME below. -->
-<link rel="stylesheet" href="css/styles.css?v=20261031a">
+<link rel="stylesheet" href="css/styles.css?v=20261031b">
 
 <!-- PWA / Add to Home Screen support -->
 <link rel="manifest" href="manifest.json">
@@ -181,7 +181,9 @@
   (function () {
     var GAME_DAY_SPLASHES = [
       { date: '2026-10-27', src: 'assets/intro/quarterfinals-2026-10-27.webp',
-        alt: 'Quarterfinals: Merrimack Valley Spartans versus Ayer-Shirley-Lunenburg Bengals, Tuesday, October 27th, 6:30 PM, Lunenburg Middle School' }
+        alt: 'Quarterfinals: Merrimack Valley Spartans versus Ayer-Shirley-Lunenburg Bengals, Tuesday, October 27th, 6:30 PM, Lunenburg Middle School' },
+      { date: '2026-11-01', src: 'assets/intro/semifinals-2026-11-01.webp',
+        alt: 'Semifinals: Oxford/Webster versus Ayer-Shirley-Lunenburg Bengals, Sunday, November 1st, 12:30 PM, at Oxford' }
     ];
     var el = document.getElementById('gameDaySplash');
     if (!el) return;
@@ -2634,7 +2636,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261031a';
+  const BUILD_V = '20261031b';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
