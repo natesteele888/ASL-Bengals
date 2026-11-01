@@ -14,7 +14,7 @@ This means the real ask isn't "build player profiles and a leaders page" — it'
 
 ## The gap: two different shapes for the same stats
 
-Stat Keeper compiles its play log into per-player **totals** — e.g. `rushing: [{name:'Jacob W', att:4, yds:37, td:1, fd:2}]`.
+Stat Keeper compiles its play log into per-player **totals** — e.g. `rushing: [{name:'Player D', att:4, yds:37, td:1, fd:2}]`.
 
 The live app's `statSheet` stores per-player **attempt-by-attempt arrays** instead — e.g. `rushing: [{num:'6', attempts:[{yds:12,fd:false,dir:'Left'},{yds:9,fd:true,dir:'Right'},...]}]`, keyed by jersey **number**, not name, and rolled up into totals only at display time by `computeGamePlayerStats`.
 
