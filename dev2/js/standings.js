@@ -1245,6 +1245,13 @@
   //                     the entry doesn't depend on who wins the game feeding it)
   //   date 'YYYY-MM-DD', time 'HH:MM' (24 hour, optional), place (optional)
   //   score             optional [teams[0]'s score, teams[1]'s score]
+  //   winner            optional, one team's name: who won when the score isn't
+  //                     known yet ("Milford won", nothing else passed along).
+  //                     The winner moves on and the line reads "Final · Milford
+  //                     beat Tewksbury" with "Score not in yet" beside it; add
+  //                     `score` as soon as it's known. Needs both teams, and a
+  //                     score that disagrees with it is a typo, so such a game
+  //                     is left out.
   // Teams are named, not numbered, and an entry is only used when those teams
   // really are in that matchup of that season's bracket, so a re-seeded
   // bracket or next year's can never pick up a stale line. Our own game's
@@ -1255,12 +1262,14 @@
   // the score: a game of ours is told from the Bengals' side ("Bengals 12,
   // Oxford/Webster 6", green W / red L), not as a box score.
   const PLAYOFF_GAME_INFO = [
-    // Tewksbury 14, Hudson 0 (Nathan, Wed Oct 28 night) -- so Tewksbury plays Milford on Sunday
+    // Tewksbury 14, Hudson 0 (Nathan, Wed Oct 28 night; Sun Nov 1: "Tewksbury not Tyngsboro beat Hudson 14-0") -- so Tewksbury played Milford on Sunday
     { season: 2026, division: 1, teams: ['Hudson', 'Tewksbury'], date: '2026-10-28', time: '18:30', place: 'Hudson', score: [0, 14] },
-    // Milford (#1) hosts the Hudson/Tewksbury winner this Sunday; no time or place passed along yet
-    { season: 2026, division: 1, teams: ['Milford'], date: '2026-11-01' },
-    // Bengals 12, Oxford/Webster 6 (Nathan, Sun Nov 1) -- so we play the Milford/Tewksbury winner for the championship
+    // Milford (#1) beat Tewksbury (Nathan, Sun Nov 1: "no final score known but milford won"); no time or place passed along
+    { season: 2026, division: 1, teams: ['Milford', 'Tewksbury'], date: '2026-11-01', winner: 'Milford' },
+    // Bengals 12, Oxford/Webster 6 (Nathan, Sun Nov 1) -- so we play Milford for the championship
     { season: 2026, division: 1, teams: ['Oxford/Webster', 'Ayer/Shirley/Lunenburg'], date: '2026-11-01', time: '12:30', place: 'Oxford High School', score: [6, 12] },
+    // The championship, Bengals v Milford, Sun Nov 8 (the date is on Nathan's Super Bowl Bound flyer; Nov 1: "No idea on game time or location yet")
+    { season: 2026, division: 1, teams: ['Milford', 'Ayer/Shirley/Lunenburg'], date: '2026-11-08' },
     { season: 2026, division: 2, teams: ['Worcester Vikings', 'Leicester/Spencer'], date: '2026-11-01', time: '10:30' },
     { season: 2026, division: 2, teams: ['Leominster', 'Wachusett'], date: '2026-11-01', time: '10:30' },
   ];
@@ -1292,18 +1301,30 @@
   // The table's finished games, as results (same shape as the Schedule's). A
   // game of ours is told from the Bengals' side, like one read off the
   // Schedule: our seed first and `ours` set, whichever order it was typed in.
+  // A game with a `winner` and no score yet is a result too, with both scores
+  // null (playoffResultHtml words it without them).
   function tablePlayoffResults(bracket, tableGames) {
     const us = (bracket.seeds || []).find(s => isBengalsRow({ team: s.teamLabel }));
     const results = [];
     tableGames.forEach(t => {
-      const sc = t.b !== null && Array.isArray(t.entry.score) ? t.entry.score.map(Number) : null;
-      if (!sc || sc.length !== 2 || sc.some(isNaN) || sc[0] === sc[1]) return;
+      if (t.b === null) return;
+      const sc = Array.isArray(t.entry.score) ? t.entry.score.map(Number) : null;
+      const scored = !!sc && sc.length === 2 && !sc.some(isNaN) && sc[0] !== sc[1];
+      if (sc && !scored) return;
+      let winner = scored ? (sc[0] > sc[1] ? t.a : t.b) : null;
+      if (t.entry.winner) {
+        const named = playoffSeedByName(bracket, t.entry.winner);
+        if (named !== t.a && named !== t.b) return;
+        if (scored && named !== winner) return;
+        winner = named;
+      }
+      if (winner === null) return;
       const ours = !!us && (t.a === us.seed || t.b === us.seed);
       const flip = ours && t.b === us.seed;
       results.push({
         a: flip ? t.b : t.a, b: flip ? t.a : t.b,
-        aScore: flip ? sc[1] : sc[0], bScore: flip ? sc[0] : sc[1],
-        winner: sc[0] > sc[1] ? t.a : t.b, date: t.entry.date || '', ours,
+        aScore: scored ? (flip ? sc[1] : sc[0]) : null, bScore: scored ? (flip ? sc[0] : sc[1]) : null,
+        winner, date: t.entry.date || '', ours,
       });
     });
     return results;
@@ -1377,23 +1398,29 @@
   // The "Final" line under a played matchup. Ours is always told from the
   // Bengals' side so the two scores can't be read against the wrong team (the
   // green W / red L badge is the Schedule's own); another team's game lists
-  // the winner first, like a box score.
+  // the winner first, like a box score. A result with no scores yet (the
+  // table's `winner` without a `score`) says who beat whom, with "Score not in
+  // yet" beside it.
   function playoffResultHtml(bracket, r) {
     const nameOf = (n) => { const s = bracket.seeds.find(x => x.seed === n); return s ? playoffTeamShortName(s.teamLabel) : 'Opponent'; };
     const dateLabel = playoffDateLabel(r.date);
+    const scored = r.aScore !== null && r.bScore !== null;
     let badge = '', line;
     if (r.ours) {
       const won = r.winner === r.a;
       badge = `<span class="scheduleResultBadge ${won ? 'win' : 'loss'}">${won ? 'W' : 'L'}</span>`;
-      line = `Final · Bengals ${r.aScore}, ${nameOf(r.b)} ${r.bScore}`;
+      line = scored ? `Final · Bengals ${r.aScore}, ${nameOf(r.b)} ${r.bScore}` : `Final · Bengals ${won ? 'beat' : 'lost to'} ${nameOf(r.b)}`;
     } else {
       const aWon = r.winner === r.a;
-      line = `Final · ${nameOf(aWon ? r.a : r.b)} ${aWon ? r.aScore : r.bScore}, ${nameOf(aWon ? r.b : r.a)} ${aWon ? r.bScore : r.aScore}`;
+      line = scored
+        ? `Final · ${nameOf(aWon ? r.a : r.b)} ${aWon ? r.aScore : r.bScore}, ${nameOf(aWon ? r.b : r.a)} ${aWon ? r.bScore : r.aScore}`
+        : `Final · ${nameOf(aWon ? r.a : r.b)} beat ${nameOf(aWon ? r.b : r.a)}`;
     }
     return `
         <div class="playoffMatchupResult">${badge ? `
           ${badge}` : ''}
-          <span>${escapeHtml(line)}</span>${dateLabel ? `
+          <span>${escapeHtml(line)}</span>${scored ? '' : `
+          <span class="playoffResultDate">Score not in yet</span>`}${dateLabel ? `
           <span class="playoffResultDate">${escapeHtml(dateLabel)}</span>` : ''}
         </div>`;
   }
