@@ -1256,7 +1256,7 @@
     { season: 2026, division: 1, teams: ['Hudson', 'Tewksbury'], date: '2026-10-28', time: '18:30', place: 'Hudson', score: [0, 14] },
     // Milford (#1) hosts the Hudson/Tewksbury winner this Sunday; no time or place passed along yet
     { season: 2026, division: 1, teams: ['Milford'], date: '2026-11-01' },
-    { season: 2026, division: 1, teams: ['Oxford/Webster'], date: '2026-11-01', time: '12:30', place: 'Oxford' },
+    { season: 2026, division: 1, teams: ['Oxford/Webster'], date: '2026-11-01', time: '12:30', place: 'Oxford High School' },
     { season: 2026, division: 2, teams: ['Worcester Vikings', 'Leicester/Spencer'], date: '2026-11-01', time: '10:30' },
     { season: 2026, division: 2, teams: ['Leominster', 'Wachusett'], date: '2026-11-01', time: '10:30' },
   ];
