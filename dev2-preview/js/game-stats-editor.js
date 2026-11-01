@@ -187,7 +187,7 @@
     }
     // Flags an EXISTING row whose number is shared by more than one
     // roster player -- e.g. an already-imported row from before the
-    // Jaiden L / Dean A jersey-number collision was caught. The row can't
+    // Player A / Player B jersey-number collision was caught. The row can't
     // say for certain which of them it belongs to, so this just makes
     // that visible instead of silently showing whichever one happens to
     // match first.
@@ -204,8 +204,8 @@
       h.textContent = text;
       return h;
     }
-    // Nathan: "The stats mistakenly have Jaiden L with the receiving
-    // yards. Dean A had the 16 yards." Root cause: every stat row is keyed
+    // Nathan: "The stats mistakenly have Player A with the receiving
+    // yards. Player B had the 16 yards." Root cause: every stat row is keyed
     // by jersey NUMBER, but several roster players legitimately have no
     // number yet -- so two blank-number players (or, in principle, two
     // players who were accidentally given the same real number) collapse

@@ -18,7 +18,7 @@
   // Found live (codebase audit, 2026-09-26): nothing anywhere validated a
   // jersey # against the rest of the roster before this -- exactly the
   // root cause game-stats-editor.js's own comment already documents as a
-  // real, already-happened incident ("Jaiden L / Dean A jersey-number
+  // real, already-happened incident ("Player A / Player B jersey-number
   // collision" -- two players sharing a number silently pooled their
   // stats onto one row, since every stat/profile lookup keys purely by
   // number). That file's fix only guards against creating a NEW

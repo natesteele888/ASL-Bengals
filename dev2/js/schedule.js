@@ -2925,7 +2925,7 @@
       </div>
       <div id="schedMapPreviewWrap" style="margin-bottom:8px;"></div>
       <div class="lbSub" style="margin:0 0 4px;">Game day info (host contact, parking/arrival, field rules -- shown to everyone on this game's page):</div>
-      <textarea id="schedGameDayNotes" placeholder="e.g. Host contact: Pat Bishop 617-678-8550. Parking available in the athletic field lot off 2A. Bengals wearing BLACK jerseys." style="width:100%;min-height:70px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:8px;"></textarea>
+      <textarea id="schedGameDayNotes" placeholder="e.g. Host contact: Coach Pat 555-0100. Parking available in the athletic field lot off 2A. Bengals wearing BLACK jerseys." style="width:100%;min-height:70px;padding:10px;border:2px solid #ccc;border-radius:8px;font-size:14px;box-sizing:border-box;font-family:inherit;margin-bottom:8px;"></textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
         <label class="lbLinkBtn" style="cursor:pointer;">🖼️ Upload Field Photo<input type="file" id="schedFieldPhotoInput" accept="image/*" style="display:none;"></label>
         <span id="schedFieldPhotoStatus" class="lbSub" style="margin:0;"></span>

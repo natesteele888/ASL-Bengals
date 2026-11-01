@@ -27,8 +27,8 @@
     return String(s || '').trim().toLowerCase();
   }
 
-  // Nathan: "The stats mistakenly have Jaiden L with the receiving yards.
-  // Dean A had the 16 yards." Root cause: every statSheet row is keyed by
+  // Nathan: "The stats mistakenly have Player A with the receiving yards.
+  // Player B had the 16 yards." Root cause: every statSheet row is keyed by
   // jersey NUMBER (see ensureAttemptRow below, and the live app's own
   // gamePlayerStats()) -- but several roster players have no number yet
   // (teamRoster.json legitimately allows a blank num), so two different
