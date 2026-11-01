@@ -1250,13 +1250,17 @@
   // bracket or next year's can never pick up a stale line. Our own game's
   // entry (Oxford hosting the #3/#6 winner, which is us) is only a stand-in:
   // as soon as a coach puts the game on the Schedule, the Schedule's date,
-  // time and place win.
+  // time and place win -- and so does its score. Once it's played, name us
+  // the way the feed does ('Ayer/Shirley/Lunenburg', either order) and add
+  // the score: a game of ours is told from the Bengals' side ("Bengals 12,
+  // Oxford/Webster 6", green W / red L), not as a box score.
   const PLAYOFF_GAME_INFO = [
     // Tewksbury 14, Hudson 0 (Nathan, Wed Oct 28 night) -- so Tewksbury plays Milford on Sunday
     { season: 2026, division: 1, teams: ['Hudson', 'Tewksbury'], date: '2026-10-28', time: '18:30', place: 'Hudson', score: [0, 14] },
     // Milford (#1) hosts the Hudson/Tewksbury winner this Sunday; no time or place passed along yet
     { season: 2026, division: 1, teams: ['Milford'], date: '2026-11-01' },
-    { season: 2026, division: 1, teams: ['Oxford/Webster'], date: '2026-11-01', time: '12:30', place: 'Oxford High School' },
+    // Bengals 12, Oxford/Webster 6 (Nathan, Sun Nov 1) -- so we play the Milford/Tewksbury winner for the championship
+    { season: 2026, division: 1, teams: ['Oxford/Webster', 'Ayer/Shirley/Lunenburg'], date: '2026-11-01', time: '12:30', place: 'Oxford High School', score: [6, 12] },
     { season: 2026, division: 2, teams: ['Worcester Vikings', 'Leicester/Spencer'], date: '2026-11-01', time: '10:30' },
     { season: 2026, division: 2, teams: ['Leominster', 'Wachusett'], date: '2026-11-01', time: '10:30' },
   ];
@@ -1285,13 +1289,22 @@
     });
     return out;
   }
-  // The table's finished games, as results (same shape as ours, not `ours`).
-  function tablePlayoffResults(tableGames) {
+  // The table's finished games, as results (same shape as the Schedule's). A
+  // game of ours is told from the Bengals' side, like one read off the
+  // Schedule: our seed first and `ours` set, whichever order it was typed in.
+  function tablePlayoffResults(bracket, tableGames) {
+    const us = (bracket.seeds || []).find(s => isBengalsRow({ team: s.teamLabel }));
     const results = [];
     tableGames.forEach(t => {
       const sc = t.b !== null && Array.isArray(t.entry.score) ? t.entry.score.map(Number) : null;
       if (!sc || sc.length !== 2 || sc.some(isNaN) || sc[0] === sc[1]) return;
-      results.push({ a: t.a, b: t.b, aScore: sc[0], bScore: sc[1], winner: sc[0] > sc[1] ? t.a : t.b, date: t.entry.date || '', ours: false });
+      const ours = !!us && (t.a === us.seed || t.b === us.seed);
+      const flip = ours && t.b === us.seed;
+      results.push({
+        a: flip ? t.b : t.a, b: flip ? t.a : t.b,
+        aScore: flip ? sc[1] : sc[0], bScore: flip ? sc[0] : sc[1],
+        winner: sc[0] > sc[1] ? t.a : t.b, date: t.entry.date || '', ours,
+      });
     });
     return results;
   }
@@ -1328,7 +1341,7 @@
     const ours = ourPlayoffGamesFor(bracket, games);
     const table = tablePlayoffGamesFor(bracket, shape, season);
     // our Schedule's results go last: they win a game both happen to list
-    const lay = layPlayoffResults(bracket, tablePlayoffResults(table).concat(ourPlayoffResultsFor(ours)));
+    const lay = layPlayoffResults(bracket, tablePlayoffResults(bracket, table).concat(ourPlayoffResultsFor(ours)));
     return { lay, info: playoffInfoFor(shape, table, ours) };
   }
   // 'YYYY-MM-DD' -> "Tue, Oct 27" (built from the parts, so no timezone shift)
