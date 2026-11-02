@@ -785,4 +785,27 @@
       clearInitializing();
     }
   };
+  // Doorway to Play Studio (play-studio.html), the full-screen play drawing
+  // page. Built once; the admin flag rides along on the link so the page can
+  // offer "Add to playbook" to the one coach allowed to use it (the database
+  // rules, not this flag, are the real gate -- this only decides which buttons
+  // show).
+  window.initCoachPlayStudio = function () {
+    var body = document.getElementById('coachPlayStudioBody');
+    if (!body || body.firstChild) return;
+    var isAdmin = !!(window.isPlayBuilderAdmin && window.isPlayBuilderAdmin());
+    var a = document.createElement('a');
+    a.href = 'play-studio.html' + (isAdmin ? '?admin=1' : '');
+    a.className = 'btn';
+    a.textContent = 'Open Play Studio';
+    a.style.cssText = 'display:inline-block;padding:14px 26px;border-radius:12px;font-weight:800;font-size:17px;text-decoration:none;background:#fb4f14;color:#fff;';
+    body.appendChild(a);
+    var note = document.createElement('div');
+    note.className = 'hint';
+    note.style.cssText = 'max-width:520px;margin:14px auto 0;';
+    note.textContent = isAdmin
+      ? 'You can add finished plays straight to the playbook.'
+      : 'Your drafts can be shared with Coach Nate, who adds them to the playbook.';
+    body.appendChild(note);
+  };
 })();

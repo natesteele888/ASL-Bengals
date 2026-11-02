@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#111111">
+<title>Play Studio</title>
+<style>
+  :root {
+    --bg:#f4f2ee; --panel:#ffffff; --ink:#15151a; --ink2:#5c5c66; --line:#dcd8d0;
+    --accent:#fb4f14; --accent-ink:#ffffff; --good:#1f8a4c; --warn:#b4570a;
+    --turf:#ece9e1; --turf-line:#d3cec2; --los:#e0570a;
+    --ol-fill:#1d1d22; --ol-text:#ffffff; --sk-fill:#ffffff; --sk-stroke:#1d1d22; --sk-text:#1d1d22;
+    --route:#fb4f14; --block:#4b4b55; --def:#9a968b; --ghost:#bdb8ab;
+    --shadow:0 2px 10px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e0e11; --panel:#1a1a20; --ink:#f1f0ee; --ink2:#a2a1ab; --line:#33333c;
+      --turf:#18221b; --turf-line:#26352b; --ol-fill:#e9e8e4; --ol-text:#15151a;
+      --sk-fill:#22222a; --sk-stroke:#e9e8e4; --sk-text:#f1f0ee;
+      --block:#9d9da8; --def:#6b6a63; --ghost:#4a4a4a; --shadow:0 2px 10px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:16px/1.35 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; overscroll-behavior:none; }
+  #app { height:100dvh; display:flex; flex-direction:column; padding-top:env(safe-area-inset-top); }
+  button { font:inherit; color:inherit; }
+
+  /* ---- top bar ---- */
+  #bar { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); }
+  #bar a, #bar button.ghost { color:var(--accent); text-decoration:none; font-weight:700; font-size:15px; background:none; border:0; padding:8px 4px; min-height:40px; }
+  #title { flex:1; text-align:center; font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #steps { display:flex; gap:4px; padding:6px 12px 8px; background:var(--panel); border-bottom:1px solid var(--line); }
+  #steps .dot { flex:1; text-align:center; font-size:10px; font-weight:700; letter-spacing:.02em; color:var(--ink2); text-transform:uppercase; }
+  #steps .dot i { display:block; height:4px; border-radius:2px; background:var(--line); margin-bottom:4px; }
+  #steps .dot.done i { background:var(--ink2); } #steps .dot.now i { background:var(--accent); } #steps .dot.now { color:var(--ink); }
+  @media (max-width:420px) { #steps .dot span { display:none; } #steps .dot i { margin:0; height:5px; } }
+
+  /* ---- main ---- */
+  #main { flex:1; min-height:0; position:relative; display:flex; flex-direction:column; }
+  .screen { position:absolute; inset:0; overflow-y:auto; padding:16px 14px 24px; display:none; }
+  .screen.on { display:block; }
+  .screen h2 { margin:4px 0 4px; font-size:22px; } .screen p.sub { margin:0 0 14px; color:var(--ink2); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:10px; text-align:center; cursor:pointer; box-shadow:var(--shadow); min-height:96px; }
+  .card.sel { border-color:var(--accent); }
+  .card svg { width:100%; height:92px; display:block; background:var(--turf); border-radius:8px; }
+  .card b { display:block; margin-top:8px; font-size:16px; } .card small { color:var(--ink2); }
+  .card.big { text-align:left; padding:16px; } .card.big b { margin:0 0 2px; font-size:19px; }
+  .shelf { margin-top:22px; } .shelf h3 { margin:0 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink2); }
+  .row { display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+  .row .grow { flex:1; min-width:0; } .row .grow b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .row small { color:var(--ink2); }
+  .row button { background:var(--accent); color:var(--accent-ink); border:0; border-radius:10px; padding:9px 14px; font-weight:700; min-height:40px; }
+  .row button.quiet { background:transparent; color:var(--ink2); border:1px solid var(--line); }
+
+  #canvasWrap { position:absolute; inset:0; display:none; background:var(--turf); touch-action:none; }
+  #canvasWrap.on { display:block; }
+  #field { width:100%; height:100%; display:block; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #bubble { position:absolute; left:10px; right:10px; top:10px; pointer-events:none; display:flex; justify-content:center; }
+  #bubble span { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:8px 14px; font-weight:700; font-size:14px; box-shadow:var(--shadow); text-align:center; }
+  #zoomCtl { position:absolute; right:10px; top:58px; display:flex; flex-direction:column; gap:6px; }
+  #zoomCtl button { width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:var(--panel); font-size:20px; font-weight:700; box-shadow:var(--shadow); }
+  #leftCtl { position:absolute; left:10px; top:58px; display:flex; flex-direction:column; gap:6px; }
+  #leftCtl button { min-height:40px; padding:0 12px; border-radius:12px; border:1px solid var(--line); background:var(--panel); font-weight:700; font-size:13px; box-shadow:var(--shadow); }
+  #leftCtl button.on { background:var(--ink); color:var(--bg); }
+
+  /* options sheet is a normal screen */
+  .opt { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+  .opt label.q { display:block; font-weight:800; margin-bottom:2px; } .opt .why { color:var(--ink2); font-size:13px; margin-bottom:8px; }
+  .seg { display:flex; gap:6px; } .seg button { flex:1; min-height:46px; border-radius:11px; border:2px solid var(--line); background:transparent; font-weight:800; }
+  .seg button.on { border-color:var(--accent); background:var(--accent); color:var(--accent-ink); }
+  input[type=text] { width:100%; min-height:48px; border-radius:11px; border:2px solid var(--line); background:var(--bg); color:var(--ink); padding:0 12px; font-size:17px; font-weight:700; }
+  input[type=text]:focus { outline:none; border-color:var(--accent); }
+  .link { background:none; border:0; color:var(--accent); font-weight:800; padding:8px 0; min-height:40px; }
+
+  /* ---- dock ---- */
+  #dock { background:var(--panel); border-top:1px solid var(--line); padding:8px 12px calc(10px + env(safe-area-inset-bottom)); }
+  #prompt { font-weight:700; font-size:14px; margin:0 0 6px; min-height:20px; }
+  #chips { display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none; }
+  #chips::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; min-height:44px; padding:0 14px; border-radius:999px; border:2px solid var(--line); background:transparent; font-weight:800; font-size:14px; white-space:nowrap; }
+  .chip.on { border-color:var(--accent); background:var(--accent); color:var(--accent-ink); }
+  .chip.danger { color:#c0392b; } .chip:disabled { opacity:.4; }
+  #nav { display:flex; gap:10px; }
+  #nav button { min-height:50px; border-radius:14px; font-weight:800; font-size:16px; border:2px solid var(--line); background:transparent; }
+  #back { flex:0 0 28%; } #next { flex:1; background:var(--accent)!important; border-color:var(--accent)!important; color:var(--accent-ink); }
+  #next:disabled { opacity:.35; }
+  #nav button.sec { flex:1; } #nav button.go { flex:1.4; background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  #nav button:disabled { opacity:.4; }
+
+  #toast { position:fixed; left:50%; bottom:calc(150px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:92vw; background:var(--ink); color:var(--bg); border-radius:12px; padding:10px 14px; font-weight:700; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:9; text-align:center; }
+  #toast.on { opacity:1; }
+
+
+  /* ---- phone held sideways: the intended way to draw ----
+     The tools move to a column on the right so the field gets the full height
+     and stays as large as it can on a 390px-tall screen. */
+  #rotateHint { position:absolute; left:10px; right:10px; bottom:10px; display:none; align-items:center; gap:10px; background:var(--ink); color:var(--bg); border-radius:12px; padding:10px 12px; font-weight:700; font-size:14px; box-shadow:var(--shadow); }
+  #rotateHint button { margin-left:auto; background:none; border:0; color:inherit; font-size:20px; padding:0 6px; }
+  @media (orientation:portrait) and (max-width:700px) { #canvasWrap.on #rotateHint.show { display:flex; } }
+  @media (orientation:landscape) and (max-height:600px) {
+    #app { display:grid; grid-template-columns:minmax(0,1fr) 264px; grid-template-rows:auto auto minmax(0,1fr); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+    #bar { grid-column:1; padding:2px 10px; } #bar a, #bar button.ghost { min-height:34px; padding:4px; }
+    #title { font-size:15px; }
+    #steps { grid-column:1; padding:2px 12px 4px; } #steps .dot i { margin-bottom:2px; height:4px; } #steps .dot { font-size:9px; }
+    #main { grid-column:1; grid-row:3; }
+    #dock { grid-column:2; grid-row:1 / 4; border-top:0; border-left:1px solid var(--line); display:flex; flex-direction:column; overflow-y:auto; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); }
+    #prompt { font-size:14px; margin-bottom:8px; }
+    #chips { flex-wrap:wrap; overflow:visible; padding-bottom:10px; }
+    .chip { min-height:40px; padding:0 12px; }
+    #nav { margin-top:auto; flex-direction:column; } #nav button { min-height:46px; } #back { flex:none; }
+    #nav button.sec, #nav button.go { flex:none; }
+    #toast { bottom:16px; left:calc(50% - 132px); }
+    .screen { padding:10px 14px 16px; } .screen h2 { font-size:19px; margin-top:0; } .screen p.sub { margin-bottom:8px; }
+    .cards { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; } .card svg { height:64px; } .card { min-height:0; }
+    .card.big { padding:10px 14px; }
+    #zoomCtl { top:8px; } #zoomCtl button { width:38px; height:38px; } #leftCtl { top:8px; } #bubble { top:8px; }
+  }
+
+  /* svg parts */
+  .turf { fill:var(--turf); } .yard { stroke:var(--turf-line); stroke-width:3; }
+  .los { stroke:var(--los); stroke-width:5; stroke-dasharray:22 14; opacity:.85; }
+  .pl .body { stroke-width:5; } .pl.ol .body { fill:var(--ol-fill); stroke:var(--ol-fill); } .pl.sk .body { fill:var(--sk-fill); stroke:var(--sk-stroke); }
+  .pl.ol text { fill:var(--ol-text); } .pl.sk text { fill:var(--sk-text); }
+  .pl text { font-weight:800; font-size:34px; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .pl .ring { fill:none; stroke:var(--accent); stroke-width:9; }
+  .pl.faded { opacity:.35; }
+  .dfn { fill:none; stroke:var(--def); stroke-width:4; } .dfnT { fill:var(--def); font-size:26px; font-weight:800; text-anchor:middle; dominant-baseline:central; }
+  .rt { fill:none; stroke-linecap:round; stroke-linejoin:round; } .rt.run { stroke:var(--route); stroke-width:11; } .rt.block { stroke:var(--block); stroke-width:9; }
+  .rt.ghost { stroke:var(--ghost)!important; opacity:.8; }
+  .cap.run { fill:var(--route); } .cap.block { stroke:var(--block); stroke-width:9; stroke-linecap:round; }
+  .hnd { fill:var(--panel); stroke:var(--accent); stroke-width:7; }
+  .live { fill:none; stroke:var(--accent); stroke-width:9; stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
+  .bdg circle { fill:var(--accent); stroke:var(--panel); stroke-width:5; } .bdg text { fill:#fff; font-weight:900; font-size:34px; text-anchor:middle; dominant-baseline:central; }
+  .bdg.fake circle { fill:#7a5af8; }
+  .ball { fill:#8b4a1b; stroke:#2a1608; stroke-width:3; }
+  .tagTxt { fill:var(--ink2); font-size:30px; font-weight:800; text-anchor:middle; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <a id="exit" href="index.html">‹ App</a>
+    <div id="title">Play Studio</div>
+    <button class="ghost" id="newBtn" title="Start a fresh play">New</button>
+  </header>
+  <nav id="steps"></nav>
+  <div id="main">
+    <section class="screen" id="scrFormation"></section>
+    <section class="screen" id="scrType"></section>
+    <section class="screen" id="scrOptions"></section>
+    <div id="canvasWrap">
+      <svg id="field" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="rotateHint" class="show"><span>↻ Turn your phone sideways for more room to draw</span><button id="rotateX" aria-label="Dismiss">×</button></div>
+      <div id="bubble"><span id="bubbleTxt"></span></div>
+      <div id="leftCtl"></div>
+      <div id="zoomCtl"><button id="zIn" aria-label="Zoom in">+</button><button id="zOut" aria-label="Zoom out">−</button><button id="zFit" aria-label="Fit" style="font-size:16px">⤢</button></div>
+    </div>
+  </div>
+  <footer id="dock">
+    <div id="prompt"></div>
+    <div id="chips"></div>
+    <div id="nav"><button id="back">Back</button><button id="next">Next</button></div>
+  </footer>
+</div>
+<div id="toast"></div>
+
+<script src="js/playbuilder/mirror.js"></script>
+<script src="js/playbuilder/seed-formations.js"></script>
+<script src="js/cloud-auth.js"></script>
+<script src="js/playbuilder/store.js"></script>
+<script src="js/assignment-store.js"></script>
+<script src="js/play-studio.js?v=20261102a"></script>
+</body>
+</html>
