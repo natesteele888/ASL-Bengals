@@ -315,6 +315,11 @@ function toLegacyPlayType(play, formation, defenseLook, opts) {
   // back to the legacy default (false/RUN) everywhere the real app shows
   // that distinction.
   if (play.isPass) result.isPass = true;
+  // Play Studio (play-studio.html): the receivers in the order the QB reads
+  // them, and what kind of play a coach said it was. js/play-calls.js's
+  // drawReadBadges puts the numbers on the card; nothing else reads these.
+  if (Array.isArray(play.reads) && play.reads.length) result.reads = play.reads;
+  if (play.playStyle) result.playStyle = play.playStyle;
   if (play.hasQbSneak) { result.hasQbSneak = true; result.qbSneakRoute = play.qbSneakRoute; }
   // I's Sweep: Nathan -- "needs an option for QB Keep on top of the Boot
   // option it already has. The QB Keep toggle has the QB turning left

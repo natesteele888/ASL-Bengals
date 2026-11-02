@@ -2600,7 +2600,30 @@ function renderCardDiagram(stage, playKey, direction, wingSide, selectedPlayer, 
   // the real path when a coach actually hits ▶ Play; it's just invisible
   // on the still diagram, matching "data in the background."
 
+  drawReadBadges(playType, playerCircles, circlesLayer);
   drawDefenseResponsibility(activeDefense, playerCircles, circlesLayer);
+}
+
+// Nathan: "choose receivers and the reads in order." A play drawn in Play
+// Studio (play-studio.html) carries `reads` -- the receivers in the order the
+// QB looks for them -- and this puts a small numbered badge on each one so a
+// kid sees "look here first" on the card itself. A no-op for every play that
+// has no `reads` (all of them, until Studio plays exist), so nothing already
+// shipped changes by a pixel.
+function drawReadBadges(playType, playerCircles, circlesLayer) {
+  if (!playType || !Array.isArray(playType.reads) || !playType.reads.length) return;
+  playType.reads.forEach((id, i) => {
+    const c = playerCircles[String(id)];
+    if (!c || !c.circleEl) return;
+    const x = c.circleEl.cx.baseVal.value + CIRCLE_R * 0.95;
+    const y = c.circleEl.cy.baseVal.value - CIRCLE_R * 0.95;
+    const g = svgEl('g', { 'pointer-events': 'none' });
+    g.appendChild(svgEl('circle', { cx: x, cy: y, r: 17, fill: '#ff6a13', stroke: '#fff', 'stroke-width': 4 }));
+    const t = svgEl('text', { x, y: y + 1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#fff', 'font-size': 22, 'font-weight': 800 });
+    t.textContent = String(i + 1);
+    g.appendChild(t);
+    circlesLayer.appendChild(g);
+  });
 }
 
 // Nathan: "choose a defender and give them man to man or zone

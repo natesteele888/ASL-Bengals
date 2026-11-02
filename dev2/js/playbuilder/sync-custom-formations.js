@@ -181,6 +181,44 @@ async function syncCustomFormationsIntoData() {
         });
     });
 
+  // Plays drawn in Play Studio (js/play-studio.js, play-studio.html) on the
+  // WING formation. Wing is skipped above on purpose -- every one of its
+  // shipped plays has old-system data the adapter cannot reproduce -- but a
+  // play with origin:'studio' has no old-system twin at all, it was authored
+  // here from scratch, so there is nothing to lose by merging it. Without
+  // this, a Studio play saved on Wing would show up for the coach who just
+  // saved it (mergeWingSplitPlayIntoData's "no existing entry" branch) and
+  // then vanish on the next page load, since the boot sync would never look
+  // at it. Same shape as that branch: authoredFormationId dropped so the play
+  // reads as a native Wing play to renderFormationPlays. Split is NOT handled:
+  // it renders through renderSplitDiagram, which cannot draw an adapter play.
+  const studioNativeKeys = new Set();
+  const wingFormation = data.formations.find((f) => f.id === 'shotgun');
+  if (wingFormation) {
+    data.plays
+      .filter((p) => p.formationId === 'shotgun' && p.origin === 'studio')
+      .forEach((play) => {
+        try {
+          const legacy = window.PlayBuilderLegacyAdapter.toLegacyPlayType(play, wingFormation, defenseLook, fbLegacyOptsFor(play));
+          delete legacy.authoredFormationId;
+          mergePlayType(legacy);
+          window.PlayBuilderPlaysById[play.id] = play;
+          studioNativeKeys.add(play.id);
+        } catch (err) {
+          console.error(`[sync-custom-formations] failed to convert Studio play "${play.id}" (continuing anyway):`, err);
+        }
+      });
+  }
+  // A Studio Wing play that was deleted has no authoredFormationId to key the
+  // prune below off, so remember which keys we merged last time and drop the
+  // ones that are no longer real.
+  (window.__studioNativeKeys || []).forEach((key) => {
+    if (studioNativeKeys.has(key)) return;
+    window.DATA.playTypes = window.DATA.playTypes.filter((p) => p.key !== key);
+    delete window.PlayBuilderPlaysById[key];
+  });
+  window.__studioNativeKeys = Array.from(studioNativeKeys);
+
   // Nathan's own "Remove Play"/"Remove Formation" (js/playbuilder/store.js)
   // delete the real Play Builder V2 record, then re-run this whole
   // function -- but mergePlayType only ever inserts/updates by key, it

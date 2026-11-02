@@ -132,6 +132,11 @@
     // a separate static file), so adding one here is live immediately,
     // everywhere, with no git commit/deploy step, unlike the manual path
     // used earlier this session for card #33.
+    // Play Studio -- the full-screen, phone-friendly way to draw a play from
+    // scratch (play-studio.html). Open to every approved coach, unlike Play
+    // Builder: anyone can draw and share a draft, only the Play Builder admin
+    // can add one to the playbook (enforced inside the page).
+    { key: 'playstudio', label: '✏️ Play Studio', category: 'plays', panel: 'coachPlayStudioPanel', init: () => window.initCoachPlayStudio && window.initCoachPlayStudio() },
     { key: 'signalsadmin', label: '📇 Signal Cards', category: 'plays', panel: 'coachSignalsAdminPanel', init: () => window.initCoachSignalsAdmin && window.initCoachSignalsAdmin() },
   ];
 
