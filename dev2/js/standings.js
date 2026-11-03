@@ -875,6 +875,7 @@
     // this team once that fetch resolves.
     const legacyClips = gameClips;
     html += `<div id="standingsOpponentFilm">${opponentFilmSectionHtml(legacyClips)}</div>`;
+    html += '<div id="standingsScoutDiagrams"></div>';
     // Nathan: "utilize the CMYFCC website to also pull in team game
     // history for the other teams" -- filled in asynchronously by
     // showOpponentPage right below (real network call, shouldn't block
@@ -952,6 +953,7 @@
     if (scheduleLink) scheduleLink.addEventListener('click', () => { if (window.openScheduleGame) window.openScheduleGame(game.id); });
     loadOpponentRecentForm(game.opponent, teams, games);
     loadOpponentFilmSection(game);
+    if (window.ScoutDiagrams) window.ScoutDiagrams.mount(document.getElementById('standingsScoutDiagrams'), game.opponent);
     // Skipped for our own team -- opponentPageHtml already set the real,
     // fixed Bengals color synchronously (BENGALS_HERO_HUE); this upgrade
     // exists to find an UNKNOWN opponent's real logo hue, which doesn't

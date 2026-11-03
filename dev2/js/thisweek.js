@@ -562,6 +562,7 @@
     const footageHtml = `
       <div id="thisweekWatchFootageWrap"></div>
       <div id="thisweekOpponentScoutingWrap"></div>
+      <div id="thisweekScoutDiagramsWrap"></div>
       <div id="thisweekGameFootageWrap"></div>
       <!-- Nathan: "link formatting and placement isn't good - needs
            breathing room for other things and needs to be centered."
@@ -752,6 +753,8 @@
     // are the js/opponent-film.js entries for this week's opponent, kept
     // per TEAM in Coach Tools, fetched fresh each render (cheap, small
     // document) rather than cached, since a coach could add one mid-week.
+    const scoutDiagramsWrap = document.getElementById('thisweekScoutDiagramsWrap');
+    if (scoutDiagramsWrap && linkedGame && linkedGame.opponent && window.ScoutDiagrams) window.ScoutDiagrams.mount(scoutDiagramsWrap, linkedGame.opponent);
     const scoutingWrap = document.getElementById('thisweekOpponentScoutingWrap');
     if (scoutingWrap) {
       scoutingWrap.innerHTML = '';
