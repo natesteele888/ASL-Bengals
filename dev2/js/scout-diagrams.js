@@ -9,10 +9,19 @@
 // `scoutTeam`, not `teamNames`, so the film lists skip it) -- that node's
 // database rules already cover exactly this audience.
 //
-// Same look as Play Calls: CIRCLE_R 36 / stroke 11, routes 16 wide, red for
-// the ball, navy for everyone else, arrow = run/route, bar = block. The one
-// deliberate difference: drawn from the DEFENSE'S side, offense coming DOWN
-// the screen, because that's the picture our kids see across the line.
+// Same look as Play Calls: CIRCLE_R 36 / stroke 11, routes 16 wide, navy
+// routes, arrow = run/route, bar = block. Red is only used when a pack marks a
+// route as the ball carrier (`ball`), because the hand-drawn sheets don't say
+// who has it. The one deliberate difference: drawn from the DEFENSE'S side,
+// offense coming DOWN the screen, because that's the picture our kids see
+// across the line.
+//
+// Pack format (version 2): every diagram is centered on the center at 0,0
+// (y up is negative), 100 units = one normal lineman gap, so tight splits and
+// wide splits are kept:
+//   { cat, name, notes[], src, players:[{x,y,c,line}],
+//     routes:[{pts:[[x,y]...], end:'a'|'b'|'n', curve, dash, ball}],
+//     labels:[{x,y,t}] }   // short words the coach wrote next to a diagram
 (function () {
   'use strict';
   var BALL = '#e0201a', NOBALL = '#123a8c', INK = '#111';
@@ -36,6 +45,17 @@
   }
   function lineD(p) { return 'M ' + p.map(function (q) { return q[0] + ' ' + q[1]; }).join(' L '); }
 
+  // Arrow: its TIP sits on the last point (the hand-drawn tip), and the line is
+  // cut back under the head so the stroke doesn't poke out past it.
+  function trimmed(r) {
+    var p = r.pts.map(function (q) { return [q[0], q[1]]; });
+    if (r.end !== 'a' || p.length < 2) return p;
+    var b = p[p.length - 1], a = p[p.length - 2];
+    var dx = b[0] - a[0], dy = b[1] - a[1], len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var cut = Math.min(24, len * 0.9);
+    p[p.length - 1] = [b[0] - dx / len * cut, b[1] - dy / len * cut];
+    return p;
+  }
   function endCap(r, color) {
     var p = r.pts, b = p[p.length - 1], a = p[p.length - 2];
     var deg = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
@@ -46,34 +66,48 @@
     }
     if (r.end === 'a') {
       var s = ROUTE / 9;
-      return '<polygon transform="' + t + '" points="' + (-2 * s) + ',' + (-11 * s) + ' ' + (20 * s) + ',0 ' + (-2 * s) + ',' + (11 * s) + '" fill="' + color + '"/>';
+      return '<polygon transform="' + t + ' translate(' + (-20 * s) + ',0)" points="' + (-2 * s) + ',' + (-11 * s) + ' ' + (20 * s) + ',0 ' + (-2 * s) + ',' + (11 * s) + '" fill="' + color + '"/>';
     }
     return '';
   }
 
   function svg(d) {
-    var maxX = 800, minY = -200, maxY = 220;
+    // Fixed minimum width so every card draws at the same scale; it only grows
+    // when something is drawn farther out than that.
+    var maxX = 820, minY = -200, maxY = 110;
     (d.players || []).forEach(function (p) {
-      maxX = Math.max(maxX, Math.abs(p.x) + 70); minY = Math.min(minY, p.y - 70);
+      maxX = Math.max(maxX, Math.abs(p.x) + 70); minY = Math.min(minY, p.y - 70); maxY = Math.max(maxY, p.y + 70);
     });
     (d.routes || []).forEach(function (r) {
       r.pts.forEach(function (q) {
         maxX = Math.max(maxX, Math.abs(q[0]) + 70); minY = Math.min(minY, q[1] - 70); maxY = Math.max(maxY, q[1] + 70);
       });
     });
+    (d.labels || []).forEach(function (l) {
+      maxX = Math.max(maxX, Math.abs(l.x) + 130); minY = Math.min(minY, l.y - 70); maxY = Math.max(maxY, l.y + 70);
+    });
     var w = maxX * 2, h = maxY - minY;
     var o = '<svg viewBox="' + (-maxX) + ' ' + minY + ' ' + w + ' ' + h + '" role="img" aria-label="' + esc(d.name) + '" style="display:block;width:100%;height:auto;background:#fff;">';
     // Line of scrimmage: same dashed look as the sideline formation sheet.
     o += '<line x1="' + (-maxX) + '" y1="0" x2="' + maxX + '" y2="0" stroke="#bbb" stroke-width="5" stroke-dasharray="20 16"/>';
     (d.routes || []).forEach(function (r) {
-      var color = r.ball ? BALL : NOBALL;
-      var pathD = (r.curve && r.pts.length > 2) ? curveD(r.pts) : lineD(r.pts);
+      var color = r.ball ? BALL : NOBALL, pts = trimmed(r);
+      var pathD = (r.curve && pts.length > 2) ? curveD(pts) : lineD(pts);
       o += '<path d="' + pathD + '" fill="none" stroke="' + color + '" stroke-width="' + ROUTE + '" stroke-linecap="round" stroke-linejoin="round"' + (r.dash ? ' stroke-dasharray="10 26"' : '') + '/>';
-      o += endCap(r, color);
     });
     (d.players || []).forEach(function (p) {
       o += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + R + '" fill="#fff" stroke="' + INK + '" stroke-width="' + STROKE + '"/>';
       if (p.c) o += '<text x="' + p.x + '" y="' + (p.y + 14) + '" font-size="40" font-weight="900" font-style="italic" text-anchor="middle" fill="' + INK + '">C</text>';
+    });
+    // Arrow heads and block bars go on top, so one that lands on a lineman's
+    // circle (as on the sheet) is still visible.
+    (d.routes || []).forEach(function (r) { o += endCap(r, r.ball ? BALL : NOBALL); });
+    // The coach's own words next to the drawing ("Fake", "Roll"...), centered on
+    // where he wrote them, \n = new line, with a white halo over any route.
+    (d.labels || []).forEach(function (l) {
+      var lines = String(l.t).split('\n'), LH = 52, y0 = l.y - (lines.length - 1) * LH / 2 + 16;
+      o += '<text x="' + l.x + '" font-size="46" font-weight="800" text-anchor="middle" fill="#444" stroke="#fff" stroke-width="12" paint-order="stroke" stroke-linejoin="round">' +
+        lines.map(function (t, i) { return '<tspan x="' + l.x + '" y="' + (y0 + i * LH) + '">' + esc(t) + '</tspan>'; }).join('') + '</text>';
     });
     return o + '</svg>';
   }
@@ -110,7 +144,7 @@
           groups.map(function (g) {
             return '<button type="button" class="gameplanChip' + (g.key === active ? ' active' : '') + '" data-scout-group="' + g.key + '">' + g.label + '</button>';
           }).join('') + '</div>' +
-          '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Red = the ball. Arrow = where he goes. Bar = who he blocks.</div>' +
+          '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Arrow = where he goes. Bar = who he blocks.</div>' +
           pack.diagrams.filter(function (d) { return d.cat === active; }).map(cardHtml).join('');
         el.querySelectorAll('[data-scout-group]').forEach(function (b) {
           b.addEventListener('click', function () { active = b.dataset.scoutGroup; draw(); });
