@@ -142,5 +142,30 @@
     return withCurrent((current) => current.filter((e) => e.id !== id));
   }
 
-  window.OpponentFilm = { load, clipsForTeam, distinctOpponentNames, teamsMatch, addClip, removeClip };
+  // Scout Diagrams (js/scout-diagrams.js) keep their pack in this same
+  // document, behind the same login: an entry with `scoutTeam` instead of
+  // `teamNames`, so clipsForTeam and the admin film list both skip it. One
+  // pack per team -- re-importing replaces it.
+  function saveScoutPack(team, diagrams) {
+    team = (team || '').trim();
+    if (!team) return Promise.reject(new Error('Pick the team first.'));
+    if (!Array.isArray(diagrams) || !diagrams.length) return Promise.reject(new Error('That file has no diagrams in it.'));
+    const entry = {
+      id: 'sd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      scoutTeam: team,
+      diagrams,
+      addedAt: new Date().toISOString(),
+    };
+    return withCurrent((current) => current
+      .filter((e) => !(e && e.scoutTeam && teamsMatch(e.scoutTeam, team)))
+      .concat([entry])).then(() => entry);
+  }
+  function scoutPackForTeam(entries, teamName) {
+    return (entries || []).find((e) => e && e.scoutTeam && teamsMatch(e.scoutTeam, teamName)) || null;
+  }
+  function scoutPacks(entries) {
+    return (entries || []).filter((e) => e && e.scoutTeam);
+  }
+
+  window.OpponentFilm = { load, clipsForTeam, distinctOpponentNames, teamsMatch, addClip, removeClip, saveScoutPack, scoutPackForTeam, scoutPacks };
 })();

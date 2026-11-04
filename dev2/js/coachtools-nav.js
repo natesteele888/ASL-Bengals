@@ -82,7 +82,7 @@
     // by team name. See js/opponent-film.js (the shared store, also read
     // by This Week's Week Ahead and a team's own Standings page) and
     // js/coachtools-opponentfilm.js (this tab's own authoring UI).
-    { key: 'opponentfilm', label: '🔭 Opponent Film', category: 'library', panel: 'coachOpponentFilmPanel', init: () => window.initOpponentFilmAdmin && window.initOpponentFilmAdmin() },
+    { key: 'opponentfilm', label: '🔭 Opponent Film', category: 'library', panel: 'coachOpponentFilmPanel', init: () => { if (window.initOpponentFilmAdmin) window.initOpponentFilmAdmin(); if (window.ScoutDiagrams) window.ScoutDiagrams.initAdmin(); } },
     { key: 'playclips', label: '🎬 Play Clips', category: 'library', panel: 'coachPlayClipsPanel', init: () => window.initPlayClipsAdmin && window.initPlayClipsAdmin() },
     // Nathan: "make sure that the notes that were added to the What's New
     // can be added at any time by a coach in the Coach Tools block" -- the

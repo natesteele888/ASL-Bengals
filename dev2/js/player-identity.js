@@ -1358,6 +1358,10 @@
       // trigger point as the other post-session checks here -- see
       // js/study-quiz.js's renderEngagementCallout.
       if (typeof window.renderEngagementCallout === 'function') window.renderEngagementCallout();
+      // Nathan (2026-11-03): the Opponent Offense tab "needs to be called out as soon
+      // as each kid opens the app" -- NEW pill on the tab + a card under the
+      // ticker. See js/opp-offense.js.
+      if (typeof window.refreshOppOffenseCallout === 'function') window.refreshOppOffenseCallout();
       // Nathan: "parents shouldn't show on the leaderboard." Warms
       // study-quiz.js's parent-name cache as early as possible after login
       // (fire-and-forget -- openLeaderboardBtn's own click handler awaits a

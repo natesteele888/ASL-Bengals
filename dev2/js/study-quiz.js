@@ -23,6 +23,7 @@ const thisweekModeEl = document.getElementById('thisweekMode');
 const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 const scheduleModeEl = document.getElementById('scheduleMode');
 const standingsModeEl = document.getElementById('standingsMode');
+const oppOffenseModeEl = document.getElementById('oppOffenseMode');
 // Real back-button support (js/nav-history.js) -- setMode is the single
 // choke point every top-level section switch AND every Play sub-tab
 // switch already goes through (setSection, below, just delegates to it),
@@ -49,6 +50,7 @@ function setMode(mode, navOpts){
   if (coachtoolsModeEl) coachtoolsModeEl.classList.toggle('show', mode==='coachtools');
   if (scheduleModeEl) scheduleModeEl.classList.toggle('show', mode==='schedule');
   if (standingsModeEl) standingsModeEl.classList.toggle('show', mode==='standings');
+  if (oppOffenseModeEl) oppOffenseModeEl.classList.toggle('show', mode==='oppoffense');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -65,6 +67,7 @@ function setMode(mode, navOpts){
   if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
   if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
+  if(mode==='oppoffense' && typeof window.initOppOffenseNav === 'function') window.initOppOffenseNav();
 
   currentMode = mode;
   // navOpts.fromHistory is set only when THIS call is itself running as
@@ -163,14 +166,17 @@ function setSection(section, navOpts){
   navOpts = navOpts || {};
   const fromSection = currentSection;
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
+  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings' || section === 'oppoffense') {
     modeTabsEl.style.display = 'none';
     hideGlobalCallout();
+    // The Opponent Offense call-out card lives on the home screen only, same as the ticker.
+    if (typeof window.hideOppOffenseBanner === 'function') window.hideOppOffenseBanner();
     setMode(section, { fromHistory: true });
   } else {
     modeTabsEl.style.display = '';
     setMode(lastPlaySubMode, { fromHistory: true });
     if (typeof renderEngagementCallout === 'function') renderEngagementCallout();
+    if (typeof window.refreshOppOffenseCallout === 'function') window.refreshOppOffenseCallout();
   }
   currentSection = section;
   if (!navOpts.fromHistory && fromSection !== section && window.NavHistory) {
@@ -234,6 +240,11 @@ window.refreshCoachToolsVisibility = function(){
   // Tools' own approvedCoach gate).
   const standingsBtn = document.getElementById('standingsSectionBtn');
   if (standingsBtn) standingsBtn.style.display = ''; // visible to everyone
+  // Nathan (2026-11-03): Opponent Offense tab for the kids to study the opposing
+  // offense's formations and plays. Players and coaches; parents keep
+  // Schedule as their whole app, same exclusion as This Week above.
+  const oppOffenseBtn = document.getElementById('oppOffenseSectionBtn');
+  if (oppOffenseBtn) oppOffenseBtn.style.display = isPlayerOrCoach ? '' : 'none';
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 
@@ -339,6 +350,7 @@ window.refreshCoachToolsVisibility = function(){
     (activeSection === 'play' && !isParent) ||
     activeSection === 'schedule' ||
     (activeSection === 'thisweek' && isCoach) ||
+    (activeSection === 'oppoffense' && isPlayerOrCoach) ||
     (activeSection === 'coachtools' && approvedCoach);
   if (isParent) {
     // Schedule is the only thing a parent can ever land on -- send them
@@ -1623,11 +1635,21 @@ async function renderEngagementCallout(){
   }
   const items = [];
   try {
-    const [mostImproved, games, bestDrillToday] = await Promise.all([
+    const [mostImproved, games, bestDrillToday, oppOffenseSummary] = await Promise.all([
       computeMostImproved().catch(() => null),
       Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
       computeBestDrillToday().catch(() => null),
+      Promise.resolve(window.getOppOffenseSummary ? window.getOppOffenseSummary() : null).catch(() => null),
     ]);
+    // Nathan (2026-11-03): the Opponent Offense tab "needs to be called out as soon
+    // as each kid opens the app" -- leads the strip, tappable (see the
+    // data-open-section handler in gcSetupTicker). Only exists once a coach
+    // has imported diagrams.
+    if(oppOffenseSummary && oppOffenseSummary.total){
+      const lead = oppOffenseSummary.isNew ? 'NEW: Study the Opponent Offense tab' : 'Opponent Offense tab';
+      const what = `${oppOffenseSummary.formations} formation${oppOffenseSummary.formations===1?'':'s'} + ${oppOffenseSummary.plays} plays`;
+      items.push(`<span class="gcTickerItem gcTickerItemClickable" data-open-section="oppoffense"><span class="gcTickerIcon">📋</span>${gcEscapeHtml(lead)} — ${gcEscapeHtml(what)}</span><span class="gcTickerSep">•</span>`);
+    }
     // "basic details of next game on schedule... clickable to get to the
     // game info" -- see gcFmtGameLine (now includes arrive time/location
     // too) and gcTickerItemClickableHtml.
@@ -1790,6 +1812,8 @@ function gcSetupTicker(host, track){
     if(dragMaxDelta > 6) return;
     const el = e.target.closest && e.target.closest('[data-open-game]');
     if(el && window.openScheduleGame) window.openScheduleGame(el.dataset.openGame);
+    const sec = e.target.closest && e.target.closest('[data-open-section]');
+    if(sec && typeof setSection === 'function') setSection(sec.dataset.openSection);
   });
   // Keep the ticker's DATA catching up on its own for as long as this
   // tab/session stays open -- see the staleness explanation further above.
