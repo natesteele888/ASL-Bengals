@@ -29,7 +29,7 @@
 
   // The note shown under the tab's title.
   var NOTICE = {
-    lead: 'We are changing for Defense.',
+    lead: 'We are making changes on defense.',
     rest: 'More changes to come from Coach Joe at practice.',
   };
 
