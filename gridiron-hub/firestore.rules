@@ -119,6 +119,21 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
         allow delete: if isSignedIn() && (resource.data.postedBy == request.auth.uid || canManageTeam(teamId));
       }
+
+      // photos.html and player.html's tagged-photo lookup both depend on
+      // this -- same gap as everything above, just not covered by that
+      // work since photos also need Firebase Storage turned on (a Blaze
+      // billing decision, not a rules one) before uploads actually work.
+      // This half is ready regardless: the Firestore record of a photo
+      // (its Storage URL, who uploaded it, which players are tagged) is
+      // plain data with no billing dependency of its own.
+      match /photos/{photoId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.uploadedByUid == request.auth.uid
+          && (isTeamMember(teamId) || canManageTeam(teamId));
+        allow delete: if isSignedIn() && (resource.data.uploadedByUid == request.auth.uid || canManageTeam(teamId));
+      }
     }
 
     // Nothing else exists yet. Default-deny keeps a future collection

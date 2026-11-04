@@ -133,7 +133,7 @@ import('../../src/firebase-config.js').then(({ auth, db }) => {
         } catch (e) { /* rules not deployed yet, or offline -- just skip the link */ }
         slot.innerHTML =
           (isAdmin ? `<a href="${P}admin.html" class="nav-cta" style="background:none;border:1px solid var(--line);color:var(--text-dim);">Admin</a>` : '') +
-          `<span class="nav-user-email">${user.email}</span><button class="nav-signout-btn">Sign Out</button>`;
+          `<a href="${P}dashboard.html" class="nav-user-email">${user.email}</a><button class="nav-signout-btn">Sign Out</button>`;
         slot.querySelector('.nav-signout-btn').addEventListener('click', () => signOut(auth));
       } else {
         slot.innerHTML = `<a href="${P}login.html" class="nav-cta">Sign In</a>`;

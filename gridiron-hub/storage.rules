@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Gridiron Hub — Storage rules for photo uploads (team.html's banner,
+// photos.html's gallery). NOT deployable yet: Firebase Storage requires
+// the Blaze (pay-as-you-go) plan, which needs a billing method on the
+// project -- that's a decision for Nathan to make in the Firebase
+// console, not something a rules file or a deploy command can do. Until
+// Storage is turned on, uploadBytes() in both pages throws, and each
+// page's own status message says so plainly rather than failing silently.
+//
+// Once Storage IS on, deploy this with:
+//   firebase deploy --only storage
+//
+// Kept deliberately simple -- signed-in, image files only, a size cap --
+// rather than replicating the team-membership check from firestore.rules.
+// Storage rules CAN call into Firestore (firestore.get()/exists()) to do
+// that, but that path couldn't be verified against a live project here
+// since Storage isn't enabled to test against. Worth tightening to match
+// firestore.rules' team-membership check once it can actually be deployed
+// and tried against the real project.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /teams/{teamId}/photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
