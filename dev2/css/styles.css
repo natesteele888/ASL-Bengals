@@ -714,21 +714,21 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   text-shadow:0 0 3px rgba(255,210,150,.85),0 0 8px rgba(255,150,70,.4)}
 .gcTickerItemClickable:hover,.gcTickerItemClickable:active{color:#fff3e0}
 
-/* Nathan (2026-11-03): the Defense tab "needs to be called out as soon as
+/* Nathan (2026-11-03): the Opponent Offense tab "needs to be called out as soon as
    each kid opens the app so they can go to it and study." A tappable card
-   under the ticker on the home screen (js/defense.js), orange on black like
+   under the ticker on the home screen (js/opp-offense.js), orange on black like
    the nav so it reads as part of the app, hidden once this device has opened
-   the Defense tab. */
-.defenseBanner{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:8px 10px 8px;
+   the Opponent Offense tab. */
+.oppOffenseBanner{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:8px 10px 8px;
   padding:10px 12px;box-sizing:border-box;text-align:left;font:inherit;cursor:pointer;
   background:var(--bengal-black);color:#fff;border:2px solid var(--bengal-orange);border-radius:12px}
-.defenseBanner:active{background:#2a2a2a}
-.defenseBanner .dbIcon{font-size:28px;line-height:1;flex-shrink:0}
-.defenseBanner .dbText{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
-.defenseBanner .dbKicker{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--bengal-orange)}
-.defenseBanner .dbMain{font-size:15px;font-weight:800;line-height:1.2}
-.defenseBanner .dbSub{font-size:12px;color:rgba(255,255,255,.7);line-height:1.25}
-.defenseBanner .dbArrow{font-size:26px;line-height:1;color:var(--bengal-orange);flex-shrink:0}
+.oppOffenseBanner:active{background:#2a2a2a}
+.oppOffenseBanner .dbIcon{font-size:28px;line-height:1;flex-shrink:0}
+.oppOffenseBanner .dbText{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.oppOffenseBanner .dbKicker{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--bengal-orange)}
+.oppOffenseBanner .dbMain{font-size:15px;font-weight:800;line-height:1.2}
+.oppOffenseBanner .dbSub{font-size:12px;color:rgba(255,255,255,.7);line-height:1.25}
+.oppOffenseBanner .dbArrow{font-size:26px;line-height:1;color:var(--bengal-orange);flex-shrink:0}
 
 /* Confetti -- a handful of small colored rectangles JS drops in on a
    timer, falling + drifting + spinning via this one keyframe, each with

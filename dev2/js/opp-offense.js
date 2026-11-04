@@ -1,7 +1,8 @@
-// Defense tab (Nathan, 2026-11-03): "add another tab to the kids 11U app that
+// Opponent Offense tab (Nathan, 2026-11-03): "add another tab to the kids 11U app that
 // says defense and in that tab will be the formation diagrams and then all of
 // the plays. This needs to be called out as soon as each kid opens the app so
-// they can go to it and study."
+// they can go to it and study." Renamed the same night: "it's actually
+// opponent offense" -- these are the other team's formations and plays.
 //
 // WHAT IT SHOWS
 // Every Scout Diagrams pack a coach has imported (Coach Tools > Opponent Film >
@@ -11,11 +12,11 @@
 //
 // HOW IT IS CALLED OUT (three quiet places, no popup -- js/launch-screen.js
 // switched launch popups off on purpose, and a new one would undo that)
-//   1. a red NEW pill on the Defense tab (#defenseNewBadge)
-//   2. a tappable card under the ticker on the home screen (#defenseBanner)
+//   1. a red NEW pill on the Opponent Offense tab (#oppOffenseNewBadge)
+//   2. a tappable card under the ticker on the home screen (#oppOffenseBanner)
 //   3. the lead item in the scrolling ticker (js/study-quiz.js asks
-//      getDefenseSummary() for it)
-// 1 and 2 stay up until this device has opened the Defense tab once; a coach
+//      getOppOffenseSummary() for it)
+// 1 and 2 stay up until this device has opened the Opponent Offense tab once; a coach
 // importing a new pack changes the signature, so they come back. 3 stays
 // whenever a pack exists, worded differently once it has been seen.
 //
@@ -23,7 +24,7 @@
 (function () {
   'use strict';
 
-  var SEEN_KEY = 'aslBengalsDefenseSeen';
+  var SEEN_KEY = 'aslBengalsOppOffenseSeen';
   var TTL_MS = 3 * 60 * 1000; // same cadence as the ticker's own refresh
 
   var cache = null;
@@ -89,40 +90,40 @@
   }
 
   function setBadge(on) {
-    var b = document.getElementById('defenseNewBadge');
+    var b = document.getElementById('oppOffenseNewBadge');
     if (b) b.style.display = on ? '' : 'none';
   }
 
   function hideBanner() {
-    var host = document.getElementById('defenseBanner');
+    var host = document.getElementById('oppOffenseBanner');
     if (host) { host.style.display = 'none'; host.innerHTML = ''; host.onclick = null; }
   }
 
   function renderBanner(s) {
-    var host = document.getElementById('defenseBanner');
+    var host = document.getElementById('oppOffenseBanner');
     if (!host) return;
     if (!s.isNew || activeSection() !== 'play') { hideBanner(); return; }
     host.innerHTML =
-      '<span class="dbIcon">🛡️</span>' +
+      '<span class="dbIcon">📋</span>' +
       '<span class="dbText">' +
-        '<span class="dbKicker">NEW · DEFENSE</span>' +
+        '<span class="dbKicker">NEW · OPPONENT OFFENSE</span>' +
         '<span class="dbMain">Study ' + s.formations + ' formation' + (s.formations === 1 ? '' : 's') + ' + ' + s.plays + ' plays</span>' +
-        '<span class="dbSub">Learn what the offense runs against us</span>' +
+        '<span class="dbSub">Learn what the other team runs against us</span>' +
       '</span>' +
       '<span class="dbArrow">›</span>';
-    host.onclick = function () { if (typeof window.setSection === 'function') window.setSection('defense'); };
+    host.onclick = function () { if (typeof window.setSection === 'function') window.setSection('oppoffense'); };
     host.style.display = '';
   }
 
   // For the ticker (js/study-quiz.js). Null for a parent.
-  window.getDefenseSummary = function () {
+  window.getOppOffenseSummary = function () {
     if (window.isParentSession) return Promise.resolve(null);
     return getPacks().then(summarize);
   };
 
   // Called once a session is known (player-identity.js's gate()) and again
   // every time someone lands back on the Play home screen.
-  window.refreshDefenseCallout = function () {
+  window.refreshOppOffenseCallout = function () {
     if (window.isParentSession) { setBadge(false); hideBanner(); return Promise.resolve(); }
     return getPacks().then(function (packs) {
       var s = summarize(packs);
@@ -130,13 +131,13 @@
       renderBanner(s);
     }).catch(function () { /* nice-to-have -- never worth breaking the app over */ });
   };
-  window.hideDefenseBanner = hideBanner;
+  window.hideOppOffenseBanner = hideBanner;
 
   // The tab itself.
-  window.initDefenseNav = function () {
-    var host = document.getElementById('defensePanel');
+  window.initOppOffenseNav = function () {
+    var host = document.getElementById('oppOffensePanel');
     if (!host) return;
-    host.innerHTML = '<div class="lbEmpty">Loading the defense diagrams…</div>';
+    host.innerHTML = '<div class="lbEmpty">Loading the opponent offense diagrams…</div>';
     getPacks(true).then(function (packs) {
       if (!host.isConnected) return;
       if (!packs.length) {
@@ -145,17 +146,17 @@
           : '';
         host.innerHTML = lastFailed
           ? '<div class="lbEmpty">Could not load the diagrams. Check your connection and try again.</div>' +
-            '<div style="text-align:center;margin-top:8px;"><button type="button" class="navBtn" id="defenseRetryBtn">Try again</button></div>'
-          : '<div class="lbEmpty">The defense diagrams are not up yet. Check back soon!</div>' + coachLine;
-        var retry = host.querySelector('#defenseRetryBtn');
-        if (retry) retry.addEventListener('click', window.initDefenseNav);
+            '<div style="text-align:center;margin-top:8px;"><button type="button" class="navBtn" id="oppOffenseRetryBtn">Try again</button></div>'
+          : '<div class="lbEmpty">The opponent offense diagrams are not up yet. Check back soon!</div>' + coachLine;
+        var retry = host.querySelector('#oppOffenseRetryBtn');
+        if (retry) retry.addEventListener('click', window.initOppOffenseNav);
         return;
       }
       host.innerHTML =
-        '<div class="lbHeroHeader"><div class="lbHeroTrophy">🛡️</div><h3>Know the Defense</h3></div>' +
+        '<div class="lbHeroHeader"><div class="lbHeroTrophy">📋</div><h3>Opponent Offense</h3></div>' +
         '<div class="hint" style="text-align:center;margin-bottom:6px;">Study the formations first, so you can see how they line up. Then learn the plays they run from them.</div>' +
-        '<div id="defenseBrowser"></div>';
-      window.ScoutDiagrams.browse(host.querySelector('#defenseBrowser'), packs, {
+        '<div id="oppOffenseBrowser"></div>';
+      window.ScoutDiagrams.browse(host.querySelector('#oppOffenseBrowser'), packs, {
         title: function (p) { return '📋 ' + p.scoutTeam + ' Offense'; },
       });
       // They are looking at it now -- clear the call-outs on this device.
