@@ -41,6 +41,7 @@
   .message-item{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:14px 16px;margin-bottom:10px;}
   .message-item .msg-meta{font-size:11px;color:var(--orange);font-weight:800;margin-bottom:6px;}
   .message-item .msg-text{font-size:14px;line-height:1.5;white-space:pre-wrap;}
+  .message-item .msg-seen{font-size:11.5px;color:var(--text-dim);margin-top:8px;}
 
   .event-card{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px 18px;}
   .event-card.cancelled{opacity:.6;border-color:#ff6b5e;}
@@ -109,7 +110,7 @@
 
     <div class="section">
       <div class="section-head">
-        <div><h2>Team Messages</h2><p>Updates from the coaching staff.</p></div>
+        <div><h2>Team Messages</h2><p>A shared board for the team -- players, parents and coaches alike.</p></div>
       </div>
 
       <div id="postMessageForm" style="display:none;margin-bottom:18px;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px;">
@@ -153,7 +154,7 @@
 <script type="module">
   import { app, auth, db } from './src/firebase-config.js';
   import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-  import { doc, getDoc, setDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+  import { doc, getDoc, setDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
   import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-storage.js";
 
   const storage = getStorage(app);
@@ -164,7 +165,14 @@
   // actual point of this page: proving teams can update their own content
   // without a code change, even before every field has that treatment.
   const TEAM_DISPLAY = {
+    '8u': { name: 'ASL Bengals 8U', sport: 'TACKLE FOOTBALL', record: '' },
+    '9u': { name: 'ASL Bengals 9U', sport: 'TACKLE FOOTBALL', record: '' },
+    '10u': { name: 'ASL Bengals 10U', sport: 'TACKLE FOOTBALL', record: '' },
     '11u': { name: 'ASL Bengals 11U', sport: 'TACKLE FOOTBALL', record: '1-1' },
+    '12u': { name: 'ASL Bengals 12U', sport: 'TACKLE FOOTBALL', record: '' },
+    '13u': { name: 'ASL Bengals 13U', sport: 'TACKLE FOOTBALL', record: '' },
+    'flex': { name: 'ASL Bengals Flex', sport: 'FLEX FOOTBALL', record: '' },
+    'cheer': { name: 'ASL Bengals Cheer', sport: 'CHEER', record: '' },
   };
 
   const params = new URLSearchParams(window.location.search);
@@ -204,37 +212,43 @@
   }
   loadBanner();
 
-  // Any signed-in user can edit for now -- role-based restriction (coach
-  // for this specific team only) needs the role/orgId assignment flow that
-  // doesn't exist yet. Flagging this here rather than pretending it's
-  // already properly locked down.
-  // Real permission check: any signed-in user is no longer enough --
-  // must be role 'admin', or role 'coach' with this teamId in their
-  // teamIds array. UI here only controls what's *shown*; the actual
-  // enforcement is in Firestore rules, since a hidden button is not
-  // security -- someone could still call the SDK directly.
+  // Permission check mirrors firestore.rules exactly (canManageTeam /
+  // isTeamMember there): admin or board can manage any team, a coach can
+  // manage only a team in their own teamIds. UI here only controls what's
+  // *shown*; the actual enforcement is server-side, since a hidden button
+  // is not security -- someone could still call the SDK directly.
+  //
+  // canPostMessage is deliberately broader than canEditThisTeam: this is
+  // the two-way part. Roster, the banner and the practice schedule stay
+  // coach/admin/board tools, but any player or parent on the team can
+  // post to Team Messages, same as the rules allow.
   let currentUser = null;
   let canEditThisTeam = false;
+  let canPostMessage = false;
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
     canEditThisTeam = false;
+    canPostMessage = false;
     if (user) {
       try {
         const userSnap = await getDoc(doc(db, 'users', user.uid));
         if (userSnap.exists()) {
           const u = userSnap.data();
-          canEditThisTeam = u.role === 'admin' || (u.role === 'coach' && Array.isArray(u.teamIds) && u.teamIds.includes(teamId));
+          const isMyTeam = Array.isArray(u.teamIds) && u.teamIds.includes(teamId);
+          canEditThisTeam = u.role === 'admin' || u.role === 'board' || (u.role === 'coach' && isMyTeam);
+          canPostMessage = canEditThisTeam || isMyTeam;
         }
       } catch (e) {
-        console.warn('Could not check coach permission:', e);
+        console.warn('Could not check team permission:', e);
       }
     }
     editBtn.style.display = canEditThisTeam ? 'block' : 'none';
     document.getElementById('addPlayerForm').style.display = canEditThisTeam ? 'flex' : 'none';
     document.getElementById('pasteRosterForm').style.display = canEditThisTeam ? 'block' : 'none';
-    document.getElementById('postMessageForm').style.display = canEditThisTeam ? 'block' : 'none';
+    document.getElementById('postMessageForm').style.display = canPostMessage ? 'block' : 'none';
     document.getElementById('addEventForm').style.display = canEditThisTeam ? 'flex' : 'none';
     renderEvents(); // re-render so each event's cancel button / RSVP-as-you reflects the now-known permission and identity
+    renderMessages(); // re-render so read-receipt marking has an identity to mark with
   });
 
   editBtn.addEventListener('click', (e) => {
@@ -350,14 +364,24 @@
   });
 
   // ---- Team Messages ----
-  // Simple flat feed, newest first. Any signed-in coach/admin can post
-  // (write is enforced server-side in Firestore rules); everyone can read.
-  // postedByName is stored on write so the feed shows real attribution
-  // without needing a join against the users collection on every read.
+  // Two-way feed, newest first: any team member can post (coach/board/
+  // admin included), not just coaching staff -- write access is enforced
+  // server-side in Firestore rules, this is just what's shown. postedByName
+  // is stored on write so the feed shows real attribution without a join
+  // against the users collection on every read.
+  //
+  // Read receipts: readBy is an array of uids on each message. Cached
+  // locally (latestMessages) so renderMessages() can re-run whenever
+  // *either* the snapshot changes *or* identity resolves, same reasoning
+  // as latestEvents/renderEvents above. Rendering a message you haven't
+  // read yet marks it read -- one arrayUnion write, skipped entirely if
+  // you're already in the array, so re-renders don't spam writes.
+  let latestMessages = [];
   const messagesList = document.getElementById('messagesList');
   const messagesEmpty = document.getElementById('messagesEmpty');
-  onSnapshot(query(collection(db, 'teams', teamId, 'messages'), orderBy('postedAt', 'desc')), (snap) => {
-    if (snap.empty) {
+
+  function renderMessages() {
+    if (!latestMessages.length) {
       messagesList.style.display = 'none';
       messagesEmpty.style.display = 'block';
       return;
@@ -365,15 +389,25 @@
     messagesList.style.display = 'block';
     messagesEmpty.style.display = 'none';
     messagesList.innerHTML = '';
-    snap.forEach((docSnap) => {
-      const m = docSnap.data();
+    latestMessages.forEach((m) => {
       const when = m.postedAt?.toDate ? m.postedAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      const readBy = Array.isArray(m.readBy) ? m.readBy : [];
       const div = document.createElement('div');
       div.className = 'message-item';
-      div.innerHTML = `<div class="msg-meta">${m.postedByName || 'Coach'} · ${when}</div><div class="msg-text"></div>`;
+      div.innerHTML = `<div class="msg-meta">${m.postedByName || 'Someone'} · ${when}</div><div class="msg-text"></div><div class="msg-seen">👀 Seen by ${readBy.length}</div>`;
       div.querySelector('.msg-text').textContent = m.text; // textContent, not innerHTML -- message text is user input
       messagesList.appendChild(div);
+
+      if (currentUser && canPostMessage && !readBy.includes(currentUser.uid)) {
+        updateDoc(doc(db, 'teams', teamId, 'messages', m.id), { readBy: arrayUnion(currentUser.uid) })
+          .catch((err) => console.warn('Could not mark message read:', err));
+      }
     });
+  }
+
+  onSnapshot(query(collection(db, 'teams', teamId, 'messages'), orderBy('postedAt', 'desc')), (snap) => {
+    latestMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderMessages();
   }, (err) => console.warn('Messages fetch error (check Firestore rules for teams/{teamId}/messages):', err));
 
   document.getElementById('postMessageBtn').addEventListener('click', async () => {
@@ -384,7 +418,7 @@
     statusEl.textContent = 'Posting…';
     try {
       await addDoc(collection(db, 'teams', teamId, 'messages'), {
-        text, postedBy: currentUser.uid, postedByName: currentUser.email, postedAt: serverTimestamp()
+        text, postedBy: currentUser.uid, postedByName: currentUser.email, postedAt: serverTimestamp(), readBy: [currentUser.uid]
       });
       input.value = '';
       statusEl.textContent = 'Posted.';

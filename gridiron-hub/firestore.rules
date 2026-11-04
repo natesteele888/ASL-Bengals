@@ -26,6 +26,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     function isAdmin() { return isSignedIn() && myProfile().role == 'admin'; }
+    // Board runs the whole org, not one team, so they get the same reach
+    // as a coach across every team rather than needing teamIds set at all.
+    function isStaff() { return isSignedIn() && myProfile().role in ['admin', 'board']; }
+    function isCoachOf(teamId) {
+      return isSignedIn() && myProfile().role == 'coach'
+        && myProfile().teamIds is list && teamId in myProfile().teamIds;
+    }
+    function isTeamMember(teamId) {
+      return isSignedIn() && myProfile().teamIds is list && teamId in myProfile().teamIds;
+    }
+    function canManageTeam(teamId) { return isStaff() || isCoachOf(teamId); }
 
     match /users/{uid} {
       // Read your own profile, or any profile if you're an admin (the
@@ -57,9 +68,59 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Nothing else exists yet (RSVPs, the message board). Default-deny
-    // keeps a future collection safe-by-default until it gets its own
-    // rule written on purpose.
+    // Per-team data: team.html already has this fully built (roster, a
+    // banner photo, announcements, a practice schedule with RSVPs) and has
+    // been silently failing every read and write since it was written,
+    // for lack of any rule at all. Reads are public on purpose -- a
+    // practice time or "practice cancelled" message is exactly the kind
+    // of thing a parent needs to see without first creating an account.
+    // Writes are the real boundary.
+    match /teams/{teamId} {
+      allow read: if true;
+      // The banner-photo update (team.html's only direct write here).
+      allow write: if canManageTeam(teamId);
+
+      match /roster/{playerId} {
+        allow read: if true;
+        allow write: if canManageTeam(teamId);
+      }
+
+      match /events/{eventId} {
+        allow read: if true;
+        allow create, update: if canManageTeam(teamId);
+        allow delete: if false;
+
+        // Doc id IS the uid (team.html does setDoc(..., 'rsvps', uid)),
+        // so there's no separate uid field to check -- just that it's you,
+        // and that you actually belong to this team (or run it).
+        match /rsvps/{uid} {
+          allow read: if true;
+          allow write: if isSignedIn() && request.auth.uid == uid
+            && (isTeamMember(teamId) || canManageTeam(teamId));
+        }
+      }
+
+      // Two-way on purpose: any team member can post, not just a coach --
+      // that's the difference between this and a one-way announcement
+      // feed. readBy is how "seen by" works: anyone who can already read
+      // the message can add themselves to it, and nothing else about an
+      // existing message is editable once posted.
+      match /messages/{msgId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.postedBy == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+          && (isTeamMember(teamId) || canManageTeam(teamId));
+        allow update: if isSignedIn()
+          && (isTeamMember(teamId) || canManageTeam(teamId))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
+        allow delete: if isSignedIn() && (resource.data.postedBy == request.auth.uid || canManageTeam(teamId));
+      }
+    }
+
+    // Nothing else exists yet. Default-deny keeps a future collection
+    // safe-by-default until it gets its own rule written on purpose.
     match /{document=**} { allow read, write: if false; }
   }
 }
