@@ -129,6 +129,47 @@
       '</div>';
   }
 
+  function inGroup(pack, key) {
+    return (pack.diagrams || []).filter(function (d) { return d.cat === key; });
+  }
+
+  // Draws a pack browser into `el`: a team row (only when there is more than
+  // one pack), then Formations / Runs / Passes chips with counts, then the
+  // cards. Formations come first so a kid learns the look before the plays.
+  // opts.title(pack) -> header text.
+  function browse(el, packs, opts) {
+    opts = opts || {};
+    var pi = 0;
+    var active = null;
+    function draw() {
+      var pack = packs[pi];
+      var groups = GROUPS.filter(function (g) { return inGroup(pack, g.key).length; });
+      if (!groups.some(function (g) { return g.key === active; })) active = groups.length ? groups[0].key : null;
+      el.innerHTML =
+        (opts.title ? '<div class="lbSectionHeader" style="font-size:13px;">' + esc(opts.title(pack)) + '</div>' : '') +
+        (packs.length > 1
+          ? '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px 0 2px;">' +
+            packs.map(function (p, i) {
+              return '<button type="button" class="gameplanChip' + (i === pi ? ' active' : '') + '" data-scout-pack="' + i + '">' + esc(p.scoutTeam) + '</button>';
+            }).join('') + '</div>'
+          : '') +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px 0 8px;">' +
+        groups.map(function (g) {
+          return '<button type="button" class="gameplanChip' + (g.key === active ? ' active' : '') + '" data-scout-group="' + g.key + '">' +
+            g.label + ' (' + inGroup(pack, g.key).length + ')</button>';
+        }).join('') + '</div>' +
+        '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Arrow = where he goes. Bar = who he blocks.</div>' +
+        (active ? inGroup(pack, active).map(cardHtml).join('') : '');
+      el.querySelectorAll('[data-scout-group]').forEach(function (b) {
+        b.addEventListener('click', function () { active = b.dataset.scoutGroup; draw(); });
+      });
+      el.querySelectorAll('[data-scout-pack]').forEach(function (b) {
+        b.addEventListener('click', function () { pi = Number(b.dataset.scoutPack); draw(); });
+      });
+    }
+    draw();
+  }
+
   // Fills `el` with the team's diagrams, or leaves it empty if there are none.
   function mount(el, teamName) {
     if (!el || !window.OpponentFilm) return;
@@ -136,21 +177,7 @@
       if (!el.isConnected) return;
       var pack = window.OpponentFilm.scoutPackForTeam(entries, teamName);
       if (!pack) { el.innerHTML = ''; return; }
-      var groups = GROUPS.filter(function (g) { return pack.diagrams.some(function (d) { return d.cat === g.key; }); });
-      var active = groups[0].key;
-      function draw() {
-        el.innerHTML = '<div class="lbSectionHeader" style="font-size:13px;">📋 ' + esc(teamName) + ' Offense</div>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px 0 8px;">' +
-          groups.map(function (g) {
-            return '<button type="button" class="gameplanChip' + (g.key === active ? ' active' : '') + '" data-scout-group="' + g.key + '">' + g.label + '</button>';
-          }).join('') + '</div>' +
-          '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Arrow = where he goes. Bar = who he blocks.</div>' +
-          pack.diagrams.filter(function (d) { return d.cat === active; }).map(cardHtml).join('');
-        el.querySelectorAll('[data-scout-group]').forEach(function (b) {
-          b.addEventListener('click', function () { active = b.dataset.scoutGroup; draw(); });
-        });
-      }
-      draw();
+      browse(el, [pack], { title: function () { return '📋 ' + teamName + ' Offense'; } });
     }).catch(function () {});
   }
 
@@ -192,5 +219,5 @@
     refresh();
   }
 
-  window.ScoutDiagrams = { mount: mount, initAdmin: initAdmin };
+  window.ScoutDiagrams = { mount: mount, browse: browse, initAdmin: initAdmin };
 })();

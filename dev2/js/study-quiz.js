@@ -23,6 +23,7 @@ const thisweekModeEl = document.getElementById('thisweekMode');
 const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 const scheduleModeEl = document.getElementById('scheduleMode');
 const standingsModeEl = document.getElementById('standingsMode');
+const defenseModeEl = document.getElementById('defenseMode');
 // Real back-button support (js/nav-history.js) -- setMode is the single
 // choke point every top-level section switch AND every Play sub-tab
 // switch already goes through (setSection, below, just delegates to it),
@@ -49,6 +50,7 @@ function setMode(mode, navOpts){
   if (coachtoolsModeEl) coachtoolsModeEl.classList.toggle('show', mode==='coachtools');
   if (scheduleModeEl) scheduleModeEl.classList.toggle('show', mode==='schedule');
   if (standingsModeEl) standingsModeEl.classList.toggle('show', mode==='standings');
+  if (defenseModeEl) defenseModeEl.classList.toggle('show', mode==='defense');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -65,6 +67,7 @@ function setMode(mode, navOpts){
   if(mode==='coachtools' && typeof window.initCoachToolsNav === 'function') window.initCoachToolsNav();
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
   if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
+  if(mode==='defense' && typeof window.initDefenseNav === 'function') window.initDefenseNav();
 
   currentMode = mode;
   // navOpts.fromHistory is set only when THIS call is itself running as
@@ -163,14 +166,17 @@ function setSection(section, navOpts){
   navOpts = navOpts || {};
   const fromSection = currentSection;
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings') {
+  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings' || section === 'defense') {
     modeTabsEl.style.display = 'none';
     hideGlobalCallout();
+    // The Defense call-out card lives on the home screen only, same as the ticker.
+    if (typeof window.hideDefenseBanner === 'function') window.hideDefenseBanner();
     setMode(section, { fromHistory: true });
   } else {
     modeTabsEl.style.display = '';
     setMode(lastPlaySubMode, { fromHistory: true });
     if (typeof renderEngagementCallout === 'function') renderEngagementCallout();
+    if (typeof window.refreshDefenseCallout === 'function') window.refreshDefenseCallout();
   }
   currentSection = section;
   if (!navOpts.fromHistory && fromSection !== section && window.NavHistory) {
@@ -234,6 +240,11 @@ window.refreshCoachToolsVisibility = function(){
   // Tools' own approvedCoach gate).
   const standingsBtn = document.getElementById('standingsSectionBtn');
   if (standingsBtn) standingsBtn.style.display = ''; // visible to everyone
+  // Nathan (2026-11-03): Defense tab for the kids to study the opposing
+  // offense's formations and plays. Players and coaches; parents keep
+  // Schedule as their whole app, same exclusion as This Week above.
+  const defenseBtn = document.getElementById('defenseSectionBtn');
+  if (defenseBtn) defenseBtn.style.display = isPlayerOrCoach ? '' : 'none';
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 
@@ -339,6 +350,7 @@ window.refreshCoachToolsVisibility = function(){
     (activeSection === 'play' && !isParent) ||
     activeSection === 'schedule' ||
     (activeSection === 'thisweek' && isCoach) ||
+    (activeSection === 'defense' && isPlayerOrCoach) ||
     (activeSection === 'coachtools' && approvedCoach);
   if (isParent) {
     // Schedule is the only thing a parent can ever land on -- send them
@@ -1623,11 +1635,21 @@ async function renderEngagementCallout(){
   }
   const items = [];
   try {
-    const [mostImproved, games, bestDrillToday] = await Promise.all([
+    const [mostImproved, games, bestDrillToday, defenseSummary] = await Promise.all([
       computeMostImproved().catch(() => null),
       Promise.resolve(window.ensureGamesLoaded ? window.ensureGamesLoaded() : []).catch(() => []),
       computeBestDrillToday().catch(() => null),
+      Promise.resolve(window.getDefenseSummary ? window.getDefenseSummary() : null).catch(() => null),
     ]);
+    // Nathan (2026-11-03): the Defense tab "needs to be called out as soon
+    // as each kid opens the app" -- leads the strip, tappable (see the
+    // data-open-section handler in gcSetupTicker). Only exists once a coach
+    // has imported diagrams.
+    if(defenseSummary && defenseSummary.total){
+      const lead = defenseSummary.isNew ? 'NEW: Study the Defense tab' : 'Defense tab';
+      const what = `${defenseSummary.formations} formation${defenseSummary.formations===1?'':'s'} + ${defenseSummary.plays} plays`;
+      items.push(`<span class="gcTickerItem gcTickerItemClickable" data-open-section="defense"><span class="gcTickerIcon">🛡️</span>${gcEscapeHtml(lead)} — ${gcEscapeHtml(what)}</span><span class="gcTickerSep">•</span>`);
+    }
     // "basic details of next game on schedule... clickable to get to the
     // game info" -- see gcFmtGameLine (now includes arrive time/location
     // too) and gcTickerItemClickableHtml.
@@ -1790,6 +1812,8 @@ function gcSetupTicker(host, track){
     if(dragMaxDelta > 6) return;
     const el = e.target.closest && e.target.closest('[data-open-game]');
     if(el && window.openScheduleGame) window.openScheduleGame(el.dataset.openGame);
+    const sec = e.target.closest && e.target.closest('[data-open-section]');
+    if(sec && typeof setSection === 'function') setSection(sec.dataset.openSection);
   });
   // Keep the ticker's DATA catching up on its own for as long as this
   // tab/session stays open -- see the staleness explanation further above.
