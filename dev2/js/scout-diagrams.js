@@ -162,7 +162,7 @@
           return '<button type="button" class="gameplanChip' + (g.key === active ? ' active' : '') + '" data-scout-group="' + g.key + '">' +
             g.label + ' (' + inGroup(pack, g.key).length + ')</button>';
         }).join('') + '</div>' +
-        '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Arrow = where he goes. Bar = who he blocks.</div>' +
+        (opts.hint === false ? '' : '<div class="hint" style="text-align:center;margin-bottom:8px;">Drawn from our side of the ball: they are coming down the screen at you. Arrow = where he goes. Bar = who he blocks.</div>') +
         (active ? inGroup(pack, active).map(cardHtml).join('') : '');
       el.querySelectorAll('[data-scout-group]').forEach(function (b) {
         b.addEventListener('click', function () { active = b.dataset.scoutGroup; draw(); });
