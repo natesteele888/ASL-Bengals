@@ -85,6 +85,16 @@ html[data-theme="light"] .nav-cta{color:#fff;}
 footer{padding:30px 0;color:var(--text-dim);font-size:13px;border-top:1px solid var(--line);}
 footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
 
+/* Between the mobile hamburger breakpoint and a fully comfortable desktop
+   width, the signed-in nav (brand + every link + Admin + email + Sign Out)
+   doesn't fit on one row -- the email address overflows it off-screen
+   entirely around ~1024px, worst for an admin since Admin+email+Sign Out
+   is the widest the auth slot ever gets. The email is the one piece
+   nobody actually needs restated back to them, so it's what gives first. */
+@media (max-width:1180px){
+  .nav-user-email{display:none;}
+}
+
 @media (max-width:860px){
   .card-grid{grid-template-columns:repeat(2,1fr);}
 
