@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// Gridiron Hub — Firestore security rules for the my-gridiron-hub project.
+//
+// Nothing like this existed before: no firestore.rules file has ever been
+// committed or deployed here, which means Firestore has been running on
+// whatever default the console picked when the project was created —
+// either locked to deny-all (so logins silently fail to create a user
+// doc) or wide open to any signed-in — or even anonymous — visitor for
+// 30 days. Deploy this file (see ADMIN_SETUP.md) to put real rules in
+// place instead of guessing which default you're on.
+//
+// The model: every signed-in user gets exactly one users/{uid} doc,
+// created on first login (see login.html's ensureUserDoc). A user can
+// always read and update their own doc, but can never set their own
+// role, orgId or teamIds — those three fields only move via an admin,
+// which is what makes "role-based visibility" actually mean something
+// instead of being an honor system. There is no admin yet on a fresh
+// deploy; ADMIN_SETUP.md covers the one manual console step that bootstraps
+// the first one.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isAdmin() { return isSignedIn() && myProfile().role == 'admin'; }
+
+    match /users/{uid} {
+      // Read your own profile, or any profile if you're an admin (the
+      // admin page needs to list everyone to assign roles/teams).
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // First login ever: you may create your own doc, but only with the
+      // untouched defaults — role/orgId unset, no teams. This is the one
+      // write login.html's ensureUserDoc performs.
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.role == null
+        && request.resource.data.orgId == null
+        && request.resource.data.teamIds is list
+        && request.resource.data.teamIds.size() == 0;
+
+      // After that: you may update your own doc as long as role, orgId
+      // and teamIds come out unchanged (so a display-name edit is fine,
+      // self-promoting to admin is not). An admin may update anyone's
+      // doc, including those three fields — that's the actual assignment
+      // flow the admin page uses.
+      allow update: if isSignedIn() && (
+        (request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.orgId == resource.data.orgId
+          && request.resource.data.teamIds == resource.data.teamIds)
+        || isAdmin()
+      );
+
+      allow delete: if false;
+    }
+
+    // Nothing else exists yet (RSVPs, the message board). Default-deny
+    // keeps a future collection safe-by-default until it gets its own
+    // rule written on purpose.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

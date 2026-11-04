@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron Hub — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  .gate{max-width:420px;margin:80px auto;text-align:center;padding:0 24px;}
+  .gate p{color:var(--text-dim);font-size:14.5px;line-height:1.6;}
+
+  .user-table{display:flex;flex-direction:column;gap:10px;}
+  .user-row{background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center;}
+  .user-row.pending{border-left:3px solid var(--orange);}
+  .user-who{min-width:0;}
+  .user-who .email{font-weight:800;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .user-who .meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
+  .user-who .meta .pending-tag{color:var(--orange);font-weight:800;}
+  select.role-select{background:#0a0a0b;color:var(--text);border:1.5px solid var(--line);border-radius:5px;padding:9px 10px;font-size:13.5px;font-family:'Karla',sans-serif;}
+  html[data-theme="light"] select.role-select{background:#fff;}
+  .team-pick{display:flex;flex-wrap:wrap;gap:5px;max-width:260px;}
+  .team-chip{font-size:11.5px;font-weight:800;padding:5px 10px;border-radius:999px;border:1.5px solid var(--line);color:var(--text-dim);cursor:pointer;user-select:none;}
+  .team-chip.on{background:var(--orange);border-color:var(--orange);color:#0e0e10;}
+  .save-btn{background:none;border:1.5px solid var(--line);color:var(--text-dim);padding:9px 16px;border-radius:5px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;}
+  .save-btn:hover{border-color:var(--orange);color:var(--text);}
+  .save-btn.dirty{border-color:var(--orange);color:var(--orange);}
+  .save-btn.saved{border-color:var(--green);color:var(--green);}
+  .empty-state{color:var(--text-dim);font-size:14px;padding:50px 0;text-align:center;}
+
+  @media (max-width:860px){
+    .user-row{grid-template-columns:1fr;}
+    .team-pick{max-width:none;}
+  }
+</style>
+</head>
+<body>
+
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='';</script>
+<script src="assets/js/nav.js"></script>
+
+  <div id="gate" class="gate" style="display:none;">
+    <h1>Admin</h1>
+    <p id="gateMsg">Checking access…</p>
+  </div>
+
+  <div id="app" class="wrap" style="display:none;">
+    <div class="page-head">
+      <div class="page-eyebrow">ADMIN</div>
+      <h1>People</h1>
+      <p>Assign a role and teams to everyone who's signed up. Nobody sees anything role-gated until they're set here — that's what the new Firestore rules actually enforce now, not just a UI convention.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+        <h2 style="font-size:18px;" id="pendingHead">Pending</h2>
+      </div>
+      <div class="user-table" id="pendingList"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+        <h2 style="font-size:18px;" id="assignedHead">Everyone else</h2>
+      </div>
+      <div class="user-table" id="assignedList"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
+
+<script type="module">
+  import { auth, db } from './src/firebase-config.js';
+  import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+  import { collection, getDocs, doc, updateDoc, orderBy, query } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+  // Single org for now — Gridiron Hub's data model leaves room for more,
+  // but there's only one organization running on this deployment, so the
+  // admin page sets it automatically instead of making someone pick from
+  // a list of one.
+  const ORG_ID = 'asl-bengals';
+  const ROLES = [
+    { v: '', label: 'Unassigned' },
+    { v: 'parent', label: 'Parent' },
+    { v: 'coach', label: 'Coach' },
+    { v: 'board', label: 'Board' },
+    { v: 'admin', label: 'Admin' },
+  ];
+  const TEAMS = ['8u', '9u', '10u', '11u', '12u', '13u', 'flex', 'cheer'];
+  const TEAM_LABEL = { '8u': '8U', '9u': '9U', '10u': '10U', '11u': '11U', '12u': '12U', '13u': '13U', flex: 'Flex', cheer: 'Cheer' };
+
+  const gateEl = document.getElementById('gate');
+  const gateMsgEl = document.getElementById('gateMsg');
+  const appEl = document.getElementById('app');
+  const pendingList = document.getElementById('pendingList');
+  const assignedList = document.getElementById('assignedList');
+  const pendingHead = document.getElementById('pendingHead');
+  const assignedHead = document.getElementById('assignedHead');
+
+  function showGate(msg) {
+    gateEl.style.display = 'block';
+    appEl.style.display = 'none';
+    gateMsgEl.textContent = msg;
+  }
+
+  function rowHtml(uid, u) {
+    const chips = TEAMS.map(t => {
+      const on = (u.teamIds || []).includes(t);
+      return `<span class="team-chip ${on ? 'on' : ''}" data-team="${t}">${TEAM_LABEL[t]}</span>`;
+    }).join('');
+    const options = ROLES.map(r => `<option value="${r.v}" ${((u.role || '') === r.v) ? 'selected' : ''}>${r.label}</option>`).join('');
+    return `
+      <div class="user-row ${u.role ? '' : 'pending'}" data-uid="${uid}">
+        <div class="user-who">
+          <div class="email">${u.displayName ? escapeHtml(u.displayName) + ' — ' : ''}${escapeHtml(u.email || uid)}</div>
+          <div class="meta">${u.role ? 'Signed up' : '<span class="pending-tag">Waiting on a role</span>'}</div>
+        </div>
+        <select class="role-select" data-field="role">${options}</select>
+        <div class="team-pick" data-field="teamIds">${chips}</div>
+        <button class="save-btn" type="button">Save</button>
+      </div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function wireRow(rowEl, uid) {
+    const saveBtn = rowEl.querySelector('.save-btn');
+    const roleSelect = rowEl.querySelector('.role-select');
+    const teamPick = rowEl.querySelector('.team-pick');
+
+    function markDirty() {
+      saveBtn.classList.remove('saved');
+      saveBtn.classList.add('dirty');
+      saveBtn.textContent = 'Save';
+    }
+    roleSelect.addEventListener('change', markDirty);
+    teamPick.addEventListener('click', (e) => {
+      const chip = e.target.closest('.team-chip');
+      if (!chip) return;
+      chip.classList.toggle('on');
+      markDirty();
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const role = roleSelect.value || null;
+      const teamIds = Array.from(teamPick.querySelectorAll('.team-chip.on')).map(c => c.dataset.team);
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          role,
+          orgId: role ? ORG_ID : null,
+          teamIds,
+        });
+        rowEl.classList.toggle('pending', !role);
+        saveBtn.classList.remove('dirty');
+        saveBtn.classList.add('saved');
+        saveBtn.textContent = 'Saved';
+      } catch (err) {
+        saveBtn.classList.remove('dirty', 'saved');
+        saveBtn.textContent = 'Failed — retry';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  async function loadUsers() {
+    const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
+    const pending = [];
+    const assigned = [];
+    snap.forEach(d => (d.data().role ? assigned : pending).push([d.id, d.data()]));
+
+    pendingHead.textContent = `Pending (${pending.length})`;
+    assignedHead.textContent = `Everyone else (${assigned.length})`;
+
+    pendingList.innerHTML = pending.length
+      ? pending.map(([uid, u]) => rowHtml(uid, u)).join('')
+      : `<div class="empty-state">Nobody's waiting on a role right now.</div>`;
+    assignedList.innerHTML = assigned.length
+      ? assigned.map(([uid, u]) => rowHtml(uid, u)).join('')
+      : `<div class="empty-state">No one's been assigned yet.</div>`;
+
+    document.querySelectorAll('.user-row').forEach(rowEl => wireRow(rowEl, rowEl.dataset.uid));
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { showGate('Sign in first.'); setTimeout(() => window.location.href = 'login.html', 1200); return; }
+
+    const { doc: fsDoc, getDoc } = await import("https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js");
+    const snap = await getDoc(fsDoc(db, 'users', user.uid));
+    const role = snap.exists() ? snap.data().role : null;
+
+    if (role !== 'admin') {
+      showGate("This page is for admins only. If that should be you, the person who already has admin needs to set your role to Admin here first.");
+      return;
+    }
+
+    gateEl.style.display = 'none';
+    appEl.style.display = 'block';
+    try {
+      await loadUsers();
+    } catch (err) {
+      appEl.innerHTML = `<div class="empty-state">Could not load the user list (${err.code || err.message}).</div>`;
+    }
+  });
+</script>
+
+<script src="assets/js/theme.js"></script>
+</body>
+</html>

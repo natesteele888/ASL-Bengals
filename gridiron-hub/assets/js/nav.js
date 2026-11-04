@@ -100,13 +100,40 @@ navLinks?.querySelectorAll('a').forEach(a => {
 
 // Auth state is real here (imports the actual Firebase SDK) -- shows
 // whichever account is actually signed in, or a real Sign In link if not.
-import(`${P}src/firebase-config.js`).then(({ auth }) => {
-  import('https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js').then(({ onAuthStateChanged, signOut }) => {
-    onAuthStateChanged(auth, (user) => {
+// Signed-in users also get a quiet extra Firestore read of their own
+// profile, purely to decide whether to show the Admin link -- the real
+// gate is firestore.rules, this is just so an admin doesn't have to know
+// the URL by heart.
+//
+// This used to be `${P}src/firebase-config.js` -- a bare specifier
+// (nothing before "src"), which is invalid per the ES module spec outside
+// an import map and silently throws instead of resolving. That broke
+// nav.js's auth state entirely on every page (console error, caught
+// nowhere); login.html and dashboard.html had the same bug in their own
+// separate imports, fixed alongside this one, which meant sign-in itself
+// never actually worked. Also note this is a *dynamic* import inside an
+// external file, so -- unlike an inline <script type="module"> in the
+// page itself -- it resolves relative to nav.js's own location
+// (assets/js/), not the including page, regardless of page depth. Hence
+// a fixed "../../" here rather than reusing P, which exists only for the
+// page-relative href attributes in the nav markup above.
+import('../../src/firebase-config.js').then(({ auth, db }) => {
+  Promise.all([
+    import('https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js'),
+    import('https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js'),
+  ]).then(([{ onAuthStateChanged, signOut }, { doc, getDoc }]) => {
+    onAuthStateChanged(auth, async (user) => {
       const slot = document.getElementById('navAuthSlot');
       if (!slot) return;
       if (user) {
-        slot.innerHTML = `<span class="nav-user-email">${user.email}</span><button class="nav-signout-btn">Sign Out</button>`;
+        let isAdmin = false;
+        try {
+          const snap = await getDoc(doc(db, 'users', user.uid));
+          isAdmin = snap.exists() && snap.data().role === 'admin';
+        } catch (e) { /* rules not deployed yet, or offline -- just skip the link */ }
+        slot.innerHTML =
+          (isAdmin ? `<a href="${P}admin.html" class="nav-cta" style="background:none;border:1px solid var(--line);color:var(--text-dim);">Admin</a>` : '') +
+          `<span class="nav-user-email">${user.email}</span><button class="nav-signout-btn">Sign Out</button>`;
         slot.querySelector('.nav-signout-btn').addEventListener('click', () => signOut(auth));
       } else {
         slot.innerHTML = `<a href="${P}login.html" class="nav-cta">Sign In</a>`;
