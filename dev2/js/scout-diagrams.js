@@ -120,12 +120,16 @@
     { key: 'pass', label: 'Passes' },
   ];
 
+  // Nathan (2026-11-04): "remove all the fine print text in the bottom
+  // corners of the play diagrams." The pack's notes[] (Cover 2, stars,
+  // circled numbers -- meanings still unknown) are kept in the data but no
+  // longer drawn under the card; the labels drawn inside the diagram
+  // (Fake, Roll, Pitch...) are part of the picture and stay.
   function cardHtml(d) {
-    var notes = (d.notes || []).map(esc).join(' · ');
     return '<div style="border:2px solid #ddd;border-radius:8px;overflow:hidden;background:#fff;margin-bottom:10px;">' +
       '<div style="padding:8px 10px 4px;color:#111;font-weight:800;font-size:15px;">' + esc(d.name) + (d.tag ? ' · ' + esc(d.tag) : '') + '</div>' +
       svg(d) +
-      (notes ? '<div style="padding:6px 10px 9px;color:#333;font-size:13px;line-height:1.4;">' + notes + '</div>' : '') +
+      '<div style="height:6px;"></div>' +
       '</div>';
   }
 
