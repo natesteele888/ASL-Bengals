@@ -27,6 +27,12 @@
   var SEEN_KEY = 'aslBengalsOppOffenseSeen';
   var TTL_MS = 3 * 60 * 1000; // same cadence as the ticker's own refresh
 
+  // The note shown under the tab's title.
+  var NOTICE = {
+    lead: 'We are changing for Defense.',
+    rest: 'More changes to come from Coach Joe at practice.',
+  };
+
   var cache = null;
   var cacheAt = 0;
   var inflight = null;
@@ -154,10 +160,16 @@
       }
       host.innerHTML =
         '<div class="lbHeroHeader"><div class="lbHeroTrophy">📋</div><h3>Opponent Offense</h3></div>' +
-        '<div class="hint" style="text-align:center;margin-bottom:6px;">Study the formations first, so you can see how they line up. Then learn the plays they run from them.</div>' +
+        // Nathan (2026-11-04): "remove all the wording under the title and add
+        // in that we are changing for Defense, more changes to come from coach
+        // jello practice." Edit NOTICE below when the message changes.
+        '<div style="text-align:center;margin:10px 0 4px;padding:10px 12px;background:var(--card);color:var(--ink);' +
+          'border:2px solid var(--bengal-orange);border-radius:10px;font-size:14px;line-height:1.35;">' +
+          '<b>' + NOTICE.lead + '</b> ' + NOTICE.rest + '</div>' +
         '<div id="oppOffenseBrowser"></div>';
       window.ScoutDiagrams.browse(host.querySelector('#oppOffenseBrowser'), packs, {
         title: function (p) { return '📋 ' + p.scoutTeam + ' Offense'; },
+        hint: false,
       });
       // They are looking at it now -- clear the call-outs on this device.
       markSeen(summarize(packs).signature);
@@ -165,4 +177,14 @@
       hideBanner();
     });
   };
+
+  // Catch-up for a remembered session. auth.js runs player-identity.js's
+  // gate() the moment window.PlayerIdentity exists, while the ~60 scripts are
+  // still loading one after another -- so on a slow load the gate's call to
+  // refreshOppOffenseCallout() can fire before this file has even loaded and
+  // be skipped, leaving no NEW pill or card. Run it once more now.
+  try {
+    var sess = window.PlayerIdentity && window.PlayerIdentity.getSession && window.PlayerIdentity.getSession();
+    if (sess && sess.name) window.refreshOppOffenseCallout();
+  } catch (e) { /* the gate's own call covers a fresh sign-in */ }
 })();
