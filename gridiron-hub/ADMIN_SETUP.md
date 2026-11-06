@@ -36,6 +36,12 @@ picker step. If the CLI asks anyway, choose `my-gridiron-hub`.
 > my-gridiron-hub → Firestore Database → Create database** first, then
 > re-run the deploy.
 
+> **Nov 2026 change — redeploy needed.** Team rosters, practice RSVPs and
+> team messages now need sign-in: only that team's members, its coach,
+> board and admin can read them. Team pages and practice times stay public.
+> This only takes effect once you run `firebase deploy --only firestore:rules`
+> again. Until then the live site still lets anyone read rosters.
+
 ## 2. Make yourself the first admin
 
 Nobody is an admin yet — the rules deliberately don't allow anyone to grant
