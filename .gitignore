@@ -8,3 +8,6 @@ testfile_delete_me.txt
 # longer need to be (and shouldn't be) published to the live site.
 dev2/data/plays.json
 dev2/data/cards.json
+
+# Spreadsheets can carry player names; keep them out of this public repo.
+*.xlsx
