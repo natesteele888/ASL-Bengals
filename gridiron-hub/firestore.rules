@@ -71,17 +71,19 @@ service cloud.firestore {
     // Per-team data: team.html already has this fully built (roster, a
     // banner photo, announcements, a practice schedule with RSVPs) and has
     // been silently failing every read and write since it was written,
-    // for lack of any rule at all. Reads are public on purpose -- a
-    // practice time or "practice cancelled" message is exactly the kind
-    // of thing a parent needs to see without first creating an account.
-    // Writes are the real boundary.
+    // for lack of any rule at all. The team doc and its practice events
+    // are public on purpose -- a practice time or "practice cancelled"
+    // notice is exactly the kind of thing a parent needs to see without
+    // first creating an account. The roster (kids' names and numbers),
+    // RSVPs and the team message board are NOT: only the team's own
+    // members and the people who run it can read those.
     match /teams/{teamId} {
       allow read: if true;
       // The banner-photo update (team.html's only direct write here).
       allow write: if canManageTeam(teamId);
 
       match /roster/{playerId} {
-        allow read: if true;
+        allow read: if isTeamMember(teamId) || canManageTeam(teamId);
         allow write: if canManageTeam(teamId);
       }
 
@@ -94,7 +96,7 @@ service cloud.firestore {
         // so there's no separate uid field to check -- just that it's you,
         // and that you actually belong to this team (or run it).
         match /rsvps/{uid} {
-          allow read: if true;
+          allow read: if isTeamMember(teamId) || canManageTeam(teamId);
           allow write: if isSignedIn() && request.auth.uid == uid
             && (isTeamMember(teamId) || canManageTeam(teamId));
         }
@@ -106,7 +108,7 @@ service cloud.firestore {
       // the message can add themselves to it, and nothing else about an
       // existing message is editable once posted.
       match /messages/{msgId} {
-        allow read: if true;
+        allow read: if isTeamMember(teamId) || canManageTeam(teamId);
         allow create: if isSignedIn()
           && request.resource.data.postedBy == request.auth.uid
           && request.resource.data.text is string

@@ -106,6 +106,7 @@
 
       <div id="rosterGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
       <div id="rosterEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No players added yet.</div>
+      <div id="rosterLocked" class="team-locked" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;"><a href="login.html">Sign in</a> with your team account to see the roster.</div>
     </div>
 
     <div class="section">
@@ -123,6 +124,7 @@
 
       <div id="messagesList"></div>
       <div id="messagesEmpty" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;">No messages posted yet.</div>
+      <div id="messagesLocked" class="team-locked" style="color:var(--text-dim);font-size:14px;padding:20px 0;display:none;"><a href="login.html">Sign in</a> with your team account to see team messages.</div>
     </div>
 
     <div class="section" style="border-bottom:none;">
@@ -247,6 +249,7 @@
     document.getElementById('pasteRosterForm').style.display = canEditThisTeam ? 'block' : 'none';
     document.getElementById('postMessageForm').style.display = canPostMessage ? 'block' : 'none';
     document.getElementById('addEventForm').style.display = canEditThisTeam ? 'flex' : 'none';
+    setPrivateFeeds(canPostMessage);
     renderEvents(); // re-render so each event's cancel button / RSVP-as-you reflects the now-known permission and identity
     renderMessages(); // re-render so read-receipt marking has an identity to mark with
   });
@@ -262,7 +265,31 @@
   const rosterGrid = document.getElementById('rosterGrid');
   const rosterEmpty = document.getElementById('rosterEmpty');
   const rosterQuery = query(collection(db, 'teams', teamId, 'roster'), orderBy('number', 'asc'));
-  onSnapshot(rosterQuery, (snap) => {
+  const rosterLocked = document.getElementById('rosterLocked');
+  const messagesLocked = document.getElementById('messagesLocked');
+  rosterLocked.style.display = 'block';
+  messagesLocked.style.display = 'block';
+
+  // Roster, RSVPs and messages are readable only by this team's members and
+  // the people who run it (firestore.rules). So these listeners start only
+  // once sign-in shows the visitor is one of them, and a stranger sees a
+  // "sign in" note instead of an empty list.
+  let stopRoster = null, stopMessages = null;
+  function setPrivateFeeds(allowed) {
+    rosterLocked.style.display = allowed ? 'none' : 'block';
+    messagesLocked.style.display = allowed ? 'none' : 'block';
+    if (!allowed) {
+      if (stopRoster) { stopRoster(); stopRoster = null; }
+      if (stopMessages) { stopMessages(); stopMessages = null; }
+      rosterGrid.innerHTML = ''; rosterGrid.style.display = 'none'; rosterEmpty.style.display = 'none';
+      latestMessages = []; messagesList.innerHTML = ''; messagesList.style.display = 'none'; messagesEmpty.style.display = 'none';
+      return;
+    }
+    if (!stopRoster) stopRoster = listenRoster();
+    if (!stopMessages) stopMessages = listenMessages();
+  }
+
+  function listenRoster() { return onSnapshot(rosterQuery, (snap) => {
     if (snap.empty) {
       rosterGrid.style.display = 'none';
       rosterEmpty.style.display = 'block';
@@ -281,7 +308,7 @@
     });
   }, (err) => {
     console.warn('Roster fetch error (likely Firestore rules for teams/{teamId}/roster not set up yet):', err);
-  });
+  }); }
 
   // General bulk-paste importer -- works for any team, not a one-off for
   // 11U. Accepts tab-separated (pasting straight out of Excel/Sheets
@@ -381,6 +408,7 @@
   const messagesEmpty = document.getElementById('messagesEmpty');
 
   function renderMessages() {
+    if (!stopMessages) return; // not a team member: the "sign in" note is showing instead
     if (!latestMessages.length) {
       messagesList.style.display = 'none';
       messagesEmpty.style.display = 'block';
@@ -405,10 +433,10 @@
     });
   }
 
-  onSnapshot(query(collection(db, 'teams', teamId, 'messages'), orderBy('postedAt', 'desc')), (snap) => {
+  function listenMessages() { return onSnapshot(query(collection(db, 'teams', teamId, 'messages'), orderBy('postedAt', 'desc')), (snap) => {
     latestMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMessages();
-  }, (err) => console.warn('Messages fetch error (check Firestore rules for teams/{teamId}/messages):', err));
+  }, (err) => console.warn('Messages fetch error (check Firestore rules for teams/{teamId}/messages):', err)); }
 
   document.getElementById('postMessageBtn').addEventListener('click', async () => {
     const input = document.getElementById('messageInput');
@@ -488,8 +516,11 @@
     const notGoingBtn = rsvpRow.querySelector('[data-status="not-going"]');
 
     // Live count + this-user's-current-response, both from the same
-    // rsvps subcollection listener.
-    onSnapshot(collection(db, 'teams', teamId, 'events', eventId, 'rsvps'), (rsvpSnap) => {
+    // rsvps subcollection listener. Only team members (and the people who
+    // run the team) may read RSVPs, so everyone else sees a sign-in note.
+    if (!canPostMessage) {
+      countEl.textContent = 'Sign in with your team account to RSVP';
+    } else onSnapshot(collection(db, 'teams', teamId, 'events', eventId, 'rsvps'), (rsvpSnap) => {
       let going = 0, notGoing = 0, myStatus = null;
       rsvpSnap.forEach((r) => {
         const d = r.data();
@@ -504,7 +535,7 @@
 
     [goingBtn, notGoingBtn].forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (!currentUser) return; // RSVP requires being signed in -- buttons are visible either way since read is public, but write needs an identity to attach the response to
+        if (!currentUser) return; // RSVP requires being signed in -- buttons are visible either way, but write needs an identity to attach the response to
         try {
           await setDoc(doc(db, 'teams', teamId, 'events', eventId, 'rsvps', currentUser.uid), {
             status: btn.dataset.status, respondedByName: currentUser.email, respondedAt: serverTimestamp()
