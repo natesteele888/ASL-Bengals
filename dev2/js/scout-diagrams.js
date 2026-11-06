@@ -125,9 +125,18 @@
   // circled numbers -- meanings still unknown) are kept in the data but no
   // longer drawn under the card; the labels drawn inside the diagram
   // (Fake, Roll, Pitch...) are part of the picture and stay.
+  // Nathan (2026-11-05): defensive call moves to a pill at the top right of
+  // the card -- orange with black text for Cover 2, black with orange text
+  // for Nightmare (Cover 3). The call itself comes from the pack's `tag`.
+  function tagPillHtml(tag) {
+    var nightmare = /nightmare/i.test(tag);
+    return '<span style="flex:none;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap;' +
+      'background:' + (nightmare ? '#111' : '#ff6a13') + ';color:' + (nightmare ? '#ff6a13' : '#111') + ';">' + esc(tag) + '</span>';
+  }
   function cardHtml(d) {
     return '<div style="border:2px solid #ddd;border-radius:8px;overflow:hidden;background:#fff;margin-bottom:10px;">' +
-      '<div style="padding:8px 10px 4px;color:#111;font-weight:800;font-size:15px;">' + esc(d.name) + (d.tag ? ' · ' + esc(d.tag) : '') + '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 4px;color:#111;font-weight:800;font-size:15px;">' +
+        '<span style="min-width:0;">' + esc(d.name) + '</span>' + (d.tag ? tagPillHtml(d.tag) : '') + '</div>' +
       svg(d) +
       '<div style="height:6px;"></div>' +
       '</div>';
