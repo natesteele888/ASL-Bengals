@@ -21,6 +21,9 @@
   'use strict';
 
   var ORANGE = '#ff7a1a', GREEN = '#1f9d3a', RED = '#d62020';
+  // Everyone without the ball (lead blockers, fakes, blocks) draws gray, so
+  // the ball carrier's colored line is the only one that stands out.
+  var GRAY = '#7a7a7a';
   var GRAD = 'linear-gradient(180deg,#fff 0%,' + ORANGE + ' 85%)';
 
   function esc(s) {
@@ -66,6 +69,13 @@
   // The arrows that could be the ball: an arrow ('a') out of a player who is
   // not on the line. Returns { lane, routes } or null when they disagree.
   function ballAnswer(d) {
+    // Nathan (2026-11-06): a coach can mark the ball carrier (`ball: true` on
+    // that route, set in the formation picker). That always wins.
+    var marked = (d.routes || []).filter(function (r) { return r.ball && r.end === 'a'; });
+    if (marked.length) {
+      var m = marked[marked.length - 1];
+      return { lane: laneOf(m.pts[m.pts.length - 1][0]), routes: [m] };
+    }
     var carriers = (d.routes || []).filter(function (r) {
       var i = startPlayer(d, r);
       return r.end === 'a' && i >= 0 && !d.players[i].line;
@@ -260,6 +270,12 @@
         return r.end === 'b' && k >= 0 && !x.run.players[k].line;
       });
     }
+    function othersOf(x) {
+      return (x.run.routes || []).filter(function (r) {
+        var k = startPlayer(x.run, r);
+        return r.end === 'a' && k >= 0 && !x.run.players[k].line && x.routes.indexOf(r) < 0;
+      });
+    }
     function draw(g, picked, reveal, only, oneRun) {
       var d = JSON.parse(JSON.stringify(g.formation)), colors = [];
       d.labels = [];
@@ -268,7 +284,9 @@
       d.routes = [].concat.apply([], shown.map(function (x) {
         var blocks = withBlocks ? blocksOf(x).map(function (r) {
           return { pts: placeOn(g, x, r), end: 'b', curve: true, ball: false };
-        }) : [];
+        }).concat(othersOf(x).map(function (r) {
+          return { pts: placeOn(g, x, r), end: 'a', curve: true, ball: false };
+        })) : [];
         return blocks.concat(x.routes.map(function (r) {
           colors.push(LANE_COLOR[x.lane]);
           return { pts: placeOn(g, x, r), end: 'a', curve: true, ball: true };
@@ -280,6 +298,7 @@
       pic = pic.replace(/(<path [^>]*stroke=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
       k = 0;
       pic = pic.replace(/(<polygon [^>]*fill=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
+      pic = pic.replace(/#123a8c/g, GRAY);
       grown[3] += 300;
       pic = pic.replace(/viewBox="[^"]*"/, 'viewBox="' + grown.join(' ') + '"');
       pic = pic.replace(/<(circle|path|polygon|text|line) /g, '<$1 pointer-events="none" ');
@@ -442,11 +461,15 @@
   function drawWith(form, routes, colors, vb, under) {
     var d = JSON.parse(JSON.stringify(form));
     d.labels = []; d.tag = null;
-    d.routes = routes.map(function (r) { return { pts: r.pts, end: 'a', curve: true, ball: true }; });
+    d.routes = routes.map(function (r) { return { pts: r.pts, end: r.end || 'a', curve: true, ball: true }; });
+    var heads = [], bars = [];
+    routes.forEach(function (r, n) { ((r.end || 'a') === 'b' ? bars : heads).push(colors[n]); });
     var pic = window.ScoutDiagramSvg(d), k = 0;
     pic = pic.replace(/(<path [^>]*stroke=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
     k = 0;
-    pic = pic.replace(/(<polygon [^>]*fill=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
+    pic = pic.replace(/(<polygon [^>]*fill=")#e0201a"/g, function (m, a) { return a + heads[k++] + '"'; });
+    k = 0;
+    pic = pic.replace(/(<line transform="[^"]*"[^>]*stroke=")#e0201a"/g, function (m, a) { return a + bars[k++] + '"'; });
     if (vb) pic = pic.replace(/viewBox="[^"]*"/, 'viewBox="' + vb.join(' ') + '"');
     pic = pic.replace(/<(circle|path|polygon|text|line) /g, '<$1 pointer-events="none" ');
     return under ? pic.replace(/(<svg [^>]*>)/, '$1' + under) : pic;
@@ -458,7 +481,7 @@
     field.innerHTML = '<div style="position:relative;">' + base + frames.map(function (svgStr, n) {
       var arrows = (svgStr.match(/<path [^>]*\/>/g) || []).join('') +
         (svgStr.match(/<circle [^>]*\/>|<text [^>]*font-size="40" font-weight="900"[^>]*>C<\/text>/g) || []).join('') +
-        (svgStr.match(/<polygon [^>]*\/>/g) || []).join('');
+        (svgStr.match(/<polygon [^>]*\/>|<line [^>]*transform="[^"]*"[^>]*\/>/g) || []).join('');
       return '<svg data-frame viewBox="' + vb.join(' ') + '" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:' + (n ? 0 : 1) + ';transition:opacity .45s ease;">' + arrows + '</svg>';
     }).join('') +
       '<div data-frame-label style="position:absolute;top:6px;left:8px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.9);font-size:12px;font-weight:900;color:' + color + ';"></div></div>';
@@ -513,10 +536,21 @@
   function runPassQuiz(el, pack, back) {
     var rounds = shuffle(playsByFormation(pack)), i = 0, score = 0, TITLE = 'Run or Pass?', stop = null;
     function halt() { if (stop) { stop(); stop = null; } }
-    function routesOf(g, x, kind) {
-      return (kind === 'run' ? runRoutes(x.play) : passRoutes(x.play)).map(function (r) {
-        return { pts: slideOnto(g.formation, x.mirror, x.play, r), color: kind === 'run' ? RUN_C : PASS_C };
+    // detail = one play on screen: add everyone else's arrows and blocks in
+    // gray. With several plays at once only the ball's path is drawn.
+    function routesOf(g, x, kind, detail) {
+      var d = x.play, main = kind === 'run' ? runRoutes(d) : passRoutes(d), known = kind === 'pass' || !!ballAnswer(d);
+      var put = function (r, color) { return { pts: slideOnto(g.formation, x.mirror, d, r), end: r.end, color: color }; };
+      var out = main.map(function (r) { return put(r, known ? (kind === 'run' ? RUN_C : PASS_C) : GRAY); });
+      if (!detail) return out;
+      var rest = (d.routes || []).filter(function (r) {
+        var k = startPlayer(d, r);
+        return main.indexOf(r) < 0 && k >= 0 && !d.players[k].line && (r.end === 'a' || r.end === 'b');
       });
+      return rest.map(function (r) { return put(r, GRAY); }).concat(out);
+    }
+    function labelOf(x, kind) {
+      return x.play.name + (kind === 'run' && !ballAnswer(x.play) ? ' · ball carrier not marked' : '');
     }
     function ask() {
       halt();
@@ -547,10 +581,10 @@
             var list = only === 'run' ? g.runs : only === 'pass' ? g.passes : null;
             if (list && list.length > 1) {
               stop = flashPlays(field, drawWith(g.formation, [], [], vb),
-                list.map(function (x) { var rs = routesOf(g, x, only); return drawWith(g.formation, rs, rs.map(function (r) { return r.color; }), vb); }),
-                list.map(function (x, n) { return x.play.name + ' · ' + (n + 1) + ' of ' + list.length; }), only === 'run' ? RUN_C : PASS_C);
+                list.map(function (x) { var rs = routesOf(g, x, only, true); return drawWith(g.formation, rs, rs.map(function (r) { return r.color; }), vb); }),
+                list.map(function (x, n) { return labelOf(x, only) + ' · ' + (n + 1) + ' of ' + list.length; }), only === 'run' ? RUN_C : PASS_C);
             } else {
-              var rs = list ? routesOf(g, list[0], only) : all;
+              var rs = list ? routesOf(g, list[0], only, true) : all;
               field.innerHTML = drawWith(g.formation, rs, rs.map(function (r) { return r.color; }), vb);
             }
             var chips = [];
