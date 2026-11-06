@@ -166,7 +166,15 @@
         '<div style="text-align:center;margin:10px 0 4px;padding:10px 12px;background:var(--card);color:var(--ink);' +
           'border:2px solid var(--bengal-orange);border-radius:10px;font-size:14px;line-height:1.35;">' +
           '<b>' + NOTICE.lead + '</b> ' + NOTICE.rest + '</div>' +
+        // Nathan (2026-11-06): Coverage Call + Where's the Ball? quizzes
+        // (js/scout-quiz.js), one block per team pack, above the diagrams.
+        packs.map(function (p, n) { return '<div class="oppOffenseQuiz" data-pack="' + n + '" style="margin:10px 0 14px;"></div>'; }).join('') +
         '<div id="oppOffenseBrowser"></div>';
+      if (window.ScoutQuiz) {
+        host.querySelectorAll('.oppOffenseQuiz').forEach(function (el) {
+          window.ScoutQuiz.mount(el, packs[+el.dataset.pack]);
+        });
+      }
       window.ScoutDiagrams.browse(host.querySelector('#oppOffenseBrowser'), packs, {
         title: function (p) { return '📋 ' + p.scoutTeam + ' Offense'; },
         hint: false,
