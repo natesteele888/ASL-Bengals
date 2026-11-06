@@ -125,13 +125,16 @@
   // circled numbers -- meanings still unknown) are kept in the data but no
   // longer drawn under the card; the labels drawn inside the diagram
   // (Fake, Roll, Pitch...) are part of the picture and stay.
-  // Nathan (2026-11-05): defensive call moves to a pill at the top right of
-  // the card -- orange with black text for Cover 2, black with orange text
-  // for Nightmare (Cover 3). The call itself comes from the pack's `tag`.
+  // Nathan (2026-11-05): defensive call sits in a pill at the top right of the
+  // card. Cover 2: white-to-orange pill, black text. Nightmare (Cover 3): black
+  // pill, white-to-orange letters. The call itself comes from the pack's `tag`.
   function tagPillHtml(tag) {
-    var nightmare = /nightmare/i.test(tag);
-    return '<span style="flex:none;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap;' +
-      'background:' + (nightmare ? '#111' : '#ff6a13') + ';color:' + (nightmare ? '#ff6a13' : '#111') + ';">' + esc(tag) + '</span>';
+    var GRAD = 'linear-gradient(180deg,#fff 0%,#ff7a1a 85%)';
+    var base = 'flex:none;padding:3px 9px;border-radius:999px;font-size:13px;line-height:1.1;font-weight:900;letter-spacing:.3px;white-space:nowrap;';
+    if (/nightmare/i.test(tag)) {
+      return '<span style="' + base + 'background:#000;"><span style="background:' + GRAD + ';-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;">' + esc(tag) + '</span></span>';
+    }
+    return '<span style="' + base + 'background:' + GRAD + ';color:#000;box-shadow:inset 0 0 0 1px #ff7a1a;">' + esc(tag) + '</span>';
   }
   function cardHtml(d) {
     return '<div style="border:2px solid #ddd;border-radius:8px;overflow:hidden;background:#fff;margin-bottom:10px;">' +
