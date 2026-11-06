@@ -168,6 +168,31 @@
     }
     return (nn(a, b, m, 1) + nn(b, a, 1, m)) / (a.length + b.length);
   }
+  // Nathan (2026-11-06): "the lines should be nice and smooth and
+  // consistent." The run sheets are hand-traced, so each path is redrawn
+  // as one clean stroke: a straight line when it is close to straight,
+  // otherwise a single smooth bend through its midpoint.
+  function smoothPts(p) {
+    if (p.length < 3) return p;
+    var segs = [0], total = 0;
+    for (var j = 1; j < p.length; j++) { total += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); segs.push(total); }
+    function at(f) {
+      var want = total * f;
+      for (var j = 1; j < p.length; j++) {
+        if (segs[j] >= want) {
+          var t = (want - segs[j - 1]) / ((segs[j] - segs[j - 1]) || 1);
+          return [p[j - 1][0] + (p[j][0] - p[j - 1][0]) * t, p[j - 1][1] + (p[j][1] - p[j - 1][1]) * t];
+        }
+      }
+      return p[p.length - 1];
+    }
+    var a = p[0], e = p[p.length - 1], m = at(0.5);
+    var chord = Math.hypot(e[0] - a[0], e[1] - a[1]) || 1;
+    var off = Math.abs((e[0] - a[0]) * (a[1] - m[1]) - (a[0] - m[0]) * (e[1] - a[1])) / chord;
+    if (off < chord * 0.08) return [a, e];
+    return [a, at(0.25), m, at(0.75), e];
+  }
+
   function runsByFormation(pack) {
     var forms = (pack.diagrams || []).filter(function (d) { return d.cat === 'formation'; });
     var out = forms.map(function (f) { return { formation: f, runs: [] }; });
@@ -208,30 +233,6 @@
     // lane gets its own color -- the arrows, the lane's tint and its count
     // all match, with a color key under the field.
     var LANE_COLOR = { L2: '#1f5fd6', L1: '#7a3fd1', M: '#0e9a8a', R1: '#d6359b', R2: '#e07b00' };
-    // Nathan (2026-11-06): "the lines should be nice and smooth and
-    // consistent." The run sheets are hand-traced, so each path is redrawn
-    // as one clean stroke: a straight line when it is close to straight,
-    // otherwise a single smooth bend through its midpoint.
-    function smoothPts(p) {
-      if (p.length < 3) return p;
-      var segs = [0], total = 0;
-      for (var j = 1; j < p.length; j++) { total += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); segs.push(total); }
-      function at(f) {
-        var want = total * f;
-        for (var j = 1; j < p.length; j++) {
-          if (segs[j] >= want) {
-            var t = (want - segs[j - 1]) / ((segs[j] - segs[j - 1]) || 1);
-            return [p[j - 1][0] + (p[j][0] - p[j - 1][0]) * t, p[j - 1][1] + (p[j][1] - p[j - 1][1]) * t];
-          }
-        }
-        return p[p.length - 1];
-      }
-      var a = p[0], e = p[p.length - 1], m = at(0.5);
-      var chord = Math.hypot(e[0] - a[0], e[1] - a[1]) || 1;
-      var off = Math.abs((e[0] - a[0]) * (a[1] - m[1]) - (a[0] - m[0]) * (e[1] - a[1])) / chord;
-      if (off < chord * 0.08) return [a, e];
-      return [a, at(0.25), m, at(0.75), e];
-    }
     // The run sheet's backs don't stand exactly where the formation sheet's
     // do, so a path is slid over to start on the formation's nearest back or
     // receiver (same shape, same direction), then smoothed.
@@ -393,23 +394,291 @@
     ask();
   }
 
+  // ---- Shared by the two pass quizzes ----
+  // Which formation drawing a play comes from: the closest one, mirrored if
+  // that fits better. A play can name it with `formation` / `mirror`.
+  function formationOf(forms, d) {
+    var best = null;
+    if (d.formation) {
+      forms.forEach(function (f) { if (f.name === d.formation) best = { f: f, m: d.mirror ? -1 : 1 }; });
+      if (best) return best;
+    }
+    forms.forEach(function (f) {
+      [1, -1].forEach(function (m) {
+        var c = matchCost(d.players || [], f.players || [], m);
+        if (!best || c < best.c) best = { f: f, m: m, c: c };
+      });
+    });
+    return best;
+  }
+  // Slide a play's route onto the formation drawing (mirrored if needed): it
+  // starts on the formation's nearest player of the same kind (on the line or
+  // off it), keeps its shape, and is smoothed.
+  function slideOnto(form, mirror, d, r) {
+    var pts = r.pts.map(function (q) { return [mirror ? -q[0] : q[0], q[1]]; });
+    var k = startPlayer(d, r), onLine = k >= 0 && !!d.players[k].line, s0 = pts[0], best = null, bd = Infinity;
+    (form.players || []).forEach(function (pl) {
+      if (!!pl.line !== onLine) return;
+      var dd = Math.hypot(pl.x - s0[0], pl.y - s0[1]);
+      if (dd < bd) { bd = dd; best = pl; }
+    });
+    if (best) pts = pts.map(function (q) { return [q[0] + best.x - s0[0], q[1] + best.y - s0[1]]; });
+    return smoothPts(pts);
+  }
+  // Arrows a receiver (or back) runs past the line on a pass play.
+  function passRoutes(d) {
+    return (d.routes || []).filter(function (r) { return r.end === 'a' && r.pts[r.pts.length - 1][1] > 0; });
+  }
+  // The arrows that show where a run goes: the carrier's when the sheet makes
+  // that clear, otherwise every backfield arrow.
+  function runRoutes(d) {
+    var a = ballAnswer(d);
+    if (a) return a.routes;
+    return (d.routes || []).filter(function (r) { var k = startPlayer(d, r); return r.end === 'a' && k >= 0 && !d.players[k].line; });
+  }
+  // Draw a formation with some routes, each in its own color, at a fixed
+  // viewBox, with an optional layer under the players. Players stay crisp on
+  // top and ignore taps, so a layer underneath can take them.
+  function drawWith(form, routes, colors, vb, under) {
+    var d = JSON.parse(JSON.stringify(form));
+    d.labels = []; d.tag = null;
+    d.routes = routes.map(function (r) { return { pts: r.pts, end: 'a', curve: true, ball: true }; });
+    var pic = window.ScoutDiagramSvg(d), k = 0;
+    pic = pic.replace(/(<path [^>]*stroke=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
+    k = 0;
+    pic = pic.replace(/(<polygon [^>]*fill=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
+    if (vb) pic = pic.replace(/viewBox="[^"]*"/, 'viewBox="' + vb.join(' ') + '"');
+    pic = pic.replace(/<(circle|path|polygon|text|line) /g, '<$1 pointer-events="none" ');
+    return under ? pic.replace(/(<svg [^>]*>)/, '$1' + under) : pic;
+  }
+  // Flash between several plays: the base (players) stays, each play's
+  // arrows fade in for 2 seconds, then the next. Returns a stop function.
+  function flashPlays(field, base, frames, labels, color) {
+    var vb = viewBoxOf(base);
+    field.innerHTML = '<div style="position:relative;">' + base + frames.map(function (svgStr, n) {
+      var arrows = (svgStr.match(/<path [^>]*\/>/g) || []).join('') +
+        (svgStr.match(/<circle [^>]*\/>|<text [^>]*font-size="40" font-weight="900"[^>]*>C<\/text>/g) || []).join('') +
+        (svgStr.match(/<polygon [^>]*\/>/g) || []).join('');
+      return '<svg data-frame viewBox="' + vb.join(' ') + '" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:' + (n ? 0 : 1) + ';transition:opacity .45s ease;">' + arrows + '</svg>';
+    }).join('') +
+      '<div data-frame-label style="position:absolute;top:6px;left:8px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.9);font-size:12px;font-weight:900;color:' + color + ';"></div></div>';
+    var els = field.querySelectorAll('[data-frame]'), label = field.querySelector('[data-frame-label]'), at = 0;
+    label.textContent = labels[0];
+    var t = setInterval(function () {
+      if (!field.isConnected) { clearInterval(t); return; }
+      els[at].style.opacity = 0;
+      at = (at + 1) % els.length;
+      els[at].style.opacity = 1;
+      label.textContent = labels[at];
+    }, 2450);
+    return function () { clearInterval(t); };
+  }
+  function chipRow(chips, active) {
+    return '<div style="font-size:12px;font-weight:800;opacity:.6;margin:8px 2px 2px;">Tap to see only those plays</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:2px 0;">' + chips.map(function (c) {
+        var on = c.key === active;
+        return '<button type="button" data-only="' + c.key + '" style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;cursor:pointer;' +
+          'border:2px solid ' + (on ? c.color : 'transparent') + ';background:' + (on ? '#fff' : tint(c.color, .12)) + ';color:' + c.color + ';font-size:13px;font-weight:900;">' +
+          (c.dot ? '<span style="width:12px;height:12px;border-radius:50%;background:' + c.color + ';"></span>' : '') + c.label + '</button>';
+      }).join('') + '</div>';
+  }
+  function tint(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  function grownBox(vb, minBottom) {
+    var g = vb.slice(), bottom = g[1] + g[3];
+    if (bottom < minBottom) g[3] = minBottom - g[1];
+    return g;
+  }
+
+  // ---- Quiz 3: Run or Pass? ----
+  // Nathan (2026-11-06): "something similar with the pass plays." A formation
+  // is shown; does Milford mostly run or pass from it? The reveal counts the
+  // plays drawn from that look and draws them: runs red, passes blue, with a
+  // key to see only the runs or only the passes (flashing between them).
+  var RUN_C = '#e0201a', PASS_C = '#1f5fd6';
+  function playsByFormation(pack) {
+    var forms = (pack.diagrams || []).filter(function (d) { return d.cat === 'formation'; });
+    var out = forms.map(function (f) { return { formation: f, runs: [], passes: [] }; });
+    (pack.diagrams || []).forEach(function (d) {
+      if (d.cat !== 'run' && d.cat !== 'pass') return;
+      var b = formationOf(forms, d);
+      if (!b) return;
+      var o = out.filter(function (x) { return x.formation === b.f; })[0];
+      (d.cat === 'run' ? o.runs : o.passes).push({ play: d, mirror: b.m < 0 });
+    });
+    return out.filter(function (o) { return o.runs.length + o.passes.length; });
+  }
+  function runPassQuiz(el, pack, back) {
+    var rounds = shuffle(playsByFormation(pack)), i = 0, score = 0, TITLE = 'Run or Pass?', stop = null;
+    function halt() { if (stop) { stop(); stop = null; } }
+    function routesOf(g, x, kind) {
+      return (kind === 'run' ? runRoutes(x.play) : passRoutes(x.play)).map(function (r) {
+        return { pts: slideOnto(g.formation, x.mirror, x.play, r), color: kind === 'run' ? RUN_C : PASS_C };
+      });
+    }
+    function ask() {
+      halt();
+      if (i >= rounds.length) return finish(el, TITLE, score, rounds.length, function () { runPassQuiz(el, pack, back); }, back);
+      var g = rounds[i], nr = g.runs.length, np = g.passes.length;
+      var answer = nr > np ? 'run' : np > nr ? 'pass' : 'even';
+      var all = [].concat(
+        [].concat.apply([], g.runs.map(function (x) { return routesOf(g, x, 'run'); })),
+        [].concat.apply([], g.passes.map(function (x) { return routesOf(g, x, 'pass'); })));
+      var vb = grownBox(viewBoxOf(drawWith(g.formation, all, all.map(function (r) { return r.color; }))), 300);
+      el.innerHTML = header(TITLE, i + 1, rounds.length, score) +
+        '<div style="margin:10px 2px 0;font-size:15px;font-weight:800;">Do they mostly run or pass from this look?</div>' +
+        card('<div id="sqField" style="padding:4px 0;">' + drawWith(g.formation, [], [], vb) + '</div>') +
+        '<div style="display:flex;gap:8px;">' +
+          ['run', 'pass', 'even'].map(function (k) {
+            return '<div style="flex:1;">' + btn({ run: 'Mostly run', pass: 'Mostly pass', even: 'About even' }[k], 'data-rp="' + k + '"', 'background:#111;color:#fff;font-size:15px;padding:14px 6px;') + '</div>';
+          }).join('') + '</div>' +
+        '<div id="sqResult"></div>';
+      var field = el.querySelector('#sqField');
+      el.querySelectorAll('[data-rp]').forEach(function (b) {
+        b.onclick = function () {
+          var right = b.dataset.rp === answer;
+          if (right) score++;
+          el.querySelectorAll('[data-rp]').forEach(function (x) { x.disabled = true; x.style.opacity = x.dataset.rp === answer ? '1' : '.3'; });
+          var head = verdict(right, '<b>' + esc(g.formation.name) + '</b>: ' + nr + ' run' + (nr === 1 ? '' : 's') + ', ' + np + ' pass' + (np === 1 ? '' : 'es') + ' drawn.');
+          function show(only) {
+            halt();
+            var list = only === 'run' ? g.runs : only === 'pass' ? g.passes : null;
+            if (list && list.length > 1) {
+              stop = flashPlays(field, drawWith(g.formation, [], [], vb),
+                list.map(function (x) { var rs = routesOf(g, x, only); return drawWith(g.formation, rs, rs.map(function (r) { return r.color; }), vb); }),
+                list.map(function (x, n) { return x.play.name + ' · ' + (n + 1) + ' of ' + list.length; }), only === 'run' ? RUN_C : PASS_C);
+            } else {
+              var rs = list ? routesOf(g, list[0], only) : all;
+              field.innerHTML = drawWith(g.formation, rs, rs.map(function (r) { return r.color; }), vb);
+            }
+            var chips = [];
+            if (nr && np) chips.push({ key: '', label: 'All ' + (nr + np), color: '#111111' });
+            if (nr) chips.push({ key: 'run', label: 'Runs ' + nr, color: RUN_C, dot: true });
+            if (np) chips.push({ key: 'pass', label: 'Passes ' + np, color: PASS_C, dot: true });
+            el.querySelector('#sqResult').innerHTML = head + chipRow(chips, only || (nr && np ? '' : null)) +
+              btn(i + 1 < rounds.length ? 'Next' : 'See score', 'data-sq="next"');
+            el.querySelectorAll('[data-only]').forEach(function (c) {
+              c.onclick = function () { var k = c.dataset.only; show(k && k !== only ? k : ''); };
+            });
+            el.querySelector('[data-sq="next"]').onclick = function () { i++; ask(); };
+          }
+          show('');
+        };
+      });
+    }
+    ask();
+  }
+
+  // ---- Quiz 4: Where Do Receivers Go? ----
+  // A pass play is shown with the players only; tap every zone a receiver
+  // runs to (short or deep, left, middle or right), then Check. The reveal
+  // draws the routes in blue. Short = up to 250 units (about 2.5 lineman
+  // gaps) past the line; deep is beyond that.
+  var ZCOLS = [{ k: 'L', min: -Infinity, max: -250, label: 'left' }, { k: 'M', min: -250, max: 250, label: 'middle' }, { k: 'R', min: 250, max: Infinity, label: 'right' }];
+  var ZROWS = [{ k: 'S', min: 0, max: 250, label: 'Short' }, { k: 'D', min: 250, max: Infinity, label: 'Deep' }];
+  function zoneOf(p) {
+    var c = ZCOLS.filter(function (z) { return p[0] >= z.min && p[0] < z.max; })[0] || ZCOLS[1];
+    var r = p[1] <= 250 ? ZROWS[0] : ZROWS[1];
+    return r.k + c.k;
+  }
+  function zoneName(k) {
+    var r = ZROWS.filter(function (z) { return z.k === k.charAt(0); })[0], c = ZCOLS.filter(function (z) { return z.k === k.charAt(1); })[0];
+    return r.label.toLowerCase() + ' ' + c.label;
+  }
+  function receiversQuiz(el, pack, back) {
+    var forms = (pack.diagrams || []).filter(function (d) { return d.cat === 'formation'; });
+    var pool = (pack.diagrams || []).filter(function (d) { return d.cat === 'pass' && passRoutes(d).length; });
+    var rounds = shuffle(pool).slice(0, 10), i = 0, score = 0, TITLE = 'Where Do Receivers Go?';
+    function zoneLayer(vb, picked, used) {
+      var x0 = vb[0], w = vb[2], bottom = vb[1] + vb[3], o = '';
+      ZROWS.forEach(function (r) {
+        var y1 = r.min, y2 = Math.min(r.max, bottom);
+        ZCOLS.forEach(function (c) {
+          var k = r.k + c.k, a = Math.max(c.min, x0), b = Math.min(c.max, x0 + w), on = !!picked[k], fill = 'transparent', txt = '#999', mark = '';
+          if (used) {
+            if (used[k]) { fill = tint(GREEN, on ? .22 : .1); txt = GREEN; mark = on ? '✓ ' : ''; }
+            else if (on) { fill = 'rgba(214,32,32,.14)'; txt = RED; mark = '✗ '; }
+          } else if (on) { fill = 'rgba(255,122,26,.28)'; txt = '#c25200'; mark = '✓ '; }
+          o += '<rect data-zone="' + k + '" x="' + a + '" y="' + y1 + '" width="' + (b - a) + '" height="' + (y2 - y1) + '" fill="' + fill + '" stroke="#ddd" stroke-width="3" style="cursor:pointer;"/>';
+          var cx = (a + b) / 2, cy = y1 + (y2 - y1) / 2;
+          o += '<text x="' + cx + '" y="' + (cy - 8) + '" font-size="64" font-weight="900" text-anchor="middle" fill="' + txt + '" pointer-events="none">' + mark + esc(r.label) + '</text>' +
+            '<text x="' + cx + '" y="' + (cy + 58) + '" font-size="56" font-weight="800" text-anchor="middle" fill="' + txt + '" pointer-events="none">' +
+            esc(c.label) + (used && used[k] ? ' · ' + used[k] + 'x' : '') + (used && used[k] && !on ? ' missed' : '') + '</text>';
+        });
+      });
+      return o;
+    }
+    function ask() {
+      if (i >= rounds.length) return finish(el, TITLE, score, rounds.length, function () { receiversQuiz(el, pack, back); }, back);
+      var d = rounds[i], routes = passRoutes(d), used = {}, picked = {};
+      routes.forEach(function (r) { var k = zoneOf(r.pts[r.pts.length - 1]); used[k] = (used[k] || 0) + 1; });
+      var smooth = routes.map(function (r) { return { pts: smoothPts(r.pts) }; });
+      var vb = grownBox(viewBoxOf(drawWith(d, smooth, smooth.map(function () { return PASS_C; }))), 620);
+      // Only name the look when the coach has set it on the play (`formation`):
+      // a guessed match can be wrong, and the kid sees the players anyway.
+      var f = d.formation ? forms.filter(function (x) { return x.name === d.formation; })[0] : null;
+      var look = f ? '<div style="display:flex;align-items:center;gap:8px;margin:10px 2px 0;font-weight:900;font-size:15px;">' + esc(f.name) +
+        (f.tag ? '<span style="padding:3px 9px;border-radius:999px;font-size:12px;' + (isNightmare(f.tag) ? 'background:#000;color:' + ORANGE : 'background:' + GRAD + ';color:#000') + ';">' + esc(f.tag) + '</span>' : '') + '</div>' : '';
+      el.innerHTML = header(TITLE, i + 1, rounds.length, score) + look +
+        '<div style="margin:4px 2px 0;font-size:15px;font-weight:800;">Tap every zone a receiver runs to, then Check.</div>' +
+        card('<div id="sqField" style="padding:4px 0;"></div>') +
+        '<div id="sqResult">' + btn('Check', 'data-sq="check"', 'background:#111;color:#fff;opacity:.4;') + '</div>';
+      var field = el.querySelector('#sqField'), check = el.querySelector('[data-sq="check"]');
+      function paint() {
+        field.innerHTML = drawWith(d, [], [], vb, zoneLayer(vb, picked, null));
+        field.querySelectorAll('[data-zone]').forEach(function (z) {
+          z.addEventListener('click', function () {
+            var k = z.getAttribute('data-zone');
+            if (picked[k]) delete picked[k]; else picked[k] = true;
+            check.style.opacity = Object.keys(picked).length ? '1' : '.4';
+            paint();
+          });
+        });
+      }
+      paint();
+      check.onclick = function () {
+        if (!Object.keys(picked).length) return;
+        var keys = [];
+        ZROWS.forEach(function (r) { ZCOLS.forEach(function (c) { keys.push(r.k + c.k); }); });
+        var right = keys.every(function (k) { return !!picked[k] === !!used[k]; });
+        if (right) score++;
+        field.innerHTML = drawWith(d, smooth, smooth.map(function () { return PASS_C; }), vb, zoneLayer(vb, picked, used));
+        var list = keys.filter(function (k) { return used[k]; }).map(zoneName).join(', ');
+        el.querySelector('#sqResult').innerHTML =
+          verdict(right, '<b>' + esc(d.name) + '</b>: receivers go ' + esc(list) + '.') +
+          btn(i + 1 < rounds.length ? 'Next' : 'See score', 'data-sq="next"');
+        el.querySelector('[data-sq="next"]').onclick = function () { i++; ask(); };
+      };
+    }
+    ask();
+  }
+
   // ---- Menu ----
   function mount(el, pack, options) {
     opts = options || {};
     var team = pack.scoutTeam || 'Opponent';
     var nCov = (pack.diagrams || []).filter(function (d) { return d.cat === 'formation' && d.tag; }).length;
     var nBall = runsByFormation(pack).length;
+    var nRP = playsByFormation(pack).length;
+    var nRec = Math.min(10, (pack.diagrams || []).filter(function (d) { return d.cat === 'pass' && passRoutes(d).length; }).length);
     function menu() {
       el.innerHTML = '<div style="text-align:center;font-weight:900;font-size:18px;margin:8px 0 2px;">🧠 ' + esc(team) + ' Quizzes</div>' +
         (nCov ? btn('Coverage Call<div style="font-size:13px;font-weight:600;opacity:.8;margin-top:2px;">' + nCov + ' formations · Cover 2 or Nightmare?</div>', 'data-quiz="cov"') : '') +
         (nBall ? btn("Where's the Ball?<div style=\"font-size:13px;font-weight:600;opacity:.8;margin-top:2px;\">" + nBall + ' formations · pick every lane they run to</div>', 'data-quiz="ball"') : '') +
-        (!nCov && !nBall ? '<div class="lbEmpty">No quizzes for this team yet.</div>' : '');
+        (nRP ? btn('Run or Pass?<div style="font-size:13px;font-weight:600;opacity:.8;margin-top:2px;">' + nRP + ' formations · what do they do from this look?</div>', 'data-quiz="rp"') : '') +
+        (nRec ? btn('Where Do Receivers Go?<div style="font-size:13px;font-weight:600;opacity:.8;margin-top:2px;">' + nRec + ' pass plays · pick every zone</div>', 'data-quiz="rec"') : '') +
+        (!nCov && !nBall && !nRP && !nRec ? '<div class="lbEmpty">No quizzes for this team yet.</div>' : '');
       var c = el.querySelector('[data-quiz="cov"]'), b = el.querySelector('[data-quiz="ball"]');
+      var rp = el.querySelector('[data-quiz="rp"]'), rec = el.querySelector('[data-quiz="rec"]');
+      if (rp) rp.onclick = function () { runPassQuiz(el, pack, menu); };
+      if (rec) rec.onclick = function () { receiversQuiz(el, pack, menu); };
       if (c) c.onclick = function () { coverageQuiz(el, pack, menu); };
       if (b) b.onclick = function () { ballQuiz(el, pack, menu); };
     }
     menu();
   }
 
-  window.ScoutQuiz = { mount: mount, ballAnswer: ballAnswer, runsByFormation: runsByFormation };
+  window.ScoutQuiz = { mount: mount, ballAnswer: ballAnswer, runsByFormation: runsByFormation, playsByFormation: playsByFormation, formationOf: formationOf };
 })();
