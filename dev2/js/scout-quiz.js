@@ -276,6 +276,20 @@
         return r.end === 'a' && k >= 0 && !x.run.players[k].line && x.routes.indexOf(r) < 0;
       });
     }
+    // Nathan (2026-11-06): paths were cut off at the edge. One picture size
+    // per formation, big enough for every line of every run from it (ball
+    // carriers, other backs, blocks), so nothing is clipped and the picture
+    // doesn't jump around between runs.
+    function boxFor(g) {
+      if (g._box) return g._box;
+      var d = JSON.parse(JSON.stringify(g.formation));
+      d.labels = [];
+      d.routes = [].concat.apply([], g.runs.map(function (x) {
+        return x.routes.concat(blocksOf(x), othersOf(x)).map(function (r) { return { pts: placeOn(g, x, r), end: r.end, curve: true }; });
+      }));
+      g._box = viewBoxOf(window.ScoutDiagramSvg(d));
+      return g._box;
+    }
     function draw(g, picked, reveal, only, oneRun) {
       var d = JSON.parse(JSON.stringify(g.formation)), colors = [];
       d.labels = [];
@@ -292,7 +306,7 @@
           return { pts: placeOn(g, x, r), end: 'a', curve: true, ball: true };
         }));
       }));
-      var pic = window.ScoutDiagramSvg(d), vb = viewBoxOf(pic), grown = vb.slice();
+      var pic = window.ScoutDiagramSvg(d), vb = boxFor(g), grown = vb.slice();
       // Recolor each run's line and arrow head (drawn in route order) by lane.
       var k = 0;
       pic = pic.replace(/(<path [^>]*stroke=")#e0201a"/g, function (m, a) { return a + colors[k++] + '"'; });
@@ -378,7 +392,7 @@
           var inLane = only ? g.runs.filter(function (x) { return x.lane === only; }) : [];
           if (inLane.length > 1) {
             // Players and lanes stay put; only each run's arrows fade in and out.
-            var base = draw(g, picked, true, only, { none: true }), vb = viewBoxOf(base);
+            var base = draw(g, picked, true, only, { none: true }), vb = viewBoxOf(base); // already the formation's fixed box
             field.innerHTML = '<div style="position:relative;">' + base + inLane.map(function (x, n) {
               var one = draw(g, picked, true, only, x);
               var arrows = (one.match(/<path [^>]*\/>/g) || []).join('') +
@@ -560,7 +574,10 @@
       var all = [].concat(
         [].concat.apply([], g.runs.map(function (x) { return routesOf(g, x, 'run'); })),
         [].concat.apply([], g.passes.map(function (x) { return routesOf(g, x, 'pass'); })));
-      var vb = grownBox(viewBoxOf(drawWith(g.formation, all, all.map(function (r) { return r.color; }))), 300);
+      var everything = [].concat(
+        [].concat.apply([], g.runs.map(function (x) { return routesOf(g, x, 'run', true); })),
+        [].concat.apply([], g.passes.map(function (x) { return routesOf(g, x, 'pass', true); })));
+      var vb = grownBox(viewBoxOf(drawWith(g.formation, everything, everything.map(function (r) { return r.color; }))), 300);
       el.innerHTML = header(TITLE, i + 1, rounds.length, score) +
         '<div style="margin:10px 2px 0;font-size:15px;font-weight:800;">Do they mostly run or pass from this look?</div>' +
         card('<div id="sqField" style="padding:4px 0;">' + drawWith(g.formation, [], [], vb) + '</div>') +
