@@ -184,7 +184,7 @@ if (topSectionsEl) {
 }
 
 // Nathan (original): "have all these things be visible only on the coaching
-// login FrontSeat on not on the kids side until we add it over" -- This
+// login [code] on not on the kids side until we add it over" -- This
 // Week and Schedule started coach-only while unfinished. Nathan later asked
 // specifically: "Schedule is added to player visibility automatically when
 // they exist on the schedule" -- so Schedule is now visible to every signed

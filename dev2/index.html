@@ -338,7 +338,7 @@
 </div>
 
 <!-- Nathan: "in first login, you should be able to choose Player, Coach or
-     Parent. For Coach profile, you will need to put in 'FrontSeat' as the
+     Parent. For Coach profile, you will need to put in the coach code as the
      password... For coaches that are already in there and noted... they
      will be granted Coach access without additional setup." Shown right
      after the shared team code above (that part's unchanged -- still the
@@ -347,7 +347,7 @@
      works too (auth.js) and skips this screen entirely, so nobody who
      already knows it has to learn a new step. Picking Coach here reveals
      a small password field checked against the exact same secret
-     ('FrontSeat') as that old coach code -- same protection, new door.
+     as that old coach code -- same protection, new door.
      Player and Parent need nothing further here; player-identity.js's
      name+PIN screen runs right after either one. -->
 <div class="loginScreen hide" id="roleScreen">
@@ -603,7 +603,7 @@
      roadmap) without any of them crowding into the Play sub-tabs.
 
      Then: "have all these things be visible only on the coaching login
-     FrontSeat on not on the kids side until we add it over" -- This Week
+     [code] on not on the kids side until we add it over" -- This Week
      and Schedule are still brand new/unfinished from a player's point of
      view, so both start hidden (style="display:none") and only appear for
      an actual coach login (window.isCoachSession, auth.js's two-code gate

@@ -80,7 +80,7 @@
     var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
   }
-  // Shared with play-calls.js (FrontSeat gate) and study-quiz.js (admin PIN)
+  // Shared with play-calls.js (coach-code gate) and study-quiz.js (admin PIN)
   // so those secrets can be hashed the same way instead of sitting as
   // plaintext in the shipped JS.
   window.sha256Hex = sha256Hex;
