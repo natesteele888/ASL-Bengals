@@ -100,10 +100,11 @@
     // game's offensive snaps back in true order when re-opening this game
     // in Stat Keeper (see its reconstructPlaysFromStatSheet/seqOf, and
     // game-stats-editor.js's commitAttempt which stamps this same way for
-    // the manual entry screen). exportData.plays is newest-first (Stat
-    // Keeper's insertPlay unshifts), so seq has to count up from the OLDEST
-    // play, not forEach's own index order.
-    const chronological = (exportData.plays || []).slice().reverse();
+    // the manual entry screen). seq counts up from the first play of the
+    // game. A file can hold either an early-season log (saved newest
+    // first) or a newer one (oldest first), so js/play-order.js works out
+    // which; a blind reverse() numbered newer games backwards.
+    const chronological = window.BengalsPlayOrder.orderPlays(exportData.plays);
     const seqByPlay = new Map();
     chronological.forEach((p, i) => seqByPlay.set(p, i + 1));
     function playOrderExtra(p) {
