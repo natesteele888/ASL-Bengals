@@ -3,59 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gridiron Hub — Dashboard</title>
+<title>Gridiron Hub — My Account</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
 <script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  *{box-sizing:border-box;}
-  body{margin:0;min-height:100vh;background:var(--ink);font-family:'Karla',sans-serif;color:var(--text);}
-  h1,h2{font-family:'Anton',sans-serif;font-weight:400;margin:0;}
-  header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line);}
-  .brand{display:flex;align-items:center;gap:10px;}
-  .brand img{width:32px;height:32px;}
-  .brand span{font-family:'Anton',sans-serif;font-size:16px;}
-  #signOutBtn{background:none;border:1px solid var(--line);color:var(--text-dim);padding:7px 14px;border-radius:5px;font-size:13px;cursor:pointer;}
-  main{max-width:520px;margin:0 auto;padding:60px 24px;text-align:center;}
-  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:32px;margin-top:24px;text-align:left;}
+  .loading{color:var(--text-dim);text-align:center;padding:60px 0;}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:24px;margin-bottom:20px;}
   .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;}
   .row:last-child{border-bottom:none;}
   .row span:first-child{color:var(--text-dim);}
   .pending{color:var(--orange);font-weight:700;}
-  .loading{color:var(--text-dim);text-align:center;padding:60px 0;}
+  .team-list{display:flex;flex-direction:column;gap:10px;}
+  .team-row{display:flex;align-items:center;justify-content:space-between;background:var(--ink-2);border:1px solid var(--line);border-radius:6px;padding:14px 18px;font-weight:700;}
+  .team-row:hover{border-color:var(--orange);color:var(--orange);}
+  .team-row .go{color:var(--orange);font-weight:800;font-size:13px;}
+  .admin-banner{background:rgba(244,105,28,.08);border:1px solid rgba(244,105,28,.3);border-radius:8px;padding:18px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;}
+  .admin-banner p{margin:0;font-size:13.5px;color:var(--text-dim);}
+  .empty-note{font-size:13.5px;color:var(--text-dim);line-height:1.6;}
+  #signOutRow{margin-top:8px;}
+  #signOutBtn{background:none;border:1px solid var(--line);color:var(--text-dim);padding:9px 18px;border-radius:5px;font-size:13px;cursor:pointer;font-family:'Karla',sans-serif;}
+  #signOutBtn:hover{border-color:#ff6b5e;color:#ff6b5e;}
 </style>
 </head>
 <body>
 
-  <header>
-    <div class="brand"><img src="assets/img/tiger-logo.png" alt=""><span>GRIDIRON HUB</span></div>
-    <button id="signOutBtn">Sign Out</button>
-  </header>
+  <nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='';</script>
+<script src="assets/js/nav.js"></script>
 
-  <main>
-    <div id="loading" class="loading">Loading…</div>
-    <div id="content" style="display:none;">
-      <h1>Welcome</h1>
-      <div class="card">
-        <div class="row"><span>Email</span><span id="fEmail"></span></div>
-        <div class="row"><span>Role</span><span id="fRole"></span></div>
-        <div class="row"><span>Organization</span><span id="fOrg"></span></div>
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-eyebrow">ACCOUNT</div>
+      <h1>My Account</h1>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <div id="loading" class="loading">Loading…</div>
+      <div id="content" style="display:none;max-width:640px;">
+
+        <div id="adminBanner" class="admin-banner" style="display:none;">
+          <p><b style="color:var(--text);">You're an admin.</b> Assign roles and teams to anyone who's signed up.</p>
+          <a href="admin.html" class="btn btn-primary" style="margin:0;">Manage People →</a>
+        </div>
+
+        <div class="card">
+          <div class="row"><span>Email</span><span id="fEmail"></span></div>
+          <div class="row"><span>Role</span><span id="fRole"></span></div>
+          <div class="row"><span>Organization</span><span id="fOrg"></span></div>
+        </div>
+
+        <h2 style="font-size:18px;margin-bottom:12px;">Your teams</h2>
+        <div id="teamList" class="team-list"></div>
+        <p id="noTeamsNote" class="empty-note" style="display:none;">
+          You're not on any team yet. Whoever manages Gridiron Hub can add you from the
+          <a href="admin.html" style="color:var(--orange);">Admin</a> page once you've told them you've signed up.
+        </p>
+
+        <div id="signOutRow"><button id="signOutBtn">Sign Out</button></div>
       </div>
     </div>
-  </main>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <div>ASL Bengals · Ayer, Shirley &amp; Lunenburg · CMYFCC Member</div>
+      <div>General questions: aslbengals.president@gmail.com</div>
+    </div>
+  </footer>
 
 <script type="module">
   import { auth, db } from './src/firebase-config.js';
   import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
   import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
+  const TEAM_LABEL = { '8u': '8U', '9u': '9U', '10u': '10U', '11u': '11U', '12u': '12U', '13u': '13U', flex: 'Flex', cheer: 'Cheer' };
+
   const loadingEl = document.getElementById('loading');
   const contentEl = document.getElementById('content');
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      // Not signed in -- send back to login rather than showing an empty dashboard.
+      // Not signed in -- send back to login rather than showing an empty page.
       window.location.href = 'login.html';
       return;
     }
@@ -63,13 +93,23 @@
     const data = snap.exists() ? snap.data() : {};
 
     document.getElementById('fEmail').textContent = data.email || user.email;
-    // role/orgId are null until an org admin assigns this person somewhere --
-    // that assignment flow doesn't exist yet, so this is the honest current
-    // state rather than a placeholder value pretending otherwise.
     document.getElementById('fRole').textContent = data.role || 'Not yet assigned';
     document.getElementById('fRole').className = data.role ? '' : 'pending';
     document.getElementById('fOrg').textContent = data.orgId || 'Not yet assigned';
     document.getElementById('fOrg').className = data.orgId ? '' : 'pending';
+
+    document.getElementById('adminBanner').style.display = data.role === 'admin' ? 'flex' : 'none';
+
+    const teamIds = Array.isArray(data.teamIds) ? data.teamIds : [];
+    const teamListEl = document.getElementById('teamList');
+    const noTeamsNote = document.getElementById('noTeamsNote');
+    if (teamIds.length) {
+      teamListEl.innerHTML = teamIds.map((id) =>
+        `<a class="team-row" href="team.html?id=${encodeURIComponent(id)}"><span>${TEAM_LABEL[id] || id.toUpperCase()}</span><span class="go">Open →</span></a>`
+      ).join('');
+    } else {
+      noTeamsNote.style.display = 'block';
+    }
 
     loadingEl.style.display = 'none';
     contentEl.style.display = 'block';

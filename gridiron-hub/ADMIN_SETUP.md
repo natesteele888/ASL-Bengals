@@ -68,13 +68,27 @@ admin.
 
 ## Things worth knowing
 
-**What a role actually unlocks.** Right now, a role mainly exists so that
-future features (RSVPs, the team message board, coach-only tools) have
-something real to check — Firestore itself refuses writes from anyone who
-isn't an admin to another person's `role`/`orgId`/`teamIds`, and refuses a
-non-admin from ever setting those fields on themselves, even by editing the
-request directly. The admin page is a convenience on top of that
-enforcement, not the enforcement itself.
+**What a role actually unlocks.** A team's roster, practice schedule with
+RSVPs, and team message board (with read receipts) are all live on
+`team.html?id=<team>` once you deploy `firestore.rules` — those aren't
+future features, they're what this unlocks today. Firestore itself refuses
+writes from anyone who isn't an admin to another person's
+`role`/`orgId`/`teamIds`, and refuses a non-admin from ever setting those
+fields on themselves, even by editing the request directly. The admin page
+is a convenience on top of that enforcement, not the enforcement itself.
+
+**Photos are the one piece still blocked — on purpose, not an oversight.**
+`team.html`'s banner photo and `photos.html`'s team gallery both need
+Firebase Storage, which (unlike everything else here) requires upgrading
+the project to the **Blaze** (pay-as-you-go) plan — a billing decision only
+you can make, in **console.firebase.google.com → my-gridiron-hub → Storage
+→ get started**, which walks you through adding a payment method. A youth
+team's photo volume won't come close to real charges, but it does need a
+card on file. `storage.rules` is already written and ready — once Storage
+is turned on, deploy it the same way:
+```bash
+firebase deploy --only storage
+```
 
 **One organization.** The data model leaves room for Gridiron Hub to run
 more than one organization later, but this deployment only has the ASL
