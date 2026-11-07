@@ -14,3 +14,14 @@ This app is one of several that share parts and lessons through the private
   want, add a dated entry to `nate-brain/lessons.md`. If you change a shared part
   here, update its entry in `parts.md`.
 - Know-how only in nate-brain: never copy names, contact info, stats or secrets into it.
+
+## Privacy
+This repo is public. Keep names of players and parents, personal contact
+info, stats, keys and data dumps out of it.
+- **One exception, on purpose:** Gridiron Hub (`gridiron-hub/`) shows the
+  club board's public contact emails (the president and secretary role
+  addresses ASL already publishes). Nate chose to keep them. Don't strip
+  them in a privacy sweep.
+- The exception covers only those published board role addresses. It does
+  not cover players, parents, coaches' personal contacts or any other
+  personal info. Those stay out, same as everywhere else.
