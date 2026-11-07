@@ -34,8 +34,16 @@
 // this public repo.
 //
 // If the database ever refuses filmRoom (its rules allowlist top-level
-// paths), the tab says so and shows the rule to add:
-//   "filmRoom": { ".read": "auth != null", ".write": "auth != null" }
+// paths), the tab says so and tells a coach to add a filmRoom rule that is a
+// copy of the one on teamRoster. Don't use a bare "auth != null": every
+// visitor is signed in anonymously on page load, before typing any code
+// (js/cloud-auth.js), so that would let anyone who opens the app read and
+// write the team's notes. If teamRoster has no rule to copy, this keeps
+// anonymous sessions out (a code sign-in is a 'password' session):
+//   "filmRoom": {
+//     ".read":  "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'",
+//     ".write": "auth != null && auth.token.firebase.sign_in_provider != 'anonymous'"
+//   }
 //
 // POINTS are worked out from the notes themselves (no second store to drift
 // out of sync): post a note +5, reply +2, each teammate "I see it too" on
@@ -81,7 +89,7 @@
   }
   function keyFor(url) { return source(url).key; }
   function fmt(t) {
-    t = Math.max(0, Math.round(t || 0));
+    t = Math.max(0, Math.round(+t || 0));
     var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
     return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (s < 10 ? '0' : '') + s;
   }
@@ -275,7 +283,7 @@
 
   function setupMsg() {
     return '<div class="frMsg"><b>Film notes need a one-time setup.</b> ' +
-      (me().coach ? 'In the Firebase Console › Realtime Database › Rules, add <code>"filmRoom": { ".read": "auth != null", ".write": "auth != null" }</code> next to the other paths, then reload.'
+      (me().coach ? 'In the Firebase Console › Realtime Database › Rules, add a <code>"filmRoom"</code> entry next to the other paths and copy the rule from <code>"teamRoster"</code> into it (so only signed-in team members can read or write notes), then reload.'
         : 'Ask a coach to turn on Film Room notes.') + '</div>';
   }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
@@ -509,7 +517,7 @@
           .sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
         var canDelete = mine.coach || (mine.id && mine.id === n.byId);
         return '<div class="frNote" data-note="' + esc(n.id) + '">' +
-          '<div class="frRow">' + (n.t != null ? '<button type="button" class="frTime" data-jump="' + n.t + '">▶ ' + fmt(n.t) + '</button>' : '') +
+          '<div class="frRow">' + (n.t != null ? '<button type="button" class="frTime" data-jump="' + (+n.t || 0) + '">▶ ' + fmt(n.t) + '</button>' : '') +
             '<span style="font-size:11px;font-weight:900;padding:2px 8px;border-radius:999px;background:' + t.color + '1f;color:' + t.color + ';">' + esc(t.label) + '</span>' +
             (n.pick ? '<span style="font-size:12px;font-weight:900;color:#b8860b;">⭐ Coach\'s pick</span>' : '') + '</div>' +
           '<div style="margin-top:6px;font-size:15px;line-height:1.35;">' + esc(n.text) + '</div>' +
