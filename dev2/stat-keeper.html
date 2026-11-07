@@ -78,6 +78,7 @@
   .fieldRow label{display:block;font-size:10px;color:var(--dim);margin-bottom:6px;
     text-transform:uppercase;letter-spacing:.05em;font-weight:700}
   .playerGrid{display:flex;flex-wrap:wrap;gap:6px}
+  .rosterNote{font-size:12px;color:var(--dim2);padding:4px 0}
   .playerChip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;
     font-size:12.5px;cursor:pointer;user-select:none;background:#0a0c10;color:var(--dim);font-weight:700}
   .playerChip .num{color:var(--dim2);font-weight:800;margin-right:4px}
@@ -175,7 +176,7 @@
 </head>
 <body>
 
-<div class="proto-banner">STANDALONE TOOL — signs in with your coach code to load real games from the Schedule and save each game's play log to the cloud (so you can come back and edit it later). Roster is still a one-time snapshot, not live-synced.</div>
+<div class="proto-banner">STANDALONE TOOL — signs in with your coach code to load real games from the Schedule and save each game's play log to the cloud (so you can come back and edit it later). The team roster loads after you sign in.</div>
 
 <header>
   <div class="brand">STAT<span>KEEPER</span></div>
@@ -280,46 +281,24 @@
   </section>
 
   <footer class="note">
-    Roster pulled from the live team roster (teamRoster.json) as a one-time snapshot for this prototype — not live-synced.<br>
+    Roster loads from the live team roster (teamRoster.json) after coach sign-in.<br>
     Field shape mirrors the live app's <code>statSheet</code> (rushing / passing / receiving / kickoffs / tackles / defExtra / turnovers) so a real integration later is a data hookup, not a redesign.
   </footer>
 </div>
 
 <script>
 (function(){
-  // Pulled from the live team roster (teamRoster.json) as a one-time snapshot for
-  // this prototype — not a live sync. Full name incl. last initial kept as stored,
-  // since multiple players share a first name (two Wyatts).
-  // Nathan (2026-08-31): "updated all jersey numbers in roster" -- every
-  // player who previously had a blank number (Player A, Player B, Player C,
-  // Dylan, Wyatt M) now has a real, unique one. That blank-number overlap
-  // was the exact root cause of the Player A / Player B stat mixup, so this
-  // refresh also matters for translatePlaysForLive's jersey-number
-  // collision check above to actually resolve (it can only detect/skip a
-  // collision, not know who a blank number "really" belongs to).
-  const ROSTER = [
-    {num:'76', name:'Desmond S', pos:''},
-    {num:'7', name:'Henry G', pos:''},
-    {num:'6', name:'Jacob W', pos:'TE'},
-    {num:'49', name:'Emmett B', pos:''},
-    {num:'44', name:'Jaxson P', pos:''},
-    {num:'77', name:'Jagger L', pos:''},
-    {num:'65', name:'Jaxon R', pos:''},
-    {num:'86', name:'Caden', pos:''},
-    {num:'8', name:'Connor', pos:''},
-    {num:'66', name:'Player A', pos:''},
-    {num:'11', name:'Player B', pos:''},
-    {num:'80', name:'Wyatt B', pos:''},
-    {num:'51', name:'Sonny L', pos:'QB'},
-    {num:'99', name:'Rocco D', pos:''},
-    {num:'98', name:'Player C', pos:''},
-    {num:'5', name:'Will J', pos:'RB'},
-    {num:'87', name:'James J', pos:'RB'},
-    {num:'9', name:'Dylan', pos:''},
-    {num:'53', name:'Wyatt M', pos:''},
-    {num:'33', name:'Braden', pos:''},
-    {num:'27', name:'Timmy S', pos:''},
-  ];
+  // The team roster lives in teamRoster.json (managed in Coach Tools >
+  // Roster) behind coach sign-in. loadRoster() near boot() fills this in
+  // after sign-in -- it is never typed into this file, since the repo is
+  // public. Until it loads (signed out, offline, or the read failed) the
+  // chip grid shows why, and the write-in name box still works.
+  // Names keep the stored "First L" form, since players can share a first
+  // name (Player A vs Player B). Jersey numbers matter too: two
+  // blank-number players once pooled their stats, which is what
+  // translatePlaysForLive's jersey-number collision check guards against.
+  let ROSTER = [];             // [{num, name, pos}]
+  let rosterState = 'signedOut'; // 'signedOut' | 'loading' | 'loaded' | 'error'
 
   // Snapshot of the real playbook's named plays (dev2/data/plays.json
   // playTypes), for the optional "Play Called" tag on run/pass plays.
@@ -695,6 +674,17 @@
     const multi = !!opts.multi;
     const wrap = document.createElement('div');
     wrap.className = 'playerGrid';
+    if (!ROSTER.length){
+      // No roster yet -- say why, so a blank grid never looks like an
+      // empty team. The write-in box under this still works either way.
+      const msg = document.createElement('div');
+      msg.className = 'rosterNote';
+      msg.textContent = rosterState === 'loading' ? 'Loading the roster…'
+        : rosterState === 'error' ? 'Couldn\'t load the roster -- write names in below.'
+        : rosterState === 'loaded' ? 'The team roster is empty -- add players in Coach Tools > Roster, or write names in below.'
+        : 'Sign in to load the roster (reload the page). You can still write names in below.';
+      wrap.appendChild(msg);
+    }
     ROSTER.forEach(function(p){
       const chip = document.createElement('div');
       chip.className = 'playerChip';
@@ -718,7 +708,7 @@
   }
 
   // Wraps playerChips() with an optional "hot" quick-pick row (e.g. top 3 tacklers so
-  // far) and a write-in text field, for subs or anyone not on the roster snapshot.
+  // far) and a write-in text field, for subs or anyone not on the loaded roster.
   function playerPicker(fieldKey, opts){
     opts = opts || {};
     const multi = !!opts.multi;
@@ -1296,7 +1286,7 @@
       // the box score. Still a real snap (counts toward snap totals) and
       // still moves the ball (spot tracking above is unaffected) -- this
       // only pulls it out of the Rushing stat table. Lets a play like
-      // "Desmond S, -1 yd" get corrected after the fact via the normal
+      // "Player A, -1 yd" get corrected after the fact via the normal
       // click-to-edit flow once you realize it was actually a fumbled
       // exchange he recovered himself, not a real designed carry.
       toggles.appendChild(chipToggle('fumbledExchange', 'Fumbled Exchange (not a rush attempt)'));
@@ -2408,7 +2398,7 @@
           (p.note ? ' ('+p.note+')' : ''));
         // Nathan: "add fumbles recovered along with yards per carry."
         // Nathan (follow-up): "it said it couldn't find player #11...
-        // they were on the other team" + "Jacob W doesn't have his 1st
+        // they were on the other team" + "Player B doesn't have his 1st
         // quarter interception showing up." Same two fixes as
         // translatePlaysForLive's copy of this: (1) only credit a
         // recovery to OUR defExtra table when WE actually recovered it
@@ -2889,18 +2879,18 @@
     const numCounts = {};
     // Nathan: "we have those players on the roster" -- a few real mismatches
     // baked into this exact-match lookup:
-    //   - "#49 Emmett B" -- the jersey number got typed right into the name
+    //   - "#49 Player C" -- the jersey number got typed right into the name
     //     itself (from a quick-pick label or a stray "#NN " habit), so it
-    //     never matches a roster row named plainly "Emmett B". Stripped off
+    //     never matches a roster row named plainly "Player C". Stripped off
     //     below before either side of the comparison, since the number's
     //     already looked up separately anyway.
-    //   - "Rocco" vs the roster's "Rocco D" -- logged with just a first
+    //   - "Player" vs the roster's "Player D" -- logged with just a first
     //     name, no last initial. firstNameIndex below is a fallback for
     //     exactly this: if precisely ONE roster player's first name matches,
-    //     use them; if it's ambiguous (two Roccos) or there's still no
+    //     use them; if it's ambiguous (two players with that first name) or there's still no
     //     match at all, this still safely falls through to the warning
     //     rather than guessing wrong.
-    // "Jayden L" vs a roster spelled "Player A" (or a name not on the
+    // "Player E" vs a roster spelled "Player F" (or a name not on the
     // roster at all, like a departed player) can't be resolved here --
     // that's a real spelling/roster mismatch, not a lookup bug, and needs
     // a human to decide which spelling is correct.
@@ -3124,7 +3114,7 @@
             if (p.td) row.td = true;
           }
         }
-        // Nathan (follow-up): "Jacob W doesn't have his 1st quarter
+        // Nathan (follow-up): "Player B doesn't have his 1st quarter
         // interception showing up." A logged Interception never had a
         // matching credit branch at all here -- only Fumble did. Same
         // team-check as the fumble fix just above (an interception only
@@ -3538,6 +3528,29 @@
   }
   gameSelect.addEventListener('change', function(){ selectGame(gameSelect.value); });
 
+  // Loads the team roster (same teamRoster.json pushToLiveStats reads) once
+  // a coach is signed in. Never throws: on failure the chip grid says so
+  // and the write-in box keeps working.
+  async function loadRoster(){
+    rosterState = 'loading';
+    renderFields();
+    try {
+      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data ? Object.values(data) : []);
+      ROSTER = list.filter(function(p){ return p && p.name; }).map(function(p){
+        return { num: p.num == null ? '' : String(p.num), name: String(p.name), pos: p.position || '' };
+      });
+      rosterState = 'loaded';
+    } catch(e){
+      ROSTER = [];
+      rosterState = 'error';
+    }
+    renderFields();
+  }
+
   async function boot(){
     updateSideUI();
     renderTypeGrid();
@@ -3552,8 +3565,11 @@
     if (!ok){
       setGameLoadStatus('Sign-in required to load games -- reload the page to try again.');
       gameSelect.innerHTML = '<option value="">— Sign-in required —</option>';
+      rosterState = 'signedOut';
+      renderFields();
       return;
     }
+    await loadRoster();
     setGameLoadStatus('Loading games…');
     try {
       const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
