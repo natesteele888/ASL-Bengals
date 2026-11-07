@@ -127,8 +127,10 @@ service cloud.firestore {
       // This half is ready regardless: the Firestore record of a photo
       // (its Storage URL, who uploaded it, which players are tagged) is
       // plain data with no billing dependency of its own.
+      // Photos of kids and who's tagged in them stay behind team sign-in,
+      // same as the roster (Nathan's rule: no photos of people in public).
       match /photos/{photoId} {
-        allow read: if true;
+        allow read: if isTeamMember(teamId) || canManageTeam(teamId);
         allow create: if isSignedIn()
           && request.resource.data.uploadedByUid == request.auth.uid
           && (isTeamMember(teamId) || canManageTeam(teamId));
