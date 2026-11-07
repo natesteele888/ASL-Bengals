@@ -2801,11 +2801,50 @@ if (window.ResizeObserver) {
   if(window.__addSept2026FeatureWhatsNewNotes) window.__addSept2026FeatureWhatsNewNotes();
 
   const FIREBASE_DB_URL = 'https://aslbengals-default-rtdb.firebaseio.com';
-  const [cardsRes, playsRes] = await Promise.all([
-    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`)),
-    fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/plays.json`)),
-  ]);
-  window.ALL_CARDS = await cardsRes.json();
+  // No signal at the field: the fetch below used to throw, boot() stopped
+  // here, and a signed-in phone sat on the loading art for 20s and then
+  // showed empty tabs (none of the feature scripts below ever loaded).
+  // Every good load now keeps a copy of the deck and plays in Cache Storage
+  // (its own 'bengals-data-v1' cache, which sw.js never deletes), and a
+  // failed, refused or 10s-stalled load uses that copy instead. With no
+  // copy saved yet, it behaves exactly as before.
+  const PLAY_DATA_CACHE = 'bengals-data-v1';
+  const PLAY_DATA_KEYS = ['offline-data/cards.json', 'offline-data/plays.json'];
+  const readSavedPlayData = async () => {
+    try {
+      const c = await caches.open(PLAY_DATA_CACHE);
+      const res = await Promise.all(PLAY_DATA_KEYS.map(k => c.match(k)));
+      if (!res[0] || !res[1]) return null;
+      return await Promise.all(res.map(r => r.json()));
+    } catch (e) { return null; }
+  };
+  const savedPlayData = readSavedPlayData();
+  const livePlayData = (async () => {
+    const [cardsRes, playsRes] = await Promise.all([
+      fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`)),
+      fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/plays.json`)),
+    ]);
+    return { ok: cardsRes.ok && playsRes.ok, data: [await cardsRes.json(), await playsRes.json()] };
+  })();
+  let playData;
+  try {
+    const live = await Promise.race([livePlayData, new Promise((_, no) =>
+      setTimeout(() => savedPlayData.then(s => s && no(new Error('play data still loading after 10s'))), 10000))]);
+    if (!live.ok && await savedPlayData) throw new Error('play data refused');
+    playData = live.data;
+    // Stringified now, before the relabel and custom-formation steps below
+    // change these objects, so the saved copy is exactly what Firebase sent.
+    const bodies = live.ok ? playData.map(d => JSON.stringify(d)) : null;
+    if (bodies && window.caches) caches.open(PLAY_DATA_CACHE).then(c => Promise.all(PLAY_DATA_KEYS.map((k, i) =>
+      c.put(k, new Response(bodies[i], { headers: { 'Content-Type': 'application/json' } })))))
+      .catch(() => {});
+  } catch (err) {
+    playData = await savedPlayData;
+    if (!playData) throw err;
+    console.warn('[boot] using the play data saved on this phone:', err && err.message);
+    window.__playDataFromSavedCopy = true;
+  }
+  window.ALL_CARDS = playData[0];
   // Nathan (2026-10-08): "the current Signal #24, labeled 4-SWEEP, needs to be
   // changed. We are now using that little hand toss as the TOSS signal. We
   // can keep it in the same spot and update it to TOSS." The live deck is
@@ -2831,7 +2870,7 @@ if (window.ResizeObserver) {
     return cards;
   };
   window.applyCardRelabels(window.ALL_CARDS);
-  window.DATA = await playsRes.json();
+  window.DATA = playData[1];
 
   const appLoadingBar = document.getElementById('appLoadingBar');
   let loadedCount = 0;
