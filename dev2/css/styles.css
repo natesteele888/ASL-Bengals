@@ -1845,6 +1845,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   margin-top: 4px;
 }
 .pcInfoBtn {
+  position: relative;
   margin-left: 6px;
   border: 2px solid var(--bengal-black);
   background: #fff;
@@ -1856,6 +1857,11 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   cursor: pointer;
   vertical-align: middle;
 }
+
+/* Invisible hit zone: the "i" stays 22px to the eye but takes taps across
+   34px (same ::after trick as .toolbarBtn; inset counts from inside the
+   2px border). */
+.pcInfoBtn::after { content: ''; position: absolute; inset: -8px; }
 
 /* Kid-facing Play Calls tutorial: a few short steps instead of one wall
    of text, each with a small mock-up of the real control so it's obvious
@@ -3337,6 +3343,14 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
 .standingsDivTag { display: block; font-size: 10.5px; color: var(--muted); font-weight: 400; white-space: normal; }
 .standingsTeamLink { background: none; border: none; padding: 0; font: inherit; font-weight: 700;
   color: var(--bengal-orange); cursor: pointer; text-decoration: underline; }
+/* Team names are ~22px tall; reach into the cell's own 8px padding so a tap
+   anywhere on the row's height opens the team (~38px), without changing the
+   row's size or reaching into the next row. Same for the Play Calls
+   ball-carrier filter link (14px tall text). */
+.standingsTeamLink { position: relative; }
+.standingsTeamLink::after { content: ''; position: absolute; inset: -8px -4px; }
+.pc-carrier-filter .lbLinkBtn { position: relative; }
+.pc-carrier-filter .lbLinkBtn::after { content: ''; position: absolute; inset: -10px -6px; }
 /* Team logo next to the name in the main standings table -- same
    .scheduleTeamBadge component every other logo in the app uses (js/
    schedule.js), just sized down for this dense a row. See js/
