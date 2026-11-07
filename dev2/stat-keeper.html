@@ -83,6 +83,53 @@
   .offlineBar{background:#241a05;color:var(--yellow);border:1px solid #4a3a0a;border-radius:10px;
     font-size:12px;font-weight:700;text-align:center;padding:7px 10px;margin:0 0 10px}
   .offlineBar[hidden]{display:none}
+
+  /* Quick Log: one coach, one hand, mid-game. Big targets, no typing. */
+  .ql{background:var(--panel);border:1px solid var(--line-bright);border-radius:14px;padding:10px;margin-bottom:12px}
+  .qlStatus{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .qlPill{background:#0a0c10;border:1px solid var(--line);border-radius:10px;color:var(--text);font:800 13px/1 inherit;
+    padding:9px 10px;min-height:38px;cursor:pointer;font-family:inherit}
+  .qlPill.poss{margin-left:auto;color:var(--orange);border-color:var(--orange-dim)}
+  .qlPill.poss.them{color:var(--blue);border-color:#1d3550}
+  .qlPill.run{color:var(--green)}
+  .qlTypes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+  .qlBtn{background:var(--panel2);border:1px solid var(--line);border-radius:12px;color:var(--text);
+    font:800 14px/1.1 inherit;min-height:52px;padding:6px 4px;cursor:pointer;font-family:inherit}
+  .qlBtn.on{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan)}
+  .qlLabel{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin:8px 0 5px}
+  .qlNums{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:6px}
+  .qlNum{min-height:48px;font-size:17px}
+  .qlChips{display:flex;flex-wrap:wrap;gap:6px}
+  .qlChip{background:#0a0c10;border:1px solid var(--line);border-radius:999px;color:var(--text);font:700 13px/1 inherit;
+    padding:11px 13px;min-height:42px;cursor:pointer;font-family:inherit}
+  .qlChip.on{background:var(--orange);border-color:var(--orange);color:#fff}
+  .qlYards{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .qlYards .qlBtn{min-height:46px;flex:1 1 0}
+  .qlYardsVal{flex:1.4 1 0;text-align:center;font-size:24px;font-weight:900;color:var(--cyan)}
+  .qlStrip{position:relative;height:46px;border-radius:8px;cursor:pointer;margin-top:4px;
+    background:linear-gradient(90deg,#3a1408 0 8%,#14341c 8% 92%,#3a1408 92%);border:1px solid var(--line)}
+  .qlStrip i{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18)}
+  .qlStrip b{position:absolute;top:4px;bottom:4px;width:4px;margin-left:-2px;border-radius:2px}
+  .qlStripTxt{font-size:12px;color:var(--dim);margin-top:4px;text-align:center}
+  /* Pinned to the bottom of the screen while Quick Log is in view, so Log is always under the thumb. */
+  .qlActions{display:flex;gap:8px;margin-top:10px;position:sticky;bottom:0;z-index:5;background:var(--panel);
+    padding:8px 0 calc(8px + env(safe-area-inset-bottom))}
+  .qlActions .qlBtn{min-height:56px;font-size:16px}
+  .qlLog{flex:2 1 0;background:var(--orange) !important;border-color:var(--orange) !important;color:#fff !important}
+  .qlLog:disabled{opacity:.4}
+  .qlUndo{flex:1 1 0}
+  .qlUndo:disabled{opacity:.35}
+  .qlNote{font-size:12px;color:var(--yellow);margin-top:6px;min-height:0}
+  .qlFeed{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+  .qlFeedRow{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .qlFeedRow .meta{color:var(--dim);font-size:11px;white-space:nowrap;min-width:70px}
+  .qlFeedRow .txt{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+  .qlFeedRow button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--cyan);font:700 12px inherit;
+    padding:8px 10px;cursor:pointer;font-family:inherit}
+  .qlBox{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+  .qlBox th,.qlBox td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right}
+  .qlBox th:first-child,.qlBox td:first-child{text-align:left}
+  .qlBox th{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
   .playerChip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;
     font-size:12.5px;cursor:pointer;user-select:none;background:#0a0c10;color:var(--dim);font-weight:700}
   .playerChip .num{color:var(--dim2);font-weight:800;margin-right:4px}
@@ -172,7 +219,7 @@
 
   .insertPosRow{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .insertPosRow label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
-  .insertPosRow select{flex:1 1 200px;background:#0a0c10;color:var(--text);border:1px solid var(--line);
+  .insertPosRow select{flex:1 1 200px;min-width:0;max-width:100%;background:#0a0c10;color:var(--text);border:1px solid var(--line);
     border-radius:8px;padding:7px 8px;font-size:12px;font-family:inherit}
 
   footer.note{font-size:11px;color:var(--dim2);text-align:center;padding:16px 10px 0;line-height:1.6}
@@ -214,6 +261,27 @@
   <div id="offlineBar" class="offlineBar" role="status" hidden></div>
 
   <div class="scoreboard" id="scoreboardBox">US 0 — 0 OPP</div>
+
+  <!-- Nathan: "We also don't have the ability to really accurately track
+       our stats during the game." Quick Log: about 3-5 taps a play, one
+       hand, no typing. Builds the same play records as the full form
+       below, and down, distance, spot, quarter and clock carry over. -->
+  <section class="ql" id="quickLog">
+    <div class="qlStatus" id="qlStatus"></div>
+    <div class="qlTypes" id="qlTypes"></div>
+    <div id="qlBody"></div>
+    <div class="qlActions">
+      <button class="qlBtn qlUndo" id="qlUndoBtn" type="button" disabled>↩ Undo</button>
+      <button class="qlBtn qlLog" id="qlLogBtn" type="button" disabled>✅ Log</button>
+    </div>
+    <div class="qlNote" id="qlNote"></div>
+    <div class="qlFeed">
+      <div class="qlLabel">Play-by-play (newest first)</div>
+      <div id="qlFeed"><div class="emptyState">No plays yet.</div></div>
+      <div class="qlLabel">Box score</div>
+      <div id="qlBox"></div>
+    </div>
+  </section>
 
   <div class="entryPanel" id="entryPanel">
     <h2 id="entryPanelToggle" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
@@ -574,8 +642,12 @@
   setInterval(retryOutboxSoon, 15000);
   function blankGameState(){ return { plays: [], quarter: 1, spot: 50, down: 1, distance: 10, finalUs: '', finalOpp: '' }; }
   function currentGameStateObj(){
+    // poss / clock / quarterLen / lastPasser are Quick Log's running state
+    // (added 2026-11-07; older saved games just don't have them).
     return { plays: plays, quarter: currentQuarter, spot: currentSpot, down: currentDown, distance: currentDistance,
-      finalUs: finalScoreUs.value, finalOpp: finalScoreOpp.value, updatedAt: new Date().toISOString() };
+      finalUs: finalScoreUs.value, finalOpp: finalScoreOpp.value,
+      poss: qlState.poss, clock: clockNow(), quarterLen: qlState.quarterLen, lastPasser: qlState.lastPasser,
+      updatedAt: new Date().toISOString() };
   }
   function applyGameState(gs){
     gs = gs || blankGameState();
@@ -589,6 +661,13 @@
     currentDistance = (typeof gs.distance === 'number') ? gs.distance : 10;
     finalScoreUs.value = gs.finalUs || '';
     finalScoreOpp.value = gs.finalOpp || '';
+    stopClock(false);
+    qlState.poss = gs.poss === 'Opponent' ? 'Opponent' : 'Us';
+    qlState.clock = (typeof gs.clock === 'number') ? gs.clock : null;
+    qlState.quarterLen = (typeof gs.quarterLen === 'number') ? gs.quarterLen : 600;
+    qlState.lastPasser = gs.lastPasser || null;
+    qlState.undo = [];
+    ql = {};
   }
 
   // Nathan: "would be nice to have a score verification through the
@@ -2061,6 +2140,16 @@
   // before saving.
   function maybePromptExtraPoint(entry){
     if (!entry.td) return;
+    const scoringTeam = scoringTeamForTd(entry);
+    currentType = 'score';
+    document.querySelectorAll('.typeBtn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-type') === 'score'); });
+    resetDraft();
+    draft.scoreTeam = scoringTeam;
+    renderFields();
+    alert('🏆 Touchdown by ' + scoringTeam + '! Pick the extra point attempt below (Kick or Run/Pass Play) and Good/No Good, then Log Play.');
+  }
+  // Which team a play's td flag scores for (also used by Quick Log).
+  function scoringTeamForTd(entry){
     let scoringTeam = 'Us';
     if (entry.type === 'run') scoringTeam = entry.runTeam !== 'Opponent' ? 'Us' : 'Opponent';
     else if (entry.type === 'pass') scoringTeam = entry.passTeam !== 'Opponent' ? 'Us' : 'Opponent';
@@ -2068,12 +2157,7 @@
     else if (entry.type === 'punt') scoringTeam = entry.puntTeam !== 'Opponent' ? 'Opponent' : 'Us';
     else if (entry.type === 'turnover') scoringTeam = entry.side === 'offense' ? 'Opponent' : 'Us'; // we lost it (offense) -> they ran it back, or vice versa
     else scoringTeam = entry.side === 'offense' ? 'Us' : 'Opponent';
-    currentType = 'score';
-    document.querySelectorAll('.typeBtn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-type') === 'score'); });
-    resetDraft();
-    draft.scoreTeam = scoringTeam;
-    renderFields();
-    alert('🏆 Touchdown by ' + scoringTeam + '! Pick the extra point attempt below (Kick or Run/Pass Play) and Good/No Good, then Log Play.');
+    return scoringTeam;
   }
 
   document.getElementById('logPlayBtn').addEventListener('click', function(){
@@ -2310,6 +2394,8 @@
       });
     });
     populateInsertPosSel();
+    renderQuickFeed();
+    renderQuickBox();
   }
 
   // Nathan: "go back to a game... so I can edit them" made "Start New Game"
@@ -3598,6 +3684,7 @@
     renderStats();
     renderBallPositionControl();
     renderDownDistanceControl();
+    renderQuick('');
   }
 
   let liveGamesCache = [];
@@ -3755,7 +3842,510 @@
       rosterState = Array.isArray(saved) ? 'loaded' : 'error';
     }
     renderFields();
+    renderQuick();
   }
+
+
+  // ---------------------------------------------------------------------
+  // Quick Log -- live sideline entry, one hand, about 3-5 taps a play.
+  // Nathan: "We also don't have the ability to really accurately track
+  // our stats during the game, so it's reliant on a coach going back in
+  // time and adding the stats in manually."
+  //
+  //   Run  ->  #12  ->  +6  ->  Log                    (our run, 4 taps)
+  //   Pass ->  #22  ->  Complete  ->  +8  ->  Log      (QB carries over)
+  //   Run  ->  +3   ->  Log                            (their run, 3 taps)
+  //
+  // Each tap builds the SAME play record the full "Log a Play" form makes
+  // (runTeam/carrier/yards/startSide..., see renderFields), so the stats
+  // sheet, Push to Live Stats, Game Playback and the Coach Tools import
+  // read it unchanged. Only new field: clock ("7:42", time left in the
+  // quarter), which js/play-order.js uses to order plays inside a quarter.
+  // After each play, spot and down/distance advance through the same
+  // advanceSpotForPlay/advanceDownDistanceForPlay as the full form;
+  // Quick Log also flips possession (punt, kickoff, turnover, turnover on
+  // downs) and moves the distance on accepted penalties. Saves go through
+  // persist(), so they queue offline like everything else.
+  // ---------------------------------------------------------------------
+  const qlState = { poss: 'Us', clock: null, quarterLen: 600, lastPasser: null, undo: [] };
+  let ql = {};              // the play being built
+  let clockRunning = false, clockStartedAt = 0, clockStartSecs = 0, clockTimer = null;
+  let lastPlayIdMs = 0;
+
+  const QL_TYPES = [['run','🏃 Run'],['pass','🎯 Pass'],['punt','🦶 Punt'],['kick','🦵 Kick'],
+    ['penalty','🚩 Penalty'],['turnover','🔄 Turnover'],['score','🏆 Score']];
+  const QL_YARD_CHIPS = [-5, -2, 0, 2, 4, 6, 8, 10, 15, 20];
+  const QL_PEN_TYPES = ['False Start','Offsides','Holding','Delay of Game','Pass Interference','Face Mask','Unsportsmanlike','Other'];
+  const QL_SCORE_KINDS = [['Kick (2 pt Good)','Kick ✓ (2)'],['Kick (No Good)','Kick ✗'],
+    ['Run/Pass Play (1 pt Good)','Play ✓ (1)'],['Run/Pass Play (No Good)','Play ✗'],['Safety','Safety (2)']];
+
+  function other(team){ return team === 'Opponent' ? 'Us' : 'Opponent'; }
+  function newPlayId(){ lastPlayIdMs = Math.max(Date.now(), lastPlayIdMs + 1); return 'play_' + lastPlayIdMs; }
+  function sideYard(abs){ const sy = sideYardFromAbs(clampSpot(abs)); return sy; }
+
+  // ---- Game clock (counts down while running; tap to fix) ----
+  function clockNow(){
+    if (qlState.clock == null) return null;
+    if (!clockRunning) return qlState.clock;
+    return Math.max(0, clockStartSecs - Math.floor((Date.now() - clockStartedAt) / 1000));
+  }
+  function fmtClock(sec){ return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+  function startClock(){
+    if (qlState.clock == null) qlState.clock = qlState.quarterLen;
+    clockStartSecs = qlState.clock; clockStartedAt = Date.now(); clockRunning = true;
+    clearInterval(clockTimer);
+    clockTimer = setInterval(function(){
+      const el = document.getElementById('qlClock');
+      if (el) el.textContent = '⏱ ' + fmtClock(clockNow()) + ' ⏸';
+      if (clockNow() === 0) stopClock(true);
+    }, 1000);
+  }
+  function stopClock(redraw){
+    if (clockRunning) qlState.clock = clockNow();
+    clockRunning = false; clearInterval(clockTimer); clockTimer = null;
+    if (redraw) renderQuick();
+  }
+  // Clock stamped on a play: never later than the play before it in the
+  // same quarter, so a clock fixed upward mid-quarter can't reorder plays.
+  function clockStamp(){
+    const now = clockNow();
+    if (now == null) return null;
+    let cap = now;
+    for (let i = plays.length - 1; i >= 0; i--){
+      const p = plays[i];
+      if (p.type === 'quarterEnd') break;
+      const c = window.BengalsPlayOrder.clockSeconds(p.clock);
+      if (c != null){ cap = Math.min(now, c); break; }
+    }
+    return fmtClock(cap);
+  }
+  function resetClockForNewQuarter(){
+    stopClock(false);
+    qlState.clock = qlState.clock == null ? null : qlState.quarterLen;
+  }
+  function endQuarterNow(){
+    if (!selectedGame) return;
+    if (!confirm('End ' + quarterLabel(currentQuarter) + '?')) return;
+    plays.push({ type: 'quarterEnd', id: 'q_' + newPlayId().slice(5), quarter: currentQuarter });
+    currentQuarter = currentQuarter + 1;
+    resetClockForNewQuarter();
+    persist(); renderLog(); populateEndQuarterSel(); renderQuick();
+  }
+  // The full form's quarter dropdown resets the clock too.
+  endQuarterSel.addEventListener('change', function(){ resetClockForNewQuarter(); renderQuick(); });
+
+  // ---- What each type needs ----
+  function qlRole(){
+    const us = qlState.poss === 'Us';
+    switch (ql.type){
+      case 'run': return us ? ['player', 'Ball carrier'] : ['player', 'Tackler (optional)'];
+      case 'pass': return us ? ['player', ql.pickQb ? 'Quarterback' : 'Target'] : ['player', 'Tackler (optional)'];
+      case 'punt': return us ? ['player', 'Punter'] : (ql.result === 'Returned' ? ['player', 'Returner'] : null);
+      case 'kick': return us ? null : ['player', 'Returner'];
+      case 'turnover': return us ? ['player', 'Lost by'] : ['player', 'Recovered by'];
+      case 'penalty': return ql.penTeam === 'Us' ? ['player', 'Player (optional)'] : null;
+      case 'score': return ['player', 'Player (optional)'];
+    }
+    return null;
+  }
+  function qlNeedsYards(){
+    if (ql.type === 'run') return 'Yards';
+    if (ql.type === 'pass') return (ql.result === 'Complete' || ql.result === 'Sacked') ? (ql.result === 'Sacked' ? 'Yards (loss)' : 'Yards') : null;
+    if ((ql.type === 'punt' || ql.type === 'kick') && ql.result === 'Returned') return 'Return yards';
+    return null;
+  }
+  function qlNeedsSpot(){
+    if (ql.type === 'run' || (ql.type === 'pass' && (ql.result === 'Complete' || ql.result === 'Sacked'))) return 'Or tap where the play ended';
+    if (ql.type === 'punt' || ql.type === 'kick') return ql.result === 'Touchback' ? null : 'Tap where the ball was dead';
+    if (ql.type === 'turnover') return 'Tap where the ball ended up';
+    return null;
+  }
+  // Forward direction for whoever has the ball: our offense moves toward 100.
+  function dirFor(team){ return team === 'Opponent' ? -1 : 1; }
+  function qlDefaultEnd(){
+    const poss = qlState.poss, start = currentSpot;
+    if (ql.type === 'run' || ql.type === 'pass') return clampSpot(start + dirFor(poss) * Number(ql.yards || 0));
+    if (ql.type === 'punt') return ql.result === 'Touchback' ? (poss === 'Us' ? 80 : 20) : clampSpot(start + dirFor(poss) * 30);
+    if (ql.type === 'kick'){
+      if (ql.result === 'Touchback') return poss === 'Us' ? 80 : 20;
+      return poss === 'Us' ? 70 : 30; // the receiving team's own 30
+    }
+    return start;
+  }
+  function qlEnd(){ return ql.endAbs != null ? ql.endAbs : qlDefaultEnd(); }
+  function qlReady(){
+    if (!selectedGame || !ql.type) return false;
+    const us = qlState.poss === 'Us';
+    if (ql.type === 'run') return !us || !!ql.player;
+    if (ql.type === 'pass') return !!ql.result && (!us || !!(ql.passer || qlState.lastPasser));
+    if (ql.type === 'punt' || ql.type === 'kick') return !!ql.result;
+    if (ql.type === 'penalty') return !!ql.penTeam && !!ql.penType;
+    if (ql.type === 'turnover') return !!ql.toType && (!us || !!ql.player);
+    if (ql.type === 'score') return !!ql.scoreKind;
+    return false;
+  }
+
+  function qlBuildEntry(){
+    const poss = qlState.poss, us = poss === 'Us';
+    const start = currentSpot, startSY = sideYard(start);
+    const e = { type: ql.type, id: newPlayId(), side: us ? 'offense' : 'defense', quarter: currentQuarter,
+      down: currentDown, distance: currentDistance };
+    const clock = clockStamp(); if (clock) e.clock = clock;
+    const end = qlEnd(), endSY = sideYard(end);
+    const yards = Number(ql.yards || 0);
+    function snapSpots(){ e.startSide = startSY.side; e.startYard = startSY.yard; e.endSide = endSY.side; e.endYard = endSY.yard; }
+    function reachesGoal(){ return us ? end >= 100 : end <= 0; }
+    if (ql.type === 'run'){
+      e.runTeam = poss;
+      e.yards = Math.round((end - start) * dirFor(poss));
+      if (us) e.carrier = ql.player; else if (ql.player) e.tackler = ql.player;
+      snapSpots();
+      e.td = !!ql.td || reachesGoal();
+      if (!e.td && e.yards >= currentDistance) e.firstDown = true;
+    } else if (ql.type === 'pass'){
+      e.passTeam = poss; e.result = ql.result;
+      if (us){ e.passer = ql.passer || qlState.lastPasser; if (ql.result !== 'Sacked' && ql.player) e.target = ql.player; }
+      else if (ql.player && ql.result === 'Complete') e.tackler = ql.player;
+      if (ql.result === 'Complete' || ql.result === 'Sacked'){
+        e.yards = Math.round((end - start) * dirFor(poss));
+        snapSpots();
+        if (ql.result === 'Complete'){
+          e.td = !!ql.td || reachesGoal();
+          if (!e.td && e.yards >= currentDistance) e.firstDown = true;
+        }
+      } else {
+        e.spotSide = startSY.side; e.spotYard = startSY.yard;
+      }
+    } else if (ql.type === 'punt'){
+      e.puntTeam = poss; e.puntResult = ql.result;
+      if (us && ql.player) e.punter = ql.player;
+      if (!us && ql.result === 'Returned' && ql.player) e.returner = ql.player;
+      const ret = ql.result === 'Returned' ? yards : 0;
+      const catchSY = sideYard(end - dirFor(other(poss)) * ret);
+      e.startSide = startSY.side; e.startYard = startSY.yard;
+      e.catchSide = catchSY.side; e.catchYard = catchSY.yard;
+      e.endSide = endSY.side; e.endYard = endSY.yard;
+      if (ql.td){ e.td = true; }
+    } else if (ql.type === 'kick'){
+      e.kickTeam = poss;
+      const kickFrom = us ? 40 : 60;
+      const kSY = sideYard(kickFrom); e.startSide = kSY.side; e.startYard = kSY.yard;
+      if (!us && ql.player) e.returner = ql.player;
+      const ret = ql.result === 'Returned' ? yards : 0;
+      const catchSY = sideYard(end - dirFor(other(poss)) * ret);
+      e.catchSide = catchSY.side; e.catchYard = catchSY.yard;
+      e.endSide = endSY.side; e.endYard = endSY.yard;
+      if (ql.td) e.td = true;
+    } else if (ql.type === 'penalty'){
+      e.penTeam = ql.penTeam; e.penType = ql.penType; e.penYards = Number(ql.penYards || 5);
+      if (ql.penTeam === 'Us' && ql.player) e.penPlayer = ql.player;
+      e.spotSide = startSY.side; e.spotYard = startSY.yard;
+      if (ql.declined) e.declined = true;
+      if (ql.firstDown) e.firstDown = true;
+    } else if (ql.type === 'turnover'){
+      e.toType = ql.toType;
+      if (us) e.lostBy = ql.player; else if (ql.player) e.recoveredBy = ql.player;
+      e.catchSide = startSY.side; e.catchYard = startSY.yard;
+      e.endSide = endSY.side; e.endYard = endSY.yard;
+      if (ql.td) e.td = true;
+    } else if (ql.type === 'score'){
+      e.scoreKind = ql.scoreKind; e.scoreTeam = ql.scoreTeam || poss;
+      e.side = e.scoreTeam === 'Us' ? 'offense' : 'defense';
+      if (ql.player) e.scorePlayer = ql.player;
+      e.spotSide = startSY.side; e.spotYard = startSY.yard;
+    }
+    return e;
+  }
+
+  // Possession and the bits advanceDownDistanceForPlay leaves alone.
+  function qlAfter(e, before){
+    const offense = before.poss;
+    if (e.type === 'punt') qlState.poss = other(e.puntTeam);
+    else if (e.type === 'kick') qlState.poss = other(e.kickTeam);
+    else if (e.type === 'turnover') qlState.poss = other(offense);
+    else if (e.type === 'score') qlState.poss = e.scoreKind === 'Safety' ? other(e.scoreTeam) : e.scoreTeam; // that team kicks off next
+    else if ((e.type === 'run' || e.type === 'pass') && !e.td && before.down === 4 && currentDown !== 1){
+      qlState.poss = other(offense); // turnover on downs
+      currentDown = 1;
+      currentDistance = Math.max(1, Math.min(10, qlState.poss === 'Us' ? 100 - currentSpot : currentSpot));
+    } else if (e.type === 'penalty' && !e.declined && !e.firstDown){
+      const yds = Number(e.penYards || 0);
+      currentDistance = e.penTeam === offense ? currentDistance + yds : currentDistance - yds;
+      if (currentDistance <= 0){ currentDown = 1; currentDistance = 10; }
+      const toGoal = offense === 'Us' ? 100 - currentSpot : currentSpot;
+      currentDistance = Math.max(1, Math.min(currentDistance, toGoal || 1));
+    }
+    if (e.type === 'pass' && e.passer) qlState.lastPasser = e.passer;
+  }
+
+  function commitQuick(){
+    if (!qlReady()) return;
+    const before = { spot: currentSpot, down: currentDown, distance: currentDistance, poss: qlState.poss,
+      quarter: currentQuarter, lastPasser: qlState.lastPasser };
+    const e = qlBuildEntry();
+    plays.push(e); // Quick Log always logs the latest play (the full form handles going back in time)
+    advanceSpotForPlay(e);
+    advanceDownDistanceForPlay(e);
+    qlAfter(e, before);
+    qlState.undo.push({ id: e.id, before: before });
+    ql = {};
+    let note = '';
+    if (e.td){
+      ql = { type: 'score', scoreTeam: scoringTeamForTd(e) };
+      note = '🏆 Touchdown, ' + (ql.scoreTeam === 'Us' ? 'Bengals' : 'opponent') + '! Pick the extra point below.';
+    }
+    persist(); renderLog(); renderStats(); renderBallPositionControl(); renderDownDistanceControl(); populateEndQuarterSel();
+    renderQuick(note);
+  }
+  function undoQuick(){
+    const last = qlState.undo.pop();
+    if (!last) return;
+    const idx = plays.findIndex(function(p){ return p.id === last.id; });
+    if (idx === -1){ renderQuick(); return; }
+    const wasLast = idx === plays.length - 1;
+    plays.splice(idx, 1);
+    if (wasLast){
+      currentSpot = last.before.spot; currentDown = last.before.down; currentDistance = last.before.distance;
+      qlState.poss = last.before.poss; currentQuarter = last.before.quarter; qlState.lastPasser = last.before.lastPasser;
+    }
+    ql = {};
+    persist(); renderLog(); renderStats(); renderBallPositionControl(); renderDownDistanceControl(); populateEndQuarterSel();
+    renderQuick('↩ Undid the last play.');
+  }
+
+  // ---- Drawing ----
+  function qlEl(tag, cls, text){ const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; }
+  function qlButton(cls, text, on, fn){
+    const b = qlEl('button', cls + (on ? ' on' : ''), text); b.type = 'button';
+    b.addEventListener('click', fn); return b;
+  }
+  function numFor(name){ const r = ROSTER.find(function(p){ return p.name === name; }); return r && r.num ? '#' + r.num : name; }
+  function qlChipRow(options, current, fn){
+    const row = qlEl('div', 'qlChips');
+    options.forEach(function(o){
+      const v = Array.isArray(o) ? o[0] : o, label = Array.isArray(o) ? o[1] : String(o);
+      row.appendChild(qlButton('qlChip', label, current === v, function(){ fn(current === v ? null : v); }));
+    });
+    return row;
+  }
+  function renderQuick(note){
+    const status = document.getElementById('qlStatus');
+    if (!status) return;
+    const enabled = !!selectedGame;
+    document.getElementById('quickLog').style.opacity = enabled ? '' : '.5';
+    status.innerHTML = '';
+    const poss = qlState.poss;
+    status.appendChild(qlButton('qlPill', quarterLabel(currentQuarter) + ' ▸', false, endQuarterNow)).title = 'End this quarter';
+    const c = clockNow();
+    const clockBtn = qlButton('qlPill' + (clockRunning ? ' run' : ''), c == null ? '⏱ Clock ▶' : '⏱ ' + fmtClock(c) + (clockRunning ? ' ⏸' : ' ▶'), false, function(){
+      if (clockRunning) stopClock(true); else { startClock(); renderQuick(); }
+    });
+    clockBtn.id = 'qlClock';
+    status.appendChild(clockBtn);
+    status.appendChild(qlButton('qlPill', '✎', false, function(){
+      let v = null;
+      try { v = prompt('Time left in ' + quarterLabel(currentQuarter) + ' (m:ss). At the start of a quarter this also sets the quarter length.', c == null ? fmtClock(qlState.quarterLen) : fmtClock(c)); } catch(e){ return; }
+      const sec = window.BengalsPlayOrder.clockSeconds(v);
+      if (sec == null) return;
+      const wasRunning = clockRunning; stopClock(false);
+      qlState.clock = sec;
+      const quarterHasPlays = plays.some(function(p){ return p.type !== 'quarterEnd' && p.quarter === currentQuarter; });
+      if (!quarterHasPlays) qlState.quarterLen = sec;
+      if (wasRunning) startClock();
+      persist(); renderQuick();
+    })).title = 'Fix the clock';
+    status.appendChild(qlButton('qlPill', ['1st','2nd','3rd','4th'][currentDown - 1] + ' & ' + currentDistance, false, function(){
+      let v = null;
+      try { v = prompt('Down and distance, e.g. 3 & 4', currentDown + ' & ' + currentDistance); } catch(e){ return; }
+      const m = String(v || '').match(/^\s*([1-4])\D+(\d{1,2})\s*$/);
+      if (!m) return;
+      currentDown = Number(m[1]); currentDistance = Math.max(1, Number(m[2]));
+      persist(); renderDownDistanceControl(); renderQuick();
+    })).title = 'Fix down and distance';
+    status.appendChild(qlButton('qlPill', spotLabelAbs(currentSpot), false, function(){
+      ql.setSpot = !ql.setSpot; renderQuick(ql.setSpot ? 'Tap the field below to set the ball spot.' : '');
+    })).title = 'Fix the ball spot';
+    status.appendChild(qlButton('qlPill poss' + (poss === 'Us' ? '' : ' them'), poss === 'Us' ? '🏈 Our ball ⇄' : '🛡️ Their ball ⇄', false, function(){
+      qlState.poss = other(qlState.poss); ql = ql.type ? { type: ql.type } : {}; persist(); renderQuick();
+    })).title = 'Switch who has the ball';
+
+    const types = document.getElementById('qlTypes');
+    types.innerHTML = '';
+    QL_TYPES.forEach(function(t){
+      types.appendChild(qlButton('qlBtn', t[1], ql.type === t[0], function(){
+        ql = ql.type === t[0] ? {} : { type: t[0] };
+        if (t[0] === 'penalty') ql.penYards = 5;
+        if (t[0] === 'kick') ql.result = 'Returned';
+        renderQuick();
+      }));
+    });
+
+    const body = document.getElementById('qlBody');
+    body.innerHTML = '';
+    const us = poss === 'Us';
+    if (ql.type === 'pass' && us){
+      const qb = ql.passer || qlState.lastPasser;
+      body.appendChild(qlButton('qlChip', qb ? 'QB ' + numFor(qb) + (ql.pickQb ? ' · pick below' : ' · change') : 'QB · pick below', !!ql.pickQb || !qb, function(){ ql.pickQb = !ql.pickQb; renderQuick(); }));
+      if (!qb) ql.pickQb = true;
+    }
+    if (ql.type === 'penalty'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Penalty on'));
+      body.appendChild(qlChipRow([['Us','Us'],['Opponent','Them']], ql.penTeam, function(v){ ql.penTeam = v; renderQuick(); }));
+      body.appendChild(qlEl('div', 'qlLabel', 'Penalty'));
+      body.appendChild(qlChipRow(QL_PEN_TYPES, ql.penType, function(v){ ql.penType = v; renderQuick(); }));
+      body.appendChild(qlEl('div', 'qlLabel', 'Yards'));
+      body.appendChild(qlChipRow([5, 10, 15], ql.penYards, function(v){ ql.penYards = v || 5; renderQuick(); }));
+      body.appendChild(qlChipRow([['declined','Declined'],['firstDown','Automatic 1st down']], ql.declined ? 'declined' : (ql.firstDown ? 'firstDown' : null), function(v){
+        ql.declined = v === 'declined'; ql.firstDown = v === 'firstDown'; renderQuick();
+      }));
+    }
+    if (ql.type === 'score'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Scored by'));
+      if (!ql.scoreTeam) ql.scoreTeam = poss;
+      body.appendChild(qlChipRow([['Us','Bengals'],['Opponent','Them']], ql.scoreTeam, function(v){ ql.scoreTeam = v || poss; renderQuick(); }));
+      body.appendChild(qlEl('div', 'qlLabel', 'Kind'));
+      body.appendChild(qlChipRow(QL_SCORE_KINDS, ql.scoreKind, function(v){ ql.scoreKind = v; renderQuick(); }));
+    }
+    if (ql.type === 'turnover'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Turnover'));
+      body.appendChild(qlChipRow(['Fumble','Interception'], ql.toType, function(v){ ql.toType = v; renderQuick(); }));
+    }
+    const role = qlRole();
+    if (role && (ql.type !== 'score' || ql.scoreTeam === 'Us')){
+      body.appendChild(qlEl('div', 'qlLabel', role[1]));
+      const grid = qlEl('div', 'qlNums');
+      const picking = ql.type === 'pass' && us && ql.pickQb;
+      const current = picking ? (ql.passer || qlState.lastPasser) : ql.player;
+      const list = ROSTER.slice().sort(function(a, b){ return (Number(a.num) || 999) - (Number(b.num) || 999); });
+      if (!list.length) grid.appendChild(qlEl('div', 'rosterNote', rosterState === 'loading' ? 'Loading the roster…' : 'No roster on this phone yet -- use the full form below to write names in.'));
+      list.forEach(function(p){
+        grid.appendChild(qlButton('qlBtn qlNum', p.num ? '#' + p.num : p.name, current === p.name, function(){
+          if (picking){ ql.passer = p.name; ql.pickQb = false; }
+          else ql.player = (ql.player === p.name) ? null : p.name;
+          renderQuick();
+        })).title = p.name;
+      });
+      body.appendChild(grid);
+    }
+    if (ql.type === 'pass'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Result'));
+      body.appendChild(qlChipRow(['Complete','Incomplete','Sacked'], ql.result, function(v){
+        ql.result = v; ql.endAbs = null; ql.yards = v === 'Sacked' ? -5 : 0; renderQuick();
+      }));
+    }
+    if (ql.type === 'punt'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Result'));
+      body.appendChild(qlChipRow(['Downed','Fair Catch','Touchback','Out of Bounds','Returned'], ql.result, function(v){ ql.result = v; ql.endAbs = null; renderQuick(); }));
+    }
+    if (ql.type === 'kick'){
+      body.appendChild(qlEl('div', 'qlLabel', 'Result'));
+      body.appendChild(qlChipRow(['Returned','Touchback'], ql.result, function(v){ ql.result = v || 'Returned'; ql.endAbs = null; renderQuick(); }));
+    }
+    const yl = qlNeedsYards();
+    if (yl){
+      body.appendChild(qlEl('div', 'qlLabel', yl));
+      const row = qlEl('div', 'qlYards');
+      const setY = function(v){ ql.yards = v; if (ql.type === 'run' || ql.type === 'pass') ql.endAbs = null; renderQuick(); };
+      row.appendChild(qlButton('qlBtn', '−5', false, function(){ setY(Number(ql.yards || 0) - 5); }));
+      row.appendChild(qlButton('qlBtn', '−1', false, function(){ setY(Number(ql.yards || 0) - 1); }));
+      const shown = (ql.type === 'run' || ql.type === 'pass') ? Math.round((qlEnd() - currentSpot) * dirFor(poss)) : Number(ql.yards || 0);
+      row.appendChild(qlEl('div', 'qlYardsVal', (shown > 0 ? '+' : '') + shown));
+      row.appendChild(qlButton('qlBtn', '+1', false, function(){ setY(Number(ql.yards || 0) + 1); }));
+      row.appendChild(qlButton('qlBtn', '+5', false, function(){ setY(Number(ql.yards || 0) + 5); }));
+      body.appendChild(row);
+      body.appendChild(qlChipRow(QL_YARD_CHIPS.filter(function(v){ return yl !== 'Return yards' || v >= 0; }).map(function(v){ return [v, (v > 0 ? '+' : '') + v]; }),
+        (ql.type === 'run' || ql.type === 'pass') && ql.endAbs != null ? null : ql.yards, function(v){ setY(v == null ? 0 : v); }));
+    }
+    const sl = ql.setSpot ? 'Tap to set the ball spot' : qlNeedsSpot();
+    if (sl) body.appendChild(qlStrip(sl));
+    const canTd = ql.type === 'run' || (ql.type === 'pass' && ql.result === 'Complete') || ql.type === 'turnover' ||
+      ((ql.type === 'punt' || ql.type === 'kick') && ql.result === 'Returned');
+    if (canTd) body.appendChild(qlChipRow([['td','🏆 Touchdown']], ql.td ? 'td' : null, function(v){ ql.td = v === 'td'; renderQuick(); }));
+
+    document.getElementById('qlLogBtn').disabled = !qlReady();
+    document.getElementById('qlUndoBtn').disabled = !qlState.undo.length;
+    if (note !== undefined) document.getElementById('qlNote').textContent = note;
+  }
+  function qlStrip(label){
+    const wrap = qlEl('div');
+    wrap.appendChild(qlEl('div', 'qlLabel', label));
+    const strip = qlEl('div', 'qlStrip');
+    for (let y = 10; y < 100; y += 10){ const t = qlEl('i'); t.style.left = leftPctForSpot(y) + '%'; strip.appendChild(t); }
+    const los = qlEl('b'); los.style.left = leftPctForSpot(currentSpot) + '%'; los.style.background = 'var(--blue)'; strip.appendChild(los);
+    const endAbs = ql.setSpot ? null : qlEnd();
+    if (endAbs != null){ const m = qlEl('b'); m.style.left = leftPctForSpot(endAbs) + '%'; m.style.background = 'var(--yellow)'; strip.appendChild(m); }
+    strip.addEventListener('click', function(ev){
+      const r = strip.getBoundingClientRect();
+      const pct = (ev.clientX - r.left) / r.width * 100;
+      const abs = clampSpot(Math.round((pct - 8) / 84 * 100));
+      if (ql.setSpot){ currentSpot = abs; ql.setSpot = false; persist(); renderBallPositionControl(); renderQuick(''); return; }
+      ql.endAbs = abs;
+      renderQuick();
+    });
+    wrap.appendChild(strip);
+    wrap.appendChild(qlEl('div', 'qlStripTxt', '🔵 ' + spotLabelAbs(currentSpot) + (endAbs != null ? '  →  🟡 ' + (endAbs >= 100 ? 'their end zone' : endAbs <= 0 ? 'our end zone' : spotLabelAbs(endAbs)) : '') + '   (our goal on the left)'));
+    return wrap;
+  }
+  function leftPctForSpot(abs){ return 8 + clampSpot(abs) / 100 * 84; }
+
+  function renderQuickFeed(){
+    const feed = document.getElementById('qlFeed');
+    if (!feed) return;
+    const recent = plays.filter(function(p){ return p.type !== 'quarterEnd'; }).slice(-8).reverse();
+    feed.innerHTML = '';
+    if (!recent.length){ feed.appendChild(qlEl('div', 'emptyState', 'No plays yet.')); return; }
+    recent.forEach(function(p){
+      const row = qlEl('div', 'qlFeedRow');
+      const dd = (p.down && p.distance) ? ' · ' + ['1st','2nd','3rd','4th'][p.down - 1] + '&' + p.distance : '';
+      row.appendChild(qlEl('div', 'meta', quarterLabel(p.quarter || 1) + (p.clock ? ' ' + p.clock : '') + dd));
+      row.appendChild(qlEl('div', 'txt', describePlay(p)));
+      row.appendChild(qlButton('', 'Edit', false, function(){
+        expandEntryPanel();
+        startEditPlay(p.id);
+        entryPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+      feed.appendChild(row);
+    });
+  }
+  function renderQuickBox(){
+    const box = document.getElementById('qlBox');
+    if (!box) return;
+    if (!plays.some(function(p){ return p.type !== 'quarterEnd'; })){ box.innerHTML = '<div class="emptyState">Totals show here as you log.</div>'; return; }
+    const s = compileStatSheet();
+    const sum = function(rows, k){ return rows.reduce(function(n, r){ return n + (Number(r[k]) || 0); }, 0); };
+    const usRush = { att: sum(s.rushing, 'att'), yds: sum(s.rushing, 'yds') };
+    const usPass = { comp: sum(s.passing, 'comp'), att: sum(s.passing, 'att'), yds: sum(s.passing, 'yds') };
+    let fdUs = 0, fdOpp = 0, toUs = 0, toOpp = 0;
+    plays.forEach(function(p){
+      if (p.firstDown && (p.type === 'run' || p.type === 'pass' || p.type === 'penalty')){
+        const team = p.type === 'run' ? p.runTeam : p.type === 'pass' ? p.passTeam : (p.penTeam === 'Us' ? 'Opponent' : 'Us');
+        if (team === 'Opponent') fdOpp++; else fdUs++;
+      }
+      if (p.type === 'turnover'){ if (p.side === 'offense') toUs++; else toOpp++; }
+      if (p.type === 'defextra' && p.extraType === 'INT') toOpp++;
+    });
+    const score = computeRunningScore();
+    const esc = escapeHtml;
+    let h = '<table class="qlBox"><thead><tr><th>Team</th><th>Pts</th><th>Rush</th><th>Pass</th><th>Yds</th><th>1st</th><th>TO</th><th>Pen</th></tr></thead><tbody>';
+    h += '<tr><td>Bengals</td><td>' + score.us + '</td><td>' + usRush.att + '-' + usRush.yds + '</td><td>' + usPass.comp + '/' + usPass.att + '-' + usPass.yds +
+      '</td><td>' + (usRush.yds + usPass.yds) + '</td><td>' + fdUs + '</td><td>' + toUs + '</td><td>' + s.penaltyTotals.us.count + '-' + s.penaltyTotals.us.yds + '</td></tr>';
+    h += '<tr><td>Opponent</td><td>' + score.opp + '</td><td>' + s.oppRushing.att + '-' + s.oppRushing.yds + '</td><td>' + s.oppPassing.comp + '/' + s.oppPassing.att + '-' + s.oppPassing.yds +
+      '</td><td>' + (s.oppRushing.yds + s.oppPassing.yds) + '</td><td>' + fdOpp + '</td><td>' + toOpp + '</td><td>' + s.penaltyTotals.opponent.count + '-' + s.penaltyTotals.opponent.yds + '</td></tr>';
+    h += '</tbody></table>';
+    const lines = [];
+    s.passing.forEach(function(r){ lines.push(['Pass', r.name, r.comp + '/' + r.att + ', ' + r.yds + ' yds' + (r.td ? ', ' + r.td + ' TD' : '')]); });
+    s.rushing.forEach(function(r){ lines.push(['Rush', r.name, r.att + ' for ' + r.yds + (r.td ? ', ' + r.td + ' TD' : '')]); });
+    s.receiving.forEach(function(r){ lines.push(['Rec', r.name, r.rec + ' for ' + r.yds + (r.td ? ', ' + r.td + ' TD' : '')]); });
+    s.tackles.forEach(function(r){ lines.push(['Tkl', r.name, r.solo + (r.ast ? ' + ' + r.ast + ' ast' : '')]); });
+    if (lines.length){
+      h += '<table class="qlBox"><thead><tr><th>Player</th><th></th><th>Totals</th></tr></thead><tbody>';
+      lines.forEach(function(l){ h += '<tr><td>' + esc(numFor(l[1])) + ' <span style="color:var(--dim)">' + esc(l[1]) + '</span></td><td>' + l[0] + '</td><td>' + esc(l[2]) + '</td></tr>'; });
+      h += '</tbody></table>';
+    }
+    box.innerHTML = h;
+  }
+  document.getElementById('qlLogBtn').addEventListener('click', commitQuick);
+  document.getElementById('qlUndoBtn').addEventListener('click', undoQuick);
 
   async function boot(){
     updateSideUI();
@@ -3764,6 +4354,7 @@
     renderBallPositionControl();
     renderDownDistanceControl();
     setGameControlsEnabled(false);
+    renderQuick('');
     setGameLoadStatus('Signing in…');
     let ok = false;
     try { ok = await ensureCoachAuth(); }
