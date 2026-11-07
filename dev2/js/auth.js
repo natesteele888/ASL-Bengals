@@ -375,7 +375,8 @@ window.exitPlayerPreview = function(){
       errorEl.textContent = 'This browser can\'t verify the code securely — try a modern browser over https.';
       return;
     }
-    var hash = await sha256Hex(inputEl.value);
+    var typed = inputEl.value;
+    var hash = await sha256Hex(typed);
     if(hash === CODE_HASH || hash === COACH_CODE_HASH){
       var typedCoachCode = hash === COACH_CODE_HASH;
       // Establish a real, non-anonymous Firebase session tied to this
@@ -384,7 +385,7 @@ window.exitPlayerPreview = function(){
       // (e.g. offline), treat it the same as a wrong code rather than
       // showing an app that will silently fail to load its data.
       try {
-        await window.signInWithGate(typedCoachCode ? 'coach' : 'player', hash);
+        await window.signInWithGate(typedCoachCode ? 'coach' : 'player', typed);
       } catch(gateErr) {
         console.error('Gate sign-in failed:', gateErr);
         errorEl.textContent = "Couldn't verify that code right now -- check your connection and try again.";
@@ -494,7 +495,8 @@ window.exitPlayerPreview = function(){
       roleErrorEl.textContent = 'This browser can\'t verify the password securely — try a modern browser over https.';
       return;
     }
-    var hash = await sha256Hex(roleCoachInput.value);
+    var typed = roleCoachInput.value;
+    var hash = await sha256Hex(typed);
     if(hash === COACH_CODE_HASH){
       // Match attemptLogin()'s typed-coach-code path: establish the real
       // 'coach' gate session before granting the role, not just the local
@@ -503,7 +505,7 @@ window.exitPlayerPreview = function(){
       // (usually 'player'), different from someone who types the coach
       // code directly.
       try {
-        await window.signInWithGate('coach', hash);
+        await window.signInWithGate('coach', typed);
       } catch(gateErr) {
         console.error('Gate sign-in failed:', gateErr);
         roleErrorEl.textContent = "Couldn't verify that right now -- check your connection and try again.";

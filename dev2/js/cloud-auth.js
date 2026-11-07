@@ -9,14 +9,22 @@
    2) Gate sign-in (real): once someone types the correct team/coach
       access code (checked by auth.js against CODE_HASH/COACH_CODE_HASH,
       same as before), we sign them into a real, non-anonymous Firebase
-      account tied to that code -- window.signInWithGate(kind, hash) below.
-      The "password" for that account IS the SHA-256 hash auth.js already
-      computed for the local compare, so the plaintext code itself is
-      never sent anywhere or stored; only someone who can reproduce that
-      exact hash (i.e. someone who knows the real code) can ever sign in
-      again. The account is created automatically the first time this
-      runs after this file shipped (EMAIL_NOT_FOUND -> sign up instead of
-      sign in) -- no manual Firebase console step needed to bootstrap it.
+      account tied to that code -- window.signInWithGate(kind, typedCode).
+      The account is created automatically the first time this runs
+      (sign up when it doesn't exist yet) -- no manual Firebase console
+      step needed to bootstrap it.
+
+      The account's password is NOT the SHA-256 hash any more (Nov 2026).
+      That hash is published in auth.js, so anyone who copied it from the
+      public repo could use it as the Firebase password and sign in
+      without knowing the code. The password is now PBKDF2(typed code)
+      with its own salt (gatePassword below), so it can only be worked
+      out by someone who knows the code itself. An account that still
+      carries the old hash password is moved over the first time its code
+      is typed (signInWithGate below), so nothing has to be run by hand.
+      Moving it ends every other device's saved session, which
+      endGateSession handles by sending that device back to the code
+      screen.
 
       Database rules key off auth.token.firebase.sign_in_provider to tell
       a gate session ('password') apart from a throwaway anonymous one
@@ -35,7 +43,7 @@
      window.firebaseAuthed(url)    -- async, returns the given Firebase
        Realtime Database URL with "?auth=<token>" (or "&auth=..." if the
        URL already has a query string) appended, ready to fetch().
-     window.signInWithGate(kind, passwordHash) -- async, kind is 'player'
+     window.signInWithGate(kind, typedCode) -- async, kind is 'player'
        or 'coach'. Called by auth.js right after a correct code is typed.
      window.hasGateSession() -- sync, true if this device already has a
        real (non-anonymous) session saved, so auth.js knows whether it's
@@ -51,6 +59,24 @@
   const SIGNUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`;
   const SIGNIN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
   const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const UPDATE_URL = `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${FIREBASE_API_KEY}`;
+  // Gate account password: PBKDF2 of the typed code, salted per gate.
+  const GATE_PW_SALT_PREFIX = 'aslbengals-gate-v2';
+  const GATE_PW_ITERATIONS = 100000;
+  const toHex = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  async function gatePassword(typedCode, kind){
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(typedCode), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      {name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(`${GATE_PW_SALT_PREFIX}|${kind}`), iterations: GATE_PW_ITERATIONS},
+      key, 256);
+    return toHex(bits);
+  }
+  // What every gate account had as its password before Nov 2026: the
+  // published SHA-256 of the code. Only used to move an old account over.
+  async function legacyGatePassword(typedCode){
+    return toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(typedCode)));
+  }
   // Refresh a little before actual expiry so an in-flight request never
   // gets built with a token that expires mid-flight.
   const SAFETY_MARGIN_MS = 60000;
@@ -82,6 +108,27 @@
     return !!(s && s.refreshToken);
   };
 
+  // A saved session Firebase has ended never works again. Forget it and
+  // reload once so the code screen shows, instead of leaving the app open
+  // on an anonymous session the database rules turn away. After the
+  // reload there is no saved session, so this cannot loop; the
+  // sessionStorage stamp is a second guard in case storage won't clear.
+  function endGateSession(){
+    cached = null;
+    let had = false;
+    try {
+      had = !!localStorage.getItem(GATE_SESSION_KEY);
+      localStorage.removeItem(GATE_SESSION_KEY);
+    } catch(e){}
+    if(!had) return;
+    try {
+      const last = Number(sessionStorage.getItem('bengalsGateEndedAt') || 0);
+      if(Date.now() - last < 30000) return;
+      sessionStorage.setItem('bengalsGateEndedAt', String(Date.now()));
+    } catch(e){}
+    try { location.reload(); } catch(e){}
+  }
+
   async function signInAnonymously(){
     const res = await fetch(SIGNUP_URL, {
       method: 'POST',
@@ -103,7 +150,13 @@
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
     });
-    if(!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
+    if(!res.ok){
+      const err = new Error('Token refresh failed: HTTP ' + res.status);
+      // 400 = Firebase has ended this saved session for good (the gate
+      // password was changed), not a network blip.
+      if(res.status === 400) err.sessionEnded = true;
+      throw err;
+    }
     const data = await res.json();
     return {
       idToken: data.id_token,
@@ -113,12 +166,17 @@
   }
 
   // Called by auth.js once a typed code matches CODE_HASH/COACH_CODE_HASH.
-  // passwordHash is that same SHA-256 hex string -- reused as the Firebase
-  // account password so the real plaintext code never has to travel any
-  // further than auth.js's own local compare.
-  window.signInWithGate = async function(kind, passwordHash){
+  // typedCode is the code as typed; the Firebase password is derived from
+  // it (gatePassword above), never the published hash.
+  window.signInWithGate = async function(kind, typedCode){
     const email = GATE_EMAILS[kind];
     if(!email) throw new Error('Unknown gate kind: ' + kind);
+    const password = await gatePassword(typedCode, kind);
+    const post = (url, body) => fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
     // Try creating the account first, not signing in first. Newer Firebase
     // projects have "email enumeration protection" on by default, which
     // makes sign-in deliberately return the same vague error whether the
@@ -127,29 +185,36 @@
     // any more. Account *creation*, on the other hand, always still
     // reports EMAIL_EXISTS unambiguously when the account is already
     // there, so that's the reliable signal to branch on instead.
-    let res = await fetch(SIGNUP_URL, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
-    });
-    if(!res.ok){
+    let res = await post(SIGNUP_URL, { email, password, returnSecureToken: true });
+    let data;
+    if(res.ok){
+      data = await res.json();
+    } else {
       const errBody = await res.json().catch(() => ({}));
       const code = errBody.error && errBody.error.message;
-      if(code === 'EMAIL_EXISTS'){
-        // Not the first time -- this gate account already exists, so sign
-        // into it instead. If this fails too, the code the person typed
-        // really doesn't match what the account was created with.
-        res = await fetch(SIGNIN_URL, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ email, password: passwordHash, returnSecureToken: true }),
-        });
-        if(!res.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+      if(code !== 'EMAIL_EXISTS') throw new Error('Gate account setup failed: ' + (code || res.status));
+      // Not the first time -- this gate account already exists, so sign
+      // into it instead.
+      res = await post(SIGNIN_URL, { email, password, returnSecureToken: true });
+      if(res.ok){
+        data = await res.json();
       } else {
-        throw new Error('Gate account setup failed: ' + (code || res.status));
+        // Either the code really is wrong, or this account still has the
+        // old password (the published hash of the code). Try that once; if
+        // it works, the person does know the code, so move the account
+        // onto the new password and the published hash stops working.
+        const old = await post(SIGNIN_URL, { email, password: await legacyGatePassword(typedCode), returnSecureToken: true });
+        if(!old.ok) throw new Error('Gate sign-in failed: HTTP ' + res.status);
+        data = await old.json();
+        try {
+          const upd = await post(UPDATE_URL, { idToken: data.idToken, password, returnSecureToken: true });
+          const moved = upd.ok ? await upd.json() : null;
+          if(moved && moved.idToken && moved.refreshToken) data = moved;
+        } catch(e){
+          // Signed in either way; the next sign-in tries the move again.
+        }
       }
     }
-    const data = await res.json();
     cached = {
       idToken: data.idToken,
       refreshToken: data.refreshToken,
@@ -193,6 +258,12 @@
             }
           }
         } catch(e){
+          if(e && e.sessionEnded){
+            // Not a blip: Firebase ended this saved session. Drop it (and
+            // show the code screen) rather than retrying it forever.
+            endGateSession();
+            fallbackRefreshToken = null; fallbackKind = null;
+          }
           const anon = await signInAnonymously();
           cached = fallbackRefreshToken
             ? Object.assign({}, anon, {refreshToken: fallbackRefreshToken, kind: fallbackKind, expiresAt: 0})
