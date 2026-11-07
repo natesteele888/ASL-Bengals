@@ -24,6 +24,7 @@ const coachtoolsModeEl = document.getElementById('coachtoolsMode');
 const scheduleModeEl = document.getElementById('scheduleMode');
 const standingsModeEl = document.getElementById('standingsMode');
 const oppOffenseModeEl = document.getElementById('oppOffenseMode');
+const filmModeEl = document.getElementById('filmMode');
 // Real back-button support (js/nav-history.js) -- setMode is the single
 // choke point every top-level section switch AND every Play sub-tab
 // switch already goes through (setSection, below, just delegates to it),
@@ -51,6 +52,7 @@ function setMode(mode, navOpts){
   if (scheduleModeEl) scheduleModeEl.classList.toggle('show', mode==='schedule');
   if (standingsModeEl) standingsModeEl.classList.toggle('show', mode==='standings');
   if (oppOffenseModeEl) oppOffenseModeEl.classList.toggle('show', mode==='oppoffense');
+  if (filmModeEl) filmModeEl.classList.toggle('show', mode==='film');
   if (mode !== 'playcalls' && mode !== 'editplays') {
     const gate = document.getElementById('playCallsGate');
     if (gate) gate.classList.remove('show');
@@ -68,6 +70,7 @@ function setMode(mode, navOpts){
   if(mode==='schedule' && typeof window.initScheduleNav === 'function') window.initScheduleNav();
   if(mode==='standings' && typeof window.initStandingsNav === 'function') window.initStandingsNav();
   if(mode==='oppoffense' && typeof window.initOppOffenseNav === 'function') window.initOppOffenseNav();
+  if(mode==='film' && typeof window.initFilmRoomNav === 'function') window.initFilmRoomNav();
 
   currentMode = mode;
   // navOpts.fromHistory is set only when THIS call is itself running as
@@ -166,7 +169,7 @@ function setSection(section, navOpts){
   navOpts = navOpts || {};
   const fromSection = currentSection;
   if (topSectionsEl) topSectionsEl.querySelectorAll('.modeBtn').forEach(b=> b.classList.toggle('active', b.dataset.section===section));
-  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings' || section === 'oppoffense') {
+  if (section === 'thisweek' || section === 'coachtools' || section === 'schedule' || section === 'standings' || section === 'oppoffense' || section === 'film') {
     modeTabsEl.style.display = 'none';
     hideGlobalCallout();
     // The Opponent Offense call-out card lives on the home screen only, same as the ticker.
@@ -245,6 +248,9 @@ window.refreshCoachToolsVisibility = function(){
   // Schedule as their whole app, same exclusion as This Week above.
   const oppOffenseBtn = document.getElementById('oppOffenseSectionBtn');
   if (oppOffenseBtn) oppOffenseBtn.style.display = isPlayerOrCoach ? '' : 'none';
+  // Nathan (2026-11-07): Film Room, same audience as Opponent Offense.
+  const filmBtn = document.getElementById('filmSectionBtn');
+  if (filmBtn) filmBtn.style.display = isPlayerOrCoach ? '' : 'none';
   const thisweekMenuBtn = document.getElementById('thisweekMenuBtn');
   if (thisweekMenuBtn) thisweekMenuBtn.style.display = isPlayerOrCoach ? '' : 'none';
 
@@ -351,6 +357,7 @@ window.refreshCoachToolsVisibility = function(){
     activeSection === 'schedule' ||
     (activeSection === 'thisweek' && isCoach) ||
     (activeSection === 'oppoffense' && isPlayerOrCoach) ||
+    (activeSection === 'film' && isPlayerOrCoach) ||
     (activeSection === 'coachtools' && approvedCoach);
   if (isParent) {
     // Schedule is the only thing a parent can ever land on -- send them
