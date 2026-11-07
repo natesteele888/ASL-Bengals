@@ -239,7 +239,7 @@
       '#guideOverlay .gdFoot{text-align:center;margin-top:16px}',
       '#guideOverlay .gdFoot button{background:none;border:0;color:#999;text-decoration:underline;font-size:13px;cursor:pointer}',
       '#helpBtn.gdNew{position:relative;box-shadow:0 0 0 0 rgba(255,106,19,.8);animation:gdPulse 1.8s infinite}',
-      '#helpBtn.gdNew::after{content:"NEW";position:absolute;top:-8px;right:-12px;background:#e53935;color:#fff;font-size:8.5px;font-weight:900;padding:1px 4px;border-radius:6px;letter-spacing:.02em}',
+      '#helpBtn.gdNew::after{content:"NEW";position:absolute;inset:auto;top:-8px;right:-12px;background:#e53935;color:#fff;font-size:8.5px;font-weight:900;padding:1px 4px;border-radius:6px;letter-spacing:.02em}',
       '@keyframes gdPulse{0%{box-shadow:0 0 0 0 rgba(255,106,19,.75)}70%{box-shadow:0 0 0 9px rgba(255,106,19,0)}100%{box-shadow:0 0 0 0 rgba(255,106,19,0)}}',
     ].join('\n');
     document.head.appendChild(s);
