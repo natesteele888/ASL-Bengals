@@ -15,7 +15,10 @@
 // missing layout) even though the live site is fully up to date. Bumping
 // this forces a fresh install + activate, which deletes the old cache
 // (see the activate handler) and re-caches the current shell files.
-const CACHE_NAME = 'bengals-shell-20261002u';
+// The activate handler only deletes caches named bengals-shell-*: every
+// github.io app shares one Cache Storage, so deleting everything else
+// would wipe the other apps' offline copies.
+const CACHE_NAME = 'bengals-shell-20261106p';
 const SHELL_FILES = [
   './index.html',
   './css/styles.css',
@@ -32,7 +35,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      Promise.all(names.filter((n) => n.startsWith('bengals-shell-') && n !== CACHE_NAME).map((n) => caches.delete(n)))
     )
   );
   self.clients.claim();
