@@ -79,6 +79,10 @@
     text-transform:uppercase;letter-spacing:.05em;font-weight:700}
   .playerGrid{display:flex;flex-wrap:wrap;gap:6px}
   .rosterNote{font-size:12px;color:var(--dim2);padding:4px 0}
+  /* No-signal notice: shows while offline or while saves are waiting to send. */
+  .offlineBar{background:#241a05;color:var(--yellow);border:1px solid #4a3a0a;border-radius:10px;
+    font-size:12px;font-weight:700;text-align:center;padding:7px 10px;margin:0 0 10px}
+  .offlineBar[hidden]{display:none}
   .playerChip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;
     font-size:12.5px;cursor:pointer;user-select:none;background:#0a0c10;color:var(--dim);font-weight:700}
   .playerChip .num{color:var(--dim2);font-weight:800;margin-right:4px}
@@ -199,11 +203,15 @@
       border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
       <option value="">— Sign in to load games —</option>
     </select>
+    <button class="btn small ghost" id="quickGameBtn" type="button" hidden>➕ Quick game</button>
     <select class="btn small ghost" id="endQuarterSel" style="margin-left:auto" title="Pick whichever quarter just ended — you can jump ahead if you missed one" disabled></select>
     <button class="btn small primary" id="finishGameBtn" disabled>🏁 Finish Game</button>
     <button class="btn small ghost" id="resetGameBtn" disabled>Clear This Game's Log</button>
   </div>
   <div id="gameLoadStatus" style="font-size:11px;color:var(--dim2);margin:-6px 0 10px;text-align:center;"></div>
+  <!-- No signal at the field: the last saved schedule and roster load from
+       this phone, every save waits here, and sends itself when signal is back. -->
+  <div id="offlineBar" class="offlineBar" role="status" hidden></div>
 
   <div class="scoreboard" id="scoreboardBox">US 0 — 0 OPP</div>
 
@@ -383,6 +391,7 @@
   // per-game object, keyed the same way, so a dropped connection mid-game
   // doesn't lose anything typed since the last successful cloud save.
   let selectedGame = null; // the real game record from schedule.json, once picked from #gameSelect
+  let selectedGameFromCloud = false; // false when the open game's log came from this phone, not the cloud
   let currentQuarter = 1;
   let plays = [];
   // Nathan: "add in the field yardage markage" -- one running field
@@ -415,6 +424,153 @@
   // closes both: less "did this actually save" doubt, and no manual
   // reselect to trigger that race in the first place.
   const LAST_GAME_KEY = 'statKeeperLastGameId';
+
+  // ---- No signal at the field -------------------------------------------
+  // Nathan: "it would be great if Stat Keeper were able to log a game with
+  // no signal." A coach who has opened this page once with signal (signed
+  // in) can open it later with none:
+  //   - the game list and roster come from the copies saved on the last
+  //     good load (this phone only, same data this coach already loaded);
+  //   - with no saved list, "Quick game" adds one on this phone;
+  //   - every save lands in an outbox here first and sends itself when
+  //     signal is back (the 'online' event, a 15s retry, or the next save).
+  // Saves are still one PUT of the whole game to statKeeperLogs/{gameId},
+  // so sending the same save twice can't double-count anything, and the
+  // outbox keeps one entry per game, not one per tap.
+  const SCHEDULE_CACHE_KEY = 'statKeeperScheduleCache'; // [{id, opponent, date, homeAway}]
+  const ROSTER_CACHE_KEY = 'statKeeperRosterCache';     // [{num, name, pos}]
+  const QUICK_GAMES_KEY = 'statKeeperQuickGames';       // games added on this phone
+  const OUTBOX_KEY = 'statKeeperOutbox';                // {gameId: {n, at, m}}
+  // Play ids the cloud copy had the last time this phone read or wrote it.
+  // A cloud play that's in neither this list nor the phone's log was added
+  // from another device while this one was offline, so it gets merged in
+  // instead of being overwritten (see mergeCloudPlays).
+  function baseIdsKey(gameId){ return 'statKeeperBaseIds_' + gameId; }
+  let netDown = false; // true after a request fails for lack of signal
+
+  function readJson(key, fallback){
+    try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v == null ? fallback : v; }
+    catch(e){ return fallback; }
+  }
+  function writeJson(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch(e){} }
+  // TypeError = the request never got an answer; AbortError = a weak
+  // signal that hung past the timeout in refreshIdToken.
+  function isNetworkError(e){ return (e && (e.name === 'TypeError' || e.name === 'AbortError')) || navigator.onLine === false; }
+  function isOffline(){ return netDown || navigator.onLine === false; }
+  function saveScheduleCache(games){
+    writeJson(SCHEDULE_CACHE_KEY, games.map(function(g){
+      return { id: g.id, opponent: g.opponent || '', date: g.date || '', homeAway: g.homeAway || '' };
+    }));
+  }
+  function setBaseIds(gameId, playList){
+    writeJson(baseIdsKey(gameId), (Array.isArray(playList) ? playList : []).map(function(p){ return p && p.id; }).filter(Boolean));
+  }
+
+  function readOutbox(){ const o = readJson(OUTBOX_KEY, {}); return (o && typeof o === 'object') ? o : {}; }
+  function queuedCount(){
+    const o = readOutbox();
+    return Object.keys(o).reduce(function(n, k){ return n + ((o[k] && o[k].n) || 1); }, 0);
+  }
+  // m = "check the cloud copy before overwriting it": set when the save was
+  // made offline, or this game was opened without reading the cloud copy.
+  function queueSave(gameId, needsMerge){
+    const o = readOutbox();
+    const e = o[gameId] || { n: 0, m: false };
+    o[gameId] = { n: (e.n || 0) + 1, at: new Date().toISOString(), m: !!(e.m || needsMerge) };
+    writeJson(OUTBOX_KEY, o);
+    updateOfflineBar();
+  }
+  function clearQueued(gameId){ const o = readOutbox(); delete o[gameId]; writeJson(OUTBOX_KEY, o); }
+
+  // Cloud plays added elsewhere (not in base, not on this phone) go in
+  // front of this phone's plays: they were logged before this phone came
+  // back, and the coach can reorder with the arrow buttons if needed.
+  function mergeCloudPlays(gameId, local, cloud){
+    if (!cloud || !Array.isArray(cloud.plays)) return 0;
+    const have = {}; (local.plays || []).forEach(function(p){ if (p && p.id) have[p.id] = true; });
+    const base = {}; readJson(baseIdsKey(gameId), []).forEach(function(id){ base[id] = true; });
+    const extra = cloud.plays.filter(function(p){ return p && p.id && !have[p.id] && !base[p.id]; });
+    if (extra.length) local.plays = extra.concat(local.plays || []);
+    return extra.length;
+  }
+
+  let flushRunning = null;
+  async function sendOneGame(gameId, entry){
+    let body = null;
+    try { body = localStorage.getItem(localCacheKey(gameId)); } catch(e){}
+    if (!body){ clearQueued(gameId); return 0; }
+    let merged = 0;
+    if (entry && entry.m){
+      const getUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + gameId + '.json');
+      const getRes = await fetch(getUrl, { cache: 'no-store' });
+      if (!getRes.ok) throw new Error('HTTP ' + getRes.status);
+      const local = JSON.parse(body);
+      merged = mergeCloudPlays(gameId, local, await getRes.json());
+      if (merged){
+        body = JSON.stringify(local);
+        try { localStorage.setItem(localCacheKey(gameId), body); } catch(e){}
+        if (selectedGame && selectedGame.id === gameId){
+          plays = local.plays;
+          renderLog(); renderStats();
+          setGameLoadStatus('Added ' + merged + ' play' + (merged === 1 ? '' : 's') + ' logged on another device while this phone had no signal -- check their order in the log.');
+        }
+      }
+    }
+    const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + gameId + '.json');
+    const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: body });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setBaseIds(gameId, JSON.parse(body).plays);
+    // Only clear the entry if nothing newer was saved while this was sending.
+    let now = null;
+    try { now = localStorage.getItem(localCacheKey(gameId)); } catch(e){}
+    if (now === body) clearQueued(gameId);
+    else { const o = readOutbox(); if (o[gameId]) { o[gameId].m = false; writeJson(OUTBOX_KEY, o); } }
+    return 1;
+  }
+  // Sends every queued game. Resolves {sent, left, error}; never rejects.
+  function flushOutbox(){
+    if (flushRunning) return flushRunning;
+    flushRunning = (async function(){
+      let sent = 0, error = null;
+      for (let pass = 0; pass < 3 && !error; pass++){
+        const o = readOutbox();
+        const ids = Object.keys(o);
+        if (!ids.length) break;
+        for (const id of ids){
+          try { sent += await sendOneGame(id, o[id]); netDown = false; }
+          catch(e){ error = e; if (isNetworkError(e)) netDown = true; break; }
+        }
+      }
+      return { sent: sent, left: Object.keys(readOutbox()).length, error: error };
+    })();
+    return flushRunning.finally(function(){ flushRunning = null; updateOfflineBar(); });
+  }
+  function updateOfflineBar(){
+    const bar = document.getElementById('offlineBar');
+    if (!bar) return;
+    const n = queuedCount();
+    if (isOffline()){
+      bar.textContent = '📴 Offline — saves will send when you have signal' + (n ? ' · ' + n + ' save' + (n === 1 ? '' : 's') + ' waiting' : '');
+      bar.hidden = false;
+    } else if (n){
+      bar.textContent = '⏳ Sending ' + n + ' waiting save' + (n === 1 ? '' : 's') + '…';
+      bar.hidden = false;
+    } else {
+      bar.hidden = true;
+    }
+    const qb = document.getElementById('quickGameBtn');
+    if (qb) qb.hidden = !(isOffline() || !liveGamesCache.some(function(g){ return !g.quick; }));
+  }
+  function retryOutboxSoon(){ if (Object.keys(readOutbox()).length) flushOutbox().then(reportFlush); }
+  function reportFlush(r){
+    if (!r || !selectedGame) return;
+    if (r.error && isOffline()) setAutoSaveStatus('📴 Saved on this phone ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) + ' -- sends when you have signal');
+    else if (r.error) setAutoSaveStatus('⚠️ Cloud save failed: ' + r.error.message + ' (saved on this phone, will retry)');
+    else if (!readOutbox()[selectedGame.id]) setAutoSaveStatus('✓ Saved ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) + ' (not pushed to live stats yet)');
+  }
+  window.addEventListener('online', function(){ netDown = false; updateOfflineBar(); retryOutboxSoon(); });
+  window.addEventListener('offline', updateOfflineBar);
+  setInterval(retryOutboxSoon, 15000);
   function blankGameState(){ return { plays: [], quarter: 1, spot: 50, down: 1, distance: 10, finalUs: '', finalOpp: '' }; }
   function currentGameStateObj(){
     return { plays: plays, quarter: currentQuarter, spot: currentSpot, down: currentDown, distance: currentDistance,
@@ -1990,31 +2146,26 @@
   // and does it in two places: an immediate localStorage cache (keyed by
   // the selected game's id, so it survives a dropped connection) and a
   // debounced push to Firebase (statKeeperLogs/{gameId}, see
-  // scheduleCloudSave/saveGameToCloud near the coach-gate auth section
-  // below) -- the cloud copy is what actually makes "go back and edit"
+  // scheduleCloudSave below and flushOutbox near the top) -- the cloud copy is what actually makes "go back and edit"
   // possible from any device/browser, not just this one's local storage.
   let cloudSaveTimer = null;
   function setAutoSaveStatus(t){ const el = document.getElementById('autoSaveStatus'); if (el) el.textContent = t || ''; }
   function persist(){
     try{ localStorage.setItem(localCacheKey(selectedGame ? selectedGame.id : 'unsaved'), JSON.stringify(currentGameStateObj())); }catch(e){}
-    setAutoSaveStatus('Saving…');
+    // Queue it before trying the cloud, so a save made with no signal (or
+    // one the page closes on) still sends later. See flushOutbox above.
+    if (selectedGame) queueSave(selectedGame.id, isOffline() || !selectedGameFromCloud);
+    setAutoSaveStatus(isOffline() ? '📴 Saved on this phone -- sends when you have signal' : 'Saving…');
     scheduleCloudSave();
   }
   function scheduleCloudSave(){
     if (!selectedGame) return; // nothing to sync until a real game is picked
     clearTimeout(cloudSaveTimer);
-    cloudSaveTimer = setTimeout(function(){
-      saveGameToCloud().then(function(){
-        // Nathan: "have the ability to save progress ... but saving
-        // without having to push to live stats until I am complete."
-        // Confirms this auto-save (this game's own Stat Keeper log) is
-        // done, and spells out that it's separate from Push to Live Stats
-        // so there's no doubt those are two different things.
-        setAutoSaveStatus('✓ Saved ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) + ' (not pushed to live stats yet)');
-      }).catch(function(e){
-        setAutoSaveStatus('⚠️ Cloud save failed: ' + e.message + ' (still saved locally on this device)');
-      });
-    }, 600);
+    // Nathan: "have the ability to save progress ... but saving without
+    // having to push to live stats until I am complete." reportFlush says
+    // this auto-save (this game's own Stat Keeper log) is done, and that
+    // it's separate from Push to Live Stats.
+    cloudSaveTimer = setTimeout(function(){ flushOutbox().then(reportFlush); }, 600);
   }
   // Nathan: "it keeps resetting back to default when I reenter the page --
   // need to make sure changes are staying." The 600ms debounce above is
@@ -2029,21 +2180,10 @@
   function flushCloudSaveNow(){
     if (!selectedGame) return;
     clearTimeout(cloudSaveTimer);
-    saveGameToCloud().catch(function(){ /* best-effort on the way out -- nothing left to show the user at this point */ });
+    flushOutbox(); // best-effort on the way out; whatever doesn't send stays queued
   }
   document.addEventListener('visibilitychange', function(){ if (document.hidden) flushCloudSaveNow(); });
   window.addEventListener('pagehide', flushCloudSaveNow);
-  // FIREBASE_DB_URL/firebaseAuthedUrl are declared further down (same
-  // coach-gate auth block "Push to Live Stats" already used) -- safe to
-  // reference here since this only ever runs after a game's been picked,
-  // well after the whole script (including those consts) has finished
-  // its initial top-to-bottom pass.
-  async function saveGameToCloud(){
-    if (!selectedGame) return;
-    const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
-    const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(currentGameStateObj()) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-  }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
   // Nathan: "I need the ability to click into it so it can be updated."
@@ -2767,10 +2907,15 @@
     return !!(s && s.refreshToken);
   }
   async function refreshIdToken(refreshToken){
+    // A field with one bar can hang here for a minute; give up after 8s so
+    // boot() falls back to this phone's saved copies instead of waiting.
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const t = ctrl ? setTimeout(function(){ ctrl.abort(); }, 8000) : null;
     const res = await fetch(REFRESH_URL, {
+      signal: ctrl ? ctrl.signal : undefined,
       method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'},
       body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
-    });
+    }).finally(function(){ if (t) clearTimeout(t); });
     if (!res.ok) throw new Error('Token refresh failed: HTTP ' + res.status);
     const data = await res.json();
     return { idToken: data.id_token, refreshToken: data.refresh_token, expiresAt: Date.now() + Number(data.expires_in)*1000 };
@@ -2833,9 +2978,16 @@
     // directly. Now requires kind:'coach' specifically.
     const savedGate = loadGateSession();
     if (savedGate && savedGate.kind === 'coach'){
-      try { await getFirebaseIdToken(); return true; }
-      catch(e){ /* saved session no longer valid -- fall through to re-prompt */ }
+      try { await getFirebaseIdToken(); netDown = false; return true; }
+      catch(e){
+        // No signal: the saved coach session is still good, it just can't
+        // be refreshed yet. Work from this phone's copies until it can.
+        if (isNetworkError(e)){ netDown = true; return 'offline'; }
+        /* saved session no longer valid -- fall through to re-prompt */
+      }
     }
+    // Signing in for the first time needs signal.
+    if (navigator.onLine === false) return false;
     // prompt() throws in a few embedded/automated browser contexts instead
     // of just returning null -- wrapped so boot() can't get stuck forever
     // on "Signing in..." if that ever happens; a normal browser cancel
@@ -3357,6 +3509,8 @@
     const setPushStatus = t => { if (statusEl) statusEl.textContent = t || ''; };
     const ok = await ensureCoachAuth();
     if (!ok) return;
+    if (ok === 'offline'){ alert('Push to Live Stats needs signal. Your log is saved on this phone and in the outbox -- push once you have signal.'); return; }
+    if (selectedGame.quick){ alert('This game was added on this phone, so it isn\'t on the live schedule. Use "Download Game Log" and import it in Coach Tools > Stats > Enter Stats.'); return; }
 
     setPushStatus('Loading live roster and schedule…');
     let liveRoster = [], games = [];
@@ -3450,7 +3604,7 @@
     liveGamesCache.slice().sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999')).forEach(function(g){
       const opt = document.createElement('option');
       opt.value = g.id;
-      opt.textContent = (g.homeAway === 'Away' ? '@ ' : 'vs ') + (g.opponent || 'TBD') + (g.date ? ' — ' + g.date : '');
+      opt.textContent = (g.homeAway === 'Away' ? '@ ' : 'vs ') + (g.opponent || 'TBD') + (g.date ? ' — ' + g.date : '') + (g.quick ? ' (added on this phone)' : '');
       gameSelect.appendChild(opt);
     });
   }
@@ -3469,16 +3623,37 @@
     setGameControlsEnabled(true);
     setGameLoadStatus('Loading this game\'s log…');
     let gs = null, loadError = null;
-    try {
-      const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      gs = await res.json();
-    } catch(e){
-      loadError = e;
-      try { gs = JSON.parse(localStorage.getItem(localCacheKey(selectedGame.id)) || 'null'); } catch(e2){}
+    const localCopy = readJson(localCacheKey(selectedGame.id), null);
+    selectedGameFromCloud = false;
+    if (readOutbox()[selectedGame.id] && localCopy){
+      // This phone has saves the cloud doesn't have yet: its copy is the
+      // newest, so reading the cloud now would undo them. Send them instead.
+      gs = localCopy;
+      loadError = new Error('waiting saves');
+      retryOutboxSoon();
+    } else if (isOffline() || selectedGame.quick){
+      gs = localCopy;
+      loadError = new Error('No signal');
+    } else {
+      try {
+        const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/statKeeperLogs/' + selectedGame.id + '.json');
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        gs = await res.json();
+        selectedGameFromCloud = true;
+        netDown = false;
+        setBaseIds(selectedGame.id, gs && gs.plays);
+      } catch(e){
+        loadError = e;
+        if (isNetworkError(e)) netDown = true;
+        gs = localCopy;
+      }
     }
+    updateOfflineBar();
     const usedLocalBackup = !!(loadError && gs);
+    const localNote = isOffline() ? '📴 No signal -- using the copy saved on this phone.'
+      : (readOutbox()[selectedGame.id] ? 'Using this phone\'s copy -- it has saves the cloud doesn\'t have yet (sending now).'
+      : '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.');
 
     // Nathan: "it switches to OT1 as the next available but it doesn't show
     // the play logs" -- a saved log can contain nothing but quarter-end
@@ -3515,26 +3690,49 @@
       // on its Schedule page (ourScore/oppScore) but no detailed stats
       // entered falls in here.
       setGameLoadStatus(usedLocalBackup
-        ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.'
-        : (loadError
+        ? localNote
+        : (selectedGame.quick ? 'Quick game added on this phone -- log plays below.'
+        : isOffline() ? '📴 No signal -- start logging; this game\'s log sends when you have signal.'
+        : loadError
           ? '⚠️ Could not load this game (starting blank): ' + loadError.message
           : 'This game has no stats saved yet (no Stat Keeper log, and nothing entered in Coach Tools > Stats) -- log plays below to start one.'));
       applyGameState(gs);
     } else {
-      setGameLoadStatus(usedLocalBackup ? '⚠️ Could not reach the cloud copy -- loaded this device\'s local backup instead.' : '');
+      setGameLoadStatus(usedLocalBackup ? localNote : '');
       applyGameState(gs);
     }
     renderAllForGame();
   }
   gameSelect.addEventListener('change', function(){ selectGame(gameSelect.value); });
 
+  // ➕ Quick game: no signal and no saved game list (or the game isn't on
+  // it). Kept on this phone; its log still syncs to statKeeperLogs/{id}.
+  // It isn't on the live schedule, so it goes to Coach Tools by Download
+  // Game Log instead of Push to Live Stats.
+  document.getElementById('quickGameBtn').addEventListener('click', function(){
+    let opp = null;
+    try { opp = prompt('Opponent for this game:'); } catch(e){ return; }
+    if (opp == null) return;
+    opp = String(opp).trim().slice(0, 60) || 'Opponent';
+    const d = new Date();
+    const game = { id: 'quick-' + Date.now().toString(36), opponent: opp, homeAway: '', quick: true,
+      date: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') };
+    const quick = readJson(QUICK_GAMES_KEY, []);
+    writeJson(QUICK_GAMES_KEY, (Array.isArray(quick) ? quick : []).concat([game]));
+    liveGamesCache.push(game);
+    populateGameSelect();
+    gameSelect.value = game.id;
+    selectGame(game.id);
+  });
+
   // Loads the team roster (same teamRoster.json pushToLiveStats reads) once
   // a coach is signed in. Never throws: on failure the chip grid says so
   // and the write-in box keeps working.
-  async function loadRoster(){
+  async function loadRoster(offline){
     rosterState = 'loading';
     renderFields();
     try {
+      if (offline) throw new Error('No signal');
       const url = await firebaseAuthedUrl(FIREBASE_DB_URL + '/teamRoster.json');
       const res = await fetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -3544,9 +3742,13 @@
         return { num: p.num == null ? '' : String(p.num), name: String(p.name), pos: p.position || '' };
       });
       rosterState = 'loaded';
+      writeJson(ROSTER_CACHE_KEY, ROSTER);
     } catch(e){
-      ROSTER = [];
-      rosterState = 'error';
+      if (isNetworkError(e)) netDown = true;
+      // No signal: the roster saved on the last good load from this phone.
+      const saved = readJson(ROSTER_CACHE_KEY, null);
+      ROSTER = Array.isArray(saved) ? saved : [];
+      rosterState = Array.isArray(saved) ? 'loaded' : 'error';
     }
     renderFields();
   }
@@ -3563,26 +3765,46 @@
     try { ok = await ensureCoachAuth(); }
     catch(e){ ok = false; } // belt-and-suspenders -- boot() must never hang on "Signing in..." forever
     if (!ok){
-      setGameLoadStatus('Sign-in required to load games -- reload the page to try again.');
+      setGameLoadStatus(navigator.onLine === false
+        ? '📴 No signal, and this phone hasn\'t signed in to Stat Keeper yet. Open it once with signal and sign in -- after that it works with no signal.'
+        : 'Sign-in required to load games -- reload the page to try again.');
       gameSelect.innerHTML = '<option value="">— Sign-in required —</option>';
       rosterState = 'signedOut';
       renderFields();
       return;
     }
-    await loadRoster();
+    const offline = ok === 'offline';
+    updateOfflineBar();
+    await loadRoster(offline);
     setGameLoadStatus('Loading games…');
+    let usedSavedSchedule = false, scheduleError = null;
     try {
+      if (offline) throw new Error('No signal');
       const schedUrl = await firebaseAuthedUrl(FIREBASE_DB_URL + '/schedule.json');
       const res = await fetch(schedUrl);
-      const games = res.ok ? (await res.json() || []) : [];
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const games = await res.json() || [];
       liveGamesCache = Array.isArray(games) ? games.filter(function(g){ return g && g.id; }) : [];
+      saveScheduleCache(liveGamesCache);
     } catch(e){
-      liveGamesCache = [];
-      setGameLoadStatus('⚠️ Could not load games: ' + e.message);
-      return;
+      if (isNetworkError(e)) netDown = true;
+      // No signal: the game list saved on the last good load.
+      const saved = readJson(SCHEDULE_CACHE_KEY, null);
+      liveGamesCache = Array.isArray(saved) ? saved : [];
+      usedSavedSchedule = true;
+      if (!isOffline() && !saved) scheduleError = e;
     }
+    const quick = readJson(QUICK_GAMES_KEY, []);
+    (Array.isArray(quick) ? quick : []).forEach(function(g){
+      if (g && g.id && !liveGamesCache.some(function(x){ return x.id === g.id; })) liveGamesCache.push(g);
+    });
     populateGameSelect();
-    setGameLoadStatus(liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.');
+    updateOfflineBar();
+    retryOutboxSoon(); // anything saved with no signal last time goes now
+    setGameLoadStatus(scheduleError ? '⚠️ Could not load games: ' + scheduleError.message
+      : usedSavedSchedule && isOffline()
+      ? (liveGamesCache.length ? '📴 No signal -- showing the games saved on this phone. Pick one, or tap ➕ Quick game.' : '📴 No signal and no saved game list -- tap ➕ Quick game to start logging.')
+      : (liveGamesCache.length ? 'Select a game above to begin.' : 'No games found on the schedule yet.'));
     // Nathan: "I want this to be tied into Coach Nate profile where I have
     // a KEEP STATS CTA on the game card which allows me to launch the
     // STATKEEPER." A ?game=<id> in the URL (from that card, or from
@@ -3608,6 +3830,13 @@
     }
   }
   boot();
+
+  // Same service worker as the main app (sw.js keeps this page in its
+  // cache), so a coach who opens Stat Keeper directly can still open it
+  // with no signal next time.
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  }
 })();
 </script>
 </body>
