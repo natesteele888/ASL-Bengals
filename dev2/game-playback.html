@@ -230,6 +230,7 @@
 
 <div class="wrap" id="emptyWrap"><div class="emptyState">Pick a game above to watch its play-by-play back.</div></div>
 
+<script src="js/play-order.js"></script>
 <script>
 (function(){
   // ---------------------------------------------------------------------
@@ -807,7 +808,10 @@
     // Keeper's OWN entry form defaulted to prepending new plays -- once
     // that changed, reversing already-chronological data just flips the
     // whole game backwards, which is exactly what this screenshot shows.
-    const ordered = (plays || []).slice();
+    // Early-season games were saved newest first, newer ones oldest first:
+    // js/play-order.js works out which and returns first play to last
+    // (quarter, then game clock, then the order the coach placed them).
+    const ordered = window.BengalsPlayOrder.orderPlays(plays);
     const state = { spot: 50, down: 1, distance: 10, us: 0, opp: 0, quarter: 1 };
     const steps = [];
     ordered.forEach(function(p){

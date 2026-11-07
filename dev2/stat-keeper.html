@@ -294,6 +294,7 @@
   </footer>
 </div>
 
+<script src="js/play-order.js"></script>
 <script>
 (function(){
   // The team roster lives in teamRoster.json (managed in Coach Tools >
@@ -578,7 +579,10 @@
   }
   function applyGameState(gs){
     gs = gs || blankGameState();
-    plays = Array.isArray(gs.plays) ? gs.plays : [];
+    // First play to last: early-season games were saved newest first
+    // (js/play-order.js). Only changes what's on screen; the cloud copy is
+    // rewritten in this order only when the coach next edits this game.
+    plays = window.BengalsPlayOrder.orderPlays(gs.plays);
     currentQuarter = gs.quarter || 1;
     currentSpot = (typeof gs.spot === 'number') ? gs.spot : 50;
     currentDown = (typeof gs.down === 'number') ? gs.down : 1;
@@ -711,14 +715,16 @@
   // Inserts a new play/marker at the chosen anchor point instead of always
   // unshifting to the top; chains the anchor forward so adding several missed
   // plays back-to-back lands them in the right chronological order.
-  // The log is newest-first, so an entry that happened AFTER the anchor in
-  // game time needs to land at the anchor's own index (pushing the anchor
-  // and everything older down), not one slot past it.
+  // The log is oldest-first (since September 2026), so an entry that
+  // happened AFTER the anchor goes one slot past it. It used to land at the
+  // anchor's own index, a leftover from the newest-first days: "right after
+  // play A" went in BEFORE A, and a run of back-filled plays came out
+  // reversed.
   function insertPlay(entry){
     if (insertAfterId){
       const idx = plays.findIndex(function(p){ return p.id === insertAfterId; });
       if (idx !== -1){
-        plays.splice(idx, 0, entry);
+        plays.splice(idx + 1, 0, entry);
         insertAfterId = entry.id;
         return;
       }
@@ -3111,10 +3117,10 @@
     // without a stamp on each attempt there's no way to later put a whole
     // game's offensive snaps back in true order (see reconstructPlaysFrom
     // StatSheet's seqOf/_ord above, and game-stats-editor.js's commitAttempt
-    // which stamps this same way for the manual entry screen). playList is
-    // newest-first (insertPlay unshifts), so seq has to count up from the
-    // OLDEST play, not forEach's own index order.
-    const chronological = (playList || []).slice().reverse();
+    // which stamps this same way for the manual entry screen). seq counts
+    // up from the first play of the game; js/play-order.js works out the
+    // order (a blind reverse() here numbered newer games backwards).
+    const chronological = window.BengalsPlayOrder.orderPlays(playList);
     const seqByPlay = new Map();
     chronological.forEach((p, i) => seqByPlay.set(p, i + 1));
     function playOrderExtra(p){
@@ -3486,15 +3492,13 @@
     }
 
     // Real chronological order for anything that carried a seq (our own
-    // rushing/passing snaps), everything else grouped in afterward, then
-    // reversed to match this app's own newest-first plays[] convention
-    // (see insertPlay's unshift) so it slots in exactly like a normally-
-    // logged game would.
+    // rushing/passing snaps), everything else grouped in afterward --
+    // oldest first, same as a normally-logged game since September.
     const ordered = plays.filter(function(p){ return p._ord != null; })
       .sort(function(a, b){ return a._ord - b._ord; })
       .concat(plays.filter(function(p){ return p._ord == null; }));
     ordered.forEach(function(p){ delete p._ord; });
-    return ordered.reverse();
+    return ordered; // first play first, same as every log saved since September
   }
 
   async function pushToLiveStats(){

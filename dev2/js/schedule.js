@@ -712,7 +712,8 @@
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
     const res = await fetch(url);
     const gs = res.ok ? await res.json() : null;
-    const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+    // First play to last, whichever way this game was saved (js/play-order.js).
+    const plays = window.BengalsPlayOrder.orderPlays(gs && gs.plays);
     let scoreUs = 0, scoreOpp = 0;
     let driveTeam = null, drivePlays = 0, driveYards = 0, driveStartAbs = null;
     const scores = []; // {team, desc, plays, yards, startAbs}
@@ -1143,7 +1144,8 @@
     const url = await window.firebaseAuthed(`${FIREBASE_DB_URL}/statKeeperLogs/${gameId}.json`);
     const res = await fetch(url);
     const gs = res.ok ? await res.json() : null;
-    const plays = (gs && Array.isArray(gs.plays)) ? gs.plays : [];
+    // First play to last, whichever way this game was saved (js/play-order.js).
+    const plays = window.BengalsPlayOrder.orderPlays(gs && gs.plays);
     let quarter = 1, scoreUs = 0, scoreOpp = 0;
     let driveTeam = null, drivePlays = 0, driveYards = 0;
     const events = [];
