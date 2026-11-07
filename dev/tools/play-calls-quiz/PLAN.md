@@ -31,7 +31,7 @@ work is mostly the answer UI, scoring, the curated 10-round list, and player ide
 ## Decisions locked in with Nathan (2026-08-09)
 
 - **Identity**: name + 4-digit PIN, no email. Same SHA-256-hash-on-device pattern already
-  used for the login codes and FrontSeat/admin PIN (`auth.js`'s `sha256Hex`) — nothing new
+  used for the login codes and coach code/admin PIN (`auth.js`'s `sha256Hex`) — nothing new
   to invent there. Lets a player resume their point total on any device.
 - **Points scope**: one running per-player total fed by *all* recognition activities —
   this new Play Calls Quiz, the existing Signal Study Quiz, and the Timed Quiz. Existing

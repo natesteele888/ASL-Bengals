@@ -186,9 +186,9 @@ window.exitPlayerPreview = function(){
 
 (function(){
   var CODE_HASH = '225da58fbc98dacc1b5ced08e9cb5a7e82cb3a4ae07d554e546e50ec62b356f8';
-  // Nathan: "For Coach profile, you will need to put in 'FrontSeat' as the
+  // Nathan: "For Coach profile, you will need to put in the coach code as the
   // password to create your profile." This IS that same secret -- it's
-  // literally sha256("FrontSeat"), already the coach code today, and also
+  // literally the SHA-256 of that code, already the coach code today, and also
   // already the Play Calls Gate password (play-calls.js's PC_PASSWORD_HASH)
   // -- one secret, three doors. Typing it directly at the very first
   // screen below still works too (isCoach branch) and skips the new role
@@ -331,7 +331,7 @@ window.exitPlayerPreview = function(){
     var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
   }
-  // Shared with play-calls.js (FrontSeat gate) and study-quiz.js (admin PIN)
+  // Shared with play-calls.js (coach-code gate) and study-quiz.js (admin PIN)
   // so those secrets can be hashed the same way instead of sitting as
   // plaintext in the shipped JS.
   window.sha256Hex = sha256Hex;
