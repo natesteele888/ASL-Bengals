@@ -30,7 +30,7 @@
       kicker: '🥈 2026 D1 Super Bowl Runner-Up',
       title: 'PROUD OF YOU, BENGALS!',
       line: 'Heads high. You played like an amazing team all season.',
-      more: "We didn't get the goal we wanted, but we showed who we are. We're only getting better. See you next season. 🐯",
+      more: "We didn't get the goal we wanted, but we showed who we are. We're only getting better. See you next season. All of us coaches are proud of you.",
       solo: true,
       slim: '🥈 D1 Runner-Up · Proud of you, Bengals!',
     },
