@@ -121,6 +121,9 @@
   .section-head h2{font-size:22px;}
   .section-head p{color:var(--text-dim);font-size:13.5px;margin-top:4px;}
   .section-link{font-weight:800;font-size:13.5px;color:var(--orange);white-space:nowrap;}
+  /* Invisible tap zones: these links are only ~15px tall on a phone. */
+  .section-link,.program-card .btn-email{position:relative;}
+  .section-link::after,.program-card .btn-email::after{content:"";position:absolute;inset:-10px -6px;}
 
   /* this week strip */
   .week-strip{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px;margin:0 -24px;padding-left:24px;padding-right:24px;}

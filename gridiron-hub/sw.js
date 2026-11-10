@@ -1,5 +1,5 @@
 // Lets the app install and open with a weak signal. Pages always load fresh when online.
-const CACHE="gridiron-hub-v2";
+const CACHE="gridiron-hub-v3";
 // Save the page itself at install. Without this, the first visit caches nothing
 // (the page loaded before the worker existed), so opening it offline right after
 // installing fails. Each file is added on its own so one miss can't block install.
