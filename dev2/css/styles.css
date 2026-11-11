@@ -149,6 +149,22 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
    profile pill .whatsNewDot anchors against. */
 .myStatsNewDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bengal-orange);margin-left:6px;vertical-align:middle}
 .playerMenuBtn:active{background:rgba(17,17,17,.85)}
+/* Tap zone: the pill is drawn 20-22px tall to keep the header on one line,
+   but a tap that small is easy to miss. The button's own box reaches 10px
+   lower (into the header's bottom padding; 2px higher too on a phone) and
+   negative margins give that space back, so nothing moves. The pill you
+   see is drawn by ::before at the old size (1px wider padding stands in
+   for the border it moved onto). A plain ::after zone won't
+   work here: overflow:hidden (for the ellipsis) would clip it. */
+.playerMenuBtn{--tapUp:0px;height:32px;margin:calc(-1 * var(--tapUp)) 0 -10px;
+  padding:var(--tapUp) 11px 10px;
+  background:none;border:none;backdrop-filter:none;z-index:0}
+.playerMenuBtn::before{content:'';position:absolute;z-index:-1;left:0;right:0;
+  top:var(--tapUp);bottom:10px;border-radius:12px;
+  background:rgba(17,17,17,.65);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(3px)}
+.playerMenuBtn:active{background:none}
+.playerMenuBtn:active::before{background:rgba(17,17,17,.85)}
+.playerMenuBtn .whatsNewDot{top:calc(var(--tapUp) - 3px)}
 .playerMenuDropdown{position:absolute;top:26px;right:0;background:#fff;border-radius:10px;
   box-shadow:0 6px 20px rgba(0,0,0,.25);display:none;min-width:150px;overflow:hidden;z-index:1200}
 .playerMenuDropdown.show{display:block}
@@ -200,7 +216,7 @@ header{position:sticky;top:0;z-index:300;background:var(--bengal-black);border-b
   .toolbarRow{gap:4px}
   .toolbarBtn{width:18px;height:18px;font-size:9px}
   .pillRow{gap:4px}
-  .playerMenuBtn{max-width:96px;height:20px;padding:0 7px;font-size:9.5px}
+  .playerMenuBtn{--tapUp:2px;max-width:96px;height:32px;padding-left:8px;padding-right:8px;font-size:9.5px}
 }
 
 /* Top-level section switcher (Play / This Week / ...), sits above the
