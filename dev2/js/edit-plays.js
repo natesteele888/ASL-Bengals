@@ -661,43 +661,72 @@ saveCloudBtn.addEventListener('click', async () => {
     }
   }
 
-  saveCloudBtn.textContent = 'Saving\u2026';
-  const [playsUrl, splitUrl] = await Promise.all([
-    window.firebaseAuthed(`${FIREBASE_URL}/playEdits.json`),
-    window.firebaseAuthed(SPLIT_ROUTES_URL),
-  ]);
-  Promise.all([
-    fetch(playsUrl, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(sanitizeBlockingDistances(DATA.playTypes)),
-    }),
-    fetch(splitUrl, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(DATA.splitRoutes),
-    }),
-  ]).then(async ([r1, r2]) => {
-    if (r1.ok && r2.ok) {
-      pendingNewPlays = [];
-      saveCloudBtn.textContent = 'Saved!';
-      cloudStatusEl.textContent = 'Showing the latest saved play edits.';
-      logToWhatsNew(toLog);
-    } else {
-      const failed = !r1.ok ? r1 : r2;
-      const bodyText = await failed.text().catch(() => '');
-      saveCloudBtn.textContent = 'Save Failed';
-      cloudStatusEl.textContent = `Save failed (HTTP ${failed.status}): ${bodyText.slice(0, 200)}`;
-      console.error('Save to Cloud failed:', r1.status, r2.status, bodyText);
-    }
-    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
-  }).catch(err => {
+  saveCloudBtn.textContent = 'Saving…';
+  // Only what THIS coach changed since Edit Plays loaded (or since their
+  // last save) is written, merged into the database's latest copy -- see
+  // js/play-edits-store.js for the overwrite bug this replaces. The whole
+  // save sits in one try, so a failure anywhere (sign-in included) says
+  // "Save Failed" instead of leaving the button stuck on "Saving...".
+  try {
+    const store = window.PlayEditsStore;
+    if (!store) throw new Error('js/play-edits-store.js did not load -- refresh the page and try again');
+    const ownPlays = DATA.playTypes.filter(isEditPlaysOwned);
+    const changedPlays = ownPlays.filter(playChangedSinceSnapshot);
+    // Same blocking clean-up every save always ran, now on just the plays
+    // being written (it edits them in place, and touching an unchanged play
+    // would make it look changed next time).
+    sanitizeBlockingDistances(changedPlays);
+    const changedLeaves = store.changedSplitLeaves(savedSnapshot && savedSnapshot.split, DATA.splitRoutes);
+    await Promise.all([
+      changedPlays.length ? store.savePlays(changedPlays, { whenEmpty: ownPlays }) : null,
+      changedLeaves.length ? store.saveSplitRoutes(DATA.splitRoutes, changedLeaves) : null,
+    ]);
+    takeSavedSnapshot();
+    pendingNewPlays = [];
+    saveCloudBtn.textContent = 'Saved!';
+    cloudStatusEl.textContent = (changedPlays.length || changedLeaves.length)
+      ? `Saved ${describeSaved(changedPlays, changedLeaves)}. Everyone's other edits were kept.`
+      : 'Nothing changed since your last save.';
+    logToWhatsNew(toLog);
+  } catch (err) {
     saveCloudBtn.textContent = 'Save Failed';
-    cloudStatusEl.textContent = `Save failed: ${err.message}`;
+    cloudStatusEl.textContent = `Save failed -- nothing was changed in the cloud. ${err.message}`;
     console.error('Save to Cloud failed:', err);
-    setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
-  });
+  }
+  setTimeout(() => { saveCloudBtn.textContent = 'Save to Cloud'; }, 2500);
 });
+
+// What Edit Plays saves: the classic Wing/Split plays. Plays Play Builder
+// V2 merges in at runtime (other formations, and Wing plays drawn in Play
+// Studio) have their own home in the database and must never be copied
+// into playEdits.json.
+function isEditPlaysOwned(pt) {
+  if (!pt || !pt.key) return false;
+  if (pt.authoredFormationId) return false;
+  if ((window.__studioNativeKeys || []).indexOf(pt.key) !== -1) return false;
+  return true;
+}
+
+// Snapshot of every play and Split route call as last loaded or saved, so
+// a save can tell what this coach actually changed.
+let savedSnapshot = null;
+function takeSavedSnapshot() {
+  const store = window.PlayEditsStore;
+  if (!store) return;
+  const plays = {};
+  DATA.playTypes.forEach(pt => { if (pt && pt.key) plays[pt.key] = JSON.stringify(store.forCloud(pt)); });
+  savedSnapshot = { plays, split: store.splitLeaves(DATA.splitRoutes) };
+}
+function playChangedSinceSnapshot(pt) {
+  if (!savedSnapshot) return true; // never loaded: treat as changed, same as the old whole-list save
+  return savedSnapshot.plays[pt.key] !== JSON.stringify(window.PlayEditsStore.forCloud(pt));
+}
+function describeSaved(plays, leaves) {
+  const parts = [];
+  if (plays.length) parts.push(plays.length === 1 ? `"${plays[0].label}"` : `${plays.length} plays`);
+  if (leaves.length) parts.push(leaves.length === 1 ? '1 Split route' : `${leaves.length} Split routes`);
+  return parts.join(' and ');
+}
 
 // "Save to Cloud" above only ever writes to playEdits.json -- a coach's own
 // edit overlay. It never touches dev2PlayData/plays.json, the separate
@@ -793,8 +822,10 @@ function loadSavedPlaysFromCloud() {
       gotAny = true;
     }
     cloudStatusEl.textContent = gotAny ? 'Showing the latest saved play edits.' : 'No saved edits found -- showing the built-in defaults.';
+    takeSavedSnapshot();
   }).catch(() => {
-    cloudStatusEl.textContent = 'Could not reach the cloud -- showing the built-in defaults.';
+    cloudStatusEl.textContent = 'Could not reach the cloud -- showing the built-in defaults. Saving still keeps everyone else\'s edits.';
+    takeSavedSnapshot();
   });
 }
 
