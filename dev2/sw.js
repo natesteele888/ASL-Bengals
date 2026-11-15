@@ -18,7 +18,7 @@
 // The activate handler only deletes caches named bengals-shell-*: every
 // github.io app shares one Cache Storage, so deleting everything else
 // would wipe the other apps' offline copies.
-const CACHE_NAME = 'bengals-shell-20261112a';
+const CACHE_NAME = 'bengals-shell-20261115a';
 // SHELL_FILES lists bare paths, no ?v= (same as lybs-ballclub/sw.js): the
 // fetch handler matches with {ignoreSearch: true}, so js/auth.js?v=20261106d
 // still hits the entry cached as js/auth.js. Only CACHE_NAME has to move when
@@ -38,6 +38,7 @@ const SHELL_FILES = [
   './stat-keeper.html',
   './js/assignment-editor.js',
   './js/assignment-store.js',
+  './js/play-edits-store.js',
   './js/auth.js',
   './js/ball-path-editor.js',
   './js/ball-path.js',

@@ -6141,6 +6141,24 @@ function renderPlayDetail(container, combo, formationId, formationName, initialT
     });
   }
   window.loadLiveEditsIntoData = loadLiveEditsIntoData;
+
+  // The layers loadLiveEditsIntoData puts over the playEdits.json plays,
+  // re-applied to whatever DATA.playTypes holds now (fresh reads, so an
+  // override saved earlier this session isn't rolled back to a boot copy).
+  async function reapplyLiveLayers() {
+    const store = window.AssignmentStore;
+    if (store) {
+      const [assignments, ballPaths] = await Promise.all([
+        store.loadAll().catch(() => null),
+        store.loadBallPaths ? store.loadBallPaths().catch(() => null) : null,
+      ]);
+      if (assignments) store.applyTo(DATA.playTypes, assignments);
+      if (ballPaths && store.applyBallPaths) store.applyBallPaths(DATA.playTypes, ballPaths);
+    }
+    if (window.PlayBuilderSyncCustomFormations) {
+      await window.PlayBuilderSyncCustomFormations.syncCustomFormationsIntoData();
+    }
+  }
   // Exposed for js/gameplan-pdf.js's full-playbook reference print, which
   // needs the exact same "which plays belong to which formation" rules
   // renderFormationPlays() already uses -- see playsForFormation's own
@@ -6166,6 +6184,18 @@ function renderPlayDetail(container, combo, formationId, formationName, initialT
     }
 
     if (playCallsDataLoaded) {
+      // Coming back from Edit Plays: its load swapped in a fresh copy of
+      // DATA.playTypes from playEdits.json, which drops what was layered
+      // on top at boot -- Play Builder formations' plays and the
+      // assignment/ball-path overrides -- so those plays went missing or
+      // reverted here until a reload. Put the layers back before the grid
+      // rebuilds. Capped at 4s so a weak signal can't hold the screen.
+      if (window._playCallsShouldRebuild) {
+        Promise.race([reapplyLiveLayers(), new Promise(r => setTimeout(r, 4000))])
+          .catch(err => console.error('[proceedIntoPlayCalls] could not re-apply live layers (continuing anyway):', err))
+          .then(finishBuilding);
+        return;
+      }
       finishBuilding();
       return;
     }

@@ -316,6 +316,25 @@ async function mergeWingSplitPlayIntoData(play) {
   }
   playTypes[i] = merged;
   window.PlayBuilderPlaysById[play.id] = play;
+  await saveIntoPlayEdits(merged);
+}
+
+// The merge above only changed THIS page's copy. Play Calls on every other
+// phone -- and this one after a reload -- reads Wing plays from
+// playEdits.json, and the boot sync above deliberately skips Wing, so the
+// edit vanished on the next load ("I edit it, save it, and the play cards
+// go back"). Write the merged play into playEdits.json too, by key, leaving
+// every other saved play there untouched (js/play-edits-store.js). Throws
+// on failure so Play Builder's Save says "Save failed" instead of "Saved!".
+async function saveIntoPlayEdits(merged) {
+  if (!window.PlayEditsStore || typeof window.firebaseAuthed !== 'function') return;
+  try {
+    await window.PlayEditsStore.savePlays([merged], {
+      whenEmpty: window.DATA.playTypes.filter((p) => p && !p.authoredFormationId && (window.__studioNativeKeys || []).indexOf(p.key) === -1),
+    });
+  } catch (err) {
+    throw new Error(`Saved in Play Builder, but the play cards could not be updated yet: ${err.message}`);
+  }
 }
 
 window.PlayBuilderSyncCustomFormations = { syncCustomFormationsIntoData, mergeWingSplitPlayIntoData };
