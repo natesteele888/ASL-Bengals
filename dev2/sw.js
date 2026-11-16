@@ -18,7 +18,7 @@
 // The activate handler only deletes caches named bengals-shell-*: every
 // github.io app shares one Cache Storage, so deleting everything else
 // would wipe the other apps' offline copies.
-const CACHE_NAME = 'bengals-shell-20261115a';
+const CACHE_NAME = 'bengals-shell-20261116a';
 // SHELL_FILES lists bare paths, no ?v= (same as lybs-ballclub/sw.js): the
 // fetch handler matches with {ignoreSearch: true}, so js/auth.js?v=20261106d
 // still hits the entry cached as js/auth.js. Only CACHE_NAME has to move when
@@ -33,6 +33,12 @@ const SHELL_FILES = [
   // by two broken-image icons.
   './assets/images/header-logo.png',
   './assets/images/bengals-wordmark.png',
+  // The sign-in screen's logo and background and the loading screen's
+  // picture, so a phone opened with no signal doesn't show a broken logo
+  // or a bare black screen first.
+  './assets/images/login-logo.png',
+  './assets/images/login-bg.jpg',
+  './assets/images/loading-mobile.jpg',
   // Stat Keeper, so a coach can open it and log a game with no signal.
   // Besides itself it only loads js/play-order.js (listed below).
   './stat-keeper.html',
