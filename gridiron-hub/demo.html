@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#121212">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/apps/icons/gridiron-192.png">
+<link rel="apple-touch-icon" href="/apps/icons/gridiron-512.png">
+<script src="https://natesteele888.github.io/apps/install.js" defer></script>
+<title>Gridiron Hub — Role Preview</title>
+<meta name="description" content="Gridiron Hub demo: one club app, and every role sees only what fits them. Sample data only.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Karla:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>(function(){var t=localStorage.getItem('gridironHubTheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
+<!--
+  Gridiron Hub — Role Preview (demo for ASL leadership)
+
+  What this page is: a self-contained walkthrough of role-based visibility.
+  Pick a role at the top and the whole app re-draws with only what that
+  role is allowed to see. Nothing here talks to Firebase, nothing is saved,
+  and every name and number is made up (this repo is public).
+
+  How it's built (the one idea worth keeping):
+    ACCESS is a single table: section x role -> access level.
+    Every screen asks ACCESS what level the current role has, then draws
+    that level. The "Who sees what" map is drawn from the SAME table, so the
+    map and the screens can never disagree.
+
+  How this maps to the live site: the real Gridiron Hub already stores a
+  role on every signed-in account (parent / coach / board / admin) and
+  firestore.rules checks that role on the server before it hands over any
+  data. This demo adds two roles leadership would want (player, and head
+  vs. assistant coach) so they can see the full picture before we build it.
+-->
+<style>
+  .demo-banner{background:rgba(244,105,28,.12);border-bottom:1px solid var(--line);font-size:13px;color:var(--text);}
+  .demo-banner .wrap{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;}
+  .demo-banner b{color:var(--orange);}
+  .demo-head{padding:28px 0 8px;}
+  .demo-head h1{font-size:clamp(28px,5vw,40px);}
+  .demo-head p{color:var(--text-dim);font-size:14.5px;margin:8px 0 0;max-width:64ch;line-height:1.55;}
+
+  /* role picker */
+  .role-label{font-size:11.5px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.04em;margin:22px 0 8px;}
+  .roles{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;}
+  .role-chip{flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--ink-2);border:1.5px solid var(--line);color:var(--text-dim);border-radius:999px;padding:9px 15px;font:800 13.5px 'Karla',sans-serif;cursor:pointer;}
+  .role-chip:hover{color:var(--text);border-color:var(--orange);}
+  .role-chip[aria-pressed="true"]{background:var(--orange);border-color:var(--orange);color:#fff;}
+  .role-chip .ic{font-size:16px;line-height:1;}
+
+  .whoami{display:flex;align-items:center;gap:14px;margin-top:16px;background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:14px 16px;flex-wrap:wrap;}
+  .avatar{width:42px;height:42px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font:400 18px 'Anton',sans-serif;flex:0 0 auto;}
+  .whoami .nm{font-weight:800;font-size:15px;}
+  .whoami .sub{color:var(--text-dim);font-size:13px;margin-top:2px;}
+  .whoami .spacer{flex:1;}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);cursor:pointer;user-select:none;}
+  .toggle input{accent-color:var(--orange);width:16px;height:16px;}
+  .map-btn{background:none;border:1.5px solid var(--orange);color:var(--orange);font:800 13px 'Karla',sans-serif;padding:8px 14px;border-radius:5px;cursor:pointer;}
+  .map-btn:hover{background:var(--orange);color:#fff;}
+
+  /* section tabs */
+  .tabs{position:sticky;top:64px;z-index:15;background:var(--ink);display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-top:22px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{flex:0 0 auto;background:none;border:none;border-bottom:3px solid transparent;color:var(--text-dim);font:800 14px 'Karla',sans-serif;padding:13px 12px 11px;cursor:pointer;}
+  .tab:hover{color:var(--text);}
+  .tab[aria-selected="true"]{color:var(--orange);border-bottom-color:var(--orange);}
+  .tab.locked{opacity:.55;}
+
+  .panel{padding:24px 0 48px;min-height:50vh;}
+  .panel-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .panel-top h2{font-size:24px;}
+  .lvl{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:5px 10px;border-radius:999px;background:var(--green-bg);color:var(--green);}
+  .lvl.edit{background:rgba(244,105,28,.14);color:var(--orange);}
+  .lvl.none{background:rgba(128,128,128,.14);color:var(--text-dim);}
+  .why{color:var(--text-dim);font-size:13.5px;margin:-6px 0 16px;max-width:70ch;line-height:1.55;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .box{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:var(--shadow);}
+  .box h3{font:800 15px 'Karla',sans-serif;margin:0 0 10px;}
+  .muted{color:var(--text-dim);}
+  .small{font-size:12.5px;}
+  .tag{display:inline-block;font-size:11px;font-weight:800;padding:3px 8px;border-radius:3px;background:rgba(128,128,128,.15);color:var(--text-dim);margin-right:6px;white-space:nowrap;}
+  .tag.or{background:rgba(244,105,28,.14);color:var(--orange);}
+  .tag.gr{background:var(--green-bg);color:var(--green);}
+  .tag.rd{background:rgba(220,60,60,.14);color:#e25b5b;}
+
+  .list{display:flex;flex-direction:column;gap:10px;}
+  .item{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:14px 16px;}
+  .item .t{font-weight:800;font-size:14.5px;}
+  .item .d{color:var(--text-dim);font-size:13.5px;margin-top:4px;line-height:1.5;}
+  .item .meta{margin-top:8px;}
+  .row{display:flex;align-items:center;gap:12px;}
+  .when{min-width:62px;text-align:center;border-right:1px solid var(--line);padding-right:12px;}
+  .when .dw{font-size:11px;font-weight:800;color:var(--orange);text-transform:uppercase;}
+  .when .dn{font:400 22px 'Anton',sans-serif;}
+  .opp-logo{width:34px;height:34px;object-fit:contain;flex:0 0 auto;}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-dim);font-weight:800;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .tbl td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .tbl tr.me td{background:rgba(244,105,28,.08);}
+  .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .num{font-family:'Anton',sans-serif;font-size:16px;}
+
+  .stat{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:16px;}
+  .stat .k{font-size:11.5px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em;}
+  .stat .v{font:400 32px 'Anton',sans-serif;margin-top:6px;}
+  .stat .s{font-size:12.5px;color:var(--text-dim);margin-top:4px;}
+  .bar{height:8px;background:rgba(128,128,128,.18);border-radius:4px;overflow:hidden;margin-top:10px;}
+  .bar>i{display:block;height:100%;background:var(--orange);border-radius:4px;}
+
+  .play{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .play svg{display:block;width:100%;height:auto;background:#1f5d2a;}
+  .play .pb{padding:12px 14px;}
+  .play .pn{font-weight:800;font-size:14.5px;}
+
+  .msg{display:flex;gap:10px;align-items:flex-start;}
+  .msg .av{width:32px;height:32px;border-radius:50%;background:rgba(128,128,128,.25);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex:0 0 auto;}
+  .msg .av.c{background:var(--orange);color:#fff;}
+  .msg .bub{background:var(--ink-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.5;}
+  .msg .who{font-size:12px;font-weight:800;color:var(--text-dim);margin-bottom:3px;}
+  .chan{font-size:12px;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 10px;}
+  .compose{display:flex;gap:8px;margin-top:14px;}
+  .compose input{flex:1;background:var(--ink-2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:11px 12px;font:500 14px 'Karla',sans-serif;}
+
+  .act{background:var(--orange);color:#fff;border:none;font:800 13px 'Karla',sans-serif;padding:9px 14px;border-radius:5px;cursor:pointer;white-space:nowrap;}
+  .act.ghost{background:none;border:1.5px solid var(--line);color:var(--text);}
+  .act.ghost:hover{border-color:var(--orange);}
+  .act.sm{padding:6px 10px;font-size:12px;}
+  select.sel{background:var(--ink-2);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:6px 8px;font:700 13px 'Karla',sans-serif;}
+
+  .locked-card{border:1.5px dashed var(--line);border-radius:8px;padding:28px 18px;text-align:center;color:var(--text-dim);}
+  .locked-card .lk{font-size:30px;}
+  .locked-card b{color:var(--text);}
+
+  /* access map */
+  .map-wrap{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;margin-top:16px;}
+  .map .c-none{color:var(--text-dim);}
+  .map .c-yes{color:var(--green);font-weight:700;}
+  .map .c-edit{color:var(--orange);font-weight:800;}
+  .map th.cur,.map td.cur{background:rgba(244,105,28,.10);}
+  .map td:first-child{font-weight:800;white-space:nowrap;}
+  .map td{font-size:12.5px;min-width:104px;}
+  .how{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+  .how .step{background:var(--ink-2);border:1px solid var(--line);border-radius:8px;padding:14px;}
+  .how .n{font:400 22px 'Anton',sans-serif;color:var(--orange);}
+  .how .step p{margin:6px 0 0;font-size:13px;color:var(--text-dim);line-height:1.5;}
+
+  dialog#mapDlg{width:min(1100px,96vw);max-height:90vh;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:0;}
+  dialog#mapDlg::backdrop{background:rgba(0,0,0,.6);}
+  .dlg-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--ink);z-index:2;}
+  .dlg-head h2{font-size:22px;}
+  .dlg-body{padding:4px 18px 20px;}
+  .x{background:none;border:1px solid var(--line);color:var(--text);width:36px;height:36px;border-radius:6px;font-size:18px;cursor:pointer;}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--ink);font-weight:800;font-size:13.5px;padding:11px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:92vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:860px){
+    .grid3{grid-template-columns:1fr 1fr;}
+    .how{grid-template-columns:1fr;}
+  }
+  @media (max-width:600px){
+    .wrap{padding:0 16px;}
+    .grid2,.grid3{grid-template-columns:1fr;}
+    .whoami .spacer{display:none;}
+    .tbl .hide-sm{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav-root"></nav>
+<script>window.NAV_DEPTH=0;window.NAV_CURRENT='';</script>
+<script src="assets/js/nav.js"></script>
+
+<div class="demo-banner">
+  <div class="wrap">
+    <span><b>DEMO</b> · Every name and number on this page is made up. Nothing is saved.</span>
+    <a href="index.html" class="muted small">Back to Gridiron Hub</a>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="demo-head">
+    <div class="page-eyebrow">ROLE PREVIEW</div>
+    <h1>One club app. Everyone sees what fits them.</h1>
+    <p>Pick a role below and the app re-draws as that person. A parent sees their own kid and their team. A head coach runs the playbook. The board sees the money and the numbers, not the kids. The director sees all of it.</p>
+  </div>
+
+  <div class="role-label">View as</div>
+  <div class="roles" id="roles" role="group" aria-label="Pick a role"></div>
+
+  <div class="whoami" id="whoami"></div>
+
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <section class="panel" id="panel" role="tabpanel"></section>
+</main>
+
+<dialog id="mapDlg" aria-labelledby="mapTitle">
+  <div class="dlg-head">
+    <h2 id="mapTitle">Who sees what</h2>
+    <button class="x" id="mapClose" aria-label="Close">✕</button>
+  </div>
+  <div class="dlg-body" id="mapBody"></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  <div class="wrap">
+    <div>ASL Bengals · Gridiron Hub role preview · sample data only</div>
+    <div>Built for a leadership walkthrough</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------------------------------------------------------------------
+   1. ROLES — who can sign in. "me" is the made-up person you become.
+--------------------------------------------------------------------- */
+const ROLES = [
+  { id:'visitor', label:'Visitor',          icon:'👀', name:'Not signed in',        sub:'Anyone who finds the website' },
+  { id:'parent',  label:'Parent',           icon:'👪', name:'Morgan Sample',        sub:'Parent of Alex Sample (#12) · 11U Tackle' },
+  { id:'player',  label:'Player',           icon:'🏈', name:'Alex Sample',          sub:'#12 Running back · 11U Tackle' },
+  { id:'asst',    label:'Assistant Coach',  icon:'📋', name:'Coach Chris Demo',     sub:'Assistant coach (defense) · 11U Tackle' },
+  { id:'head',    label:'Head Coach',       icon:'🧢', name:'Coach Pat Example',    sub:'Head coach · 11U Tackle' },
+  { id:'board',   label:'Board Member',     icon:'🏛️', name:'Jamie Treasurer',      sub:'Board of Directors · Treasurer' },
+  { id:'admin',   label:'Director / Admin', icon:'🔑', name:'Club Director',        sub:'Admin · every team, program and setting' }
+];
+
+/* ---------------------------------------------------------------------
+   2. ACCESS — the one table everything reads from.
+   Levels: none, public, own, team, board, summary, edit, all
+--------------------------------------------------------------------- */
+const LEVEL = {
+  none:    { short:'Hidden',          cls:'none' },
+  public:  { short:'Public info',     cls:'yes'  },
+  own:     { short:'Their own only',  cls:'yes'  },
+  team:    { short:'Their team',      cls:'yes'  },
+  board:   { short:'Board items',     cls:'yes'  },
+  summary: { short:'Totals only',     cls:'yes'  },
+  edit:    { short:'View + edit',     cls:'edit' },
+  all:     { short:'Everything',      cls:'edit' }
+};
+
+const SECTIONS = [
+  { id:'news',     label:'News',      icon:'📣' },
+  { id:'schedule', label:'Schedule',  icon:'📅' },
+  { id:'roster',   label:'Roster',    icon:'👥' },
+  { id:'plays',    label:'Playbook',  icon:'🧠' },
+  { id:'stats',    label:'Stats',     icon:'📊' },
+  { id:'messages', label:'Messages',  icon:'💬' },
+  { id:'club',     label:'Club',      icon:'🏦' },
+  { id:'people',   label:'People & Roles', icon:'🔑' }
+];
+
+const ACCESS = {
+  news:     { visitor:'public', parent:'team',  player:'team', asst:'team',    head:'edit',    board:'edit',    admin:'all' },
+  schedule: { visitor:'public', parent:'team',  player:'team', asst:'team',    head:'edit',    board:'board',   admin:'all' },
+  roster:   { visitor:'none',   parent:'team',  player:'team', asst:'team',    head:'edit',    board:'summary', admin:'all' },
+  plays:    { visitor:'none',   parent:'none',  player:'own',  asst:'team',    head:'edit',    board:'none',    admin:'all' },
+  stats:    { visitor:'public', parent:'own',   player:'own',  asst:'team',    head:'edit',    board:'summary', admin:'all' },
+  messages: { visitor:'none',   parent:'team',  player:'team', asst:'team',    head:'edit',    board:'board',   admin:'all' },
+  club:     { visitor:'none',   parent:'own',   player:'none', asst:'none',    head:'summary', board:'summary', admin:'all' },
+  people:   { visitor:'none',   parent:'none',  player:'none', asst:'none',    head:'none',    board:'none',    admin:'all' }
+};
+
+/* What each cell means in plain words — shown on the map and under each tab. */
+const WHY = {
+  news: {
+    visitor:'Public club news only, like registration opening.',
+    parent:'Club news plus anything posted to your kid\'s team.',
+    player:'Club news plus your team\'s posts.',
+    asst:'Club news, your team, and the coaches-only posts.',
+    head:'Everything for your team, and you can post to it.',
+    board:'Club news and board posts. You can post club-wide news.',
+    admin:'Every post on every team, and you can post anywhere.'
+  },
+  schedule: {
+    visitor:'Game days and locations. No practice details.',
+    parent:'Games plus your team\'s practices.',
+    player:'Games plus your team\'s practices.',
+    asst:'Games, practices and coaches\' meetings.',
+    head:'Same as assistants, and you can add or move practices.',
+    board:'Games plus board meetings. No team practice details.',
+    admin:'Every calendar in the club.'
+  },
+  roster: {
+    visitor:'No names at all. The public only sees that the team exists.',
+    parent:'First names and numbers for your kid\'s team only.',
+    player:'Teammates\' first names and numbers.',
+    asst:'Your team, with positions and attendance.',
+    head:'Your team, with forms status and a button to message a family.',
+    board:'Player counts per team. No names.',
+    admin:'Every roster in the club.'
+  },
+  plays: {
+    visitor:'Plays never leave the team.',
+    parent:'Parents don\'t see the playbook.',
+    player:'Only the plays your coach assigned you to study, with your spot lit up.',
+    asst:'The whole team playbook, read only.',
+    head:'The whole playbook. Draw, edit and assign plays.',
+    board:'The playbook is a coaching tool, so the board doesn\'t see it.',
+    admin:'Every team\'s playbook.'
+  },
+  stats: {
+    visitor:'Team records and scores only.',
+    parent:'Your own kid\'s stats, plus the team record.',
+    player:'Your own stats, plus the team record.',
+    asst:'Every player on your team.',
+    head:'Every player on your team, and you can fix a stat.',
+    board:'Club-wide totals. No single kid\'s numbers.',
+    admin:'Every stat in the club.'
+  },
+  messages: {
+    visitor:'No messages.',
+    parent:'Your team\'s family channel.',
+    player:'Your team\'s player channel.',
+    asst:'Team channels plus the coaches-only channel.',
+    head:'Same as assistants, and you post the announcements.',
+    board:'The board channel only.',
+    admin:'Every channel.'
+  },
+  club: {
+    visitor:'Club business is not public.',
+    parent:'Your own family: registration, fees and volunteer shifts.',
+    player:'Players don\'t see club business.',
+    asst:'Assistants don\'t see club business.',
+    head:'Your team\'s paperwork and fees, as totals.',
+    board:'Registrations, sponsors and money as totals. No kids\' names.',
+    admin:'Everything, down to each family.'
+  },
+  people: {
+    visitor:'', parent:'', player:'', asst:'', head:'', board:'',
+    admin:'Give each account its role and team. Nobody can give themselves a role.'
+  }
+};
+
+/* ---------------------------------------------------------------------
+   3. SAMPLE DATA — all made up.
+--------------------------------------------------------------------- */
+const TEAM = '11U Tackle';
+const PLAYERS = [
+  { n:12, first:'Alex',   last:'Sample',      pos:'RB',  att:96, forms:true,  rush:612, td:7, tkl:9,  me:true },
+  { n:7,  first:'Jordan', last:'Demo',        pos:'QB',  att:100,forms:true,  rush:188, td:3, tkl:2  },
+  { n:22, first:'Riley',  last:'Example',     pos:'LB',  att:92, forms:true,  rush:0,   td:1, tkl:41 },
+  { n:55, first:'Casey',  last:'Testwell',    pos:'OL',  att:88, forms:false, rush:0,   td:0, tkl:6  },
+  { n:3,  first:'Taylor', last:'Mockley',     pos:'WR',  att:100,forms:true,  rush:74,  td:4, tkl:3  },
+  { n:44, first:'Drew',   last:'Placeholder', pos:'DE',  att:84, forms:true,  rush:0,   td:0, tkl:28 },
+  { n:9,  first:'Quinn',  last:'Pretend',     pos:'CB',  att:96, forms:true,  rush:22,  td:1, tkl:19 },
+  { n:61, first:'Sam',    last:'Madeup',      pos:'OL',  att:92, forms:true,  rush:0,   td:0, tkl:4  },
+  { n:28, first:'Jesse',  last:'Fictional',   pos:'S',   att:80, forms:false, rush:15,  td:0, tkl:24 },
+  { n:15, first:'Avery',  last:'Notreal',     pos:'TE',  att:96, forms:true,  rush:31,  td:2, tkl:5  },
+  { n:33, first:'Rowan',  last:'Standin',     pos:'FB',  att:100,forms:true,  rush:204, td:2, tkl:11 },
+  { n:77, first:'Parker', last:'Dummy',       pos:'DT',  att:88, forms:true,  rush:0,   td:0, tkl:22 }
+];
+const RECORD = { w:6, l:2, pf:186, pa:94 };
+
+const NEWS = [
+  { aud:'public', t:'Spring Flex registration opens Jan 5', d:'Flex football for grades K to 6. Early-bird pricing through Feb 1.', when:'2 days ago', by:'ASL Bengals' },
+  { aud:'team',   t:'11U: picture day moved to Thursday', d:'Wear game jerseys to practice. Photos start at 5:15.', when:'Yesterday', by:'Coach Pat Example' },
+  { aud:'coach',  t:'Coaches: concussion refresher due Friday', d:'Every coach needs the online course done before the next game. Link is in the coaches channel.', when:'Yesterday', by:'Club Director' },
+  { aud:'board',  t:'Board: equipment budget vote Monday', d:'Helmet recert quote came in. Treasurer will walk through it.', when:'3 days ago', by:'Jamie Treasurer' },
+  { aud:'public', t:'Bengals 11U clinch a playoff spot', d:'Big win on the road. Thanks to every family who made the trip.', when:'5 days ago', by:'ASL Bengals' }
+];
+
+const SCHEDULE = [
+  { kind:'game',     dw:'Sat', dn:'Sep 12', t:'vs Milford',     loc:'Home field', time:'10:00 AM', logo:'milford_footbal.png', res:'W 28-6' },
+  { kind:'practice', dw:'Tue', dn:'Sep 15', t:'Practice',        loc:'Practice field 2', time:'5:30 PM' },
+  { kind:'coach',    dw:'Wed', dn:'Sep 16', t:'Coaches meeting', loc:'Clubhouse', time:'7:00 PM' },
+  { kind:'practice', dw:'Thu', dn:'Sep 17', t:'Practice + picture day', loc:'Practice field 2', time:'5:15 PM' },
+  { kind:'game',     dw:'Sat', dn:'Sep 19', t:'at Nipmuc',       loc:'Away', time:'12:30 PM', logo:'nipmuc.png' },
+  { kind:'board',    dw:'Mon', dn:'Sep 21', t:'Board meeting',   loc:'Clubhouse', time:'7:00 PM' },
+  { kind:'game',     dw:'Sat', dn:'Sep 26', t:'vs Wachusett',    loc:'Home field', time:'9:00 AM', logo:'wachusett.png' }
+];
+
+const PLAYS = [
+  { id:'p1', name:'Power Right',   type:'Run',  assigned:true,  install:'Week 1', note:'Alex: follow the fullback through the 6 hole.' },
+  { id:'p2', name:'Jet Sweep Left',type:'Run',  assigned:true,  install:'Week 2', note:'Alex: motion fake, then block the edge.' },
+  { id:'p3', name:'Slant Flood',   type:'Pass', assigned:false, install:'Week 3', note:'' },
+  { id:'p4', name:'Cover 2',       type:'Defense', assigned:false, install:'Week 1', note:'' }
+];
+
+const MESSAGES = {
+  family: [
+    { who:'Coach Pat Example', c:true, txt:'Great effort Saturday. Practice Tuesday is full pads.' },
+    { who:'A parent', c:false, txt:'Is the Nipmuc game still 12:30?' },
+    { who:'Coach Pat Example', c:true, txt:'Yes, 12:30. Be there by 11:45 for warmups.' }
+  ],
+  players: [
+    { who:'Coach Pat Example', c:true, txt:'Two plays to study before Thursday. They\'re in your Playbook tab.' },
+    { who:'Jordan D.', c:false, txt:'Got it coach' }
+  ],
+  coaches: [
+    { who:'Coach Chris Demo', c:true, txt:'Want to install Cover 2 this week? Their QB likes the flat.' },
+    { who:'Coach Pat Example', c:true, txt:'Yes. Tuesday walk-through, Thursday full speed.' }
+  ],
+  board: [
+    { who:'Jamie Treasurer', c:true, txt:'Sponsor money is at 84% of goal. Two banner renewals still out.' },
+    { who:'Club Director', c:true, txt:'Thanks. Let\'s put helmet recert on Monday\'s agenda.' }
+  ]
+};
+
+const CLUB = {
+  reg: [ { p:'Flex', now:64, last:58 }, { p:'Tackle', now:142, last:131 }, { p:'Cheer', now:48, last:51 } ],
+  sponsors: { raised:18400, goal:22000, count:23 },
+  fundraiser: { raised:6250, goal:8000 },
+  volunteers: { filled:41, needed:52 },
+  teams: [
+    { t:'8U Tackle', kids:22, forms:100 }, { t:'9U Tackle', kids:24, forms:96 }, { t:'10U Tackle', kids:23, forms:91 },
+    { t:'11U Tackle', kids:12, forms:83 }, { t:'12U Tackle', kids:25, forms:100 }, { t:'13U Tackle', kids:21, forms:95 },
+    { t:'Flex', kids:64, forms:89 }, { t:'Cheer', kids:48, forms:94 }
+  ],
+  family: { status:'Registered', paid:'Paid in full', shift:'Snack shack, Sep 26, 8:00 to 10:00 AM', forms:'All forms in' },
+  myTeam: { paid:11, of:12, formsDone:10 }
+};
+
+const PEOPLE = [
+  { name:'Coach Pat Example', email:'pat@example.com',    role:'head',   team:'11U Tackle' },
+  { name:'Coach Chris Demo',  email:'chris@example.com',  role:'asst',   team:'11U Tackle' },
+  { name:'Jamie Treasurer',   email:'jamie@example.com',  role:'board',  team:'All' },
+  { name:'Morgan Sample',     email:'morgan@example.com', role:'parent', team:'11U Tackle' },
+  { name:'Alex Sample',       email:'alex@example.com',   role:'player', team:'11U Tackle' }
+];
+const REQUESTS = [
+  { name:'New sign-in', email:'newparent@example.com', asked:'Parent · 9U Tackle' },
+  { name:'New sign-in', email:'newcoach@example.com',  asked:'Coach · 10U Tackle' }
+];
+
+/* ---------------------------------------------------------------------
+   4. HELPERS
+--------------------------------------------------------------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => '$' + n.toLocaleString('en-US');
+const pct = (a,b) => Math.round(a / b * 100);
+const roleById = id => ROLES.find(r => r.id === id);
+let toastTimer;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+function lvlPill(level){
+  const L = LEVEL[level];
+  const cls = L.cls === 'edit' ? 'lvl edit' : L.cls === 'none' ? 'lvl none' : 'lvl';
+  return `<span class="${cls}">${level === 'none' ? '🔒' : '👁'} ${esc(L.short)}</span>`;
+}
+function initials(name){ return name.split(' ').filter(w => !/^coach$/i.test(w)).map(w => w[0]).slice(0,2).join('').toUpperCase(); }
+
+/* ---------------------------------------------------------------------
+   5. STATE — role and tab live in the URL (#role=parent&tab=stats) so a
+   link can open straight into one view.
+--------------------------------------------------------------------- */
+const state = { role:'parent', tab:'news', showHidden:false };
+function readHash(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (roleById(h.get('role'))) state.role = h.get('role');
+  if (SECTIONS.some(s => s.id === h.get('tab'))) state.tab = h.get('tab');
+}
+function writeHash(){ history.replaceState(null, '', `#role=${state.role}&tab=${state.tab}`); }
+const level = (section, role = state.role) => ACCESS[section][role];
+const visibleSections = () => SECTIONS.filter(s => level(s.id) !== 'none');
+
+/* ---------------------------------------------------------------------
+   6. DRAW
+--------------------------------------------------------------------- */
+function drawRoles(){
+  $('#roles').innerHTML = ROLES.map(r =>
+    `<button class="role-chip" data-role="${r.id}" aria-pressed="${r.id === state.role}"><span class="ic">${r.icon}</span>${esc(r.label)}</button>`
+  ).join('');
+}
+function drawWhoami(){
+  const r = roleById(state.role);
+  const count = visibleSections().length;
+  $('#whoami').innerHTML = `
+    <div class="avatar">${r.id === 'visitor' ? '?' : esc(initials(r.name))}</div>
+    <div>
+      <div class="nm">${esc(r.name)}</div>
+      <div class="sub">${esc(r.sub)} · sees ${count} of ${SECTIONS.length} sections</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="toggle"><input type="checkbox" id="showHidden" ${state.showHidden ? 'checked' : ''}> Show what's hidden</label>
+    <button class="map-btn" id="openMap">Who sees what</button>`;
+}
+function drawTabs(){
+  const list = state.showHidden ? SECTIONS : visibleSections();
+  if (!list.some(s => s.id === state.tab)) state.tab = list[0].id;
+  $('#tabs').innerHTML = list.map(s => {
+    const locked = level(s.id) === 'none';
+    return `<button class="tab${locked ? ' locked' : ''}" role="tab" data-tab="${s.id}" aria-selected="${s.id === state.tab}">${locked ? '🔒' : s.icon} ${esc(s.label)}</button>`;
+  }).join('');
+}
+function drawPanel(){
+  const sec = SECTIONS.find(s => s.id === state.tab);
+  const lv = level(sec.id);
+  const why = WHY[sec.id][state.role] || '';
+  let body;
+  if (lv === 'none') {
+    const r = roleById(state.role);
+    body = `<div class="locked-card"><div class="lk">🔒</div><p><b>${esc(r.label)}s don't see ${esc(sec.label)}.</b></p><p class="small">${esc(why || 'Not part of this role.')}</p><p class="small">On the live site this isn't just hidden on screen. The server refuses to send it.</p></div>`;
+  } else {
+    body = RENDER[sec.id](lv);
+  }
+  $('#panel').innerHTML = `
+    <div class="panel-top"><h2>${sec.icon} ${esc(sec.label)}</h2>${lvlPill(lv)}</div>
+    ${why && lv !== 'none' ? `<p class="why">${esc(why)}</p>` : ''}
+    ${body}`;
+}
+function drawAll(){ drawRoles(); drawWhoami(); drawTabs(); drawPanel(); writeHash(); }
+
+/* ---------------------------------------------------------------------
+   7. ONE RENDERER PER SECTION — each gets the level, draws only that.
+--------------------------------------------------------------------- */
+const isCoach = () => state.role === 'asst' || state.role === 'head';
+
+const RENDER = {
+  news(lv){
+    const can = {
+      public: ['public'],
+      team:   state.role === 'asst' ? ['public','team','coach'] : ['public','team'],
+      edit:   state.role === 'board' ? ['public','board'] : ['public','team','coach'],
+      all:    ['public','team','coach','board']
+    }[lv];
+    const audLabel = { public:['Everyone','gr'], team:[TEAM,'or'], coach:['Coaches only','or'], board:['Board only','rd'] };
+    const items = NEWS.filter(n => can.includes(n.aud));
+    const poster = lv === 'edit' || lv === 'all';
+    return `
+      ${poster ? `<div class="compose"><input placeholder="Write a post to ${state.role === 'board' ? 'the whole club' : state.role === 'admin' ? 'any team or the whole club' : 'your team'}…" aria-label="New post"><button class="act" data-demo="Post">Post</button></div><br>` : ''}
+      <div class="list">${items.map(n => `
+        <div class="item">
+          <div class="t">${esc(n.t)}</div>
+          <div class="d">${esc(n.d)}</div>
+          <div class="meta"><span class="tag ${audLabel[n.aud][1]}">${esc(audLabel[n.aud][0])}</span><span class="small muted">${esc(n.by)} · ${esc(n.when)}</span></div>
+        </div>`).join('')}
+      </div>`;
+  },
+
+  schedule(lv){
+    const kinds = {
+      public: ['game'],
+      team:   isCoach() ? ['game','practice','coach'] : ['game','practice'],
+      board:  ['game','board'],
+      edit:   ['game','practice','coach'],
+      all:    ['game','practice','coach','board']
+    }[lv];
+    const label = { game:['Game','gr'], practice:['Practice','or'], coach:['Coaches','or'], board:['Board','rd'] };
+    const rows = SCHEDULE.filter(e => kinds.includes(e.kind));
+    return `
+      ${lv === 'edit' || lv === 'all' ? `<div style="margin-bottom:14px"><button class="act" data-demo="Add practice">+ Add practice</button></div>` : ''}
+      <div class="list">${rows.map(e => `
+        <div class="item row">
+          <div class="when"><div class="dw">${esc(e.dw)}</div><div class="dn">${esc(e.dn.split(' ')[1])}</div><div class="small muted">${esc(e.dn.split(' ')[0])}</div></div>
+          ${e.logo ? `<img class="opp-logo" src="assets/img/team-logos/${esc(e.logo)}" alt="">` : ''}
+          <div style="flex:1">
+            <div class="t">${esc(e.t)} ${e.res ? `<span class="tag gr">${esc(e.res)}</span>` : ''}</div>
+            <div class="d">${esc(e.time)} · ${esc(e.loc)}</div>
+            <div class="meta"><span class="tag ${label[e.kind][1]}">${label[e.kind][0]}</span>${lv === 'edit' && e.kind === 'practice' ? '<button class="act ghost sm" data-demo="Move practice">Move</button>' : ''}</div>
+          </div>
+        </div>`).join('')}
+      </div>`;
+  },
+
+  roster(lv){
+    if (lv === 'summary') {
+      return `<div class="grid3">${CLUB.teams.map(t => `
+        <div class="stat"><div class="k">${esc(t.t)}</div><div class="v">${t.kids}</div><div class="s">players · ${t.forms}% forms in</div></div>`).join('')}</div>
+        <p class="why" style="margin-top:16px">No names on this screen. The board plans around numbers.</p>`;
+    }
+    const coach = lv === 'edit' || lv === 'all' || state.role === 'asst';
+    const head = lv === 'edit' || lv === 'all';
+    const me = state.role === 'parent' || state.role === 'player';
+    return `
+      ${state.role === 'admin' ? `<p class="small muted" style="margin:0 0 10px">Showing 11U Tackle. <select class="sel" aria-label="Team"><option>11U Tackle</option><option>8U Tackle</option><option>9U Tackle</option><option>Flex</option><option>Cheer</option></select></p>` : ''}
+      <div class="box scroll-x" style="padding:6px 0">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Player</th>${coach ? '<th>Pos</th><th>Attendance</th>' : ''}${head ? '<th class="hide-sm">Forms</th><th></th>' : ''}</tr></thead>
+        <tbody>${PLAYERS.slice().sort((a,b) => a.n - b.n).map(p => `
+          <tr class="${me && p.me ? 'me' : ''}">
+            <td class="num">${p.n}</td>
+            <td><b>${esc(p.first)}</b> ${coach ? esc(p.last) : esc(p.last[0]) + '.'}${me && p.me ? ' <span class="tag or">' + (state.role === 'player' ? 'You' : 'Your kid') + '</span>' : ''}</td>
+            ${coach ? `<td>${p.pos}</td><td>${p.att}%</td>` : ''}
+            ${head ? `<td class="hide-sm">${p.forms ? '<span class="tag gr">All in</span>' : '<span class="tag rd">Missing 1</span>'}</td><td><button class="act ghost sm" data-demo="Message family">Message family</button></td>` : ''}
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+      ${coach ? '' : '<p class="why" style="margin-top:14px">Families see first names and numbers, the same as the league\'s own roster pages. No contact info, no forms.</p>'}`;
+  },
+
+  plays(lv){
+    const list = lv === 'own' ? PLAYS.filter(p => p.assigned) : PLAYS;
+    const hl = lv === 'own';
+    return `
+      ${lv === 'own' ? '<p class="why">Coach assigned these two. Study them before Thursday.</p>' : ''}
+      <div class="grid2">${list.map(p => `
+        <div class="play">
+          ${playSvg(p.id, hl)}
+          <div class="pb">
+            <div class="pn">${esc(p.name)} <span class="tag ${p.type === 'Defense' ? 'rd' : 'or'}">${p.type}</span>${isCoach() || state.role === 'admin' ? `<span class="tag">${esc(p.install)}</span>` : ''}</div>
+            ${hl && p.note ? `<div class="d small muted" style="margin-top:6px">${esc(p.note)}</div>` : ''}
+            ${lv === 'edit' ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="act sm" data-demo="Edit play">Edit</button><button class="act ghost sm" data-demo="Assign to players">Assign to players</button></div>` : ''}
+            ${lv === 'own' ? `<div style="margin-top:10px"><button class="act sm" data-demo="Mark studied">I studied it</button></div>` : ''}
+          </div>
+        </div>`).join('')}
+      </div>`;
+  },
+
+  stats(lv){
+    const rec = `<div class="grid3" style="margin-bottom:16px">
+        <div class="stat"><div class="k">${TEAM} record</div><div class="v">${RECORD.w}-${RECORD.l}</div><div class="s">Sample season</div></div>
+        <div class="stat"><div class="k">Points for</div><div class="v">${RECORD.pf}</div><div class="s">${(RECORD.pf/8).toFixed(1)} a game</div></div>
+        <div class="stat"><div class="k">Points against</div><div class="v">${RECORD.pa}</div><div class="s">${(RECORD.pa/8).toFixed(1)} a game</div></div>
+      </div>`;
+    if (lv === 'public') return rec + '<p class="why">The public sees scores. Single players\' numbers stay inside the team.</p>';
+    if (lv === 'summary') {
+      return `<div class="grid3">
+        <div class="stat"><div class="k">Club record</div><div class="v">38-17</div><div class="s">All tackle teams</div></div>
+        <div class="stat"><div class="k">Teams in playoffs</div><div class="v">4 of 6</div><div class="s">Tackle division</div></div>
+        <div class="stat"><div class="k">Kids playing</div><div class="v">${CLUB.reg.reduce((a,r) => a + r.now, 0)}</div><div class="s">Across every program</div></div>
+      </div>`;
+    }
+    if (lv === 'own') {
+      const p = PLAYERS.find(x => x.me);
+      return rec + `<div class="box"><h3>${esc(p.first)} ${esc(p.last)} · #${p.n} ${p.pos}</h3>
+        <div class="grid3">
+          <div class="stat"><div class="k">Rushing yards</div><div class="v">${p.rush}</div><div class="s">Team leader</div></div>
+          <div class="stat"><div class="k">Touchdowns</div><div class="v">${p.td}</div></div>
+          <div class="stat"><div class="k">Tackles</div><div class="v">${p.tkl}</div></div>
+        </div></div>`;
+    }
+    return rec + `<div class="box scroll-x" style="padding:6px 0"><table class="tbl">
+      <thead><tr><th>#</th><th>Player</th><th>Rush yds</th><th>TD</th><th>Tackles</th>${lv === 'edit' ? '<th></th>' : ''}</tr></thead>
+      <tbody>${PLAYERS.slice().sort((a,b) => (b.rush + b.tkl * 10) - (a.rush + a.tkl * 10)).map(p => `
+        <tr><td class="num">${p.n}</td><td><b>${esc(p.first)}</b> ${esc(p.last)}</td><td>${p.rush}</td><td>${p.td}</td><td>${p.tkl}</td>${lv === 'edit' ? '<td><button class="act ghost sm" data-demo="Fix stat">Fix</button></td>' : ''}</tr>`).join('')}
+      </tbody></table></div>`;
+  },
+
+  messages(lv){
+    const chans = {
+      parent: [['family', `${TEAM} families`]],
+      player: [['players', `${TEAM} players`]],
+      asst:   [['coaches', 'Coaches only'], ['family', `${TEAM} families`]],
+      head:   [['coaches', 'Coaches only'], ['family', `${TEAM} families`], ['players', `${TEAM} players`]],
+      board:  [['board', 'Board of Directors']],
+      admin:  [['board', 'Board of Directors'], ['coaches', 'Coaches only'], ['family', `${TEAM} families`]]
+    }[state.role] || [];
+    return chans.map(([k, title]) => `
+      <div class="chan">${esc(title)}</div>
+      <div class="list">${MESSAGES[k].map(m => `
+        <div class="msg"><div class="av ${m.c ? 'c' : ''}">${esc(initials(m.who))}</div><div><div class="who">${esc(m.who)}</div><div class="bub">${esc(m.txt)}</div></div></div>`).join('')}
+      </div>`).join('') + `
+      <div class="compose"><input placeholder="Message ${esc(chans[0] ? chans[0][1] : '')}…" aria-label="Message"><button class="act" data-demo="Send">Send</button></div>`;
+  },
+
+  club(lv){
+    if (lv === 'own') {
+      const f = CLUB.family;
+      return `<div class="grid2">
+        <div class="box"><h3>Alex's registration</h3><p class="small" style="margin:0"><span class="tag gr">${esc(f.status)}</span><span class="tag gr">${esc(f.paid)}</span><span class="tag gr">${esc(f.forms)}</span></p></div>
+        <div class="box"><h3>Your volunteer shift</h3><p class="small muted" style="margin:0 0 10px">${esc(f.shift)}</p><button class="act sm" data-demo="Swap shift">Swap shift</button></div>
+      </div>
+      <p class="why" style="margin-top:14px">Only your own family's business. You never see anyone else's.</p>`;
+    }
+    if (lv === 'summary' && state.role === 'head') {
+      const m = CLUB.myTeam;
+      return `<div class="grid2">
+        <div class="stat"><div class="k">${TEAM} fees</div><div class="v">${m.paid} of ${m.of}</div><div class="s">families paid</div><div class="bar"><i style="width:${pct(m.paid,m.of)}%"></i></div></div>
+        <div class="stat"><div class="k">${TEAM} forms</div><div class="v">${m.formsDone} of ${m.of}</div><div class="s">players with every form in</div><div class="bar"><i style="width:${pct(m.formsDone,m.of)}%"></i></div></div>
+      </div><p class="why" style="margin-top:14px">Who still owes what is on your Roster tab. Dollar amounts stay with the board.</p>`;
+    }
+    const regTotal = CLUB.reg.reduce((a,r) => a + r.now, 0), regLast = CLUB.reg.reduce((a,r) => a + r.last, 0);
+    const s = CLUB.sponsors, fr = CLUB.fundraiser, v = CLUB.volunteers;
+    const top = `<div class="grid3">
+        <div class="stat"><div class="k">Registrations</div><div class="v">${regTotal}</div><div class="s">${regTotal >= regLast ? '+' : ''}${regTotal - regLast} vs last year (${regLast})</div></div>
+        <div class="stat"><div class="k">Sponsor money</div><div class="v">${money(s.raised)}</div><div class="s">${pct(s.raised,s.goal)}% of ${money(s.goal)} · ${s.count} sponsors</div><div class="bar"><i style="width:${pct(s.raised,s.goal)}%"></i></div></div>
+        <div class="stat"><div class="k">Fundraiser</div><div class="v">${money(fr.raised)}</div><div class="s">${pct(fr.raised,fr.goal)}% of ${money(fr.goal)}</div><div class="bar"><i style="width:${pct(fr.raised,fr.goal)}%"></i></div></div>
+      </div>
+      <div class="grid2" style="margin-top:14px">
+        <div class="box"><h3>Registrations by program</h3>
+          <table class="tbl"><thead><tr><th>Program</th><th>This year</th><th>Last year</th></tr></thead>
+          <tbody>${CLUB.reg.map(r => `<tr><td><b>${r.p}</b></td><td>${r.now}</td><td class="muted">${r.last}</td></tr>`).join('')}</tbody></table>
+        </div>
+        <div class="box"><h3>Volunteer shifts</h3><div class="v" style="font:400 32px Anton,sans-serif">${v.filled} of ${v.needed}</div><div class="bar"><i style="width:${pct(v.filled,v.needed)}%"></i></div><p class="small muted" style="margin:10px 0 0">${v.needed - v.filled} shifts still open this season</p></div>
+      </div>`;
+    if (lv === 'all') {
+      return top + `<div class="box" style="margin-top:14px"><h3>Families with something open</h3>
+        <table class="tbl"><tbody>
+          <tr><td><b>Testwell family</b></td><td>11U Tackle</td><td><span class="tag rd">Physical form</span></td><td><button class="act ghost sm" data-demo="Send reminder">Remind</button></td></tr>
+          <tr><td><b>Fictional family</b></td><td>11U Tackle</td><td><span class="tag rd">$75 balance</span></td><td><button class="act ghost sm" data-demo="Send reminder">Remind</button></td></tr>
+        </tbody></table></div>`;
+    }
+    return top + '<p class="why" style="margin-top:14px">Totals only. Which family owes what stays with the director.</p>';
+  },
+
+  people(){
+    const opts = ROLES.filter(r => r.id !== 'visitor').map(r => [r.id, r.label]);
+    return `
+      <div class="box" style="margin-bottom:14px"><h3>Waiting for access</h3>
+        <div class="list">${REQUESTS.map(q => `
+          <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div><b>${esc(q.email)}</b><div class="small muted">Asked for: ${esc(q.asked)}</div></div>
+            <div style="display:flex;gap:8px"><button class="act sm" data-demo="Approve">Approve</button><button class="act ghost sm" data-demo="Deny">Deny</button></div>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="box scroll-x" style="padding:6px 0"><table class="tbl">
+        <thead><tr><th>Person</th><th class="hide-sm">Email</th><th>Role</th><th>Team</th></tr></thead>
+        <tbody>${PEOPLE.map(p => `
+          <tr><td><b>${esc(p.name)}</b></td><td class="hide-sm muted">${esc(p.email)}</td>
+          <td><select class="sel" data-demo-change="Role changed" aria-label="Role for ${esc(p.name)}">${opts.map(([id,l]) => `<option value="${id}" ${id === p.role ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></td>
+          <td>${esc(p.team)}</td></tr>`).join('')}
+        </tbody></table></div>
+      <p class="why" style="margin-top:14px">Only the director can hand out roles. Nobody can promote themselves, and the server checks this, not just the screen.</p>`;
+  }
+};
+
+/* ---------------------------------------------------------------------
+   8. PLAY DIAGRAMS — tiny SVGs. hl = light up the player's own spot (RB).
+--------------------------------------------------------------------- */
+function playSvg(id, hl){
+  const W = 320, H = 170, los = 104;
+  const off = [[160,los+10,'C'],[136,los+10,'G'],[184,los+10,'G'],[112,los+10,'T'],[208,los+10,'T'],[232,los+10,'TE'],[40,los+10,'WR'],[160,los+28,'QB'],[160,los+46,'FB'],[160,los+60,'RB']];
+  const routes = {
+    p1: { RB:'M160,164 C165,140 178,120 182,70', FB:'M160,150 L182,104' },
+    p2: { WR:'M40,114 C80,130 140,135 230,128 C270,120 290,90 296,60', RB:'M160,164 L120,150' },
+    p3: { WR:'M40,114 L40,96 L100,64', TE:'M232,114 L232,84 L178,56', RB:'M160,164 C200,160 240,140 270,120' },
+    p4: null
+  }[id];
+  const lines = [];
+  for (let y = 24; y < H; y += 32) lines.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="rgba(255,255,255,.18)" stroke-width="1"/>`);
+  const los_ = `<line x1="0" y1="${los}" x2="${W}" y2="${los}" stroke="rgba(255,255,255,.55)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  let body = '';
+  if (id === 'p4') {
+    const d = [[110,los-10,'DE'],[150,los-10,'DT'],[190,los-10,'DT'],[230,los-10,'DE'],[130,los-34,'LB'],[190,los-34,'LB'],[40,los-30,'CB'],[290,los-30,'CB'],[90,24,'S'],[230,24,'S']];
+    body += `<rect x="0" y="0" width="160" height="40" fill="rgba(80,160,255,.14)"/><rect x="160" y="0" width="160" height="40" fill="rgba(80,160,255,.08)"/>`;
+    body += d.map(([x,y,l]) => `<g><text x="${x}" y="${y+5}" text-anchor="middle" font-family="Karla,sans-serif" font-weight="800" font-size="13" fill="#fff">✕</text><text x="${x}" y="${y+18}" text-anchor="middle" font-family="Karla,sans-serif" font-size="8" fill="rgba(255,255,255,.8)">${l}</text></g>`).join('');
+  } else {
+    Object.entries(routes).forEach(([who, d]) => {
+      const mine = hl && who === 'RB';
+      body += `<path d="${d}" fill="none" stroke="${mine ? '#f4691c' : '#ffe27a'}" stroke-width="${mine ? 3.2 : 2.2}" stroke-linecap="round" marker-end="url(#ah-${id}${mine ? '-me' : ''})"/>`;
+    });
+    body += off.map(([x,y,l]) => {
+      const mine = hl && l === 'RB';
+      return `<g><circle cx="${x}" cy="${y}" r="${mine ? 9 : 7}" fill="${mine ? '#f4691c' : '#fff'}" stroke="${mine ? '#fff' : 'none'}" stroke-width="2"/><text x="${x}" y="${y+3}" text-anchor="middle" font-family="Karla,sans-serif" font-weight="800" font-size="6.5" fill="${mine ? '#fff' : '#1f5d2a'}">${l}</text></g>`;
+    }).join('');
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Diagram of the play">
+    <defs>
+      <marker id="ah-${id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ffe27a"/></marker>
+      <marker id="ah-${id}-me" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f4691c"/></marker>
+    </defs>${lines.join('')}${los_}${body}</svg>`;
+}
+
+/* ---------------------------------------------------------------------
+   9. ACCESS MAP — drawn from the same ACCESS table as the screens.
+--------------------------------------------------------------------- */
+function drawMap(){
+  const head = ROLES.map(r => `<th class="${r.id === state.role ? 'cur' : ''}">${r.icon} ${esc(r.label)}</th>`).join('');
+  const rows = SECTIONS.map(s => `<tr><td>${s.icon} ${esc(s.label)}</td>${ROLES.map(r => {
+      const lv = ACCESS[s.id][r.id], L = LEVEL[lv];
+      const cls = L.cls === 'none' ? 'c-none' : L.cls === 'edit' ? 'c-edit' : 'c-yes';
+      const tip = WHY[s.id][r.id] || L.short;
+      return `<td class="${cls}${r.id === state.role ? ' cur' : ''}" title="${esc(tip)}">${lv === 'none' ? '—' : esc(L.short)}</td>`;
+    }).join('')}</tr>`).join('');
+  $('#mapBody').innerHTML = `
+    <p class="why" style="margin-top:14px">Every screen in the app reads this one table. Change a cell and that role's screens change with it. Your current role is highlighted. Tap a role to switch.</p>
+    <div class="map-wrap scroll-x"><table class="tbl map">
+      <thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="how">
+      <div class="step"><div class="n">1</div><b>Sign in once</b><p>Families and coaches sign in with Google or email. New accounts start with no access.</p></div>
+      <div class="step"><div class="n">2</div><b>The director gives a role</b><p>Parent, player, coach, board or admin, plus which team. Nobody can give themselves a role.</p></div>
+      <div class="step"><div class="n">3</div><b>The server checks every read</b><p>The database looks at your role before it sends anything. Hiding a tab isn't the lock. The server is.</p></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${ROLES.map(r => `<button class="role-chip" data-maprole="${r.id}" aria-pressed="${r.id === state.role}"><span class="ic">${r.icon}</span>${esc(r.label)}</button>`).join('')}</div>`;
+}
+
+/* ---------------------------------------------------------------------
+   10. EVENTS
+--------------------------------------------------------------------- */
+document.addEventListener('click', e => {
+  const chip = e.target.closest('[data-role]');
+  if (chip) { state.role = chip.dataset.role; drawAll(); return; }
+  const mr = e.target.closest('[data-maprole]');
+  if (mr) { state.role = mr.dataset.maprole; drawAll(); drawMap(); return; }
+  const tab = e.target.closest('[data-tab]');
+  if (tab) { state.tab = tab.dataset.tab; drawTabs(); drawPanel(); writeHash(); return; }
+  if (e.target.closest('#openMap')) { drawMap(); $('#mapDlg').showModal(); return; }
+  if (e.target.closest('#mapClose')) { $('#mapDlg').close(); return; }
+  const demo = e.target.closest('[data-demo]');
+  if (demo) { toast(`${demo.dataset.demo}: works in the real app. Demo only, nothing saved.`); }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'showHidden') { state.showHidden = e.target.checked; drawTabs(); drawPanel(); return; }
+  if (e.target.matches('[data-demo-change]')) toast('Role changed on screen only. Demo, nothing saved.');
+});
+$('#mapDlg').addEventListener('click', e => { if (e.target === $('#mapDlg')) $('#mapDlg').close(); });
+window.addEventListener('hashchange', () => { readHash(); drawAll(); });
+
+readHash();
+drawAll();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+<script src="assets/js/theme.js"></script>
+</body>
+</html>
