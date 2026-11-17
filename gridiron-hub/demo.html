@@ -170,6 +170,9 @@
     .whoami .spacer{display:none;}
     .tbl .hide-sm{display:none;}
   }
+  /* Invisible tap zone: this link is only ~14px tall on a phone. */
+  .back-link{position:relative;}
+  .back-link::after{content:"";position:absolute;inset:-10px -6px;}
 </style>
 </head>
 <body>
@@ -181,7 +184,7 @@
 <div class="demo-banner">
   <div class="wrap">
     <span><b>DEMO</b> · Every name and number on this page is made up. Nothing is saved.</span>
-    <a href="index.html" class="muted small">Back to Gridiron Hub</a>
+    <a href="index.html" class="muted small back-link">Back to Gridiron Hub</a>
   </div>
 </div>
 
