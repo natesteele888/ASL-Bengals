@@ -2282,6 +2282,7 @@ function bindSidebar() {
   });
 
   els.pbSaveBtn.addEventListener('click', async () => {
+    if (!state.currentPlay) { els.statusEl.textContent = 'No play loaded yet.'; return; }
     els.pbSaveBtn.textContent = 'Saving…';
     // Rename affordance -- same trim-and-guard pattern
     // formation-editor.js's own fbNameInput save already uses: apply
@@ -2494,6 +2495,7 @@ function bindSidebar() {
   });
 
   els.pbNewVariantBtn.addEventListener('click', () => {
+    if (!state.currentPlay) { els.statusEl.textContent = 'No play loaded yet.'; return; }
     const id = prompt('New variant key (lowercase, underscores, e.g. "counter"):');
     if (!id) return;
     if (state.currentPlay.variants.find((v) => v.id === id)) { alert('A variant with that key already exists.'); return; }
@@ -2572,6 +2574,7 @@ function bindSidebar() {
     render();
   });
   els.pbBallPathClearBtn.addEventListener('click', () => {
+    if (!state.currentPlay) { els.statusEl.textContent = 'No play loaded yet.'; return; }
     els.ballPathEditor.clear(); // triggers render() via renderPlay
   });
 }

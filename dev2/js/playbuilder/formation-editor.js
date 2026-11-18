@@ -224,6 +224,7 @@ function renderLeftPreview() {
 }
 
 function fbRender() {
+  if (!fbState.builder) return; // formations not loaded yet
   if (fbState.previewSide === 'left') renderLeftPreview();
   else fbState.builder.render();
 }
@@ -358,6 +359,7 @@ function bind() {
   });
 
   q('fbNewBtn').addEventListener('click', () => {
+    if (!fbState.builder || !state.formations.length) { q('fbStatus').textContent = 'Formations haven\'t loaded yet.'; return; }
     const label = (prompt('New formation name (e.g. "I-Formation"):') || '').trim();
     if (!label) return;
     const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
