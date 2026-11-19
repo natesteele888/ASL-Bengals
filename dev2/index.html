@@ -2677,7 +2677,7 @@ if (window.ResizeObserver) {
   // has (or vice versa) throws partway through and silently breaks
   // whatever wiring hadn't run yet. Bump this whenever a deploy needs to
   // force every client to fetch fresh copies.
-  const BUILD_V = '20261118a';
+  const BUILD_V = '20261119a';
   const withV = (path) => `${path}?v=${BUILD_V}`;
   // Nathan: "when you do the 5 clicks on the logo and see the coach
   // dashboard, it should show an updated version number so I know it
@@ -2825,6 +2825,12 @@ if (window.ResizeObserver) {
     } catch (e) { return null; }
   };
   const savedPlayData = readSavedPlayData();
+  const savePlayData = (data) => {
+    const bodies = data.map(d => JSON.stringify(d));
+    if (window.caches) caches.open(PLAY_DATA_CACHE).then(c => Promise.all(PLAY_DATA_KEYS.map((k, i) =>
+      c.put(k, new Response(bodies[i], { headers: { 'Content-Type': 'application/json' } })))))
+      .catch(() => {});
+  };
   const livePlayData = (async () => {
     const [cardsRes, playsRes] = await Promise.all([
       fetch(await window.firebaseAuthed(`${FIREBASE_DB_URL}/dev2PlayData/cards.json`)),
@@ -2840,15 +2846,16 @@ if (window.ResizeObserver) {
     playData = live.data;
     // Stringified now, before the relabel and custom-formation steps below
     // change these objects, so the saved copy is exactly what Firebase sent.
-    const bodies = live.ok ? playData.map(d => JSON.stringify(d)) : null;
-    if (bodies && window.caches) caches.open(PLAY_DATA_CACHE).then(c => Promise.all(PLAY_DATA_KEYS.map((k, i) =>
-      c.put(k, new Response(bodies[i], { headers: { 'Content-Type': 'application/json' } })))))
-      .catch(() => {});
+    if (live.ok) savePlayData(playData);
   } catch (err) {
     playData = await savedPlayData;
     if (!playData) throw err;
     console.warn('[boot] using the play data saved on this phone:', err && err.message);
     window.__playDataFromSavedCopy = true;
+    // On one weak bar Firebase can answer after the 10s wait. Keep that
+    // answer for the next open instead of throwing it away, or a phone
+    // that's always on a weak signal keeps showing old plays.
+    livePlayData.then(l => { if (l.ok) savePlayData(l.data); }).catch(() => {});
   }
   window.ALL_CARDS = playData[0];
   // Nathan (2026-10-08): "the current Signal #24, labeled 4-SWEEP, needs to be
