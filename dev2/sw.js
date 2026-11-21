@@ -18,7 +18,7 @@
 // The activate handler only deletes caches named bengals-shell-*: every
 // github.io app shares one Cache Storage, so deleting everything else
 // would wipe the other apps' offline copies.
-const CACHE_NAME = 'bengals-shell-20261119a';
+const CACHE_NAME = 'bengals-shell-20261121a';
 // SHELL_FILES lists bare paths, no ?v= (same as lybs-ballclub/sw.js): the
 // fetch handler matches with {ignoreSearch: true}, so js/auth.js?v=20261106d
 // still hits the entry cached as js/auth.js. Only CACHE_NAME has to move when
@@ -39,6 +39,17 @@ const SHELL_FILES = [
   './assets/images/login-logo.png',
   './assets/images/login-bg.jpg',
   './assets/images/loading-mobile.jpg',
+  // The quiz and 2-minute drill sounds (about 400 KB together), so right/
+  // wrong, the whistle, horn and cheer still play with no signal. The 3.5 MB
+  // crowd loop and the thunder loop stay out: too big to pull on install.
+  './assets/audio/correct.mp3',
+  './assets/audio/wrong.mp3',
+  './assets/audio/roar.mp3',
+  './assets/audio/badge-success.mp3',
+  './assets/audio/false-start-whistle.mp3',
+  './assets/audio/false-start-crowd.mp3',
+  './assets/audio/touchdown-horn.mp3',
+  './assets/audio/crowd-cheer.mp3',
   // Stat Keeper, so a coach can open it and log a game with no signal.
   // Besides itself it only loads js/play-order.js (listed below).
   './stat-keeper.html',
